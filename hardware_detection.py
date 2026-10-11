@@ -3124,6 +3124,77 @@ def entity_evidence(e, state_of=None) -> Dict[str, Any]:
     return out
 
 
+#: (#1092) Service fields whose VALUE names one person's box — the name
+#: they gave it, a serial. Redacted in every download (``redact_box_names``).
+BOX_VALUE_FIELDS: frozenset = frozenset({
+    "charger_name", "charger", "device_name", "charger_id", "serial",
+    "serial_number"})
+
+
+def _slug(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value).lower()).strip("_")
+
+
+def redact_box_names(obj: Any, *, stand_ins: Optional[Dict[str, str]] = None,
+                     in_ids: bool = False) -> Any:
+    """(#1092) ``obj`` with every box name replaced by a stable stand-in
+    (``box_1``, ``box_2`` …), the same one for the same name everywhere, so
+    the result still replays: the service data, the device a capture
+    registers and — with ``in_ids`` — the name inside entity ids all agree.
+
+    A box name is the value of a ``BOX_VALUE_FIELDS`` key, found in a plain
+    dict or inside a ``*_service_data`` JSON string. ``stand_ins`` collects
+    the mapping; pass the same dict to redact several objects alike."""
+    import json as _json
+    found: Dict[str, str] = stand_ins if stand_ins is not None else {}
+
+    def _collect(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k in BOX_VALUE_FIELDS and isinstance(v, str) and v \
+                        and not re.fullmatch(r"box_\d+", v):
+                    found.setdefault(v, f"box_{len(found) + 1}")
+                elif isinstance(v, str) and k.endswith("_service_data"):
+                    try:
+                        _collect(_json.loads(v or "{}"))
+                    except ValueError:
+                        pass
+                else:
+                    _collect(v)
+        elif isinstance(o, (list, tuple)):
+            for v in o:
+                _collect(v)
+    _collect(obj)
+    if not found:
+        return obj
+    slugs = {_slug(k): v for k, v in found.items() if _slug(k)}
+
+    def _swap(text: str) -> str:
+        if text in found:
+            return found[text]
+        out = text
+        for name, stand in found.items():
+            out = out.replace(f'"{name}"', f'"{stand}"')
+        if in_ids:
+            for slug, stand in sorted(slugs.items(), key=lambda kv: -len(kv[0])):
+                out = re.sub(rf"(?<![a-z0-9]){re.escape(slug)}(?![a-z0-9])",
+                             stand, out, flags=re.I)
+        return out
+
+    def _walk(o):
+        if isinstance(o, dict):
+            return {(_swap(k) if in_ids and isinstance(k, str) else k): _walk(v)
+                    for k, v in o.items()}
+        if isinstance(o, list):
+            return [_walk(v) for v in o]
+        if isinstance(o, tuple):
+            return tuple(_walk(v) for v in o)
+        if isinstance(o, str):
+            return _swap(o)
+        return o
+    return _walk(obj)
+
+
 def build_detection_report(hass: Optional[HomeAssistant] = None,
                            registry=None, configured_entities=None,
                            strategy_values=None,
