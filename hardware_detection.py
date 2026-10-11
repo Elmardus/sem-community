@@ -2393,6 +2393,13 @@ def read_charger_roles(dev_entities, domain: str, *, services_of=None,
             svc = _service_current_role(domain, live,
                                         device_ident=device_ident)
             if svc:
+                # (#1097) a service keyed by ``device_id`` needs THIS box's
+                # registry id — the one value SEM knows for certain. Left
+                # out, the created charger called the service for no box.
+                _did = next((getattr(e, "device_id", None) for e in dev_entities
+                             if getattr(e, "device_id", None)), None)
+                if "device_id" in (svc.get("fields") or ()) and _did:
+                    svc["device_id"] = str(_did)
                 roles["current_service"] = svc
             roles.update(_service_field_roles(domain, live))
     power = _charging_power(dev_entities, vehicle=vehicle)
@@ -2510,6 +2517,10 @@ def _roles_offer(roles: Dict[str, Any]) -> Dict[str, Any]:
         if roles["current_service"].get("data"):
             o["ev_charger_service_data"] = json.dumps(
                 roles["current_service"]["data"], sort_keys=True)
+        if roles["current_service"].get("device_id"):
+            # the existing per-charger key the device sends as ``device_id``
+            # (devices/base.py ``service_device_id``), as Easee's has
+            o["ev_service_device_id"] = roles["current_service"]["device_id"]
     if roles.get("phase_select"):
         o["_suggested_phase_switch"] = dict(roles["phase_select"])
     return o
@@ -2582,6 +2593,11 @@ def charger_from_near_miss(dev_entities, platform: str,
         if control.get("data"):
             out["ev_charger_service_data"] = json.dumps(control["data"],
                                                         sort_keys=True)
+        # (#1097) a service keyed by device_id gets this box's registry id
+        _did = next((getattr(e, "device_id", None) for e in dev_entities
+                     if getattr(e, "device_id", None)), None)
+        if "device_id" in (control.get("fields") or ()) and _did:
+            out["ev_service_device_id"] = str(_did)
     own = _own_names(dev_entities)
     # (#1032) the charging power is the whole box's reading, not one phase
     # leg or a clamp on something else (the rig: NRGkick's first power
