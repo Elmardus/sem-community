@@ -5824,3 +5824,12 @@ Refs #1076 #586 #704 #645.
 **Sweep question:** for every clamp, ask at which moment it was right, and whether a later moment reads it too.
 **Left for Guido:** the flag flips on after the PROD soak; a grey morning followed by a sunny afternoon must recover (watch that day shape).
 Refs #1068 #775 #598 #416.
+
+### 135. A word inside a word — a name read for meaning — GUARDED
+**Symptom:** rdehuyss's first install (2.2.0-beta.15, 11.10.2026): no car, yet setup showed an EV with `sensor.bedverwarming_device_power` — a bed-heating smart plug (#1051).
+**Root shape:** the Energy Dashboard's individual devices were scanned for the letters `ev`, `charger`, `wallbox` … anywhere in the entity id. "device" holds "ev". A name says what someone typed, not what a thing is.
+**Where it lives:** `ha_energy_reader.py::_extract_ev_from_devices` (**fixed**). Same reader, same report: the grid power pair a P1 reader gives was never looked for (**fixed**, `_POWER_DERIVE_RULES["grid_import"/"grid_export"]`); a tip whose words held live numbers rewrote a sensor state every cycle (**fixed**, `analytics/energy_assistant.py`); a price slot's `all_in` was not a price key (**fixed**, `tariff/tariff_provider.py::SLOT_PRICE_KEYS`).
+**Closure:** an Energy Dashboard device is the EV only when the entity registry says its integration is one the crawler knows as a charger (`known_charger_domains`). No registry, no EV.
+**Guard:** `tests/test_1051_first_install.py` — his plug is not the EV; a KEBA device still is; names alone never are; the P1 pair is found; a tip holds its words between rotations; >100 % export gives no tip; `all_in` is the slot price.
+**Sweep question:** where else does SEM read a substring of an entity id as a fact about what the entity is?
+Refs #1051 #250 #553 #829.
