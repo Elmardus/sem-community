@@ -1668,7 +1668,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         # required fields it cannot fill, so the dialog could not get past
         # page one — nor reach "Remove a charger". Open on the list then.
         _cards = [c for c in (saved.get("ev_chargers") or []) if isinstance(c, dict)]
-        _half_primary = bool(_cards) and not charger_is_complete(_cards[0])
+        _half_primary = bool(_cards) and not all(
+            _cards[0].get(k) for k in EV_REQUIRED_SENSORS)
         if has_managed_charger(saved) and not _half_primary:
             return await self.async_step_ev_charger()
         # The skipped page must change nothing. The final save replaces
