@@ -612,8 +612,19 @@ async def async_get_config_entry_diagnostics(
                   # (#964) what the unit grouping could attribute to no box
                   "unattributed",
                   # (#1036) meters beside a charger, not offered as chargers
-                  "meters")
+                  "meters",
+                  # (#1092) each reported integration's services and their
+                  # fields: the crawler reads roles from what a service
+                  # takes, so a download without them cannot replay
+                  "services")
                  if _report.get(k) is not None}
+    # (#1092) A box name (go-e's ``charger_name``, a serial) is the name a
+    # person gave their charger, and the integration builds its entity ids
+    # from it. Every one becomes a stable stand-in — ``box_1`` — in the
+    # service data AND inside the entity ids, the same everywhere in the
+    # section, so the download names nobody's box and still replays.
+    from .hardware_detection import redact_box_names
+    detection = redact_box_names(detection, in_ids=True)
 
     return {
         "detection": detection,
