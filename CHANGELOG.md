@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **SEM runs chargers it finds with only a charge-mode or start/stop control** (#1095). myenergi, Ohme and Zaptec without current rights were found, then dropped.
+- 🐛 **SEM finds a charging current named plainly "charging_current"** (#1096). Only on a charger; on an inverter that name is the battery limit.
+- 🐛 **A charger whose service needs the device id now gets it** (#1097). Before, SEM called the service without saying which charger.
 - 🔧 **Your diagnostics now show what SEM read from each charger: units, short states and services** (#1092). Your charger's own name is replaced by box_1.
 - 🐛 **A half-filled charger card can no longer hide or replace your working charger** (#1054) — thanks @weindler. Creating the charger again replaces the old card.
 - ✨ **The day plan follows the sky** (#1068). From midday, the rest of today's solar is scaled by what was really made. Off by default.
