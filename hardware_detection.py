@@ -1447,12 +1447,19 @@ _CONFIGURED_ROW_KEYS = CHARGER_ENTITY_KEYS | frozenset({
 
 
 def charger_is_complete(charger: Any) -> bool:
-    """(#1054 round 3) A charger card SEM can run: every sensor in
-    ``EV_REQUIRED_SENSORS`` set. A card an older detection left half-filled
-    is not a charger — it must not hide its box from detection nor outrank
-    the working card for the same box."""
-    return isinstance(charger, dict) and all(
-        charger.get(k) for k in EV_REQUIRED_SENSORS)
+    """(#1054 round 3) A charger card SEM can run. A card an older detection
+    left half-filled is not a charger — it must not hide its box from
+    detection nor outrank the working card for the same box.
+
+    (#1092) "Complete" is the crawler's own answer (``_offer_missing``): a
+    power reading and a way to act. It first required the plug and charging
+    sensors too, which most integrations' offers do not carry (Peblar, V2C,
+    Zaptec, OpenEVSE, NRGkick): every one of those running chargers read as
+    a half card, the detection page stopped calling it configured and
+    offered to create it again. The lifecycle suite caught it."""
+    if not isinstance(charger, dict):
+        return False
+    return not _offer_missing({k: v for k, v in charger.items() if v})
 
 
 def charger_entity_ids(charger: Any) -> set:

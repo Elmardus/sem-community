@@ -357,3 +357,24 @@ def test_every_capture_is_classified():
                 f"{name}: the crawler offers no charger; name it in "
                 "NO_OFFER with the reason, or fix the crawler")
     assert set(NO_OFFER) <= set(capture_names()), "a stale NO_OFFER row"
+
+
+@pytest.mark.parametrize("name", [n for n in capture_names() if n not in NO_OFFER])
+def test_every_crawler_offer_is_a_complete_charger(name):
+    """(#1092) What the crawler offers, SEM must call complete — one answer
+    to "is this a charger SEM can run". When the two disagreed (#1054 round
+    3 asked for plug and charging sensors), a running Peblar read as a half
+    card and its box was offered again."""
+    import json as _json
+    from pathlib import Path
+    from custom_components.solar_energy_management.hardware_detection import (
+        charger_is_complete,
+    )
+    view = _json.loads((Path(__file__).resolve().parent / "integrations_rig"
+                        / "crawler" / f"{name}.json").read_text())
+    offers = [n["offer"] for n in view.get("near_misses") or [] if n.get("offer")]
+    offers += [{k: v for k, v in c["mapped"].items()} for c in view.get("chargers") or []]
+    assert offers
+    for offer in offers:
+        assert charger_is_complete(offer), f"{name}: the crawler's offer reads as half: {offer}"
+    assert not charger_is_complete({"id": "x", "ev_total_energy_sensor": "sensor.e"})
