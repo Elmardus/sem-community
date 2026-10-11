@@ -2785,7 +2785,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
                     if not full_config.get(key) and charger_cfg.get(key):
                         full_config[key] = charger_cfg[key]
 
-            if not ev_power_entity or not (ev_charger_service or ev_current_entity):
+            # (#1095) ONE rule for "a charger SEM can run": the crawler's
+            # own (``charger_is_complete``) — a power reading and ANY way to
+            # act. Setup used to want a current service or a current entity,
+            # so a charger the crawler offered with only a charge-mode select
+            # or only start/stop (myenergi, Ohme, a Zaptec without current
+            # rights) was dropped here and SEM ran nothing.
+            from .hardware_detection import charger_is_complete
+            _resolved = {k: _cfg(k) for k in (
+                "ev_charging_power_sensor", "ev_charger_service",
+                "ev_current_control_entity", "ev_start_stop_entity",
+                "ev_start_service", "ev_charge_mode_entity")}
+            if not charger_is_complete(_resolved):
                 _LOGGER.debug("Charger %s missing power sensor or control method, skipping", charger_id)
                 continue
 
