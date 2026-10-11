@@ -85,7 +85,9 @@ def _sem_entry(base, data_chargers, options_chargers):
         SolarEnergyManagementConfigFlow as Flow,
     )
     data = {k: v for k, v in base.data.items() if k != "ev_chargers"}
-    data.update({"ev_chargers": data_chargers, "has_ev": False})
+    data["has_ev"] = False
+    if data_chargers is not None:
+        data["ev_chargers"] = data_chargers
     return MockConfigEntry(domain=DOMAIN, version=Flow.VERSION,
                            minor_version=Flow.MINOR_VERSION, data=data,
                            options={"ev_chargers": options_chargers})
@@ -212,3 +214,35 @@ async def test_remove_is_final(sem_real_hass, sem_multi_wallbox_config_entry):
     await h.async_block_till_done()
     assert entry.options["ev_charger_refs"] == []
     assert list(entry.runtime_data._ev_devices) == []
+
+
+@pytest.mark.asyncio
+async def test_removing_the_last_charger_brings_none_back(
+    sem_real_hass, sem_multi_wallbox_config_entry,
+):
+    """HA-TEST, 11.10.2026: X on the last charger, and the next start's
+    auto-discovery planted the KEBA that install also has. With charger refs
+    an empty list is the user's answer: setup does not re-discover, the late
+    retry does not drive one — the crawler only offers it."""
+    from .test_services_real import _setup_sem
+    h = sem_real_hass
+    _seed(h)
+    await replay(h, load_capture("keba"))
+    dev, offer = await _his_box(h)
+    new = {**offer, "id": f"goecharger_{dev}", "name": "go-eCharger"}
+    entry = _sem_entry(sem_multi_wallbox_config_entry, None, [dict(new)])
+    await _setup_sem(h, entry)
+    assert list(entry.runtime_data._ev_devices) == [new["id"]]
+
+    await h.services.async_call(DOMAIN, "remove_charger",
+                                {"charger_id": new["id"]}, blocking=True)
+    await h.async_block_till_done()
+    for _ in range(2):
+        await h.config_entries.async_reload(entry.entry_id)
+        await h.async_block_till_done()
+        coord = entry.runtime_data
+        await coord._retry_ev_device_with_backoff()
+        assert entry.options["ev_charger_refs"] == []
+        assert entry.options["ev_chargers"] == []
+        assert "ev_chargers" not in entry.data
+        assert list(coord._ev_devices) == [] and coord._ev_device is None

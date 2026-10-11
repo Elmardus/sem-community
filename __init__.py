@@ -2680,8 +2680,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
         # Build charger config list from config + auto-discovery
         ev_chargers_config = list(full_config.get("ev_chargers") or [])
 
-        # Auto-discover if no chargers configured
-        if not ev_chargers_config:
+        # Auto-discover if no chargers configured — only on an install that
+        # never had a charger list. (#1054) Once charger refs exist, an empty
+        # list is the user's answer: they removed their last charger, and a
+        # silent re-discovery put one back (HA-TEST 11.10: X on the go-e, the
+        # next start planted the KEBA). The crawler still OFFERS it.
+        from .charger_refs import REFS_KEY as _REFS_KEY
+        if not ev_chargers_config and _REFS_KEY not in (entry.options or {}):
             ev_auto = {}
             if coordinator._device_registry:
                 ev_auto = coordinator._device_registry.discover_ev_charger()
