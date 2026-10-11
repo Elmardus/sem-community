@@ -326,7 +326,7 @@ class TestProblems:
         out = problems([ref], [resolve(ref)], device_exists=lambda d: True,
                        entity_exists=lambda e: True)
         assert out[0]["kind"] == "charger_role_missing"
-        assert "ev_charging_power_sensor" in out[0]["roles"]
+        assert "power reading" in out[0]["roles"]
 
     def test_override_entity_gone(self):
         ref = card_to_ref({**NEW, "ev_charging_power_sensor": "sensor.my_meter"},
@@ -378,3 +378,26 @@ def test_a_brand_charger_without_plug_sensors_is_complete():
 
 def test_role_keys_cover_every_charger_entity_key():
     assert CHARGER_ENTITY_KEYS <= ROLE_KEYS
+
+
+def test_a_device_less_copy_is_folded():
+    """(#1092 lifecycle) A device-less box (a KEBA): setup's discovery
+    stored it, then a create click sent the same entities under a new id.
+    One box, one charger — the exact entity set is its identity."""
+    keba = {"id": "keba_fa87f74cd3", "ev_charging_power_sensor": "sensor.keba_power",
+            "ev_charger_service": "keba.set_current",
+            "ev_connected_sensor": "binary_sensor.keba_plug"}
+    refs, resolved = reconcile(data_list=None, legacy=[dict(keba)], refs=None,
+                               sig=None, device_of=_no_device, live_by_device={})
+    again = resolved + [{**keba, "id": "keba_charger"}]
+    refs2, _ = reconcile(data_list=None, legacy=again, refs=refs,
+                         sig=signature(resolved), device_of=_no_device,
+                         live_by_device={})
+    assert [r["id"] for r in refs2] == ["keba_fa87f74cd3"]
+    # a different device-less box is a second charger
+    other = {**keba, "id": "keba_two", "ev_charging_power_sensor": "sensor.keba2_power",
+             "ev_connected_sensor": "binary_sensor.keba2_plug"}
+    refs3, _ = reconcile(data_list=None, legacy=resolved + [other], refs=refs,
+                         sig=signature(resolved), device_of=_no_device,
+                         live_by_device={})
+    assert [r["id"] for r in refs3] == ["keba_fa87f74cd3", "keba_two"]

@@ -1,0 +1,34 @@
+{
+ "chargers": [],
+ "meters": [],
+ "near_misses": [
+  {
+   "charger_roles": [
+    "charge_switch",
+    "current_service",
+    "session_energy",
+    "total_energy"
+   ],
+   "choose_vehicle": 0,
+   "companions": 0,
+   "entities": 50,
+   "missing": [
+    "power reading"
+   ],
+   "offer": {},
+   "paired_vehicle": false,
+   "proposed_roles": [
+    "ev_current_control"
+   ]
+  }
+ ],
+ "proposals": [
+  {
+   "ev_current_control": [
+    "goecharger.set_max_current",
+    "per_charger"
+   ]
+  }
+ ],
+ "vehicles": []
+}

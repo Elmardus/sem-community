@@ -1446,24 +1446,20 @@ _CONFIGURED_ROW_KEYS = CHARGER_ENTITY_KEYS | frozenset({
 })
 
 
-#: (#1054) What makes a charger one SEM can drive: a power reading and a way
-#: to act on it. NOT the setup form's ``EV_REQUIRED_SENSORS`` — working brand
-#: chargers (V2C, NRGkick, OpenEVSE, Peblar, Zaptec) have no plug or
-#: charging sensor, and the #1092 lifecycle suite caught that rule calling
-#: them half cards.
-CHARGER_CONTROL_KEYS = ("ev_charger_service", "ev_current_control_entity",
-                        "ev_start_stop_entity", "ev_start_service",
-                        "ev_charge_mode_entity")
-
-
 def charger_is_complete(charger: Any) -> bool:
-    """(#1054 round 3) A charger card SEM can run: a power reading and a
-    control. A card an older detection left half-filled (weindler's: a name
-    and one energy counter) is not a charger — it must not hide its box from
-    detection nor outrank the working card for the same box."""
-    return (isinstance(charger, dict)
-            and bool(charger.get("ev_charging_power_sensor"))
-            and any(charger.get(k) for k in CHARGER_CONTROL_KEYS))
+    """(#1054 round 3) A charger card SEM can run. A card an older detection
+    left half-filled is not a charger — it must not hide its box from
+    detection nor outrank the working card for the same box.
+
+    (#1092) "Complete" is the crawler's own answer (``_offer_missing``): a
+    power reading and a way to act. It first required the plug and charging
+    sensors too, which most integrations' offers do not carry (Peblar, V2C,
+    Zaptec, OpenEVSE, NRGkick): every one of those running chargers read as
+    a half card, the detection page stopped calling it configured and
+    offered to create it again. The lifecycle suite caught it."""
+    if not isinstance(charger, dict):
+        return False
+    return not _offer_missing({k: v for k, v in charger.items() if v})
 
 
 def charger_entity_ids(charger: Any) -> set:
@@ -3003,10 +2999,7 @@ def _roles_pass(report, registry, brand_units, configured_entities,
         missing = _offer_missing(offer)
         nm = {
             "platform": platform, "device_id": unit_device_id(key),
-            "entities": [{"entity": str(e.entity_id),
-                          "domain": str(e.entity_id).split(".", 1)[0],
-                          "device_class": getattr(e, "original_device_class", None)}
-                         for e in ents],
+            "entities": [entity_evidence(e, state_of) for e in ents],
             "note": "a charger SEM has no row for",
             "roster": describe_domain(platform),
             "proposed_roles": propose_roles_from_roster(
@@ -3054,8 +3047,11 @@ def _roles_pass(report, registry, brand_units, configured_entities,
             if any(str(e.entity_id).startswith("sensor.")
                    and _roles_dc(e) == "power" for e in ents):
                 continue
+            # (#1092) the companion's entities as the crawler read them,
+            # so a download replays the site device the charger leans on
             n.setdefault("companions", []).append(
-                {"device_id": did, "entities": len(ents)})
+                {"device_id": did, "entities": len(ents),
+                 "evidence": [entity_evidence(e) for e in ents]})
             companions.add(did)
             live = _current_number_role(ents)
             sc = n.get("suggested_charger") or {}
@@ -3092,6 +3088,129 @@ def _roles_pass(report, registry, brand_units, configured_entities,
             n["choose_vehicle"] = sorted(str(c.get("device_id")) for c in cars)
 
 
+#: (#1092) The capability keys the crawler reads (a select's options, a
+#: number's range) — copied into the evidence so a download replays.
+_EVIDENCE_CAPS = ("options", "min", "max", "step", "mode", "state_class")
+#: (#1092) Whose state rides in the evidence, and how long it may be: a
+#: charger's status word or a number, never a free text or a place.
+_EVIDENCE_STATE_DOMAINS = frozenset({"sensor", "binary_sensor", "switch",
+                                     "select", "number", "button", "lock"})
+_EVIDENCE_STATE_MAX = 32
+
+
+def entity_evidence(e, state_of=None) -> Dict[str, Any]:
+    """(#1092) One entity as the crawler READ it: what a user's diagnostics
+    must carry for the download to replay as a test of the same install.
+    Before, a row held only the id and device class, so go-e's ``p_all``
+    (kW, no class) replayed as a sensor without a unit and the crawler
+    could not find the power it had found live. No unique id (it often
+    holds a serial). A short state rides along when ``state_of`` can read
+    it — the crawler reads a status word ("charging") from it; a long one
+    (a location, an address) never does."""
+    eid = str(e.entity_id)
+    out: Dict[str, Any] = {
+        "entity": eid,
+        "domain": eid.split(".", 1)[0],
+        "device_class": getattr(e, "original_device_class", None),
+    }
+    unit = getattr(e, "unit_of_measurement", None)
+    if unit:
+        out["unit"] = str(unit)
+    key = getattr(e, "translation_key", None)
+    if key:
+        out["translation_key"] = str(key)
+    cat = getattr(e, "entity_category", None)
+    if cat:
+        out["entity_category"] = str(getattr(cat, "value", cat))
+    caps = getattr(e, "capabilities", None)
+    if isinstance(caps, dict):
+        kept = {k: caps[k] for k in _EVIDENCE_CAPS if k in caps}
+        if kept:
+            out["capabilities"] = kept
+    if getattr(e, "disabled_by", None):
+        out["disabled"] = True
+    if state_of is not None and out["domain"] in _EVIDENCE_STATE_DOMAINS:
+        try:
+            st = state_of(eid)
+        except Exception:  # noqa: BLE001
+            st = None
+        val = getattr(st, "state", None)
+        if isinstance(val, str) and len(val) <= _EVIDENCE_STATE_MAX:
+            out["state"] = val
+    return out
+
+
+#: (#1092) Service fields whose VALUE names one person's box — the name
+#: they gave it, a serial. Redacted in every download (``redact_box_names``).
+BOX_VALUE_FIELDS: frozenset = frozenset({
+    "charger_name", "charger", "device_name", "charger_id", "serial",
+    "serial_number"})
+
+
+def _slug(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value).lower()).strip("_")
+
+
+def redact_box_names(obj: Any, *, stand_ins: Optional[Dict[str, str]] = None,
+                     in_ids: bool = False) -> Any:
+    """(#1092) ``obj`` with every box name replaced by a stable stand-in
+    (``box_1``, ``box_2`` …), the same one for the same name everywhere, so
+    the result still replays: the service data, the device a capture
+    registers and — with ``in_ids`` — the name inside entity ids all agree.
+
+    A box name is the value of a ``BOX_VALUE_FIELDS`` key, found in a plain
+    dict or inside a ``*_service_data`` JSON string. ``stand_ins`` collects
+    the mapping; pass the same dict to redact several objects alike."""
+    import json as _json
+    found: Dict[str, str] = stand_ins if stand_ins is not None else {}
+
+    def _collect(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k in BOX_VALUE_FIELDS and isinstance(v, str) and v \
+                        and not re.fullmatch(r"box_\d+", v):
+                    found.setdefault(v, f"box_{len(found) + 1}")
+                elif isinstance(v, str) and k.endswith("_service_data"):
+                    try:
+                        _collect(_json.loads(v or "{}"))
+                    except ValueError:
+                        pass
+                else:
+                    _collect(v)
+        elif isinstance(o, (list, tuple)):
+            for v in o:
+                _collect(v)
+    _collect(obj)
+    if not found:
+        return obj
+    slugs = {_slug(k): v for k, v in found.items() if _slug(k)}
+
+    def _swap(text: str) -> str:
+        if text in found:
+            return found[text]
+        out = text
+        for name, stand in found.items():
+            out = out.replace(f'"{name}"', f'"{stand}"')
+        if in_ids:
+            for slug, stand in sorted(slugs.items(), key=lambda kv: -len(kv[0])):
+                out = re.sub(rf"(?<![a-z0-9]){re.escape(slug)}(?![a-z0-9])",
+                             stand, out, flags=re.I)
+        return out
+
+    def _walk(o):
+        if isinstance(o, dict):
+            return {(_swap(k) if in_ids and isinstance(k, str) else k): _walk(v)
+                    for k, v in o.items()}
+        if isinstance(o, list):
+            return [_walk(v) for v in o]
+        if isinstance(o, tuple):
+            return tuple(_walk(v) for v in o)
+        if isinstance(o, str):
+            return _swap(o)
+        return o
+    return _walk(obj)
+
+
 def build_detection_report(hass: Optional[HomeAssistant] = None,
                            registry=None, configured_entities=None,
                            strategy_values=None,
@@ -3122,12 +3241,7 @@ def build_detection_report(hass: Optional[HomeAssistant] = None,
     entries = list(registry.entities.values())
 
     def _describe(e) -> Dict[str, Any]:
-        eid = str(e.entity_id)
-        return {
-            "entity": eid,
-            "domain": eid.split(".", 1)[0],
-            "device_class": getattr(e, "original_device_class", None),
-        }
+        return entity_evidence(e, _roles_state_of)
 
     report: Dict[str, Any] = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -3529,6 +3643,17 @@ def build_detection_report(hass: Optional[HomeAssistant] = None,
             if v.get("action") == "not_loaded")
     except Exception:  # noqa: BLE001 — a prior never costs the report
         report["roster_proposals"] = []
+    # (#1092) The services each reported integration offers, with their
+    # fields: the crawler reads a role from what a service TAKES, so a
+    # diagnostics download without them cannot replay as the same install.
+    try:
+        _doms = sorted({str(r.get("platform") or "").split("_rig")[0]
+                        for key in ("chargers", "near_misses", "meters")
+                        for r in report.get(key) or []} - {"", "configured"})
+        report["services"] = ({d: dict(getattr(_roles_services(d), "fields", {}) or {})
+                               for d in _doms} if _roles_services else {})
+    except Exception:  # noqa: BLE001 — evidence never costs the report
+        report["services"] = {}
     return report
 
 

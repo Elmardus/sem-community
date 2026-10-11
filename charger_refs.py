@@ -53,8 +53,8 @@ from collections import Counter
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from .hardware_detection import (
-    CHARGER_CONTROL_KEYS,
     CHARGER_ENTITY_KEYS,
+    _offer_missing,
     charger_is_complete,
 )
 
@@ -133,6 +133,18 @@ def resolve(ref: dict, live: Optional[Dict[str, Any]] = None) -> dict:
     return card
 
 
+def _box(card: dict, device_id: Optional[str]) -> Optional[str]:
+    """What makes two cards the same box: the HA device, or — for a
+    device-less charger (a KEBA) — its exact entity set. The old set_option
+    fold caught a device-less copy the same way (#1092 lifecycle: setup's
+    auto-discovery, then a create click for the same box under a new id)."""
+    if device_id is not None:
+        return device_id
+    from .hardware_detection import charger_entity_ids
+    ids = charger_entity_ids(card)
+    return "entities:" + ",".join(sorted(ids)) if ids else None
+
+
 def _is_half(ref: dict) -> bool:
     """A ref made from a half card. The crawler may complete what it
     RESOLVES to, but a complete charger for the same device still replaces
@@ -164,9 +176,10 @@ def refs_from_cards(cards: Iterable[dict], device_of: DeviceOf,
             continue
         dev = device_of_card(card, device_of)
         live = live_by_device.get(dev) if dev else None
-        if dev is not None and dev in by_device:
+        box = _box(card, dev)
+        if box is not None and box in by_device:
             placed = False
-            for idx in by_device[dev]:
+            for idx in by_device[box]:
                 existing = resolve(out[idx], live)
                 if _is_half(out[idx]) and charger_is_complete(card):
                     keep_place = out[idx]["id"]
@@ -187,19 +200,19 @@ def refs_from_cards(cards: Iterable[dict], device_of: DeviceOf,
             # two different chargers on one device keeps both: the
             # migration SETS it, numbering by position, so nothing working
             # is dropped.
-            first = out[by_device[dev][0]]
+            first = out[by_device[box][0]]
             first["settings"].setdefault("connector", 1)
             ref = card_to_ref(card, dev, live)
-            ref["settings"].setdefault("connector", len(by_device[dev]) + 1)
+            ref["settings"].setdefault("connector", len(by_device[box]) + 1)
             log(f"charger {card['id']} is a second charger on the device of "
                 f"{first['id']} — kept, as connector "
                 f"{ref['settings']['connector']}")
-            by_device[dev].append(len(out))
+            by_device[box].append(len(out))
             out.append(ref)
             continue
         ref = card_to_ref(card, dev, live)
-        if dev is not None:
-            by_device[dev] = [len(out)]
+        if box is not None:
+            by_device[box] = [len(out)]
         out.append(ref)
     return out
 
@@ -256,8 +269,12 @@ def apply_legacy_edit(refs: List[dict], legacy: List[dict],
     for pos, card in new_cards:
         dev = device_of_card(card, device_of)
         live = live_by_device.get(dev) if dev else None
+        box = _box(card, dev)
         twins = [i for i, r in enumerate(out)
-                 if r is not None and dev is not None and r.get("device_id") == dev]
+                 if r is not None and box is not None
+                 and _box(resolve(r, live_by_device.get(r.get("device_id"))
+                                  if r.get("device_id") else None),
+                          r.get("device_id")) == box]
         if twins:
             existing = resolve(out[twins[0]], live)
             if _is_half(out[twins[0]]) and charger_is_complete(card):
@@ -314,9 +331,8 @@ def problems(refs: List[dict], resolved: List[dict], *,
             out.append({"kind": "charger_device_gone", "id": ref["id"],
                         "name": name})
             continue
-        missing = [k for k in ("ev_charging_power_sensor",) if not card.get(k)]
-        if not any(card.get(k) for k in CHARGER_CONTROL_KEYS):
-            missing.append("ev_current_control")
+        # the crawler's own rule for a charger SEM can run (#1092)
+        missing = _offer_missing({k: v for k, v in card.items() if v})
         if missing:
             out.append({"kind": "charger_role_missing", "id": ref["id"],
                         "name": name, "roles": ", ".join(missing)})

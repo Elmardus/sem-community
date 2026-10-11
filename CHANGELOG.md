@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 # [Unreleased]
 
 - 🐛 **A charger is stored as its device; SEM reads its roles from it** (#1054) — thanks @weindler. Removed stays removed; the card shows what you set.
+- 🔧 **Your diagnostics now show what SEM read from each charger: units, short states and services** (#1092). Your charger's own name is replaced by box_1.
 - 🐛 **A half-filled charger card can no longer hide or replace your working charger** (#1054) — thanks @weindler. Creating the charger again replaces the old card.
 - ✨ **The day plan follows the sky** (#1068). From midday, the rest of today's solar is scaled by what was really made. Off by default.
 - ✨ **Grid operator relay** (#1021). While it is on, SEM keeps grid draw under the operator's limit and skips the devices it switches off.
