@@ -53,6 +53,20 @@ class TestCompleteWins:
         assert not charger_is_complete(OLD)
         assert not charger_is_complete(None)
 
+    def test_a_charger_without_plug_sensors_is_complete(self):
+        """(#1092 suite) V2C, NRGkick, OpenEVSE, Peblar and Zaptec have no
+        plug or charging sensor. A power reading and a control is a charger
+        SEM can run; the setup form's three sensors are not the rule."""
+        for control in ({"ev_current_control_entity": "number.box_current"},
+                        {"ev_charger_service": "zaptec.limit_current"},
+                        {"ev_start_stop_entity": "switch.box_charge"},
+                        {"ev_start_service": "keba.enable"},
+                        {"ev_charge_mode_entity": "select.box_mode"}):
+            card = {"ev_charging_power_sensor": "sensor.box_power", **control}
+            assert charger_is_complete(card), control
+        assert not charger_is_complete(
+            {"ev_charging_power_sensor": "sensor.box_power"})
+
     def test_the_create_replaces_the_half_filled_card_of_the_same_box(self):
         """weindler's state, then the create button: one charger, the
         working one, in the old card's place."""
