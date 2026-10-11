@@ -280,7 +280,7 @@ def _parse_prefs(
     # Extract device consumption (for EV charger)
     device_consumption = data.get("device_consumption", [])
     config.device_consumption = device_consumption
-    _extract_ev_from_devices(device_consumption, config)
+    _extract_ev_from_devices(device_consumption, config, hass)
 
     # Derive any power sensors the Energy Dashboard left unset (no stat_rate).
     # HA 2025.12+ power links are configured manually and are frequently absent
@@ -713,36 +713,45 @@ def _derive_battery_power_if_unrepresented(hass, config) -> None:
 
 
 def _extract_ev_from_devices(
-    device_consumption: List[Dict[str, Any]], config: EnergyDashboardConfig
+    device_consumption: List[Dict[str, Any]], config: EnergyDashboardConfig,
+    hass: Optional[HomeAssistant] = None,
 ) -> None:
-    """Extract EV charger from device consumption list.
+    """Pick the EV charger from the Energy Dashboard's individual devices.
 
-    Looks for devices that appear to be EV chargers based on naming patterns.
-    Takes the first match.
+    (#1051) A device is the EV only when the crawler knows its integration
+    as a charger (``known_charger_domains``), asked through the entity
+    registry. The old rule matched letters in the entity id — "ev" is in
+    "device" — and a bed-heating smart plug became a home's EV charger.
+    Without a registry to ask, nothing is the EV: a wrong EV makes SEM drive
+    a plug as a car, a missing one is set up from the crawler later.
 
     HA 2025.12 uses "stat_rate" for power sensors in device consumption.
     """
-    ev_patterns = ["ev", "charger", "keba", "wallbox", "easee", "zappi", "tesla_wall"]
+    if hass is None:
+        return
+    from .hardware_detection import known_charger_domains  # cycle-free here
+    chargers = known_charger_domains()
+    reg = er.async_get(hass)
+
+    def _charger_platform(entity_id: Optional[str]) -> bool:
+        entry = reg.async_get(entity_id) if entity_id else None
+        platform = str(getattr(entry, "platform", "") or "")
+        # the zaptec_custom tolerance, same rule as the discovery walk
+        return (platform in chargers
+                or (platform.startswith("zaptec") and "zaptec" in chargers))
 
     for device in device_consumption:
-        stat_consumption = device.get("stat_consumption", "")
-        # HA 2025.12 uses "stat_rate" for power, not "stat_power"
+        stat_consumption = device.get("stat_consumption") or ""
         stat_power = device.get("stat_rate") or device.get("stat_power")
-
-        # Check if this looks like an EV charger
-        entity_lower = stat_consumption.lower()
-        is_ev = any(pattern in entity_lower for pattern in ev_patterns)
-
-        if is_ev:
-            config.ev_energy = stat_consumption
-            config.ev_power = stat_power
-            config.has_ev = True
-            _LOGGER.debug(
-                "Found EV charger in devices: energy=%s, power=%s",
-                config.ev_energy,
-                config.ev_power,
-            )
-            break
+        if not (_charger_platform(stat_consumption)
+                or _charger_platform(stat_power)):
+            continue
+        config.ev_energy = stat_consumption or None
+        config.ev_power = stat_power
+        config.has_ev = True
+        _LOGGER.debug("Found EV charger in devices: energy=%s, power=%s",
+                      config.ev_energy, config.ev_power)
+        break
 
 
 def _find_power_sensor_on_device(
