@@ -125,3 +125,28 @@ def test_more_export_than_solar_gives_no_export_tip(monkeypatch):
     ea.analyze(daily_solar_kwh=5.0, daily_grid_export_kwh=5.7)
     tips = " ".join(t.description for t in ea._tips)
     assert "exported" not in tips
+
+
+# ── the BE price sensor: today/tomorrow slots priced as all_in ───────────
+
+def test_a_slot_priced_all_in_is_read_at_its_all_in_price(mock_hass):
+    """His BE prices sensor: today/tomorrow lists of {start, energy,
+    network, taxes, all_in}. The price a home pays is ``all_in``; the
+    energy part alone is a quarter of it."""
+    from datetime import datetime, timedelta
+    from unittest.mock import MagicMock
+    from custom_components.solar_energy_management.tariff.tariff_provider import (
+        DynamicTariffProvider,
+    )
+    start = datetime.fromisoformat("2026-10-11T12:00:00+02:00")
+    slots = [{"start": (start + timedelta(hours=i)).isoformat(),
+              "energy": 0.053534, "network": 0.0587, "taxes": 0.06436,
+              "all_in": 0.176594 + i / 100} for i in range(3)]
+    state = MagicMock()
+    state.state = "0.176594"
+    state.attributes = {"today": slots, "tomorrow": [],
+                        "unit_of_measurement": "EUR/kWh"}
+    mock_hass.states.get = MagicMock(return_value=state)
+    prices = DynamicTariffProvider(
+        mock_hass, price_entity="sensor.be_electricity_price")._read_prices_list()
+    assert [round(p.price, 6) for p in prices] == [0.176594, 0.186594, 0.196594]
