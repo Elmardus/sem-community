@@ -69,6 +69,7 @@ from .hardware_detection import (
     EV_REQUIRED_SENSORS,
     HardwareDetector,
     charger_entity_ids,
+    charger_is_complete,
     discover_ev_charger_from_registry,
     discover_inverter_from_registry,
     power_sensor_ids,
@@ -2460,14 +2461,19 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             return await self.async_step_ev_charger_menu()
 
         ev_chargers = self._data.get("ev_chargers", [])
-        # Don't allow removing the last charger
-        removable = [c for c in ev_chargers[1:]]  # Skip primary
-        if not removable:
+        # Don't allow removing the last charger, nor a working primary (the
+        # flat keys mirror it, #112). (#1054 round 3) A half-filled primary
+        # IS removable: an old detection's card sat first, so the only
+        # charger this list offered was weindler's working go-e.
+        removable = [(_ci, c) for _ci, c in enumerate(ev_chargers)
+                     if isinstance(c, dict) and c.get("id")
+                     and (_ci > 0 or not charger_is_complete(c))]
+        if len(ev_chargers) < 2 or not removable:
             return await self.async_step_ev_charger_menu()
 
         options = [{"value": c["id"],
-                    "label": charger_display_name(getattr(self, "hass", None), c, _ci + 1)}
-                   for _ci, c in enumerate(removable)]
+                    "label": charger_display_name(getattr(self, "hass", None), c, _ci)}
+                   for _ci, c in removable]
 
         return self.async_show_form(
             step_id="ev_charger_remove",
