@@ -150,3 +150,35 @@ def test_a_slot_priced_all_in_is_read_at_its_all_in_price(mock_hass):
     prices = DynamicTariffProvider(
         mock_hass, price_entity="sensor.be_electricity_price")._read_prices_list()
     assert [round(p.price, 6) for p in prices] == [0.176594, 0.186594, 0.196594]
+
+
+# ── a P1 meter that gives power as two sensors ───────────────────────────
+
+async def test_a_meter_with_separate_import_and_export_power_is_found(hass):
+    """His grid energies come from a P1 reader (``…_energy_consumed_tariff_1``
+    / ``…_energy_produced_tariff_1``); P1 readers give power the same way,
+    as two sensors on the same device. Without them SEM had no grid power."""
+    from homeassistant.helpers import device_registry as dr
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    entry = MockConfigEntry(domain="esphome")
+    entry.add_to_hass(hass)
+    dev = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={("esphome", "p1")})
+    reg = er.async_get(hass)
+    for oid in ("bluetooth_proxy_garage_energy_consumed_tariff_1",
+                "bluetooth_proxy_garage_energy_produced_tariff_1",
+                "bluetooth_proxy_garage_power_consumed",
+                "bluetooth_proxy_garage_power_produced"):
+        reg.async_get_or_create("sensor", "esphome", oid, suggested_object_id=oid,
+                                device_id=dev.id, config_entry=entry)
+    for oid, unit, val in (("power_consumed", "kW", "0.42"),
+                           ("power_produced", "kW", "0.0")):
+        hass.states.async_set(f"sensor.bluetooth_proxy_garage_{oid}", val,
+                              {"unit_of_measurement": unit,
+                               "device_class": "power"})
+    config = _parse_prefs(hass, PREFS, quiet=True)
+    assert config.grid_power_from == "sensor.bluetooth_proxy_garage_power_consumed"
+    assert config.grid_power_to == "sensor.bluetooth_proxy_garage_power_produced"
+    assert config.derived_power.get("grid") == (
+        "sensor.bluetooth_proxy_garage_power_consumed|"
+        "sensor.bluetooth_proxy_garage_power_produced")

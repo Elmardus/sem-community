@@ -40,6 +40,19 @@ _POWER_DERIVE_RULES: Dict[str, Dict[str, tuple]] = {
         ),
         "prefer": ("measured", "total"),
     },
+    # (#1051) A meter that gives power as two sensors (P1 readers: DSMR
+    # ``power_consumed`` / ``power_produced``, ``power_delivered`` /
+    # ``power_returned``, ``power_consumption`` / ``power_production``).
+    "grid_import": {
+        "include": ("power_consumed", "power_delivered", "power_consumption",
+                    "power_import", "import_power"),
+        "prefer": ("total",),
+    },
+    "grid_export": {
+        "include": ("power_produced", "power_returned", "power_production",
+                    "power_export", "export_power"),
+        "prefer": ("total",),
+    },
     "battery": {
         # No "charge"/"discharge" preference on purpose: when a device exposes a
         # combined `battery_power` AND a `battery_power_charge`, the shortest-name
@@ -949,6 +962,24 @@ def _derive_missing_power_sensors(
                 "Derived grid power sensor %s from energy device "
                 "(no stat_rate in Energy Dashboard)", found,
             )
+
+    # (#1051) Grid as TWO power sensors: a P1 / smart-meter reader gives
+    # import and export power separately, next to its two energy counters.
+    # Read as the same import/export pair the Energy Dashboard's "two
+    # sensors" power option gives (#553).
+    if (not config.grid_import_power and not config.grid_power_from
+            and config.grid_import_energy and config.grid_export_energy):
+        imp = _find_power_sensor_on_device(
+            hass, config.grid_import_energy, _POWER_DERIVE_RULES["grid_import"])
+        exp = _find_power_sensor_on_device(
+            hass, config.grid_export_energy, _POWER_DERIVE_RULES["grid_export"])
+        if imp and exp and imp != exp:
+            config.grid_power_from = imp
+            config.grid_power_to = exp
+            config.derived_power["grid"] = f"{imp}|{exp}"
+            _LOGGER.info(
+                "Derived grid power as an import/export pair %s / %s from the "
+                "meter's device (no stat_rate in Energy Dashboard)", imp, exp)
 
     # Battery: battery_power* (positive=charge per SEM; sign auto-detected later).
     _derive_battery_power_if_unrepresented(hass, config)
