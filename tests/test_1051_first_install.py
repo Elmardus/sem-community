@@ -83,3 +83,45 @@ def test_without_the_registry_a_name_proves_nothing(name):
     config = EnergyDashboardConfig()
     _extract_ev_from_devices([{"stat_consumption": name}], config)
     assert config.has_ev is False
+
+
+# ── the tip that wrote an Activity row every cycle ───────────────────────
+
+def _assistant(monkeypatch, clock):
+    from unittest.mock import MagicMock
+    import custom_components.solar_energy_management.analytics.energy_assistant as ea_mod
+    monkeypatch.setattr(ea_mod.time, "monotonic", lambda: clock["t"])
+    hass = MagicMock()
+    hass.config.currency = "EUR"
+    return ea_mod, ea_mod.EnergyAssistant(hass)
+
+
+def test_the_shown_tip_keeps_its_words_between_rotations(monkeypatch):
+    """His Activity: "114% … exported" then "111% …" every ~30 s. The tip's
+    numbers move every cycle; the text a person sees (a sensor STATE, so a
+    logbook row per change) must hold until the next rotation."""
+    clock = {"t": 1000.0}
+    ea_mod, ea = _assistant(monkeypatch, clock)
+    ea.analyze(daily_solar_kwh=10.0, daily_grid_export_kwh=7.0,
+               self_consumption_rate=90.0)
+    first = ea.assistant_data.current_tip
+    assert first and "exported" in first
+    clock["t"] += 30
+    ea.analyze(daily_solar_kwh=10.2, daily_grid_export_kwh=7.3,
+               self_consumption_rate=90.0)
+    assert ea.assistant_data.current_tip == first
+    clock["t"] += ea_mod.TIP_ROTATION_INTERVAL_S + 1
+    ea.analyze(daily_solar_kwh=10.2, daily_grid_export_kwh=7.3,
+               self_consumption_rate=90.0)
+    shown = [t.description for t in ea._tips]
+    assert ea.assistant_data.current_tip in shown   # fresh words on rotation
+
+
+def test_more_export_than_solar_gives_no_export_tip(monkeypatch):
+    """114 % of solar exported is not a fact about the house: the inputs
+    disagree (his solar power read only the old inverters). No tip on it."""
+    clock = {"t": 1000.0}
+    _, ea = _assistant(monkeypatch, clock)
+    ea.analyze(daily_solar_kwh=5.0, daily_grid_export_kwh=5.7)
+    tips = " ".join(t.description for t in ea._tips)
+    assert "exported" not in tips
