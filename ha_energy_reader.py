@@ -40,19 +40,6 @@ _POWER_DERIVE_RULES: Dict[str, Dict[str, tuple]] = {
         ),
         "prefer": ("measured", "total"),
     },
-    # (#1051) A meter that gives power as two sensors (P1 readers: DSMR
-    # ``power_consumed`` / ``power_produced``, ``power_delivered`` /
-    # ``power_returned``, ``power_consumption`` / ``power_production``).
-    "grid_import": {
-        "include": ("power_consumed", "power_delivered", "power_consumption",
-                    "power_import", "import_power"),
-        "prefer": ("total",),
-    },
-    "grid_export": {
-        "include": ("power_produced", "power_returned", "power_production",
-                    "power_export", "export_power"),
-        "prefer": ("total",),
-    },
     "battery": {
         # No "charge"/"discharge" preference on purpose: when a device exposes a
         # combined `battery_power` AND a `battery_power_charge`, the shortest-name
@@ -725,39 +712,77 @@ def _derive_battery_power_if_unrepresented(hass, config) -> None:
         )
 
 
+#: (#1051) Words that make an Energy Dashboard device the EV — matched as
+#: WHOLE words of the entity id, never as letters inside one: "ev" is in
+#: "device", and a bed-heating smart plug became a home's EV charger.
+_EV_NAME_TOKENS = frozenset({"ev", "evse", "charger", "keba", "wallbox",
+                             "easee", "zappi", "juicebox"})
+_EV_NAME_PHRASES = ("tesla_wall", "wall_connector")
+
+
+def _ev_by_name(entity_id: Optional[str]) -> bool:
+    import re
+    low = (entity_id or "").lower().split(".", 1)[-1]
+    if any(p in low for p in _EV_NAME_PHRASES):
+        return True
+    return any(t in _EV_NAME_TOKENS for t in re.split(r"[^a-z0-9]+", low))
+
+
+def _charger_integrations() -> frozenset:
+    """Integrations the crawler knows as chargers: those it has a discovery
+    walk for, those it proves by roles, and the roster's charger rows."""
+    from .hardware_detection import (  # cycle-free here
+        ROLE_PROVEN_PLATFORMS, _roster, known_charger_domains,
+    )
+    found = set(known_charger_domains()) | set(ROLE_PROVEN_PLATFORMS)
+    try:
+        r = _roster()
+        rows = (getattr(r, "ROSTER", {}) or {}) if r else {}
+        found |= {d for d, row in rows.items()
+                  if isinstance(row, dict) and row.get("kind") == "charger"}
+    except Exception:  # noqa: BLE001 — the roster is a hint, never required
+        pass
+    return frozenset(found)
+
+
+def is_ev_device(hass: Optional[HomeAssistant], energy: Optional[str],
+                 power: Optional[str]) -> bool:
+    """(#1051) Is this Energy Dashboard individual device the EV?
+
+    Yes when the entity registry says either entity belongs to an
+    integration the crawler knows as a charger. Otherwise the entity id's
+    WHOLE words decide (``sensor.keba_total_energy`` yes,
+    ``sensor.bedverwarming_device_power`` no) — kept so a charger behind a
+    template or utility-meter sensor stays the EV it always was."""
+    if hass is not None:
+        try:
+            reg = er.async_get(hass)
+            chargers = _charger_integrations()
+            for eid in (energy, power):
+                entry = reg.async_get(eid) if eid else None
+                platform = str(getattr(entry, "platform", "") or "")
+                if platform and (platform in chargers
+                                 or (platform.startswith("zaptec")
+                                     and "zaptec" in chargers)):
+                    return True
+        except Exception:  # noqa: BLE001 — fall back to the name
+            pass
+    return _ev_by_name(energy) or _ev_by_name(power)
+
+
 def _extract_ev_from_devices(
     device_consumption: List[Dict[str, Any]], config: EnergyDashboardConfig,
     hass: Optional[HomeAssistant] = None,
 ) -> None:
-    """Pick the EV charger from the Energy Dashboard's individual devices.
-
-    (#1051) A device is the EV only when the crawler knows its integration
-    as a charger (``known_charger_domains``), asked through the entity
-    registry. The old rule matched letters in the entity id — "ev" is in
-    "device" — and a bed-heating smart plug became a home's EV charger.
-    Without a registry to ask, nothing is the EV: a wrong EV makes SEM drive
-    a plug as a car, a missing one is set up from the crawler later.
+    """Pick the EV charger from the Energy Dashboard's individual devices
+    (first match, ``is_ev_device``).
 
     HA 2025.12 uses "stat_rate" for power sensors in device consumption.
     """
-    if hass is None:
-        return
-    from .hardware_detection import known_charger_domains  # cycle-free here
-    chargers = known_charger_domains()
-    reg = er.async_get(hass)
-
-    def _charger_platform(entity_id: Optional[str]) -> bool:
-        entry = reg.async_get(entity_id) if entity_id else None
-        platform = str(getattr(entry, "platform", "") or "")
-        # the zaptec_custom tolerance, same rule as the discovery walk
-        return (platform in chargers
-                or (platform.startswith("zaptec") and "zaptec" in chargers))
-
     for device in device_consumption:
         stat_consumption = device.get("stat_consumption") or ""
         stat_power = device.get("stat_rate") or device.get("stat_power")
-        if not (_charger_platform(stat_consumption)
-                or _charger_platform(stat_power)):
+        if not is_ev_device(hass, stat_consumption, stat_power):
             continue
         config.ev_energy = stat_consumption or None
         config.ev_power = stat_power
@@ -963,24 +988,6 @@ def _derive_missing_power_sensors(
                 "(no stat_rate in Energy Dashboard)", found,
             )
 
-    # (#1051) Grid as TWO power sensors: a P1 / smart-meter reader gives
-    # import and export power separately, next to its two energy counters.
-    # Read as the same import/export pair the Energy Dashboard's "two
-    # sensors" power option gives (#553).
-    if (not config.grid_import_power and not config.grid_power_from
-            and config.grid_import_energy and config.grid_export_energy):
-        imp = _find_power_sensor_on_device(
-            hass, config.grid_import_energy, _POWER_DERIVE_RULES["grid_import"])
-        exp = _find_power_sensor_on_device(
-            hass, config.grid_export_energy, _POWER_DERIVE_RULES["grid_export"])
-        if imp and exp and imp != exp:
-            config.grid_power_from = imp
-            config.grid_power_to = exp
-            config.derived_power["grid"] = f"{imp}|{exp}"
-            _LOGGER.info(
-                "Derived grid power as an import/export pair %s / %s from the "
-                "meter's device (no stat_rate in Energy Dashboard)", imp, exp)
-
     # Battery: battery_power* (positive=charge per SEM; sign auto-detected later).
     _derive_battery_power_if_unrepresented(hass, config)
 
@@ -1047,17 +1054,14 @@ def get_all_individual_devices(config: EnergyDashboardConfig, hass=None) -> List
         List of device dicts with energy_sensor, power_sensor, name, is_ev
     """
     devices = []
-    ev_patterns = ["ev", "charger", "keba", "wallbox", "easee", "zappi", "tesla_wall",
-                   "juicebox"]
 
     for device in config.device_consumption:
         energy_sensor = device.get("stat_consumption", "")
         power_sensor = device.get("stat_rate") or device.get("stat_power")
         name = device.get("name", "")
 
-        # Determine if this looks like an EV charger
-        entity_lower = energy_sensor.lower()
-        is_ev = any(pattern in entity_lower for pattern in ev_patterns)
+        # (#1051) the one EV rule, shared with the EV pick
+        is_ev = is_ev_device(hass, energy_sensor, power_sensor)
 
         # Derive a name: prefer the entity's friendly_name (user-set description)
         if not name and hass:

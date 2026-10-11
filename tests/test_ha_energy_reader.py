@@ -504,37 +504,42 @@ class TestExtractBatteryConfig:
         assert config.battery_power_list == ["sensor.batt_power"]
 
 
-def _registry_by_name(platforms):
-    """(#1051) A registry stand-in: which integration owns each entity.
-    The EV pick asks the registry, never the name."""
-    from types import SimpleNamespace as _NS
-
-    def _get(eid):
-        for stem, platform in platforms.items():
-            if stem in (eid or ""):
-                return _NS(platform=platform)
-        return _NS(platform="zha")
-    return _NS(async_get=_get)
-
-
-_CHARGER_REG = _registry_by_name({"keba": "keba", "wallbox": "wallbox"})
-
-
 class TestExtractEvFromDevices:
-    """Test _extract_ev_from_devices().
+    """Test _extract_ev_from_devices()."""
 
-    (#1051) A name proves nothing: without the entity registry to ask which
-    integration a device belongs to, no individual device is the EV. The
-    registry cases live in tests/test_1051_first_install.py."""
-
-    @pytest.mark.parametrize("energy", [
-        "sensor.keba_total_energy", "sensor.wallbox_energy",
-        "sensor.easee_lifetime_energy", "sensor.washing_machine_energy"])
-    def test_no_registry_no_ev(self, energy):
+    def test_extract_ev_from_devices(self):
         config = EnergyDashboardConfig()
-        _extract_ev_from_devices([{"stat_consumption": energy}], config)
+        devices = [
+            {"stat_consumption": "sensor.keba_total_energy", "stat_rate": "sensor.keba_power"},
+        ]
+        _extract_ev_from_devices(devices, config)
+        assert config.has_ev is True
+        assert config.ev_energy == "sensor.keba_total_energy"
+        assert config.ev_power == "sensor.keba_power"
+
+    def test_extract_ev_no_match(self):
+        config = EnergyDashboardConfig()
+        devices = [
+            {"stat_consumption": "sensor.washing_machine_energy", "stat_rate": "sensor.washing_machine_power"},
+        ]
+        _extract_ev_from_devices(devices, config)
         assert config.has_ev is False
-        assert config.ev_energy is None
+
+    def test_extract_ev_wallbox_pattern(self):
+        config = EnergyDashboardConfig()
+        devices = [
+            {"stat_consumption": "sensor.wallbox_energy", "stat_rate": "sensor.wallbox_power"},
+        ]
+        _extract_ev_from_devices(devices, config)
+        assert config.has_ev is True
+
+    def test_extract_ev_easee_pattern(self):
+        config = EnergyDashboardConfig()
+        devices = [
+            {"stat_consumption": "sensor.easee_lifetime_energy"},
+        ]
+        _extract_ev_from_devices(devices, config)
+        assert config.has_ev is True
 
 
 class TestReadEnergyDashboardConfig:
@@ -549,9 +554,7 @@ class TestReadEnergyDashboardConfig:
 
         with patch("os.path.exists", return_value=True):
             with patch("builtins.open", mock_open(read_data=json.dumps(SAMPLE_ENERGY_DATA))):
-                with patch("custom_components.solar_energy_management.ha_energy_reader.er.async_get",
-                           return_value=_CHARGER_REG):
-                    config = await read_energy_dashboard_config(mock_hass)
+                config = await read_energy_dashboard_config(mock_hass)
 
         assert config is not None
         assert config.has_solar is True
@@ -673,9 +676,7 @@ class TestReadMultiDeviceConfig:
 
         with patch("os.path.exists", return_value=True):
             with patch("builtins.open", mock_open(read_data=json.dumps(SAMPLE_MULTI_DEVICE_DATA))):
-                with patch("custom_components.solar_energy_management.ha_energy_reader.er.async_get",
-                           return_value=_CHARGER_REG):
-                    config = await read_energy_dashboard_config(mock_hass)
+                config = await read_energy_dashboard_config(mock_hass)
 
         assert config is not None
         # Solar: 2 inverters
@@ -706,9 +707,7 @@ class TestReadMultiDeviceConfig:
 
         with patch("os.path.exists", return_value=True):
             with patch("builtins.open", mock_open(read_data=json.dumps(SAMPLE_ENERGY_DATA))):
-                with patch("custom_components.solar_energy_management.ha_energy_reader.er.async_get",
-                           return_value=_CHARGER_REG):
-                    config = await read_energy_dashboard_config(mock_hass)
+                config = await read_energy_dashboard_config(mock_hass)
 
         assert config is not None
         assert len(config.solar_power_list) == 1
