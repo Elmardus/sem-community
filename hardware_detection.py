@@ -1452,7 +1452,8 @@ _CONFIGURED_ROW_KEYS = CHARGER_ENTITY_KEYS | frozenset({
 #: charging sensor, and the #1092 lifecycle suite caught that rule calling
 #: them half cards.
 CHARGER_CONTROL_KEYS = ("ev_charger_service", "ev_current_control_entity",
-                        "ev_start_stop_entity")
+                        "ev_start_stop_entity", "ev_start_service",
+                        "ev_charge_mode_entity")
 
 
 def charger_is_complete(charger: Any) -> bool:
