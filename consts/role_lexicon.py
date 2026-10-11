@@ -157,7 +157,12 @@ ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
         # `amp` (its API's own word since v1) and OpenEVSE's `charge_rate`.
         # On an inverter a `charge_rate` is watts into a pack. The crawler
         # applies these for kind=charger and nowhere else.
-        "charger_only_any": (r"^amp$", r"^charge_rate$"),
+        # (#1096) A plain ``charging_current`` number is the same: on a
+        # charger it is the current it offers the car; on an inverter it is
+        # the battery's charge limit — the #809 trap — so it is never in
+        # the general list above.
+        "charger_only_any": (r"^amp$", r"^charge_rate$",
+                             r"^charging_current$"),
         "not": (r"phase", r"offline", r"failsafe", r"voltage", r"power",
                 r"\bmin\b", r"_min_", r"minimum", r"energy",
                 r"input", r"^ac\d", r"aes", r"remote_panel", r"bulk",

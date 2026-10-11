@@ -174,9 +174,6 @@ def shapes() -> Dict[str, Dict[str, Any]]:
 #: Shapes the crawler cannot complete today: the gap each one shows. The
 #: lifecycle suite marks them xfail(strict=True) so a crawler fix flips them.
 SHAPE_GAPS: Dict[str, str] = {
-    "shape_number_plain_name": "#1092 crawler gap: a number named "
-        "'charging_current' (A, class current) on a charger is not read as "
-        "the current control",
     "shape_service_entity": "#1092 crawler gap: a service keyed by device_id "
         "is offered without the device_id in its service data",
 }

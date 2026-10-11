@@ -2237,7 +2237,11 @@ def _charging_now(entries) -> Optional[str]:
     return hits[0] if hits else None
 
 
-def _current_number_role(entries) -> Optional[str]:
+def _current_number_role(entries, *, charger: bool = False) -> Optional[str]:
+    """The number that sets a charger's current. ``charger`` says the device
+    is one: only then do the charger-only names (``amp``, ``charge_rate``,
+    ``charging_current``) count — on an inverter the same words are the
+    battery's charge limit (#809, #1096)."""
     from .consts import role_lexicon as lex
     rule = lex.ROLE_RULES["ev_current_control"]
     hits = []
@@ -2252,7 +2256,8 @@ def _current_number_role(entries) -> Optional[str]:
                 hits.append(eid)
                 break
             # ``amp``, ``charge_rate`` — a current only on a charger
-            if (any(re.search(p, key, re.I) for p in rule.get("charger_only_any", ()))
+            if (charger
+                    and any(re.search(p, key, re.I) for p in rule.get("charger_only_any", ()))
                     and not any(re.search(p, key, re.I) for p in rule.get("not", ()))):
                 hits.append(eid)
                 break
@@ -2332,7 +2337,14 @@ def read_charger_roles(dev_entities, domain: str, *, services_of=None,
             if hit:
                 roles[role] = hit
     else:
-        cur = _current_number_role(dev_entities)
+        # (#1096) a charger by its registry kind or by its own plug /
+        # charging reading — never an inverter or battery that happens to
+        # carry the same words
+        _kind = str((describe_domain(domain) or {}).get("kind") or "")
+        cur = _current_number_role(
+            dev_entities,
+            charger=(_kind == "charger" or bool(_plugged(dev_entities))
+                     or bool(_charging_now(dev_entities))))
         if cur:
             roles["current_number"] = cur
             if _is_stored_setting(dev_entities, cur):
@@ -3053,7 +3065,7 @@ def _roles_pass(report, registry, brand_units, configured_entities,
                 {"device_id": did, "entities": len(ents),
                  "evidence": [entity_evidence(e) for e in ents]})
             companions.add(did)
-            live = _current_number_role(ents)
+            live = _current_number_role(ents, charger=True)  # a charger's companion
             sc = n.get("suggested_charger") or {}
             if (live and not _is_stored_setting(ents, live) and sc
                     and "ev_current_control_entity" not in sc):
