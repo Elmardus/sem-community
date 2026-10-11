@@ -1446,6 +1446,15 @@ _CONFIGURED_ROW_KEYS = CHARGER_ENTITY_KEYS | frozenset({
 })
 
 
+def charger_is_complete(charger: Any) -> bool:
+    """(#1054 round 3) A charger card SEM can run: every sensor in
+    ``EV_REQUIRED_SENSORS`` set. A card an older detection left half-filled
+    is not a charger — it must not hide its box from detection nor outrank
+    the working card for the same box."""
+    return isinstance(charger, dict) and all(
+        charger.get(k) for k in EV_REQUIRED_SENSORS)
+
+
 def charger_entity_ids(charger: Any) -> set:
     """The entities a charger config points at — its fingerprint."""
     if not isinstance(charger, dict):
@@ -3270,6 +3279,16 @@ def build_detection_report(hass: Optional[HomeAssistant] = None,
             continue
         mine = charger_entity_ids(cfg)
         if not mine:
+            continue
+        if not charger_is_complete(cfg):
+            # (#1054 round 3) A half-filled card does not claim its box:
+            # weindler's old card named one energy counter of the go-e,
+            # the whole unit read "configured", and the complete offer
+            # (with its create button, which now replaces the card) was
+            # hidden. The box is walked like any unconfigured one.
+            report.setdefault("incomplete_chargers", []).append(
+                {"charger_id": str(cfg["id"]), "name": cfg.get("name"),
+                 "entities": sorted(mine)})
             continue
         configured_charger_entities |= mine
         unit_key = next((_unit_of_entity[eid] for eid in sorted(mine)
