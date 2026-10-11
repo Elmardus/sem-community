@@ -617,10 +617,31 @@ def _same_box_as(cid: str, mine: set, existing_fp: list):
     return None
 
 
+def _devices_of(charger: Any, device_of) -> set:
+    """The devices a charger card's entities belong to (unknowns left out)."""
+    from .hardware_detection import charger_entity_ids
+    out = set()
+    for eid in charger_entity_ids(charger):
+        dev = device_of(eid)
+        if dev:
+            out.add(dev)
+    return out
+
+
 def _merge_ev_chargers_by_id(
     existing: list, incoming: list, *, fold_same_box: bool = False,
+    device_of=None,
 ) -> list:
     """Merge an ``ev_chargers`` list by ``id`` rather than full-replace.
+
+    ``device_of`` (#1054 round 3, with ``fold_same_box``): an entity id →
+    its device id. An incoming COMPLETE charger (``charger_is_complete``)
+    displaces every existing INCOMPLETE card whose entities all sit on the
+    incoming charger's device, and takes the first one's place in the
+    list. A half-filled card from an older detection can never outrank —
+    or outlive — the working charger for the same box (weindler: the old
+    card stayed first, so it was the primary and could not be removed).
+    The caller removes displaced ids from ``entry.data`` too.
 
     ``fold_same_box`` (#1054 follow-up): an incoming charger under a NEW id
     that is a copy of an existing one (``_same_box_as``) is merged into
@@ -652,7 +673,7 @@ def _merge_ev_chargers_by_id(
     Pure function — no I/O, no HA dependencies. Tested in
     ``tests/test_set_option_smart_merge.py``.
     """
-    from .hardware_detection import charger_entity_ids
+    from .hardware_detection import charger_entity_ids, charger_is_complete
 
     incoming_by_id: dict[str, dict] = {}
     new_ids: list[str] = []
@@ -699,6 +720,30 @@ def _merge_ev_chargers_by_id(
             if cid not in existing_ids:
                 new_ids.append(cid)
 
+    # (#1054 round 3) A complete charger displaces the incomplete cards
+    # of its own device. Its place in the list is the first displaced
+    # card's, so a primary stays a primary.
+    displaced_by: dict[str, str] = {}
+    if fold_same_box and device_of is not None:
+        for cid, inc in incoming_by_id.items():
+            if not charger_is_complete(inc):
+                continue
+            its_devices = _devices_of(inc, device_of)
+            if len(its_devices) != 1:
+                continue
+            for c in existing or []:
+                if not isinstance(c, dict) or not c.get("id"):
+                    continue
+                oid = c["id"]
+                if oid == cid or oid in displaced_by or charger_is_complete(c):
+                    continue
+                theirs = _devices_of(c, device_of)
+                if theirs and theirs == its_devices:
+                    displaced_by[oid] = cid
+                    _LOGGER.info(
+                        "ev_chargers merge: %s is an incomplete card for the "
+                        "device of %s — replaced by it", oid, cid)
+
     # EXISTING order is the output order (#485 G2): charger list order
     # is load-bearing — index 0 is the fleet primary for the strategy
     # sensors and default surplus priorities derive from the position.
@@ -712,6 +757,15 @@ def _merge_ev_chargers_by_id(
             continue
         cid = c.get("id")
         if not cid or cid in merged_ids:
+            continue
+        if cid in displaced_by:
+            winner = displaced_by[cid]
+            if winner in new_ids and winner not in merged_ids:
+                fresh = dict(incoming_by_id[winner])
+                forget_on_mode_write(fresh, "charge_mode", fresh.get("charge_mode"))
+                merged.append(fresh)
+                merged_ids.add(winner)
+                new_ids.remove(winner)
             continue
         base = dict(c)
         if cid in incoming_by_id:
@@ -5832,18 +5886,38 @@ async def _async_register_phase_services(
         # and lose the existing chargers on next reload. Caught by
         # ``test_set_option_ev_chargers_partial_submit_preserves_sibling``
         # in the test_services_real.py framework tests.
+        pending_data = None
         if isinstance(options.get("ev_chargers"), list):
             existing_list = (
                 (target_entry.options or {}).get("ev_chargers")
                 or (target_entry.data or {}).get("ev_chargers")
                 or []
             )
-            options = {
-                **options,
-                "ev_chargers": _merge_ev_chargers_by_id(
-                    existing_list, options["ev_chargers"], fold_same_box=True,
-                ),
-            }
+            from homeassistant.helpers import entity_registry as _er
+            _reg = _er.async_get(hass)
+
+            def _device_of(eid: str):
+                ent = _reg.async_get(eid)
+                return getattr(ent, "device_id", None) if ent else None
+
+            new_list = _merge_ev_chargers_by_id(
+                existing_list, options["ev_chargers"], fold_same_box=True,
+                device_of=_device_of,
+            )
+            options = {**options, "ev_chargers": new_list}
+            # (#1054 round 3) When the merge replaced a card, entry.data
+            # gets the same list. Pruning data alone is not enough: the
+            # start-up heal unions the stores by id AND puts them in data's
+            # order, so the old card came back — or the new charger lost
+            # its place as the primary.
+            _kept = {c.get("id") for c in new_list if isinstance(c, dict)}
+            _gone = [c.get("id") for c in existing_list
+                     if isinstance(c, dict) and c.get("id")
+                     and c.get("id") not in _kept]
+            if _gone and isinstance((target_entry.data or {}).get("ev_chargers"), list):
+                # written with the options below — one entry write, one reload
+                pending_data = {**(target_entry.data or {}),
+                                "ev_chargers": [dict(c) for c in new_list]}
 
         merged = {**(target_entry.options or {}), **options}
         if merged == (target_entry.options or {}):
@@ -6027,6 +6101,7 @@ async def _async_register_phase_services(
                     coordinator._skip_options_reload = dict(direct_merged)
                 hass.config_entries.async_update_entry(
                     target_entry, options=direct_merged,
+                    **({"data": pending_data} if pending_data is not None else {}),
                 )
                 await hass.config_entries.async_reload(target_entry.entry_id)
 

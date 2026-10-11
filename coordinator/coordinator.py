@@ -1504,6 +1504,33 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             if isinstance(c, dict)
         )
 
+    def _sweep_unconfigured_charger_state(self) -> List[str]:
+        """(#1054 round 3) Drop per-charger state of chargers that are no
+        longer configured — the daily kWh bucket, its date and the taper
+        detector. A removed charger's bucket stayed published, so the
+        health check warned every cycle ("9.45 kWh against a fleet total
+        of 0.00") and its SOC rows lived on. Logged once per id.
+
+        Only runs when every configured charger has an id: an id-less one
+        registers under a positional id this list cannot name."""
+        cfg = [c for c in (self.config.get("ev_chargers") or [])
+               if isinstance(c, dict)]
+        if any(not c.get("id") for c in cfg):
+            return []
+        live = {str(c["id"]) for c in cfg} | {str(k) for k in self._ev_devices}
+        stale = sorted(
+            (set(self._daily_ev_per_charger)
+             | set(getattr(self, "_ev_taper_detectors", {}) or {})) - live)
+        for cid in stale:
+            self._daily_ev_per_charger.pop(cid, None)
+            self._daily_ev_per_charger_date.pop(cid, None)
+            (getattr(self, "_ev_taper_detectors", {}) or {}).pop(cid, None)
+        if stale:
+            _LOGGER.info(
+                "Removed the stored state of %d charger(s) that are no longer "
+                "configured: %s", len(stale), ", ".join(stale))
+        return stale
+
     def _per_charger_daily_report(self, energy) -> Dict[str, float]:
         """Per-charger daily EV energy for the sensors.
 
@@ -4793,6 +4820,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # cycle's management→process→integration chain. Wrapped so it can
             # NEVER affect the control path or break the cycle.
             self._collect_trace(sem_data, power, charging_context)
+
+            # (#1054 round 3) a removed charger's buckets go first, so
+            # neither the check below nor the sensors count them
+            self._sweep_unconfigured_charger_state()
 
             # Step 11.5: Energy balance / calculation health check
             self._health_check.run_all_checks(
