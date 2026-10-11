@@ -1446,13 +1446,24 @@ _CONFIGURED_ROW_KEYS = CHARGER_ENTITY_KEYS | frozenset({
 })
 
 
+#: (#1054) What makes a charger one SEM can drive: a power reading and a way
+#: to act on it. NOT the setup form's ``EV_REQUIRED_SENSORS`` — working brand
+#: chargers (V2C, NRGkick, OpenEVSE, Peblar, Zaptec) have no plug or
+#: charging sensor, and the #1092 lifecycle suite caught that rule calling
+#: them half cards.
+CHARGER_CONTROL_KEYS = ("ev_charger_service", "ev_current_control_entity",
+                        "ev_start_stop_entity", "ev_start_service",
+                        "ev_charge_mode_entity")
+
+
 def charger_is_complete(charger: Any) -> bool:
-    """(#1054 round 3) A charger card SEM can run: every sensor in
-    ``EV_REQUIRED_SENSORS`` set. A card an older detection left half-filled
-    is not a charger — it must not hide its box from detection nor outrank
-    the working card for the same box."""
-    return isinstance(charger, dict) and all(
-        charger.get(k) for k in EV_REQUIRED_SENSORS)
+    """(#1054 round 3) A charger card SEM can run: a power reading and a
+    control. A card an older detection left half-filled (weindler's: a name
+    and one energy counter) is not a charger — it must not hide its box from
+    detection nor outrank the working card for the same box."""
+    return (isinstance(charger, dict)
+            and bool(charger.get("ev_charging_power_sensor"))
+            and any(charger.get(k) for k in CHARGER_CONTROL_KEYS))
 
 
 def charger_entity_ids(charger: Any) -> set:
