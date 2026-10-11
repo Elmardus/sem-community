@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Încărcătorul {name}: o entitate a dispărut",
-      "description": "Ai ales {entity} pentru încărcătorul {name} și nu mai există. Alege noua entitate în setările încărcătorului sau \"folosește detectarea\"."
+      "description": "Încărcătorul {name} folosește {entity}, care a dispărut sau e dezactivată. Alege altă entitate în setările încărcătorului sau verifică integrarea dispozitivului."
     }
   },
   "selector": {

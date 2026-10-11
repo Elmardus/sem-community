@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Lader {name}: en entitet er borte",
-      "description": "Du valgte {entity} for laderen {name}, og den finnes ikke lenger. Velg den nye entiteten i laderinnstillingene eller \"bruk funnet\"."
+      "description": "Laderen {name} bruker {entity}, som er borte eller deaktivert. Velg en annen entitet i laderinnstillingene, eller sjekk integrasjonen til enheten."
     }
   },
   "selector": {

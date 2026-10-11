@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Laddare {name}: en entitet är borta",
-      "description": "Du valde {entity} för laddaren {name}, och den finns inte längre. Välj den nya entiteten i laddarens inställningar eller \"använd hittad\"."
+      "description": "Laddaren {name} använder {entity}, som är borta eller avstängd. Välj en annan entitet i laddarens inställningar eller kontrollera enhetens integration."
     }
   },
   "selector": {

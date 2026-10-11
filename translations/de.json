@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Ladegerät {name}: eine Entität fehlt",
-      "description": "Du hast {entity} für das Ladegerät {name} gewählt, und sie existiert nicht mehr. Wähle die neue Entität in den Ladegerät-Einstellungen oder \"erkannt verwenden\"."
+      "description": "Das Ladegerät {name} nutzt {entity}, die fehlt oder deaktiviert ist. Wähle eine andere Entität in den Ladegerät-Einstellungen oder prüfe die Integration des Geräts."
     }
   },
   "selector": {

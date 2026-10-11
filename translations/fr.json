@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Borne {name} : une entité a disparu",
-      "description": "Vous avez choisi {entity} pour la borne {name}, et elle n'existe plus. Choisissez la nouvelle entité dans les réglages de la borne ou \"utiliser la détection\"."
+      "description": "La borne {name} utilise {entity}, qui a disparu ou est désactivée. Choisissez une autre entité dans les réglages de la borne ou vérifiez l'intégration de l'appareil."
     }
   },
   "selector": {

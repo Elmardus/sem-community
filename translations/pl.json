@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Ładowarka {name}: encja zniknęła",
-      "description": "Wybrano {entity} dla ładowarki {name}, a ta encja już nie istnieje. Wybierz nową encję w ustawieniach ładowarki albo \"użyj wykrytej\"."
+      "description": "Ładowarka {name} używa {entity}, która zniknęła lub jest wyłączona. Wybierz inną encję w ustawieniach ładowarki albo sprawdź integrację urządzenia."
     }
   },
   "selector": {

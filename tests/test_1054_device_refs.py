@@ -336,6 +336,14 @@ class TestProblems:
         assert [(p["kind"], p.get("entity")) for p in out] == [
             ("charger_role_entity_gone", "sensor.my_meter")]
 
+    def test_a_detected_entity_disabled_is_a_repair_too(self):
+        ref = card_to_ref(dict(NEW), GOE_DEV, GOE_LIVE)
+        gone = GOE_LIVE["ev_charging_power_sensor"]
+        out = problems([ref], [resolve(ref, GOE_LIVE)], device_exists=lambda d: True,
+                       entity_exists=lambda e: e != gone)
+        assert [(p["kind"], p.get("entity")) for p in out] == [
+            ("charger_role_entity_gone", gone)]
+
     def test_device_less_chargers_raise_nothing(self):
         ref = card_to_ref(dict(PROD_KEBA), None, None)
         assert problems([ref], [resolve(ref)], device_exists=lambda d: False,

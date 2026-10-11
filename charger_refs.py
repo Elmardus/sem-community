@@ -320,9 +320,11 @@ def problems(refs: List[dict], resolved: List[dict], *,
         if missing:
             out.append({"kind": "charger_role_missing", "id": ref["id"],
                         "name": name, "roles": ", ".join(missing)})
-        for role, value in sorted((ref.get("overrides") or {}).items()):
-            if role in CHARGER_ENTITY_KEYS and "." in str(value) \
-                    and not entity_exists(str(value)):
+        # every entity the charger runs on — set by the user or detected —
+        # that is gone or disabled
+        for role in sorted(CHARGER_ENTITY_KEYS):
+            value = card.get(role)
+            if value and "." in str(value) and not entity_exists(str(value)):
                 out.append({"kind": "charger_role_entity_gone", "id": ref["id"],
                             "name": name, "entity": str(value)})
     return out
@@ -441,9 +443,17 @@ def async_reconcile(hass, entry) -> Optional[List[dict]]:
     _sync_repairs(hass, refs, problems(
         refs, resolved,
         device_exists=lambda d: dreg.async_get(d) is not None,
-        entity_exists=lambda e: ereg.async_get(e) is not None
-        or hass.states.get(e) is not None))
+        entity_exists=lambda e: _entity_usable(ereg, hass, e)))
     return resolved
+
+
+def _entity_usable(ereg, hass, entity_id: str) -> bool:
+    """In the registry and not disabled — or, for an entity with no registry
+    entry (a template, a YAML sensor), it has a state."""
+    ent = ereg.async_get(entity_id)
+    if ent is not None:
+        return not ent.disabled_by
+    return hass.states.get(entity_id) is not None
 
 
 def _sync_repairs(hass, refs: List[dict], found: List[dict]) -> None:

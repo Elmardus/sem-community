@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Cargador {name}: una entidad ya no existe",
-      "description": "Elegiste {entity} para el cargador {name} y ya no existe. Elige la nueva entidad en los ajustes del cargador o \"usar detectado\"."
+      "description": "El cargador {name} usa {entity}, que ya no existe o está desactivada. Elige otra entidad en los ajustes del cargador o revisa la integración del dispositivo."
     }
   },
   "selector": {

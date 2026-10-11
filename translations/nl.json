@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Lader {name}: een entiteit is weg",
-      "description": "Je koos {entity} voor lader {name}, en die bestaat niet meer. Kies de nieuwe entiteit in de laderinstellingen of \"gevonden gebruiken\"."
+      "description": "Lader {name} gebruikt {entity}, die weg of uitgeschakeld is. Kies een andere entiteit in de laderinstellingen of controleer de integratie van het apparaat."
     }
   },
   "selector": {

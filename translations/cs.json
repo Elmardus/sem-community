@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Nabíječka {name}: entita zmizela",
-      "description": "Pro nabíječku {name} jste vybrali {entity} a ta už neexistuje. Vyberte novou entitu v nastavení nabíječky, nebo \"použít zjištěnou\"."
+      "description": "Nabíječka {name} používá {entity}, která zmizela nebo je vypnutá. Vyberte jinou entitu v nastavení nabíječky, nebo zkontrolujte integraci zařízení."
     }
   },
   "selector": {

@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "充电桩 {name}：实体已不存在",
-      "description": "你为充电桩 {name} 选择了 {entity}，但它已不存在。请在充电桩设置中选择新的实体，或选择“使用检测结果”。"
+      "description": "充电桩 {name} 使用的 {entity} 已不存在或已停用。请在充电桩设置中选择其他实体，或检查该设备的集成。"
     }
   },
   "selector": {

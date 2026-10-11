@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Laturi {name}: entiteetti on poissa",
-      "description": "Valitsit laturille {name} entiteetin {entity}, eikä sitä enää ole. Valitse uusi entiteetti laturin asetuksista tai \"käytä löydettyä\"."
+      "description": "Laturi {name} käyttää entiteettiä {entity}, joka on poissa tai poistettu käytöstä. Valitse toinen entiteetti laturin asetuksista tai tarkista laitteen integraatio."
     }
   },
   "selector": {

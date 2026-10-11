@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Carregador {name}: uma entidade desapareceu",
-      "description": "Escolheu {entity} para o carregador {name} e já não existe. Escolha a nova entidade nas definições do carregador ou \"usar detetado\"."
+      "description": "O carregador {name} usa {entity}, que desapareceu ou está desativada. Escolha outra entidade nas definições do carregador ou verifique a integração do dispositivo."
     }
   },
   "selector": {

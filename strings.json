@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Charger {name}: an entity is gone",
-      "description": "You set {entity} for the charger {name}, and it no longer exists. Pick the new entity in the charger settings, or choose \"use detected\"."
+      "description": "The charger {name} uses {entity}, which is gone or disabled. Pick another entity in the charger settings, or check the device's integration."
     }
   },
   "selector": {

@@ -1920,7 +1920,7 @@
     },
     "charger_role_entity_gone": {
       "title": "Caricatore {name}: un'entità non c'è più",
-      "description": "Hai scelto {entity} per il caricatore {name} e non esiste più. Scegli la nuova entità nelle impostazioni del caricatore o \"usa rilevato\"."
+      "description": "Il caricatore {name} usa {entity}, che non c'è più o è disattivata. Scegli un'altra entità nelle impostazioni del caricatore o controlla l'integrazione del dispositivo."
     }
   },
   "selector": {
