@@ -67,3 +67,20 @@ diff before committing it:
 - **HACS charger integrations in the matrix** (go-e, openWB, OCPP, Alfen,
   Heidelberg, ChargePoint, ABL, Wallbox MQTT): no offline test data in their
   repos; see `docs/hardware_proof.md`.
+| `goecharger_live_weindler` | live-install | a user's SEM diagnostics download (#1054), via `capture_tools/diag_to_capture.py` | SEM 2.2.0-beta.13 diagnostics 08.10.2026 — predates the evidence fields, so no units or states |
+
+## Shapes (#1092)
+
+`shapes.py` holds captures with no brand: one per way integrations differ
+(current via a number or a service, start/stop via a switch, buttons or
+services, W or kW, no device class, enum status or binary plug,
+device-less and service-driven, cloud services keyed by device). The
+lifecycle suite (`tests/test_integrations_lifecycle.py`) runs every capture
+and every shape from the crawler to one working charger.
+
+## From a user's download (#1092)
+
+`capture_tools/diag_to_capture.py <diagnostics.json> <platform> <name> --pin "..."`
+turns the crawler's evidence in a SEM diagnostics download into a capture.
+`tests/test_integrations_diag_capture.py` proves a download replays as the
+same install, on every capture that offers a charger.
