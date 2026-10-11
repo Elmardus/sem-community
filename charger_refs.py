@@ -52,8 +52,8 @@ from collections import Counter
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from .hardware_detection import (
+    CHARGER_CONTROL_KEYS,
     CHARGER_ENTITY_KEYS,
-    EV_REQUIRED_SENSORS,
     charger_is_complete,
 )
 
@@ -297,7 +297,9 @@ def problems(refs: List[dict], resolved: List[dict], *,
             out.append({"kind": "charger_device_gone", "id": ref["id"],
                         "name": name})
             continue
-        missing = [k for k in EV_REQUIRED_SENSORS if not card.get(k)]
+        missing = [k for k in ("ev_charging_power_sensor",) if not card.get(k)]
+        if not any(card.get(k) for k in CHARGER_CONTROL_KEYS):
+            missing.append("ev_current_control")
         if missing:
             out.append({"kind": "charger_role_missing", "id": ref["id"],
                         "name": name, "roles": ", ".join(missing)})

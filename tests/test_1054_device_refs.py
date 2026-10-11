@@ -117,8 +117,7 @@ class TestNothingChangesForAWorkingCharger:
                     card[k] = f"x.{k}_own"
                 elif r < .7:
                     card[k] = None
-            for k in ("ev_connected_sensor", "ev_charging_sensor",
-                      "ev_charging_power_sensor"):
+            for k in ("ev_charging_power_sensor", "ev_charger_service"):
                 if not card.get(k):
                     card[k] = f"x.{k}_req"
             assert charger_is_complete(card)
@@ -306,7 +305,7 @@ class TestProblems:
         out = problems([ref], [resolve(ref)], device_exists=lambda d: True,
                        entity_exists=lambda e: True)
         assert out[0]["kind"] == "charger_role_missing"
-        assert "ev_connected_sensor" in out[0]["roles"]
+        assert "ev_charging_power_sensor" in out[0]["roles"]
 
     def test_override_entity_gone(self):
         ref = card_to_ref({**NEW, "ev_charging_power_sensor": "sensor.my_meter"},
@@ -334,6 +333,18 @@ def test_repair_texts_exist_in_every_language(lang):
                        ("charger_role_missing", "{roles}"),
                        ("charger_role_entity_gone", "{entity}")):
         assert needs in issues[key]["description"], (lang, key)
+
+
+def test_a_brand_charger_without_plug_sensors_is_complete():
+    """V2C, NRGkick, OpenEVSE, Peblar, Zaptec: power + a control, no plug
+    or charging sensor — a working charger, not a half card (#1092 caught
+    the setup form's rule calling them half)."""
+    v2c = {"id": "v2c", "ev_charging_power_sensor": "sensor.evse_charge_power",
+           "ev_current_control_entity": "number.evse_intensity"}
+    assert charger_is_complete(v2c)
+    ref = card_to_ref(v2c, "dev", {})
+    assert problems([ref], [resolve(ref)], device_exists=lambda d: True,
+                    entity_exists=lambda e: True) == []
 
 
 def test_role_keys_cover_every_charger_entity_key():
