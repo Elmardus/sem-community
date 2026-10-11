@@ -12,7 +12,10 @@ input: real integrations reach the tests from real installs, never by hand.
 
 What a download does not hold, the capture does not invent: only short
 states (a status word, a number — never a place), no unique ids (they
-often hold a serial — the object id stands in). A download from before 2.2.0-beta.16 also has
+often hold a serial — the object id stands in). A box's own name (go-e's
+``charger_name``, a serial) becomes ``box_1`` everywhere it appears,
+entity ids included, so the capture holds nothing personal and still
+replays. A download from before 2.2.0-beta.16 also has
 no units, capabilities or service list; the capture says so in its note,
 and the crawler's golden file shows what it can find from that alone.
 """
@@ -25,10 +28,12 @@ from typing import Any, Dict, List, Optional
 
 CAPTURES = Path(__file__).resolve().parent.parent / "captures"
 
-#: Service fields that name WHICH box — their value is the device's name in
-#: the integration's own words, so it becomes the device key the replay
-#: registers (the crawler reads it back from the device identifier).
-_BOX_FIELDS = ("charger_name", "charger_id", "serial", "charger", "device_name")
+from custom_components.solar_energy_management.hardware_detection import (  # noqa: E402
+    BOX_VALUE_FIELDS as _BOX_FIELDS,
+)
+# A box-naming service field's value is the device's name in the
+# integration's own words: it becomes the device key the replay registers
+# (the crawler reads it back from the device identifier).
 
 
 def _detection(diag: Dict[str, Any]) -> Dict[str, Any]:
@@ -95,6 +100,19 @@ def _services(det: Dict[str, Any], rows: List[Dict[str, Any]],
 
 
 def convert(diag: Dict[str, Any], platform: str, *, pin: str) -> Dict[str, Any]:
+    """The capture, with every box name a stand-in (``box_1``): in the
+    service data, the device key and inside every entity id. A download
+    from 2.2.0-beta.16 on is redacted already; an older one is not."""
+    from custom_components.solar_energy_management.hardware_detection import (
+        redact_box_names,
+    )
+    stand_ins: Dict[str, str] = {}
+    redact_box_names(diag, stand_ins=stand_ins)      # learn every name first
+    return redact_box_names(_convert(diag, platform, pin=pin),
+                            stand_ins=stand_ins, in_ids=True)
+
+
+def _convert(diag: Dict[str, Any], platform: str, *, pin: str) -> Dict[str, Any]:
     det = _detection(diag)
     rows = _rows(det, platform)
     if not rows:
