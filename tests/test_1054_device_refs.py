@@ -156,15 +156,17 @@ class TestTheMigration:
         refs = refs_from_cards([dict(OLD), keba, dict(NEW)], _goe_device, LIVE)
         assert [r["id"] for r in refs] == [NEW["id"], "ev_charger"]
 
-    def test_two_complete_boxes_on_one_device_are_both_kept(self):
+    def test_an_install_running_two_chargers_on_one_device_keeps_both(self):
+        """Migration: two different working chargers on one device (a twin
+        wallbox) are both kept, and the connector setting is SET on both —
+        nothing working is dropped."""
         left = {**NEW, "id": "left"}
         right = {**NEW, "id": "right",
                  "ev_charging_power_sensor": f"{P}_p_l1",
-                 "ev_connected_sensor": f"{P}_adapter",
-                 "ev_charging_sensor": f"{P}_adapter"}
+                 "ev_charger_service_data": '{"charger_name": "right"}'}
         refs = refs_from_cards([left, right], _goe_device, LIVE)
         assert [r["id"] for r in refs] == ["left", "right"]
-        assert refs[1]["settings"]["connector"] == 2
+        assert [r["settings"]["connector"] for r in refs] == [1, 2]
 
     def test_a_copy_is_folded(self):
         copy = {**NEW, "id": f"{NEW['id']}_1"}
@@ -254,6 +256,24 @@ class TestEdits:
         assert [r["id"] for r in refs2] == [NEW["id"]]
         assert charger_is_complete(out[0])
 
+    def test_a_second_charger_on_a_device_needs_a_connector(self):
+        """Decided (Guido, 11.10): one charger per device unless the user
+        says which connector it is. Without it, a second, different charger
+        for the same device is not added; with it, it is."""
+        refs, resolved = self._start()
+        other = {**NEW, "id": "second", "ev_charging_power_sensor": f"{P}_p_l2",
+                 "ev_charger_service_data": '{"charger_name": "second"}'}
+        refs2, _ = reconcile(data_list=None, legacy=resolved + [dict(other)],
+                             refs=refs, sig=signature(resolved),
+                             device_of=_goe_device, live_by_device=LIVE)
+        assert [r["id"] for r in refs2] == [NEW["id"]]
+        refs3, _ = reconcile(data_list=None,
+                             legacy=resolved + [{**other, "connector": 2}],
+                             refs=refs, sig=signature(resolved),
+                             device_of=_goe_device, live_by_device=LIVE)
+        assert [r["id"] for r in refs3] == [NEW["id"], "second"]
+        assert [r["settings"].get("connector") for r in refs3] == [1, 2]
+
     def test_a_half_card_the_user_finished_is_kept(self):
         """Once the user picks a role on a half card, it is their charger:
         a second, different complete card for the device is a second box."""
@@ -266,7 +286,8 @@ class TestEdits:
                                    live_by_device=LIVE)
         assert refs[0]["stored_complete"] is True
         other = {**NEW, "id": "second", "ev_charging_power_sensor": f"{P}_p_l2",
-                 "ev_connected_sensor": f"{P}_adapter", "ev_charging_sensor": f"{P}_adapter"}
+                 "ev_connected_sensor": f"{P}_adapter", "ev_charging_sensor": f"{P}_adapter",
+                 "connector": 2}
         refs2, _ = reconcile(data_list=None, legacy=resolved + [other], refs=refs,
                              sig=signature(resolved), device_of=_goe_device,
                              live_by_device=LIVE)

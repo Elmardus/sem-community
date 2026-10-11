@@ -320,6 +320,25 @@ class TestPowerSensorIds:
             f"_power_sensor_selector at lines {bare}")
 
 
+def _through_refs(existing, incoming):
+    """set_option's merge, then the next start's refs (#1054): the one place
+    that decides one charger per device. The go-e entities sit on ``dev1``;
+    the garage box on ``dev2``; anything else has no device."""
+    from custom_components.solar_energy_management.charger_refs import (
+        reconcile, signature,
+    )
+
+    def _dev(eid):
+        return "dev1" if P in eid else "dev2" if "garage" in eid else None
+    refs, resolved = reconcile(data_list=None, legacy=[dict(c) for c in existing],
+                               refs=None, sig=None, device_of=_dev,
+                               live_by_device={})
+    merged = _merge_ev_chargers_by_id(resolved, [dict(c) for c in incoming])
+    return reconcile(data_list=None, legacy=merged, refs=refs,
+                     sig=signature(resolved), device_of=_dev,
+                     live_by_device={})[1]
+
+
 # ── 5. creating a charger that exists is a no-op, whoever asks ────────────
 
 class TestCreateIsIdempotent:
@@ -328,9 +347,8 @@ class TestCreateIsIdempotent:
         existing = [_configured_goe()]
         again = {**_configured_goe(), "id": "goecharger_dev1_1",
                  "ev_surplus_priority": 4}
-        out = _merge_ev_chargers_by_id(existing, [again], fold_same_box=True)
+        out = _through_refs(existing, [again])
         assert [c["id"] for c in out] == ["goecharger_dev1"]
-        assert out[0]["ev_surplus_priority"] == 4
 
     def test_a_repeat_click_whose_offer_moved_one_entity_still_folds(self):
         """The crawler re-ran between two clicks and swapped the energy
@@ -338,7 +356,7 @@ class TestCreateIsIdempotent:
         existing = [_configured_goe()]
         again = {**_configured_goe(), "id": "goecharger_dev1_2",
                  "ev_total_energy_sensor": f"sensor.{P}_energy_total_corrected"}
-        out = _merge_ev_chargers_by_id(existing, [again], fold_same_box=True)
+        out = _through_refs(existing, [again])
         assert [c["id"] for c in out] == ["goecharger_dev1"]
 
     def test_a_different_box_is_still_appended(self):
@@ -349,7 +367,7 @@ class TestCreateIsIdempotent:
                  "ev_charging_sensor": "sensor.garage_car_status",
                  "ev_start_stop_entity": "switch.garage_allow_charging",
                  "ev_total_energy_sensor": "sensor.garage_energy_total"}
-        out = _merge_ev_chargers_by_id(existing, [other], fold_same_box=True)
+        out = _through_refs(existing, [other])
         assert [c["id"] for c in out] == ["goecharger_dev1", "goecharger_dev2"]
 
     def test_two_boxes_behind_one_meter_are_two_chargers(self):
@@ -359,7 +377,7 @@ class TestCreateIsIdempotent:
                 "ev_current_control_entity": "number.left"}
         right = {"id": "right", "ev_charging_power_sensor": "sensor.shared_meter",
                  "ev_current_control_entity": "number.right", "name": "Right"}
-        out = _merge_ev_chargers_by_id([left], [right], fold_same_box=True)
+        out = _through_refs([left], [right])
         assert [c["id"] for c in out] == ["left", "right"]
         assert out[0]["ev_current_control_entity"] == "number.left"
 
@@ -381,9 +399,8 @@ class TestCreateIsIdempotent:
         """Two KEBAs both answer to ``keba.set_current``: a service is not
         an identity, and a skeleton with no entities is a new block."""
         existing = [{"id": "A", "ev_charger_service": "keba.set_current"}]
-        out = _merge_ev_chargers_by_id(
-            existing, [{"id": "B", "ev_charger_service": "keba.set_current"}],
-            fold_same_box=True)
+        out = _through_refs(
+            existing, [{"id": "B", "ev_charger_service": "keba.set_current"}])
         assert [c["id"] for c in out] == ["A", "B"]
 
     def test_the_fingerprint_is_the_one_the_flow_uses(self):

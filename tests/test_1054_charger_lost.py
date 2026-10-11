@@ -44,6 +44,22 @@ def _device_of(eid: str):
     return "dev1" if eid.startswith(("sensor.goecharger_", "switch.goecharger_")) else None
 
 
+def _through_refs(existing, incoming, live=None):
+    """What the user sees after a write: set_option's merge (siblings kept),
+    then the next start's refs decide one charger per device (#1054)."""
+    from custom_components.solar_energy_management.charger_refs import (
+        reconcile, signature,
+    )
+    refs, resolved = reconcile(data_list=None, legacy=[dict(c) for c in existing],
+                               refs=None, sig=None, device_of=_device_of,
+                               live_by_device=live or {})
+    merged = _merge_ev_chargers_by_id(resolved, [dict(c) for c in incoming])
+    _refs, out = reconcile(data_list=None, legacy=merged, refs=refs,
+                           sig=signature(resolved), device_of=_device_of,
+                           live_by_device=live or {})
+    return out
+
+
 # ── the rule ─────────────────────────────────────────────────────────────
 
 class TestCompleteWins:
@@ -70,44 +86,36 @@ class TestCompleteWins:
     def test_the_create_replaces_the_half_filled_card_of_the_same_box(self):
         """weindler's state, then the create button: one charger, the
         working one, in the old card's place."""
-        out = _merge_ev_chargers_by_id([dict(OLD)], [dict(NEW)],
-                                       fold_same_box=True, device_of=_device_of)
+        out = _through_refs([dict(OLD)], [dict(NEW)])
         assert [c["id"] for c in out] == [NEW["id"]]
         assert out[0]["ev_charger_service"] == "goecharger.set_max_current"
 
     def test_it_takes_the_old_cards_place_so_a_primary_stays_primary(self):
         other = {"id": "keba", "name": "KEBA",
                  "ev_charging_power_sensor": "sensor.keba_power",
-                 "ev_connected_sensor": "binary_sensor.keba_plug",
-                 "ev_charging_sensor": "binary_sensor.keba_charging"}
-        out = _merge_ev_chargers_by_id([dict(OLD), dict(other)], [dict(NEW)],
-                                       fold_same_box=True, device_of=_device_of)
+                 "ev_charger_service": "keba.set_current"}
+        out = _through_refs([dict(OLD), dict(other)], [dict(NEW)])
         assert [c["id"] for c in out] == [NEW["id"], "keba"]
 
-    def test_an_existing_complete_charger_drops_the_half_card_on_update(self):
-        out = _merge_ev_chargers_by_id(
-            [dict(OLD), dict(NEW)], [{"id": NEW["id"], **{k: v for k, v in NEW.items()}}],
-            fold_same_box=True, device_of=_device_of)
+    def test_an_existing_complete_charger_drops_the_half_card(self):
+        out = _through_refs([dict(OLD), dict(NEW)], [dict(NEW)])
         assert [c["id"] for c in out] == [NEW["id"]]
 
     def test_a_complete_card_is_never_displaced(self):
         twin = {**NEW, "id": "goecharger_twin"}
-        out = _merge_ev_chargers_by_id([dict(twin)], [dict(NEW)],
-                                       fold_same_box=True, device_of=_device_of)
-        # same entity set → the older id keeps it (the #1054 fold), nothing lost
+        out = _through_refs([dict(twin)], [dict(NEW)])
+        # a copy of the running charger → the running one keeps the box
         assert [c["id"] for c in out] == ["goecharger_twin"]
         assert charger_is_complete(out[0])
 
     def test_a_half_card_on_another_box_stays(self):
         stranger = {"id": "other", "ev_total_energy_sensor": "sensor.other_energy"}
-        out = _merge_ev_chargers_by_id([dict(stranger)], [dict(NEW)],
-                                       fold_same_box=True, device_of=_device_of)
+        out = _through_refs([dict(stranger)], [dict(NEW)])
         assert [c["id"] for c in out] == ["other", NEW["id"]]
 
     def test_a_half_incoming_card_never_displaces_anything(self):
-        out = _merge_ev_chargers_by_id([dict(NEW)], [{**OLD}],
-                                       fold_same_box=True, device_of=_device_of)
-        assert [c["id"] for c in out] == [NEW["id"], OLD["id"]]
+        out = _through_refs([dict(NEW)], [{**OLD}])
+        assert [c["id"] for c in out] == [NEW["id"]]
 
     def test_the_heal_never_displaces(self):
         """No device lookup, no fold — the start-up heal keeps both for the

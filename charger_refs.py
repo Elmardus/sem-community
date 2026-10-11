@@ -31,9 +31,10 @@ be healed back.
 Rules the refs keep:
 
 * one ref per device. A half card beside a complete one for the same device
-  is folded into it; a copy of a charger is folded into it. Two COMPLETE
-  chargers on one device with different entities (a twin wallbox) keep both;
-  the second gets ``connector`` so the pair is explicit.
+  is folded into it; a copy of a charger is folded into it. A second charger
+  on a device (a twin wallbox) needs the explicit ``connector`` setting; the
+  migration sets it on an install that already runs two, so nothing working
+  is dropped.
 * a complete charger resolves to exactly what it was when it became a ref —
   every role that differs from the crawler is an override, every role the
   crawler adds is ``cleared``. Only a half card is completed by the crawler.
@@ -181,8 +182,18 @@ def refs_from_cards(cards: Iterable[dict], device_of: DeviceOf,
                     break
             if placed:
                 continue
+            # (Decision 3) a second charger on one device needs the
+            # explicit ``connector`` setting. An install that already runs
+            # two different chargers on one device keeps both: the
+            # migration SETS it, numbering by position, so nothing working
+            # is dropped.
+            first = out[by_device[dev][0]]
+            first["settings"].setdefault("connector", 1)
             ref = card_to_ref(card, dev, live)
             ref["settings"].setdefault("connector", len(by_device[dev]) + 1)
+            log(f"charger {card['id']} is a second charger on the device of "
+                f"{first['id']} — kept, as connector "
+                f"{ref['settings']['connector']}")
             by_device[dev].append(len(out))
             out.append(ref)
             continue
@@ -259,9 +270,15 @@ def apply_legacy_edit(refs: List[dict], legacy: List[dict],
                 log(f"charger {card['id']} is a copy of {out[twins[0]]['id']} "
                     "on the same device — not added twice")
                 continue
-            ref = card_to_ref(card, dev, live)
-            ref["settings"].setdefault("connector", len(twins) + 1)
-            out[pos] = ref
+            if not card.get("connector"):
+                # (Decision 3) one charger per device unless the user says
+                # which connector this one is
+                log(f"charger {card['id']} is a second charger on the device "
+                    f"of {out[twins[0]]['id']} without a connector setting — "
+                    "not added")
+                continue
+            out[twins[0]]["settings"].setdefault("connector", 1)
+            out[pos] = card_to_ref(card, dev, live)
             continue
         out[pos] = card_to_ref(card, dev, live)
     gone = [r["id"] for r in refs if r["id"] not in {c.get("id") for c in legacy or []
