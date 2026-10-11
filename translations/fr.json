@@ -1909,6 +1909,18 @@
     "split_grid_rejected": {
       "title": "SEM could not find your grid power meters",
       "description": "No grid power entity is configured and the Energy Dashboard gives none. SEM matched **{import_entity}** and **{export_entity}** by entity name, then checked them against your grid energy counters — and they do not track them, so they are not your meters. SEM reports **no grid power** rather than a wrong one. Open **Settings → Integrations → SEM → Configure → Sensors** and set **Grid import power** and **Grid export power** explicitly; this notice clears once real meters are named or the guesses start agreeing."
+    },
+    "charger_device_gone": {
+      "title": "Borne {name} : appareil introuvable",
+      "description": "Home Assistant ne connaît plus l'appareil de la borne {name}. SEM ne peut pas la piloter. Supprimez la borne dans SEM ou ajoutez de nouveau l'appareil."
+    },
+    "charger_role_missing": {
+      "title": "Borne {name} : un rôle manque",
+      "description": "SEM n'a trouvé aucune entité sur l'appareil de {name} pour : {roles}. Choisissez-la dans les réglages de la borne ou vérifiez l'intégration de l'appareil."
+    },
+    "charger_role_entity_gone": {
+      "title": "Borne {name} : une entité a disparu",
+      "description": "Vous avez choisi {entity} pour la borne {name}, et elle n'existe plus. Choisissez la nouvelle entité dans les réglages de la borne ou \"utiliser la détection\"."
     }
   },
   "selector": {

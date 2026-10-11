@@ -1909,6 +1909,18 @@
     "split_grid_rejected": {
       "title": "SEM could not find your grid power meters",
       "description": "No grid power entity is configured and the Energy Dashboard gives none. SEM matched **{import_entity}** and **{export_entity}** by entity name, then checked them against your grid energy counters — and they do not track them, so they are not your meters. SEM reports **no grid power** rather than a wrong one. Open **Settings → Integrations → SEM → Configure → Sensors** and set **Grid import power** and **Grid export power** explicitly; this notice clears once real meters are named or the guesses start agreeing."
+    },
+    "charger_device_gone": {
+      "title": "Lader {name}: apparaat ontbreekt",
+      "description": "Home Assistant heeft het apparaat achter lader {name} niet meer. SEM kan hem niet aansturen. Verwijder de lader in SEM of voeg het apparaat opnieuw toe."
+    },
+    "charger_role_missing": {
+      "title": "Lader {name}: een rol ontbreekt",
+      "description": "SEM vond op het apparaat van {name} geen entiteit voor: {roles}. Kies die in de laderinstellingen of controleer de integratie van het apparaat."
+    },
+    "charger_role_entity_gone": {
+      "title": "Lader {name}: een entiteit is weg",
+      "description": "Je koos {entity} voor lader {name}, en die bestaat niet meer. Kies de nieuwe entiteit in de laderinstellingen of \"gevonden gebruiken\"."
     }
   },
   "selector": {

@@ -217,14 +217,13 @@ class TestStaleStateIsSwept:
 # ── the real set_option path: one write, both stores, survives a reload ───
 
 @pytest.mark.asyncio
-async def test_create_replaces_the_half_card_in_both_stores(
+async def test_setup_folds_a_half_card_into_the_complete_one(
     sem_real_hass, sem_multi_wallbox_config_entry,
 ):
-    """weindler's shape on a real Home Assistant: a half card for the right
-    box sits first in ``entry.data`` and ``entry.options``. The create
-    button's ``set_option`` with the complete card replaces it in BOTH
-    stores (data gets the same list, or the heal would re-sort options to
-    data's order), and the start-up heal on reload finds nothing to do."""
+    """A half card for the right box first, the complete one second (the
+    beta.13 shape). (#1054 device refs) The first start makes one ref per
+    device: the complete charger, in the half card's place; ``entry.data``
+    keeps no list, so nothing can bring the half card back."""
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -242,8 +241,6 @@ async def test_create_replaces_the_half_card_in_both_stores(
                            {"unit_of_measurement": "A"})
         h.states.async_set(f"binary_sensor.test_wb_{side}_cable_connected", "off")
         h.states.async_set(f"sensor.test_wb_{side}_status", "idle")
-
-    # the right box is one device in the registry
     box_entry = MockConfigEntry(domain="test_wb")
     box_entry.add_to_hass(h)
     dev = dr.async_get(h).async_get_or_create(
@@ -257,27 +254,23 @@ async def test_create_replaces_the_half_card_in_both_stores(
         reg.async_get_or_create(domain, "test_wb", obj, suggested_object_id=obj,
                                 config_entry=box_entry, device_id=dev.id)
 
-    entry = sem_multi_wallbox_config_entry
-    left, right = entry.data["ev_chargers"]
+    base = sem_multi_wallbox_config_entry
+    left, right = base.data["ev_chargers"]
     half = {"id": "right_old", "name": "Old card",
             "ev_total_energy_sensor": "sensor.test_wb_right_charging_energy"}
-    entry_data = {**entry.data, "ev_chargers": [half, left]}
-    h_entry = MockConfigEntry(domain=DOMAIN, version=entry.version,
-                              minor_version=entry.minor_version,
-                              data=entry_data,
-                              options={"ev_chargers": [dict(half), dict(left)]})
-    await _setup_sem(h, h_entry)
-
     complete = {**right, "id": "right_new",
                 "ev_total_energy_sensor": "sensor.test_wb_right_charging_energy"}
-    await h.services.async_call(DOMAIN, "set_option",
-                                {"options": {"ev_chargers": [complete]}}, blocking=True)
-    await h.async_block_till_done()
+    entry = MockConfigEntry(domain=DOMAIN, version=base.version,
+                            minor_version=base.minor_version,
+                            data={**base.data, "ev_chargers": [half, left]},
+                            options={"ev_chargers": [dict(half), dict(left), dict(complete)]})
+    await _setup_sem(h, entry)
 
-    assert [c["id"] for c in h_entry.options["ev_chargers"]] == ["right_new", "ev_charger"]
-    assert [c["id"] for c in h_entry.data["ev_chargers"]] == ["right_new", "ev_charger"]
+    assert [r["id"] for r in entry.options["ev_charger_refs"]] == ["right_new", "ev_charger"]
+    assert [c["id"] for c in entry.options["ev_chargers"]] == ["right_new", "ev_charger"]
+    assert "ev_chargers" not in entry.data
 
-    await h.config_entries.async_reload(h_entry.entry_id)
+    await h.config_entries.async_reload(entry.entry_id)
     await h.async_block_till_done()
-    assert [c["id"] for c in h_entry.options["ev_chargers"]] == ["right_new", "ev_charger"]
-    assert [c["id"] for c in h_entry.data["ev_chargers"]] == ["right_new", "ev_charger"]
+    assert [r["id"] for r in entry.options["ev_charger_refs"]] == ["right_new", "ev_charger"]
+    assert sorted(entry.runtime_data._ev_devices) == ["ev_charger", "right_new"]

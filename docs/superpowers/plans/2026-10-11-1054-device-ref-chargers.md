@@ -72,7 +72,8 @@ change. MULTI_CHARGER.md's per-charger invariant is untouched.
 
 | Writer | Today | After |
 |---|---|---|
-| `set_option` (`__init__.py`) | merge cards by id, fold | upsert ref by `id`; a ref for a `device_id` that has one = update it |
+| **all writers** (built 11.10) | write `options.ev_chargers` | unchanged for one release: they still write the legacy list; the next setup sees it changed (fingerprint `ev_charger_refs_sig`) and folds the change into the refs (`charger_refs.apply_legacy_edit`) — one place, so no writer can bypass the refs |
+| `set_option` (`__init__.py`) | merge cards by id, fold | (later) upsert ref by `id`; a ref for a `device_id` that has one = update it |
 | `persist_per_charger_option` | copy-patch options list, data fallback | patch the ref's settings |
 | `remove_charger` service | drop from options + data | drop the ref |
 | options flow add / edit / remove | card dicts in `_data` | add = pick a crawler-found device (or "manual" → device-less ref); edit = settings + per-role "set by you"; remove = any ref, the last one too |
@@ -81,7 +82,12 @@ change. MULTI_CHARGER.md's per-charger invariant is untouched.
 | startup heal `_heal_ev_chargers_options` | unions data into options | **deleted** |
 | fold `_same_box_as`, displacement | guess a copy | **deleted** (one ref per device makes copies impossible) |
 
-## 4. One migration (entry version 18.2 → 19.1)
+## 4. One migration (at setup — NO entry-version bump)
+
+Built 11.10: Home Assistant refuses to set up an entry whose version is newer
+than the code, so a bump would break the downgrade promise (§5). The
+conversion runs in setup instead, guarded by the presence of
+`options.ev_charger_refs`, in the place the old heal ran.
 
 For the union of `data.ev_chargers` and `options.ev_chargers` (options wins per
 id, as the heal did):
@@ -157,6 +163,8 @@ half primary, a half card does not claim its box in the report. Removed by
 this build: the merge displacement and `device_of`, the data-side prune in
 `set_option` (no data list exists). PR #1091 is closed unmerged when this
 lands.
+
+## Decided (Guido, 11.10.2026: "Perfect go ahead") — all five at the defaults below
 
 ## Open decisions (defaults in brackets)
 

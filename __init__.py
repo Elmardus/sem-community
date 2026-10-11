@@ -2417,24 +2417,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
     # entry.data before the merged config is evaluated, so the reseed (which
     # only fires when the merged config has no chargers at all) never plants
     # its single ``id: "ev_charger"`` entry on top of a heal-able install.
-    if "ev_chargers" in (entry.options or {}):
-        _healed = _heal_ev_chargers_options(
-            (entry.data or {}).get("ev_chargers"),
-            entry.options.get("ev_chargers"),
-        )
-        if _healed is not None:
-            _LOGGER.warning(
-                "Healed ev_chargers options list: stored ids %s -> healed ids %s "
-                "(data-side ids: %s). See #462/#464.",
-                [c.get("id") for c in (entry.options.get("ev_chargers") or [])
-                 if isinstance(c, dict)],
-                [c.get("id") for c in _healed],
-                [c.get("id") for c in ((entry.data or {}).get("ev_chargers") or [])
-                 if isinstance(c, dict)],
-            )
-            hass.config_entries.async_update_entry(
-                entry, options={**entry.options, "ev_chargers": _healed},
-            )
+    # (#1054) A charger is a DEVICE reference; the crawler fills in its
+    # roles. ``charger_refs.async_reconcile`` replaces the #462/#464 heal:
+    # first start → the old data/options cards become refs (one per device,
+    # a half card folded into the complete one); later starts fold any
+    # change a writer made to the legacy ``options.ev_chargers`` copy and
+    # resolve every ref against the crawler's live answer. ``entry.data``
+    # keeps no charger list, so a removed charger cannot be healed back.
+    # Runs before full_config is built, as the heal did (#476 ordering).
+    try:
+        from .charger_refs import async_reconcile as _reconcile_charger_refs
+        _reconcile_charger_refs(hass, entry)
+    except Exception:  # noqa: BLE001 — the stores stay as they were
+        _LOGGER.exception("charger refs: reconcile failed, chargers unchanged")
 
     # (#886) Repair a charger persisted with its OFFLINE fallback register as
     # ev_current_control_entity (pre-fix JuiceBox detection bound
@@ -6868,6 +6863,35 @@ async def _async_register_phase_services(
                 "data": _chargers_brief(target.data),
                 "options": _chargers_brief(target.options),
             }
+            # (#1054) What is stored (which device, what the user set) and
+            # what the crawler answers for that device right now — so a
+            # report shows both sides of every charger role.
+            try:
+                from .charger_refs import REFS_KEY, ROLE_KEYS, live_charger_roles
+                refs = (target.options or {}).get(REFS_KEY)
+                if isinstance(refs, list):
+                    live = live_charger_roles(hass)
+                    payload["ev_charger_refs"] = [
+                        {
+                            "id": r.get("id"),
+                            "device_id": r.get("device_id"),
+                            "connector": (r.get("settings") or {}).get("connector"),
+                            "stored_complete": r.get("stored_complete"),
+                            "role_source": {
+                                role: ("you" if role in (r.get("overrides") or {})
+                                       else "cleared" if role in (r.get("cleared") or ())
+                                       else "crawler")
+                                for role in sorted(ROLE_KEYS)
+                                if role in (r.get("overrides") or {})
+                                or role in (r.get("cleared") or ())
+                                or role in (r.get("found") or {})
+                            },
+                            "crawler_now": live.get(r.get("device_id")) or {},
+                        }
+                        for r in refs if isinstance(r, dict)
+                    ]
+            except Exception as exc:  # noqa: BLE001 — a diagnose never raises
+                payload["ev_charger_refs"] = {"error": str(exc)}
 
             # #548 actuation truth — the load-bearing facts for "SEM says
             # stop but the charger keeps charging": per charger, the adapter's

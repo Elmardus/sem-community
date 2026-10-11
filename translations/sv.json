@@ -1909,6 +1909,18 @@
     "split_grid_rejected": {
       "title": "SEM could not find your grid power meters",
       "description": "No grid power entity is configured and the Energy Dashboard gives none. SEM matched **{import_entity}** and **{export_entity}** by entity name, then checked them against your grid energy counters — and they do not track them, so they are not your meters. SEM reports **no grid power** rather than a wrong one. Open **Settings → Integrations → SEM → Configure → Sensors** and set **Grid import power** and **Grid export power** explicitly; this notice clears once real meters are named or the guesses start agreeing."
+    },
+    "charger_device_gone": {
+      "title": "Laddare {name}: enheten saknas",
+      "description": "Home Assistant har inte längre enheten bakom laddaren {name}. SEM kan inte styra den. Ta bort laddaren i SEM eller lägg till enheten igen."
+    },
+    "charger_role_missing": {
+      "title": "Laddare {name}: en roll saknas",
+      "description": "SEM hittade ingen entitet på enheten för {name} för: {roles}. Välj den i laddarens inställningar eller kontrollera enhetens integration."
+    },
+    "charger_role_entity_gone": {
+      "title": "Laddare {name}: en entitet är borta",
+      "description": "Du valde {entity} för laddaren {name}, och den finns inte längre. Välj den nya entiteten i laddarens inställningar eller \"använd hittad\"."
     }
   },
   "selector": {

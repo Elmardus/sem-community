@@ -1909,6 +1909,18 @@
     "split_grid_rejected": {
       "title": "SEM could not find your grid power meters",
       "description": "No grid power entity is configured and the Energy Dashboard gives none. SEM matched **{import_entity}** and **{export_entity}** by entity name, then checked them against your grid energy counters — and they do not track them, so they are not your meters. SEM reports **no grid power** rather than a wrong one. Open **Settings → Integrations → SEM → Configure → Sensors** and set **Grid import power** and **Grid export power** explicitly; this notice clears once real meters are named or the guesses start agreeing."
+    },
+    "charger_device_gone": {
+      "title": "{name} töltő: az eszköz hiányzik",
+      "description": "A Home Assistant már nem ismeri a(z) {name} töltő eszközét. A SEM nem tudja vezérelni. Távolítsd el a töltőt a SEM-ben, vagy add hozzá újra az eszközt."
+    },
+    "charger_role_missing": {
+      "title": "{name} töltő: hiányzik egy szerep",
+      "description": "A SEM nem talált entitást a(z) {name} eszközén ehhez: {roles}. Válaszd ki a töltő beállításaiban, vagy ellenőrizd az eszköz integrációját."
+    },
+    "charger_role_entity_gone": {
+      "title": "{name} töltő: egy entitás eltűnt",
+      "description": "A(z) {name} töltőhöz a(z) {entity} entitást választottad, és már nem létezik. Válaszd ki az újat a töltő beállításaiban, vagy a \"felismert használata\" lehetőséget."
     }
   },
   "selector": {

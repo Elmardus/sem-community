@@ -229,20 +229,24 @@ class TestARemoveSticks:
             h.states.async_set(f"sensor.test_wb_{side}_status", "idle")
         entry = sem_multi_wallbox_config_entry
         await _setup_sem(h, entry)
-        assert [c["id"] for c in entry.data["ev_chargers"]] == ["ev_charger", "ev_charger_1"]
+        # (#1054 device refs) setup moved the chargers to options; data keeps none
+        assert "ev_chargers" not in entry.data
+        assert [r["id"] for r in entry.options["ev_charger_refs"]] == ["ev_charger", "ev_charger_1"]
 
         await h.services.async_call(DOMAIN, "remove_charger",
                                     {"charger_id": "ev_charger_1"}, blocking=True)
         await h.async_block_till_done()
 
-        assert [c["id"] for c in entry.data["ev_chargers"]] == ["ev_charger"]
+        assert "ev_chargers" not in entry.data
         assert [c["id"] for c in entry.options["ev_chargers"]] == ["ev_charger"]
+        assert [r["id"] for r in entry.options["ev_charger_refs"]] == ["ev_charger"]
 
         # the start-up heal runs again on reload and must find nothing to restore
         await h.config_entries.async_reload(entry.entry_id)
         await h.async_block_till_done()
         assert [c["id"] for c in entry.options["ev_chargers"]] == ["ev_charger"]
-        assert [c["id"] for c in entry.data["ev_chargers"]] == ["ev_charger"]
+        assert [r["id"] for r in entry.options["ev_charger_refs"]] == ["ev_charger"]
+        assert "ev_chargers" not in entry.data
 
 
 # ── 3. has_ev: nothing at runtime reads the setup-time flag ──────────────
