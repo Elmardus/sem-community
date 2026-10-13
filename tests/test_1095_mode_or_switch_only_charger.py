@@ -98,3 +98,37 @@ async def test_no_current_write_is_invented():
         await GenericAdapter(dev).command_current(16)
         assert not [s for s in sent if s[0] == "number"
                     or any("current" in k for k in s[2])], sent
+
+
+@pytest.mark.asyncio
+async def test_a_half_second_card_does_not_borrow_the_primarys_switch(sem_real_hass):
+    hass = sem_real_hass
+    """(self-review) Setup's ``_cfg`` falls back to the flat keys, which are
+    the primary's. A second card with only a power reading must not pass on
+    the primary's start/stop switch — SEM would then drive the primary's
+    box for it. The primary itself still runs on its flat switch."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from custom_components.solar_energy_management.const import DOMAIN
+    for eid, val, unit in (("sensor.test_grid_power", "0", "W"),
+                           ("sensor.test_battery_power", "0", "W"),
+                           ("sensor.test_battery_soc", "50", "%"),
+                           ("sensor.test_solar_power", "0", "W")):
+        hass.states.async_set(eid, val, {"unit_of_measurement": unit})
+    entry = MockConfigEntry(
+        domain=DOMAIN, version=12, minor_version=1,
+        data={"grid_power_sensor": "sensor.test_grid_power",
+              "battery_power_sensor": "sensor.test_battery_power",
+              "battery_soc_sensor": "sensor.test_battery_soc",
+              "solar_power_sensor": "sensor.test_solar_power",
+              "battery_capacity_kwh": 10.0, "update_interval": 30,
+              "ev_start_stop_entity": SWITCH},
+        options={"ev_chargers": [
+            {"id": "primary", "ev_charging_power_sensor": "sensor.box_power"},
+            {"id": "half", "ev_charging_power_sensor": "sensor.other_power"},
+        ]})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert list(entry.runtime_data._ev_devices) == ["primary"]
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

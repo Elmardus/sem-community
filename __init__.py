@@ -2791,11 +2791,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             # so a charger the crawler offered with only a charge-mode select
             # or only start/stop (myenergi, Ohme, a Zaptec without current
             # rights) was dropped here and SEM ran nothing.
+            # The start/stop, start-service and charge-mode keys count only
+            # from THIS card on a second charger: ``_cfg`` falls back to the
+            # flat keys, which are the primary's, and a half card must not
+            # pass on the primary's switch (and then drive it).
             from .hardware_detection import charger_is_complete
             _resolved = {k: _cfg(k) for k in (
                 "ev_charging_power_sensor", "ev_charger_service",
-                "ev_current_control_entity", "ev_start_stop_entity",
-                "ev_start_service", "ev_charge_mode_entity")}
+                "ev_current_control_entity")}
+            _resolved.update({k: (_cfg(k) if idx == 0 else charger_cfg.get(k))
+                              for k in ("ev_start_stop_entity",
+                                        "ev_start_service",
+                                        "ev_charge_mode_entity")})
             if not charger_is_complete(_resolved):
                 _LOGGER.debug("Charger %s missing power sensor or control method, skipping", charger_id)
                 continue
