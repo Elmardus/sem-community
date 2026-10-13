@@ -297,6 +297,63 @@ class TestASavedLockKeepsItsSource:
         assert power.grid_power == 1200.0
 
 
+@pytest.mark.unit
+class TestAPairIsNeverUnlockedIntoANegation:
+    """Re-review N1: dropping the restored lock on a PAIR source let the
+    brand seed run — on the leftover Grid power pick's platform — and negate
+    "export − import" for ever. A pair's sign is by declaration."""
+
+    def _pair_reader(self, saved, extra=None):
+        states = _reporter_states(**{
+            "sensor.p1_import": _state(2000, device_class="power"),
+            "sensor.p1_export": _state(0, device_class="power"),
+        })
+        cfg = {"grid_power_sensor": "sensor.solaredge_m1_ac_power",
+               "grid_import_power_entity": "sensor.p1_import",
+               "grid_export_power_entity": "sensor.p1_export"}
+        cfg.update(extra or {})
+        reader = _make_reader_with_states(MagicMock(), states, _reporter_ed(), cfg)
+        reader.restore_sign_state(saved)
+        return reader
+
+    def _read(self, reader, n=3):
+        reg = _registry({"sensor.solaredge_m1_ac_power": "solaredge"},
+                        {"sensor.solaredge_m1_imported_kwh": "m1"})
+        with patch(f"{SR}.er.async_get", return_value=reg), patch(f"{SR}._ri"):
+            return [reader.read_power().grid_power for _ in range(n)]
+
+    def test_a_manual_pair_under_a_leftover_brand_pick_reads_import(self):
+        reader = self._pair_reader({"grid_detected": True, "grid_inverted": False,
+                                    "grid_source": "combined:sensor.solaredge_m1_ac_power"})
+        assert self._read(reader) == [-2000.0] * 3
+        assert reader._grid_sign_detected is True
+        assert reader._grid_sign_inverted is False
+
+    def test_an_inversion_carried_from_a_combined_meter_is_not_kept_on_a_pair(self):
+        reader = self._pair_reader({"grid_detected": True, "grid_inverted": True,
+                                    "grid_source": "combined:sensor.other"})
+        assert self._read(reader) == [-2000.0] * 3
+
+    def test_a_pair_with_one_sem_half_is_no_pair(self):
+        # Re-review M1: the old guess Repair's own pair — SEM's import
+        # sensor and the Envoy's SOLAR production — read as +2500 export.
+        reader = _make_reader_with_states(MagicMock(), _reporter_states(), _reporter_ed(), {
+            "grid_import_power_entity": "sensor.sem_grid_import_power",
+            "grid_export_power_entity": "sensor.envoy_122217046540_current_power_production",
+        })
+        with patch(f"{SR}.er.async_get", return_value=_registry(**_REPORTER_REG)), \
+                patch(f"{SR}._ri"):
+            readings = reader._read_from_energy_dashboard()
+        assert readings.grid_power == 0.0
+        assert not str(reader._grid_source_key or "").startswith("manual:")
+
+    def test_a_restored_source_is_saved_until_this_run_knows_its_own(self):
+        reader = self._pair_reader({"grid_detected": True, "grid_inverted": False,
+                                    "grid_source": "manual:sensor.p1_import|sensor.p1_export"})
+        assert reader.export_sign_state()["grid_source"] == \
+            "manual:sensor.p1_import|sensor.p1_export"
+
+
 # ── 3. half a pair is not "being checked" ───────────────────────────────────
 
 @pytest.mark.unit
