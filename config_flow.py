@@ -13,6 +13,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 
+from .utils.own_entity import is_sem_entity  # (#1103)
 from .utils.device_names import (  # (#1053)
     HEAT_PUMP_DEFAULT, charger_display_name, device_display_name,
 )
@@ -544,7 +545,9 @@ def _detect_hardware_specs(hass: HomeAssistant, registry=None) -> Dict[str, floa
     for pattern in capacity_patterns:
         import fnmatch
         for state in hass.states.async_all("sensor"):
-            if fnmatch.fnmatch(state.entity_id, pattern):
+            # (#1103) SEM's own sensors are results, never hardware facts.
+            if fnmatch.fnmatch(state.entity_id, pattern) \
+                    and not is_sem_entity(hass, state.entity_id, registry):
                 try:
                     val = float(state.state)
                     if val > 0:
@@ -574,7 +577,8 @@ def _detect_hardware_specs(hass: HomeAssistant, registry=None) -> Dict[str, floa
     for pattern in power_patterns:
         import fnmatch
         for state in hass.states.async_all("sensor"):
-            if fnmatch.fnmatch(state.entity_id, pattern) and "inverter" in state.entity_id.lower():
+            if fnmatch.fnmatch(state.entity_id, pattern) and "inverter" in state.entity_id.lower() \
+                    and not is_sem_entity(hass, state.entity_id, registry):
                 try:
                     val = float(state.state)
                     if val > 100:  # Must be in W
@@ -594,7 +598,8 @@ def _detect_hardware_specs(hass: HomeAssistant, registry=None) -> Dict[str, floa
     for pattern in discharge_patterns:
         import fnmatch
         for state in hass.states.async_all(["number", "sensor"]):
-            if fnmatch.fnmatch(state.entity_id, pattern):
+            if fnmatch.fnmatch(state.entity_id, pattern) \
+                    and not is_sem_entity(hass, state.entity_id, registry):
                 try:
                     val = float(state.state)
                     if val > 0:
@@ -1579,7 +1584,8 @@ def _suggest_charge_limit_number(hass) -> str | None:
         for st in hass.states.async_all("number"):
             eid = st.entity_id.lower()
             if any(h in eid for h in _CHARGE_LIMIT_HINTS) and "discharg" not in eid \
-                    and "entlade" not in eid:
+                    and "entlade" not in eid \
+                    and not is_sem_entity(hass, st.entity_id):  # (#1103)
                 return st.entity_id
     except Exception:  # noqa: BLE001
         return None
@@ -1624,7 +1630,8 @@ def _suggest_select_with_options(hass, labels) -> str | None:
     try:
         for st in hass.states.async_all("select"):
             opts = st.attributes.get("options") or []
-            if all(w in opts for w in want):
+            if all(w in opts for w in want) \
+                    and not is_sem_entity(hass, st.entity_id):  # (#1103)
                 return st.entity_id
     except Exception:  # noqa: BLE001 — a suggestion never breaks a form
         return None
@@ -2792,8 +2799,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             current_config.get(f"phase_guard_grid_l{phase}_current_entity")
             for phase in range(1, phase_count + 1)
         ):
+            # (#1103) SEM's own phase-current sensors are not the meter's.
             discovered_currents = discover_grid_phase_current_entities(
-                self.hass.states.async_all("sensor"), phase_count=phase_count
+                [st for st in self.hass.states.async_all("sensor")
+                 if not is_sem_entity(self.hass, st.entity_id)],
+                phase_count=phase_count,
             )
 
         fields: dict[Any, Any] = {
@@ -3021,7 +3031,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     eid = state.entity_id
                     if eid in entsoe:
                         continue
-                    if DynamicTariffProvider.is_price_entity_candidate(eid):
+                    if DynamicTariffProvider.is_price_entity_candidate(eid) \
+                            and not is_sem_entity(self.hass, eid):  # (#1103)
                         user_input["dynamic_tariff_entity"] = eid
                         _LOGGER.info("Auto-detected dynamic tariff entity: %s", eid)
                         break
