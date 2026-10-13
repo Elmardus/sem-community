@@ -68,6 +68,10 @@ class EnergyAssistant:
         # (#829) rotation is for the eye, not the recorder: per-cycle
         # rotation wrote 6k rows/day on two sensors.
         self._last_tip_rotation: float = float('-inf')
+        # (#1051) the words shown, held until the next rotation: a tip's
+        # numbers move every cycle, and the text is a sensor STATE — one
+        # logbook row in Activity per change ("114%", then "111%" …).
+        self._shown_tip: Optional[tuple] = None   # (key, text, category)
         self._last_analysis: Optional[datetime] = None
         self._last_data = EnergyAssistantData()
         self._daily_stats: List[Dict[str, float]] = []
@@ -157,9 +161,16 @@ class EnergyAssistant:
             if now_mono - self._last_tip_rotation >= TIP_ROTATION_INTERVAL_S:
                 self._tip_rotation_index += 1
                 self._last_tip_rotation = now_mono
+            rotated = self._last_tip_rotation == now_mono
             idx = (self._tip_rotation_index - 1) % len(self._tips)
-            current_tip = self._tips[idx].description
-            tip_category = self._tips[idx].category
+            tip = self._tips[idx]
+            key = (tip.category, tip.title)
+            if rotated or self._shown_tip is None or self._shown_tip[0] != key:
+                self._shown_tip = (key, tip.description, tip.category)
+            current_tip = self._shown_tip[1]
+            tip_category = self._shown_tip[2]
+        else:
+            self._shown_tip = None
 
         self._last_data = EnergyAssistantData(
             optimization_score=score,
@@ -226,6 +237,11 @@ class EnergyAssistant:
             return
 
         export_pct = (daily_export_kwh / daily_solar_kwh * 100)
+        if export_pct > 100:
+            # (#1051) More exported than the sun made is not a fact about the
+            # house — the inputs disagree (his solar read one inverter of
+            # two). Advice built on it would be wrong; say nothing.
+            return
 
         from ..utils.translate import get_text
         _t = lambda key, default, **kw: get_text(self.hass, key, default, **kw)
