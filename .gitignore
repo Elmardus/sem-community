@@ -138,4 +138,4 @@ graphify-out/
 # (#1083) replay corpora are personal data — never committed
 sem-replay-corpus/
 *.json.gz
-!tests/fixtures/replay/*.json.gz
+!tests/fixtures/replay/**/*.json.gz
