@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
-- ✨ **SEM finds your grid CO₂ sensor by its unit** (#1088). CO₂ avoided can count at the live value instead of a fixed average. Off by default.
+- ✨ **SEM finds your grid CO₂ sensor by its unit** (#1088). CO₂ avoided can use its live value, not a fixed average. Off by default.
 - 🐛 **SEM no longer guesses its own sensor as your grid meter** (#1103) — thanks @LightBridge16. The Grid power pick now works with an Energy Dashboard.
 
 # [2.2.0-beta.17] — 13.10.2026
