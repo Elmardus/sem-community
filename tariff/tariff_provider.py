@@ -82,6 +82,19 @@ DAY_KEYED_PRICE_ATTRS: Tuple[str, ...] = (
 # (``prices`` / ``prices_today`` / ``prices_tomorrow``) sit on its average
 # sensor, whose state is the day's average and not a price to pay now.
 ENTSOE_PLATFORM = "entsoe"
+
+# The price a slot dict carries, in order of preference. ``all_in`` first
+# (#1051, Belgian price sensors): those slots also carry ``energy``,
+# ``network`` and ``taxes`` parts, and only ``all_in`` is what a home pays.
+SLOT_PRICE_KEYS: Tuple[str, ...] = ("all_in", "total", "price", "value")
+
+
+def _slot_price(item: Dict[str, Any], keys: Tuple[str, ...] = SLOT_PRICE_KEYS):
+    """The first price key present in a slot dict, else ``None``."""
+    for k in keys:
+        if item.get(k) is not None:
+            return item[k]
+    return None
 ENTSOE_CURRENT_PRICE_KEY = "current_price"
 
 
@@ -1183,7 +1196,7 @@ class DynamicTariffProvider(TariffProvider):
                             or item.get("time")
                             or item.get("hour")
                         )
-                        price = item.get("total", item.get("price", item.get("value")))
+                        price = _slot_price(item)
                         if ts and price is not None:
                             try:
                                 if isinstance(ts, str):
@@ -1234,8 +1247,8 @@ class DynamicTariffProvider(TariffProvider):
                             if not isinstance(item, dict):
                                 continue
                             ts = item.get("start_time", item.get("start", item.get("startsAt")))
-                            price = item.get("per_kwh", item.get("price", item.get("total",
-                                    item.get("value", item.get("value_inc_vat")))))
+                            price = _slot_price(item, ("per_kwh", "all_in", "price",
+                                                       "total", "value", "value_inc_vat"))
                             if ts and price is not None:
                                 try:
                                     if isinstance(ts, str):
