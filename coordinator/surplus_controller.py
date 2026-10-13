@@ -361,12 +361,27 @@ def solar_bounded_surplus(
     grid_export_w: float,
     active_draw_w: float,
     solar_w: "Optional[float]" = None,
+    *,
+    grid_import_w: "Optional[float]" = 0.0,
+    battery_charge_w: float = 0.0,
 ) -> float:
     """The feedback-free SOLAR surplus, physically bounded by production (#620).
 
     ``grid_export + active_draw`` reconstructs "the surplus that would exist if
     the controller's own loads were off" — the stable quantity to allocate from
     (without the add-back the signal chases its own tail as loads switch on).
+
+    (#1102) The add-back is only that if the grid side is SIGNED: export is
+    the clamped half (``max(0, grid)``), so an import read as 0 W and the loads'
+    own draw came back whole. @lostcontrol's 3 kW boiler (no battery) ran on
+    with 2 kW imported — the pool said 3 kW, not 1 kW, and after its own debit
+    the walk sat at −50 W, inside the −100 W LIFO band, while the sun stayed
+    above 3 kW. So the import comes off too — except the share a charging
+    battery explains: that share is the grid filling the pack, and
+    ``reclaimable_battery_w`` already takes it off the reclaim (#938). With
+    both, ``surplus + reclaim = draw + export + charge − import``.
+    ``grid_import_w=None`` (meter not read once this lifetime) takes nothing
+    off: the running loads hold, and nothing new can start on a dark meter.
 
     The result is then clamped to ``[0, solar]``: **you cannot have more SOLAR
     surplus than the sun is producing.** This one physical invariant is the whole
@@ -376,7 +391,11 @@ def solar_bounded_surplus(
     hit when a load ran off the battery at night). ``solar_w=None`` (sensor
     unavailable) skips the cap and falls back to the raw add-back.
     """
-    surplus = float(grid_export_w) + float(active_draw_w)
+    deficit = 0.0
+    if grid_import_w is not None:
+        deficit = max(0.0, float(grid_import_w)
+                      - max(0.0, float(battery_charge_w or 0.0)))
+    surplus = float(grid_export_w) - deficit + float(active_draw_w)
     if solar_w is not None:
         surplus = min(surplus, float(solar_w))
     return max(0.0, surplus)
@@ -1912,8 +1931,13 @@ class SurplusController:
 
             elif device.is_active:
                 # Already active — adjust power level (applies to all modes)
-                old_consumption = device.get_current_consumption()
-                consumed = await device.adjust_power(remaining_surplus + old_consumption)
+                # (#1102) Offer ``remaining_surplus`` alone: the pool already
+                # holds this load's draw (the #508 W7 add-back), and the
+                # walk only debits loads AHEAD of it. ``+ old_consumption``
+                # dates from the export-only pool of v1.0 and counted the
+                # draw twice — a watt setpoint ramped to its maximum on the
+                # grid. On/off loads ignore the figure and are unchanged.
+                consumed = await device.adjust_power(remaining_surplus)
                 # (#688) Debit the FULL draw, not just its change. The pool was
                 # credited with every active device's draw (the feedback-free
                 # add-back), so leaving the draw in after walking past the
@@ -1937,7 +1961,19 @@ class SurplusController:
                         device._tier1_batt_w = assist   # (#885)
                         self._tier1_budget_left = max(
                             0.0, self._tier1_budget_left - assist)
-                remaining_surplus -= max(0.0, consumed - assist)
+                spend = max(0.0, consumed - assist)
+                # (#1102) A load on a PAID source (cheap-hours grid, Tier-2
+                # battery) takes the sun that is left, never more: the rest
+                # it buys by design. Since the pool sees the import, its
+                # grid share would otherwise push the walk negative and the
+                # deficit LIFO — which skips it — would stop a solar load
+                # AHEAD of it that the sun still funds. The desired-state
+                # twin debits paid loads nothing; this keeps the priority
+                # order for the sun.
+                if device._offpeak_forced or getattr(
+                        device, "_batt_overnight_forced", False):
+                    spend = min(spend, max(0.0, remaining_surplus))
+                remaining_surplus -= spend
                 active_count += 1
 
             allocations.append(SurplusAllocation(

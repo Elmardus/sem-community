@@ -6263,15 +6263,6 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # arbitrage) is honored — no reclaim.
             # Same definition the EV reclaim gate uses — one source of truth.
             battery_commanded = self._battery_commanded()
-            # (#620) Feedback-free SOLAR surplus, physically bounded by the live
-            # solar production — one invariant ("surplus ≤ sun") that pins the
-            # figure to 0 overnight and kills phantom surplus from the add-back,
-            # a noisy sensor, or battery→grid flow (@onkelfu's night report).
-            true_surplus_w = solar_bounded_surplus(
-                grid_export_w=float(getattr(power, "grid_export_power", 0.0) or 0.0),
-                active_draw_w=self._surplus_controller.active_surplus_draw_w(),
-                solar_w=getattr(power, "solar_power", None),
-            )
             # #576 — pass the export surplus and the reclaimable battery-charge
             # power SEPARATELY (plus the battery's slot in the priority walk).
             # The controller offers the reclaim only to loads ABOVE the battery
@@ -6297,6 +6288,22 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 grid_import_known=_grid_known,
             )
             self._reclaim_import_w = reclaim_import_w
+            # (#620) Feedback-free SOLAR surplus, physically bounded by the live
+            # solar production — one invariant ("surplus ≤ sun") that pins the
+            # figure to 0 overnight and kills phantom surplus from the add-back,
+            # a noisy sensor, or battery→grid flow (@onkelfu's night report).
+            # (#1102) The same held import, signed into the pool: export alone
+            # read 2 kW of import as 0 W and a 3 kW boiler rode its own
+            # add-back. The share the pack's charge explains stays with the
+            # reclaim below, so the import is taken off exactly once.
+            true_surplus_w = solar_bounded_surplus(
+                grid_export_w=float(getattr(power, "grid_export_power", 0.0) or 0.0),
+                active_draw_w=self._surplus_controller.active_surplus_draw_w(),
+                solar_w=getattr(power, "solar_power", None),
+                grid_import_w=reclaim_import_w,
+                battery_charge_w=float(
+                    getattr(power, "battery_charge_power", 0.0) or 0.0),
+            )
             _now_mono = time.monotonic()
             if _grid_known:
                 self._reclaim_import_seen_mono = _now_mono
