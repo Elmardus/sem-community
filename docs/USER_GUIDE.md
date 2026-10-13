@@ -238,7 +238,7 @@ Each charger gets its own sensor entities:
 - `sensor.sem_charger_{id}_taper_trend` — BMS taper detection
 - `sensor.sem_charger_{id}_taper_ratio` — taper ratio
 
-To **edit** an existing charger, select it from the charger menu. To **remove**, select "Remove a charger" (primary charger cannot be removed).
+To **edit** an existing charger, select it from the charger menu. To **remove**, select "Remove a charger". A working primary charger cannot be removed; a half-filled one can. If an earlier setup left a charger half-filled, SEM offers it again: add it and the new charger replaces the old card.
 
 ### Appliance Dependencies
 
