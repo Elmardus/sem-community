@@ -110,28 +110,46 @@ LOADS_IMPORT_SUSTAIN_S: float = 120.0
 
 
 def sustained_import(
-    window: list,
+    state: dict,
     now_s: float,
     *,
     grid_import_w: float,
     grid_import_known: bool,
+    car_active: bool,
     hold_s: float = LOADS_IMPORT_SUSTAIN_S,
 ) -> Optional[float]:
-    """(#1102) The import the loads' pool carries: the LOWEST reading of the
-    last ``hold_s`` seconds, so only an import that lasted counts. ``window``
-    is the caller's list of ``(seconds, watts)``, kept here.
+    """(#1102) The import the loads' pool carries this cycle.
+
+    With no car charging it is the live reading — the controller's own
+    median-of-3 and smoothing already absorb a blink, and a house load that
+    cycles every two minutes must still count. While a car charges
+    (``car_active``) it is the LOWEST reading of the last ``hold_s``
+    seconds: the charger's power sensor can trail the meter by a minute at a
+    start or a ramp, and that import is the car's. The history is kept every
+    cycle, so a car that starts now is judged against the minutes before it.
+    Until ``hold_s`` of readable meter has passed (start-up, after a dark
+    gap) a charging car's import counts as none.
 
     A dark meter is ``None`` — no evidence, and unlike the reclaim's
     ``held_grid_import`` this figure STOPS loads, so a held value would act
-    on a blink (#934: a blink holds, it does not act). Dark cycles add
-    nothing to the window.
+    on a blink (#934: a blink holds, it does not act). It also restarts the
+    history. ``state`` is the caller's dict, kept here.
     """
     if not grid_import_known:
+        state.clear()
         return None
-    window.append((float(now_s), max(0.0, float(grid_import_w or 0.0))))
-    while window and float(now_s) - window[0][0] > hold_s:
-        window.pop(0)
-    return min(w for _, w in window)
+    live = max(0.0, float(grid_import_w or 0.0))
+    now = float(now_s)
+    samples = state.setdefault("samples", [])
+    since = state.setdefault("since", now)
+    samples.append((now, live))
+    while samples and now - samples[0][0] > hold_s:
+        samples.pop(0)
+    if not car_active:
+        return live
+    if now - since < hold_s:
+        return 0.0
+    return min(w for _, w in samples)
 
 
 def held_grid_import(

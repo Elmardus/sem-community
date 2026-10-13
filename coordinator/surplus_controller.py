@@ -1990,11 +1990,20 @@ class SurplusController:
                 # dates from the export-only pool of v1.0 and counted the
                 # draw twice — a watt setpoint ramped to its maximum on the
                 # grid. On/off loads ignore the figure and are unchanged.
-                if device.control_mode == DeviceControlMode.SURPLUS:
-                    consumed = await device.adjust_power(remaining_surplus)
+                _paid = bool(device._offpeak_forced or getattr(
+                    device, "_batt_overnight_forced", False))
+                if device.control_mode == DeviceControlMode.SURPLUS and not _paid:
+                    # Tier-1 assist is part of what it may have (0 for a
+                    # plain load); the debit below takes the battery's share
+                    # back out.
+                    consumed = await device.adjust_power(
+                        remaining_surplus + self._tier1_headroom_w(device))
                 else:
                     # (#1102) peak_only is the user's: SEM only sheds it
-                    # (the desired-state twin leaves it alone too).
+                    # (the desired-state twin leaves it alone too). A paid
+                    # run (cheap-hours grid, Tier-2) holds the power its
+                    # force pass set — the sun's pool is not its budget, and
+                    # offering it ~0 W wrote its floor every other cycle.
                     consumed = float(device.get_current_consumption() or 0.0)
                 # (#688) Debit the FULL draw, not just its change. The pool was
                 # credited with every active device's draw (the feedback-free
@@ -2028,8 +2037,7 @@ class SurplusController:
                 # AHEAD of it that the sun still funds. The desired-state
                 # twin debits paid loads nothing; this keeps the priority
                 # order for the sun.
-                if device._offpeak_forced or getattr(
-                        device, "_batt_overnight_forced", False):
+                if _paid:
                     spend = min(spend, max(0.0, remaining_surplus))
                 remaining_surplus -= spend
                 active_count += 1

@@ -257,15 +257,15 @@ async def _afternoon(sc, *, house_w, cycles, with_import, solar_w=SOLAR_W):
     """No battery. Each cycle the meter reads what the house, the loads and
     the sun leave; the pool is built the way the coordinator builds it."""
     imports = []
-    window = []
+    window = {}
     for i in range(cycles):
         draw = sc.active_surplus_draw_w()
         grid = solar_w - house_w - draw
         export, imp = max(0.0, grid), max(0.0, -grid)
         imports.append(imp)
-        # 10 s cycles; the coordinator hands in the import that LASTED
+        # 10 s cycles, no car: the coordinator hands in the live import
         held = sustained_import(window, i * 10.0, grid_import_w=imp,
-                                grid_import_known=True)
+                                grid_import_known=True, car_active=False)
         kw = {"grid_import_w": held} if with_import else {}
         pool = solar_bounded_surplus(
             grid_export_w=export, active_draw_w=draw, solar_w=solar_w, **kw)
@@ -508,8 +508,10 @@ class TestAVariableLoadFollowsTheSun:
             and isinstance(n.func.value, ast.Name) and n.func.value.id == "device"
         ]
         args = [ast.unparse(c.args[0]) for c in calls if c.args]
-        assert "remaining_surplus" in args, args
-        assert not any("old_consumption" in a for a in args), args
+        # the pool, plus the Tier-1 battery headroom (0 for a plain load)
+        assert "remaining_surplus + self._tier1_headroom_w(device)" in args, args
+        assert not any("old_consumption" in a or "get_current_consumption" in a
+                       for a in args), args
 
 
 # ── 4. the guard: the coordinator hands the pool the import ──────────────
@@ -593,6 +595,9 @@ class TestCoordinatorWiringGuard:
             known_src = " ".join(ast.unparse(b) for b in (
                 self._sources(known, scope) if isinstance(known, ast.Name) else [known]))
             assert "grid_power_unavailable" in known_src
+            car = _kw(s, "car_active")
+            assert car is not None and "ev_charging" in ast.unparse(car), (
+                "sustained_import() must be told when a car is charging")
         return ast.unparse(val)
 
     def test_every_pool_call_carries_the_sustained_import(self):
@@ -628,20 +633,41 @@ class TestCoordinatorWiringGuard:
 
 @pytest.mark.unit
 class TestOnlyAnImportThatLastedCounts:
-    def test_lowest_reading_of_the_window(self):
-        w = []
-        assert sustained_import(w, 0.0, grid_import_w=0.0, grid_import_known=True) == 0.0
-        assert sustained_import(w, 10.0, grid_import_w=8000.0, grid_import_known=True) == 0.0
-        assert sustained_import(w, 130.0, grid_import_w=8000.0, grid_import_known=True) == 8000.0
+    @staticmethod
+    def _feed(state, readings, *, car):
+        out = None
+        for t, w in readings:
+            out = sustained_import(state, t, grid_import_w=w,
+                                   grid_import_known=True, car_active=car)
+        return out
 
-    def test_a_dark_meter_is_no_evidence(self):
-        w = []
-        sustained_import(w, 0.0, grid_import_w=2000.0, grid_import_known=True)
-        assert sustained_import(w, 10.0, grid_import_w=0.0, grid_import_known=False) is None
-        assert len(w) == 1
+    def test_no_car_is_the_live_reading(self):
+        st = {}
+        assert self._feed(st, [(0.0, 0.0), (10.0, 2500.0)], car=False) == 2500.0
+
+    def test_a_charging_car_counts_the_lowest_of_two_minutes(self):
+        st = {}
+        quiet = [(t * 10.0, 0.0) for t in range(15)]       # 0–140 s
+        assert self._feed(st, quiet, car=False) == 0.0
+        assert self._feed(st, [(150.0, 8000.0)], car=True) == 0.0
+        lasting = [(150.0 + t * 10.0, 8000.0) for t in range(1, 14)]
+        assert self._feed(st, lasting, car=True) == 8000.0
+
+    def test_after_a_restart_a_charging_cars_import_waits(self):
+        st = {}
+        assert self._feed(st, [(0.0, 3000.0), (60.0, 3000.0)], car=True) == 0.0
+        assert self._feed(st, [(130.0, 3000.0)], car=True) == 3000.0
+
+    def test_a_dark_meter_is_no_evidence_and_restarts_the_history(self):
+        st = {}
+        self._feed(st, [(t * 10.0, 0.0) for t in range(20)], car=False)
+        assert sustained_import(st, 200.0, grid_import_w=0.0,
+                                grid_import_known=False, car_active=True) is None
+        assert st == {}
+        assert self._feed(st, [(210.0, 4000.0)], car=True) == 0.0
 
     def test_negative_reads_as_zero(self):
-        assert sustained_import([], 0.0, grid_import_w=-300.0, grid_import_known=True) == 0.0
+        assert self._feed({}, [(0.0, -300.0)], car=False) == 0.0
 
     def test_the_window_is_two_minutes(self):
         assert LOADS_IMPORT_SUSTAIN_S == 120.0
@@ -649,17 +675,19 @@ class TestOnlyAnImportThatLastedCounts:
 
 async def _car_start(sc, *, sensor_lag_cycles, sustained):
     """Sun 6 kW, house 1 kW, the 3 kW boiler running above the charger.
-    At cycle 3 a car starts at 11 kW (Now); the charger's power sensor
-    reads 0 for ``sensor_lag_cycles`` cycles (10 s each), then 11 kW."""
-    window = []
-    for i in range(40):
-        car_w = 11000.0 if i >= 3 else 0.0
-        car_seen = car_w if i >= 3 + sensor_lag_cycles else 0.0
+    At cycle 15 a car starts at 11 kW (Now) and its charging binary flips;
+    the charger's power sensor reads 0 for ``sensor_lag_cycles`` cycles
+    (10 s each), then 11 kW."""
+    window = {}
+    for i in range(50):
+        car_w = 11000.0 if i >= 15 else 0.0
+        car_seen = car_w if i >= 15 + sensor_lag_cycles else 0.0
         on_w = sc.active_surplus_draw_w()
         grid = 6000.0 - 1000.0 - on_w - car_w
         export, imp = max(0.0, grid), max(0.0, -grid)
         held = (sustained_import(window, i * 10.0, grid_import_w=imp,
-                                 grid_import_known=True)
+                                 grid_import_known=True,
+                                 car_active=car_w > 0 or car_seen > 100.0)
                 if sustained else imp)
         pool = solar_bounded_surplus(
             grid_export_w=export, active_draw_w=on_w, solar_w=6000.0,
@@ -684,3 +712,40 @@ class TestACarStartDoesNotStopTheBoiler:
         sc.register_device(boiler)
         await _car_start(sc, sensor_lag_cycles=6, sustained=False)
         boiler.deactivate.assert_awaited()
+
+
+@pytest.mark.asyncio
+class TestACyclingHouseLoadStillCounts:
+    async def test_a_4kw_load_two_minutes_on_one_off_stops_the_boiler(self):
+        # The reporter's 12:30–12:45 square wave: sun 5.3 kW, house 2.2 kW,
+        # a 4 kW load 110 s on / 60 s off, no car. Every on-phase imports
+        # ~3.9 kW with the boiler on; a two-minute minimum would never see it.
+        sc = SurplusController(MagicMock())
+        boiler = _boiler()
+        sc.register_device(boiler)
+        window = {}
+        for i in range(60):
+            extra = 4000.0 if (i % 17) < 11 else 0.0
+            on_w = sc.active_surplus_draw_w()
+            grid = 5300.0 - 2200.0 - extra - on_w
+            export, imp = max(0.0, grid), max(0.0, -grid)
+            held = sustained_import(window, i * 10.0, grid_import_w=imp,
+                                    grid_import_known=True, car_active=False)
+            pool = solar_bounded_surplus(
+                grid_export_w=export, active_draw_w=on_w, solar_w=5300.0,
+                grid_import_w=held)
+            await sc.update(pool, price_level="normal", grid_import_w=imp)
+        boiler.deactivate.assert_awaited()
+
+
+@pytest.mark.asyncio
+class TestAPaidRunIsNotSteeredBySun:
+    async def test_a_paid_setpoint_holds_its_power_at_night(self):
+        # A watt setpoint on the cheap-hours top-up at night: the sun's pool
+        # is 0, and offering it that wrote its floor every other cycle.
+        sc = SurplusController(MagicMock())
+        heater = _load("heater", 500.0, 2, paid=True)
+        sc.register_device(heater)
+        await _cycles(sc, solar_w=0.0, house_w=300.0, n=12)
+        heater.adjust_power.assert_not_awaited()
+        heater.deactivate.assert_not_awaited()
