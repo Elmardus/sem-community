@@ -290,11 +290,21 @@ not steered on at all until it is corroborated — see the next section. While
 SEM is still checking, grid power reads 0 rather than a number nobody stands
 behind.
 
-**Fix:** open *Settings → Integrations → SEM → Configure → Sensors* and set
-**Grid import power** and **Grid export power** to your real meter entities
-(both positive-only, in W). The Repair clears on the next read. If your
-inverter only exposes per-phase registers, a template sensor summing them
-works — see `grid_import_power_entity` in the setup guide.
+**Fix:** pick your meter yourself. On the SEM dashboard, open the ⚙
+**Configuration** tab:
+
+- one signed sensor for the grid (most meters — SolarEdge, Huawei, Shelly
+  EM): section **Sensor sources**, set **Grid power**. SEM finds its sign.
+- one sensor for import and one for export (both positive, in W): section
+  **Tariff & pricing**, set **Grid import sensor** and **Grid export sensor**.
+
+The Repair clears on the next read. If your inverter only exposes per-phase
+registers, a template sensor summing them works — see
+`grid_import_power_entity` in the setup guide.
+
+SEM never guesses one of its own sensors (`sensor.sem_*`). Older versions
+could offer `sensor.sem_grid_import_power` here, which is SEM's own result
+(#1103).
 
 ## SEM could not find your grid power meters
 
@@ -337,9 +347,11 @@ outcomes, and they are three, not two:
 A pick from tier 1 or tier 2 is not a guess and never enters the corroboration
 path.
 
-**Fix:** name the real meters. Open *Settings → Integrations → SEM →
-Configure → Sensors* and set **Grid import power** and **Grid export
-power**. If your inverter or cloud integration publishes no fast grid power
+**Fix:** name the real meter, as in the section above: the ⚙
+**Configuration** tab, **Sensor sources → Grid power** for one signed sensor,
+or **Tariff & pricing → Grid import sensor / Grid export sensor** for a pair.
+The same notice also shows when SEM found an export sensor with no import
+half — SEM never reads export alone as the grid. If your inverter or cloud integration publishes no fast grid power
 at all — vendor cloud APIs such as FusionSolar's northbound API typically do
 not — then leaving both empty is the correct answer, and SEM saying it is
 blind on grid is the honest reading, not a fault to work around.

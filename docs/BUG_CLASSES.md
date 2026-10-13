@@ -636,6 +636,7 @@ ED list reads ≤ 1, which removes the registry fallback's evidence for the next
 \`BatteryNightTracker(…or 20)\`) — they should call \`reserve_soc_of\`; (e) a #274 cold start whose
 ED resolves inside the first refresh now gets the global controls for that one boot (screen and
 runtime still agree).
+**Instance (#1103) — read on one of two reader paths:** the Config card's Grid power pick (`grid_power_sensor`) was read by `_read_from_legacy_config` only; `_read_from_energy_dashboard` never looked, so on every home with an Energy Dashboard the pick did nothing. Pinned in `tests/test_1103_own_sensor_is_no_input.py::TestTheGridPickIsRead` (see class 136).
 
 ### 20. Shadowed decision branch (an always-true earlier branch starves a newer one) — PARTIAL
 **Symptom:** a new decision branch is added, tested in isolation, and never executes in
@@ -5833,3 +5834,13 @@ Refs #1068 #775 #598 #416.
 **Guard:** `tests/test_1051_first_install.py` — his plug is not the EV; a KEBA device still is; names alone never are; a tip holds its words between rotations; >100 % export gives no tip; `all_in` is the slot price.
 **Sweep question:** where else does SEM read a substring of an entity id as a fact about what the entity is?
 Refs #1051 #829.
+
+### 136. SEM finds its own sensor while it looks for the house's — its result read back as the meter — GUARDED
+**Symptom:** @LightBridge16 (SolarEdge + Enphase Envoy, 2.2.0-beta, 12.10.2026): a Repair named `sensor.sem_grid_import_power` as the guessed grid IMPORT meter — SEM's own result, worked out from the meter it now stood in for (#1103).
+**Root shape:** a scan for "a sensor whose name or shape says X" walks every state, and SEM publishes sensors with exactly that name and shape. Nothing asked who owns the entity. The charger prober had the rule (`platform != "solar_energy_management"`); the grid, SOC and capacity scans did not.
+**Where it lives:** `coordinator/sensor_reader.py::_discover_split_grid_power` (**fixed**); `_auto_detect_battery_soc` strategy 3 (`sensor.sem_battery_soc` made every real SOC sensor one of two, so none — **fixed**); `auto_detect_battery_capacity_kwh` (`sensor.sem_diag_battery_capacity` is the SAVED size, read back as a found battery — the class 124 path — **fixed**); the config-dialog suggestions, phase-current discovery, price autodetect, the unmanaged-charger scan and the power picker list (**fixed**, none were seen live).
+**Closure:** one predicate, `utils/own_entity.py::is_sem_entity` — the entity registry's `platform`, never the id. No registry entry is no answer.
+**Guard:** `tests/test_1103_own_sensor_is_no_input.py` — the reporter's scan, the SOC and capacity siblings, and an AST walk: every `async_all(` over a domain SEM publishes calls the predicate or names its reason in `_EXEMPT`.
+**Same report, class 19:** the Config card's **Sensor sources → Grid power** (`grid_power_sensor`) was read on the legacy path only; on a home with an Energy Dashboard it did nothing (**fixed**). The Repair's way out named "Configure → Sensors", a page that does not exist (**fixed**: it names the card's sections).
+**Sweep question:** where does SEM look for an input by name or shape — and could the answer be one of SEM's own entities?
+Refs #1103 #911 #947 #1063.
