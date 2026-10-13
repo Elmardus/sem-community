@@ -120,3 +120,41 @@ def test_gap_days_and_inherited_failures_never_block():
                         {"forecast_overshoot": inv.Result("forecast_overshoot", "exact", True)}) == [bad]
     modelled = inv.Result("grid_limit", "modelled", False)
     assert inv.blocking({"grid_limit": modelled}, ["sunny"]) == []
+
+
+# ── memory: one day at a time, never the whole corpus ──────────────────
+
+def test_run_tree_holds_one_day_at_a_time(monkeypatch, capsys):
+    """run_tree loads a day, writes it out and drops it before the next:
+    never two days alive at once."""
+    import gc
+    import weakref
+    from custom_components.solar_energy_management.tools.replay import run_tree as rt
+
+    src = next((FIX / "battery_stop").glob("*.json.gz"))
+    alive, peak = [], [0]
+    real_load = rt.load_day
+
+    def _load(p):
+        alive[:] = [r for r in alive if r() is not None]
+        gc.collect()
+        alive[:] = [r for r in alive if r() is not None]
+        peak[0] = max(peak[0], len(alive) + 1)
+        day = real_load(p)
+        alive.append(weakref.ref(day))
+        return day
+
+    monkeypatch.setattr(rt, "load_day", _load)
+    assert rt.main([str(src)] * 4) == 0
+    assert peak[0] == 1
+    assert len(capsys.readouterr().out.strip().splitlines()) == 4
+
+
+def test_one_replayed_day_stays_under_a_memory_budget():
+    """A whole day through the engine: well under 300 MB of new memory."""
+    import tracemalloc
+    tracemalloc.start()
+    replay_day(_fixture("sunny_morning"))
+    _cur, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    assert peak < 300 * 1024 * 1024
