@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **SEM no longer guesses its own sensor as your grid meter** (#1103) — thanks @LightBridge16. The Grid power pick now works with an Energy Dashboard.
+
 # [2.2.0-beta.17] — 13.10.2026
 
 - 🐛 **A smart plug is no longer taken for your EV charger** (#1051) — thanks @rdehuyss. Only a charger integration makes an Energy Dashboard device the EV.
