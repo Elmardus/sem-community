@@ -295,3 +295,23 @@ def test_a_removed_sensor_is_replaced_after_the_rescan(monkeypatch):
     assert read() is None                     # the old id is gone
     clock["t"] += fake._GRID_CO2_RESCAN_S + 1
     assert read() == pytest.approx(0.2)
+
+
+@pytest.mark.unit
+@freeze_time("2026-10-13 12:00:00")
+def test_a_negative_daily_correction_survives_the_store():
+    """A grid cleaner than 0.128 kg/kWh makes today's correction NEGATIVE.
+    The store's repair resets negative daily kWh rows to 0 — this row is kg
+    of correction, and a restart must not wipe today's live CO2 count."""
+    from custom_components.solar_energy_management.coordinator.storage import SEMStorage
+    calc = _calc()
+    calc.set_grid_co2_intensity(0.05, live=True)
+    _hour(calc)
+    day_key = f"{CO2_CORRECTION_CATEGORY}_{_keys()[0]}"
+    state = calc.get_state()
+    assert state["daily_accumulators"][day_key] == pytest.approx(1.5 * (0.05 - 0.128))
+    assert SEMStorage._repair_accumulator_dicts(state, ("daily_accumulators",))
+    assert state["daily_accumulators"][day_key] == pytest.approx(1.5 * (0.05 - 0.128))
+    again = _calc()
+    again.restore_state(state)
+    assert again._co2_correction("daily", _keys()[0]) == pytest.approx(1.5 * (0.05 - 0.128))
