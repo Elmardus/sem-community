@@ -422,6 +422,15 @@ RECORDER_ATTR_BUDGET_BYTES: Final = RECORDER_MAX_STATE_ATTRS_BYTES - RECORDER_AT
 CONF_INTRADAY_FORECAST: Final = "intraday_forecast"
 DEFAULT_INTRADAY_FORECAST: Final = False
 
+# (#1088) Grid CO2 intensity: an optional pick when the crawler's unit-based
+# find is not the source the user means. Unset = the crawler's first find.
+CONF_GRID_CO2_ENTITY: Final = "grid_co2_entity"
+# (#1088) Soak flag, not a setting: CO2 avoided counts each kWh at the
+# grid's live intensity instead of the fixed Swiss average. Off until the
+# PROD soak; then the default flips and the key retires (set_option only).
+CONF_CO2_LIVE_INTENSITY: Final = "co2_live_intensity"
+DEFAULT_CO2_LIVE_INTENSITY: Final = False
+
 # (#1021) The grid operator's reduce-load relay (§14a EnWG, ripple control).
 # Unset = inert. Any binary_sensor / input_boolean the user picks.
 CONF_SHED_SIGNAL_ENTITY: Final = "shed_signal_entity"

@@ -37,6 +37,8 @@ from homeassistant.util import dt as dt_util
 
 from ..consts.core import CAPABILITY_MISS_CONFIRM_READS, CAPABILITY_MISS_HOLD_S
 from ..consts.core import CONF_INTRADAY_FORECAST, DEFAULT_INTRADAY_FORECAST
+from ..consts.core import (CONF_CO2_LIVE_INTENSITY, CONF_GRID_CO2_ENTITY,
+                           DEFAULT_CO2_LIVE_INTENSITY)
 from ..consts.core import (CONF_SHED_SIGNAL_ENTITY, CONF_SHED_SIGNAL_LIMIT,
                            DEFAULT_SHED_SIGNAL_LIMIT)
 from ..const import (
@@ -3510,6 +3512,16 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 if not self._tariff_rate_warned:
                     _LOGGER.warning("Tariff rate update failed; using previous rates: %s", e)
                     self._tariff_rate_warned = True
+
+            # (#1088) The grid's live CO2 intensity for the CO2-avoided books.
+            try:
+                self._energy_calculator.set_grid_co2_intensity(
+                    self._grid_co2_reading(),
+                    bool((self.config or {}).get(
+                        CONF_CO2_LIVE_INTENSITY, DEFAULT_CO2_LIVE_INTENSITY)))
+            except Exception as e:  # noqa: BLE001 — a CO2 read never costs a cycle
+                _LOGGER.debug("Grid CO2 read failed: %s", e)
+                self._energy_calculator.set_grid_co2_intensity(None, False)
 
             # Step 2a: Compute instantaneous power flows FIRST. v1.7.0
             # reorder — the autarky + cost-savings calculators need the
@@ -9244,6 +9256,49 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             "shed_signal_since": getattr(self, "_shed_signal_since", None),
             "shed_signal_locked": locked,
         }
+
+    #: (#1088) how often the crawler looks again for a CO2 source when it
+    #: found none (a sensor added later is picked up without a restart)
+    _GRID_CO2_RESCAN_S = 600
+
+    def _grid_co2_reading(self) -> Optional[float]:
+        """(#1088) The grid's CO2 intensity now, in kg/kWh, or None.
+
+        The user's pick (``grid_co2_entity``) wins; otherwise the crawler's
+        first sensor whose UNIT says CO2 per energy. None — unset, not
+        found, unavailable or implausible — means the fixed Swiss average
+        stays in force for this cycle. Publishes what it used for the
+        sensor attributes and diagnostics (never the entity id)."""
+        from ..hardware_detection import find_grid_co2_sensors, read_co2_intensity_kg
+        picked = (self.config or {}).get(CONF_GRID_CO2_ENTITY) or None
+        source = "configured" if picked else None
+        eid = picked
+        if not eid:
+            now = time.monotonic()
+            cached = getattr(self, "_grid_co2_found", None)
+            if cached is None or (not cached and now - getattr(
+                    self, "_grid_co2_scanned_at", 0.0) > self._GRID_CO2_RESCAN_S):
+                cached = find_grid_co2_sensors(self.hass)
+                self._grid_co2_found = cached
+                self._grid_co2_scanned_at = now
+            if cached:
+                eid = cached[0]["entity_id"]
+                source = "detected"
+        kg = None
+        has_forecast = False
+        if eid:
+            st = self.hass.states.get(eid)
+            kg = read_co2_intensity_kg(st)
+            if st is not None:
+                from ..hardware_detection import series_attribute
+                has_forecast = series_attribute(getattr(st, "attributes", {})) is not None
+        self._grid_co2_status = {
+            "source": source or "none",
+            "kg_per_kwh": None if kg is None else round(kg, 4),
+            "fallback": kg is None,
+            "has_forecast": has_forecast,
+        }
+        return kg
 
     def _intraday_forecast_on(self) -> bool:
         """(#1068) The soak flag: the day follows measured yield."""
