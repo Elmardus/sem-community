@@ -171,3 +171,20 @@ async def test_diagnostics_show_the_last_seven_day_tags(tmp_path):
     assert tags["enabled"] is True
     assert [t["date"] for t in tags["last_7"]] == [f"2026-10-0{d}" for d in range(3, 10)]
     assert "never shown" not in _json.dumps(tags)
+
+
+def test_a_counter_that_moved_on_an_earlier_day_does_not_hide_a_frozen_day():
+    """PROD 12.10 again, but the recorder window also holds 11.10, when the
+    counter still moved. Only the day itself and its midnight value count."""
+    rec = SimpleNamespace(date="2026-10-12", actual_kwh=0.0, forecast_kwh=15.0)
+    states = {
+        KEY_SOLAR: [_state(START, "0")],
+        "grid_power": [_state(START, "-600")],
+        "battery_power": [_state(START, "0")],
+        KEY_COUNTER: [_state(START - timedelta(hours=20), "23820.10"),
+                      _state(START - timedelta(hours=10), "23832.86")],
+        KEY_PRICE: [_state(START, "0.36")],
+    }
+    tg, _st = _tagger(states, history=[rec])
+    out = asyncio.run(tg.async_tag_day(DAY))
+    assert "gap" in out["tags"]

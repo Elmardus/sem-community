@@ -130,16 +130,21 @@ class DayTagger:
         if raw is None:
             return None
         end = day_start + timedelta(days=1)
-        out = []
+        before, inside = None, []
         for s in raw:
             t = getattr(s, "last_changed", None) or getattr(s, "last_updated", None)
             if t is None:
                 continue
             if t.tzinfo is not None:
                 t = t.astimezone(day_start.tzinfo)
-            if t < end:
-                out.append((t, str(getattr(s, "state", ""))))
-        return out
+            if t < day_start:
+                if before is None or t >= before[0]:
+                    before = (t, str(getattr(s, "state", "")))
+            elif t < end:
+                inside.append((t, str(getattr(s, "state", ""))))
+        # only the day itself, plus the value already in force at midnight:
+        # a counter that moved on an EARLIER day must not hide a frozen day
+        return ([before] if before else []) + inside
 
     def _forecast_pair(self, iso: str) -> Tuple[Optional[float], Optional[float], Optional[float]]:
         """(actual, forecast, clear-sky) from the forecast tracker's own day

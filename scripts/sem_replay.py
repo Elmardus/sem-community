@@ -31,7 +31,9 @@ PKG = "custom_components/solar_energy_management"
 
 
 def layout(tree: Path, name: str) -> Path:
-    root = LAYOUTS / name
+    # one folder per tree: two replays of different branches never share
+    import hashlib
+    root = LAYOUTS / f"{name}-{hashlib.sha1(str(tree).encode()).hexdigest()[:8]}"
     dst = root / PKG
     dst.mkdir(parents=True, exist_ok=True)
     subprocess.run(["rsync", "-a", "--delete", "--exclude=.git", "--exclude=node_modules",
@@ -70,7 +72,6 @@ def main() -> int:
     ap.add_argument("--report", type=Path)
     a = ap.parse_args()
 
-    sys.path.insert(0, str(LAYOUTS / "tool"))
     tool_root = layout(TOOL_TREE, "tool")
     sys.path.insert(0, str(tool_root))
     from custom_components.solar_energy_management.tools.replay import invariants as inv

@@ -77,6 +77,9 @@ test that makes it fail on a real recorded fault.
 - Only the paths in the table above are replayed today. EV, battery and
   load decisions are not — they need the forecast and tariff the scenario
   harness still stubs, and the counterfactual.
+- The forecast tracker starts each replayed day with no history: its
+  long-run correction factor is 1.0, where an install has its own. The
+  intraday part — what #1068 and #1104 change — is the same code either way.
 - Sunrise and sunset come from the day's own first and last real sun
   (above 50 W): the corpus holds no location.
 - SEM's entities are recorded on change, each on its own timing; replay
