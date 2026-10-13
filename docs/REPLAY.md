@@ -30,7 +30,7 @@ autopilot runs it before merging a bug fix (step 3b).
   data.
 - `~/sem-replay-corpus/pinned/` — days that once showed a bug, kept after
   they age out: 08.10 (grey, #1068), 12.10 (frozen inverter, gap),
-  13.10 (sunny morning #1104, battery stop at 21:30 #1105).
+  13.10 (tagged mixed: a clear morning #1104, clouds after noon, battery stop at 21:30 #1105).
 - Anonymised by construction: SEM's own entities are stored by **role**
   (`solar_power`, `grid_power`, …); any other entity is dropped
   (`tools/replay/recorded_day.py` `ROLES`).
