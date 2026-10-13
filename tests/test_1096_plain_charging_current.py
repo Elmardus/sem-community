@@ -46,3 +46,15 @@ def test_on_an_inverter_it_is_not(key):
     soc = _e("sensor.inv_battery_soc", key="battery_soc", dc="battery", unit="%")
     roles = read_charger_roles([POWER, soc, num], "shape_inverter")
     assert "current_number" not in roles
+
+
+@pytest.mark.parametrize("key", ["charging_current", "amp", "charge_rate"])
+def test_a_battery_charging_reading_is_not_a_charger(key):
+    """(review, 13.10) An inverter with a home battery carries
+    ``binary_sensor`` class ``battery_charging``. That alone must not make it
+    a charger, or its battery limit is read as an EV current control."""
+    num = _e(f"number.inv_{key}", key=key, dc="current", unit="A")
+    charging = _e("binary_sensor.inv_battery_charging", key="battery_charging",
+                  dc="battery_charging")
+    roles = read_charger_roles([POWER, charging, num], "shape_inverter")
+    assert "current_number" not in roles

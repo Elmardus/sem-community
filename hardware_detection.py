@@ -2337,14 +2337,14 @@ def read_charger_roles(dev_entities, domain: str, *, services_of=None,
             if hit:
                 roles[role] = hit
     else:
-        # (#1096) a charger by its registry kind or by its own plug /
-        # charging reading — never an inverter or battery that happens to
-        # carry the same words
+        # (#1096) a charger by its registry kind or by a plug — never by a
+        # "charging" reading alone: a home battery carries
+        # ``battery_charging`` too, and its ``charging_current`` is the
+        # pack's limit (#809).
         _kind = str((describe_domain(domain) or {}).get("kind") or "")
         cur = _current_number_role(
             dev_entities,
-            charger=(_kind == "charger" or bool(_plugged(dev_entities))
-                     or bool(_charging_now(dev_entities))))
+            charger=(_kind == "charger" or bool(_plugged(dev_entities))))
         if cur:
             roles["current_number"] = cur
             if _is_stored_setting(dev_entities, cur):
