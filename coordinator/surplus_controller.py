@@ -444,6 +444,19 @@ def import_absorbed_by_loads_w(
     return min(deficit, max(0.0, float(grid_export_w) + float(active_draw_w)))
 
 
+def reclaim_handed_back(remaining_w: float, reclaim_w: float) -> float:
+    """(#576, #1102) The walk's pool after it crosses the battery's slot.
+
+    The battery takes back what is left of the reclaim, never more than the
+    loads above it left: ``remaining − min(reclaim, max(0, remaining))``.
+    The old form, ``max(0, remaining − reclaim)``, gives the same answer
+    while ``remaining ≥ 0`` — and wipes a deficit the loads above the
+    battery made, so the stop pass never saw it (class 137).
+    """
+    remaining = float(remaining_w)
+    return remaining - min(max(0.0, float(reclaim_w or 0.0)), max(0.0, remaining))
+
+
 def solar_bounded_reclaim(
     reclaim_w: float,
     *,
@@ -1449,7 +1462,7 @@ class SurplusController:
             # (#576) hand the reclaim back at the battery's slot
             if (not reclaim_handed and battery_priority is not None
                     and reclaim_w > 0 and device.priority >= battery_priority):
-                remaining = max(0.0, remaining - reclaim_w)
+                remaining = reclaim_handed_back(remaining, reclaim_w)
                 reclaim_handed = True
             tier1 = self._tier1_headroom_w(device)
             intent = compute_load_intent(
@@ -1691,6 +1704,9 @@ class SurplusController:
         # surplus the higher-priority loads left unconsumed (see #576 tests).
         remaining_surplus = distributable + max(0.0, reclaim_w)
         _reclaim_handed_back = False
+        # (#1102) Loads the sun still covered at their turn in the walk. The
+        # deficit pass below stops only loads past this point.
+        _funded: set = set()
         active_count = 0
         # (#620) Tier-1 running budget — the battery can only supply its assist
         # budget ONCE, not once per device. Decremented as each battery-assist
@@ -1850,7 +1866,8 @@ class SurplusController:
             # only the export surplus and the battery charges first.
             if (not _reclaim_handed_back and battery_priority is not None
                     and reclaim_w > 0 and device.priority >= battery_priority):
-                remaining_surplus = max(0.0, remaining_surplus - reclaim_w)
+                remaining_surplus = reclaim_handed_back(
+                    remaining_surplus, reclaim_w)
                 _reclaim_handed_back = True
             # Skip devices in "off" mode — SEM never touches these
             if device.control_mode == DeviceControlMode.OFF:
@@ -1931,6 +1948,13 @@ class SurplusController:
                             "%s: %s — deactivation waiting for anti-flicker",
                             device.name, done_reason,
                         )
+                    if device.is_active:
+                        # (#1102) Still on (anti-flicker, or the stop did not
+                        # take): its draw sits in the pool's add-back, so it
+                        # is debited like any running load. Skipping it gave
+                        # its watts to every load below it.
+                        remaining_surplus -= max(
+                            0.0, float(device.get_current_consumption() or 0.0))
                     allocations.append(SurplusAllocation(
                         device_id=device.device_id,
                         device_name=device.name,
@@ -1978,6 +2002,8 @@ class SurplusController:
                     remaining_surplus -= max(0.0, consumed - assist)
                     if consumed > 0:
                         active_count += 1
+                        if remaining_surplus >= -DEFAULT_MIN_SURPLUS_CHANGE:
+                            _funded.add(device.device_id)
 
             elif not device.is_active and remaining_surplus < device.min_power_threshold:
                 device.reset_surplus_timer()
@@ -2041,6 +2067,8 @@ class SurplusController:
                     spend = min(spend, max(0.0, remaining_surplus))
                 remaining_surplus -= spend
                 active_count += 1
+                if remaining_surplus >= -DEFAULT_MIN_SURPLUS_CHANGE:
+                    _funded.add(device.device_id)
 
             allocations.append(SurplusAllocation(
                 device_id=device.device_id,
@@ -2056,6 +2084,13 @@ class SurplusController:
         if remaining_surplus < -DEFAULT_MIN_SURPLUS_CHANGE:
             for device in reversed(devices):
                 if remaining_surplus >= 0:
+                    break
+                # (#1102) The walk only takes away, so every load above a
+                # load the sun covered at its turn was covered too. The
+                # deficit is made below it; stopping a covered load would
+                # hand its sun to a lower one that cannot be stopped yet
+                # (anti-flicker, a started appliance run, a paid run).
+                if device.device_id in _funded:
                     break
                 # (#688) Only SURPLUS-mode loads are the LIFO's to stop —
                 # peak_only and Off are user-managed (SEM never proactively

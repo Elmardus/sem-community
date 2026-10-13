@@ -109,6 +109,26 @@ def reclaimable_battery_w(
 LOADS_IMPORT_SUSTAIN_S: float = 120.0
 
 
+def car_may_be_charging(
+    *, plugged: bool, commanded_amps: float, ev_draw_w: float,
+) -> bool:
+    """(#1102) May a car be drawing now, before its power sensor says so?
+
+    This opens the two-minute window in ``sustained_import``, so it must be
+    true BEFORE the charger's power reading catches up. The reader's
+    ``ev_charging`` is not that signal: since #739 it is held False until the
+    car's power reads above ``EV_ACTIVE_CHARGE_FLOOR_W``, so it turns on with
+    the lagging sensor, not ahead of it. A plugged car and SEM's own offer
+    this cycle both come first. The power floor is the 500 W of #739: a
+    charger's standby (KEBA 110-140 W) is not a car charging, and would keep
+    the window open all day.
+    """
+    from .sensor_reader import EV_ACTIVE_CHARGE_FLOOR_W
+    return (bool(plugged)
+            or float(commanded_amps or 0) > 0
+            or float(ev_draw_w or 0.0) > EV_ACTIVE_CHARGE_FLOOR_W)
+
+
 def sustained_import(
     state: dict,
     now_s: float,
@@ -122,32 +142,35 @@ def sustained_import(
 
     With no car charging it is the live reading — the controller's own
     median-of-3 and smoothing already absorb a blink, and a house load that
-    cycles every two minutes must still count. While a car charges
-    (``car_active``) it is the LOWEST reading of the last ``hold_s``
-    seconds: the charger's power sensor can trail the meter by a minute at a
-    start or a ramp, and that import is the car's. The history is kept every
-    cycle, so a car that starts now is judged against the minutes before it.
-    Until ``hold_s`` of readable meter has passed (start-up, after a dark
-    gap) a charging car's import counts as none.
+    cycles every two minutes must still count. While a car may charge
+    (``car_active``, see ``car_may_be_charging``) it is the LOWEST reading
+    of the last ``hold_s`` seconds: the charger's power sensor can trail the
+    meter by a minute at a start or a ramp, and that import is the car's.
+    The history is kept every cycle, so a car that starts now is judged
+    against the minutes before it. When there is no reading inside the
+    window (start-up, or a dark gap longer than ``hold_s``), a charging
+    car's import counts as none until ``hold_s`` of readings have passed.
 
     A dark meter is ``None`` — no evidence, and unlike the reclaim's
     ``held_grid_import`` this figure STOPS loads, so a held value would act
-    on a blink (#934: a blink holds, it does not act). It also restarts the
-    history. ``state`` is the caller's dict, kept here.
+    on a blink (#934: a blink holds, it does not act). A dark cycle adds no
+    reading and keeps the ones before it: if a blink cleared them, every
+    blink would give the house two minutes in which its import is not
+    counted (class 58). ``state`` is the caller's dict, kept here.
     """
     if not grid_import_known:
-        state.clear()
         return None
     live = max(0.0, float(grid_import_w or 0.0))
     now = float(now_s)
     samples = state.setdefault("samples", [])
-    since = state.setdefault("since", now)
-    samples.append((now, live))
     while samples and now - samples[0][0] > hold_s:
         samples.pop(0)
+    if not samples:
+        state["since"] = now
+    samples.append((now, live))
     if not car_active:
         return live
-    if now - since < hold_s:
+    if now - state["since"] < hold_s:
         return 0.0
     return min(w for _, w in samples)
 

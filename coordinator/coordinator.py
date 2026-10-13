@@ -108,6 +108,7 @@ from .cycle_trace import (
 )
 from .energy_reclaim import (
     reclaimable_battery_w, held_grid_import, sustained_import,
+    car_may_be_charging,
 )
 from .forecast_reader import ForecastReader
 from .forecast_tracker import ForecastTracker
@@ -6297,7 +6298,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             _now_mono = time.monotonic()
             # (#1102) The import the loads' pool carries: export alone read
             # 2 kW of import as 0 W and a 3 kW boiler rode its own add-back.
-            # While a car charges, only an import that LASTED (lowest reading
+            # While a car may charge, only an import that LASTED (lowest reading
             # of two minutes — a charger's power sensor can trail the meter
             # at a start); none on a dark meter; less what the chargers' draw
             # explains: a charger leaves a running load above it its sun (#885).
@@ -6309,10 +6310,17 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 self._loads_import_window, _now_mono,
                 grid_import_w=float(getattr(power, "grid_import_power", 0.0) or 0.0),
                 grid_import_known=_grid_known,
-                # the charging binary is the fast signal (#699): it flips
-                # before a lagging power sensor reads the car's draw
-                car_active=bool(getattr(power, "ev_charging", False))
-                or ev_draw_w > 100.0,
+                # a plugged car or SEM's own offer this cycle — both come
+                # before a lagging power sensor reads the car's draw. Not
+                # ``ev_charging``: #739 holds it False until that sensor
+                # reads 500 W, so it lags with it.
+                car_active=car_may_be_charging(
+                    # FLEET-READ: any plugged car may start and lag
+                    plugged=bool(getattr(power, "ev_connected", False)),
+                    commanded_amps=getattr(
+                        self, "_last_commanded_amps_fleet", 0),
+                    ev_draw_w=ev_draw_w,
+                ),
             )
             loads_export_w = float(getattr(power, "grid_export_power", 0.0) or 0.0)
             loads_draw_w = self._surplus_controller.active_surplus_draw_w()
