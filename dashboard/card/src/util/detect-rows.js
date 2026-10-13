@@ -32,6 +32,16 @@ export function isCo2IntensityEntity(stateObj) {
     return CO2_UNITS.has(unit);
 }
 
+/** (#1082) The outdoor temperature picker: a temperature sensor or a real
+ *  weather entity (never HA's auto-made weather.forecast_* twin). */
+export function isOutdoorTemperatureCandidate(stateObj) {
+    const id = String((stateObj && stateObj.entity_id) || '');
+    if (id.startsWith('weather.')) return !id.startsWith('weather.forecast_');
+    const a = (stateObj && stateObj.attributes) || {};
+    const unit = String(a.unit_of_measurement || '').trim().toLowerCase();
+    return a.device_class === 'temperature' || unit === '°c' || unit === '°f';
+}
+
 /** The label of a near-miss row: a complete offer is a charger SEM found
  *  and can add, not "no role matched". */
 export function detectRowLabelKey(miss) {

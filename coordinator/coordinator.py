@@ -39,6 +39,9 @@ from ..consts.core import CAPABILITY_MISS_CONFIRM_READS, CAPABILITY_MISS_HOLD_S
 from ..consts.core import CONF_INTRADAY_FORECAST, DEFAULT_INTRADAY_FORECAST
 from ..consts.core import (CONF_CO2_LIVE_INTENSITY, CONF_GRID_CO2_ENTITY,
                            DEFAULT_CO2_LIVE_INTENSITY)
+from ..consts.core import (CONF_OUTDOOR_TEMPERATURE_ENTITY,
+                           CONF_TEMPERATURE_LOAD_FORECAST,
+                           DEFAULT_TEMPERATURE_LOAD_FORECAST)
 from ..consts.core import (CONF_SHED_SIGNAL_ENTITY, CONF_SHED_SIGNAL_LIMIT,
                            DEFAULT_SHED_SIGNAL_LIMIT)
 from ..const import (
@@ -6983,10 +6986,19 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # Phase 8: Consumption/solar predictor (#3)
         try:
             now = dt_util.now()
+            # (#1082) the hour's temperature teaches the load-per-degree
+            # slope always; the plans use it only behind the soak flag
+            _t_now = self._outdoor_temperature_or_none()
+            self._predictor.set_temperature(
+                self._temperature_at,
+                bool((self.config or {}).get(CONF_TEMPERATURE_LOAD_FORECAST,
+                                             DEFAULT_TEMPERATURE_LOAD_FORECAST)))
+            self._maybe_refresh_temperature_forecast()
             self._predictor.observe(
                 now,
                 consumption_w=power.home_consumption_power,
                 solar_w=power.solar_power,
+                temp_c=_t_now,
             )
             # Feed EV consumption predictor (#106) — deduplicates by day
             if hasattr(energy, "daily_ev") and energy.daily_ev > 0:
@@ -9928,19 +9940,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 pass
 
     def _outdoor_temp_c(self):
-        """(#800) Covariate stamp: the first real weather entity's
-        temperature, or None. ``weather.forecast_*`` is HA's auto
-        subentity and unusable (the standing gotcha)."""
+        """(#800) Covariate stamp for the battery night record — (#1082)
+        now the one outdoor-temperature source, or None."""
         try:
-            for st in self.hass.states.async_all("weather"):
-                if st.entity_id.startswith("weather.forecast_"):
-                    continue
-                t = st.attributes.get("temperature")
-                if t is not None:
-                    return float(t)
-        except Exception:  # noqa: BLE001
+            return SEMCoordinator._outdoor_temperature_or_none(self)
+        except Exception:  # noqa: BLE001 — a stamp never costs a night
             return None
-        return None
 
     def _persist_demand_outcomes(self) -> None:
         rec = getattr(self, "_demand_outcomes", None)
@@ -13308,6 +13313,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 battery_energy_kwh=saved.get("battery_energy_kwh", 0.0),
                 solar_share_pct=saved.get("solar_share_pct", 0.0),
                 cost_chf=saved.get("cost_chf", 0.0),
+                co2_kg=float(saved.get("co2_kg", 0.0) or 0.0),
                 avg_power_w=saved.get("avg_power_w", 0.0),
                 energy_source=saved.get("energy_source", "sem_estimate"),
                 meter=dict(saved.get("meter") or {}),
@@ -13423,6 +13429,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 "battery_energy_kwh": sd.battery_energy_kwh,
                 "solar_share_pct": sd.solar_share_pct,
                 "cost_chf": sd.cost_chf,
+                "co2_kg": getattr(sd, "co2_kg", 0.0),
                 "avg_power_w": sd.avg_power_w,
                 "energy_source": getattr(sd, "energy_source", "sem_estimate"),
                 "meter": dict(getattr(sd, "meter", None) or {}),
@@ -14552,31 +14559,150 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 )
             self._ev_taper_detector.reset_session()
 
+    #: (#1082) how often the crawler looks again for an outdoor sensor
+    _OUTDOOR_TEMP_RESCAN_S = 600
+
     def _outdoor_temperature_or_none(self) -> Optional[float]:
-        """(#1022) The outdoor temperature, or None when nothing reports
-        one. The 15 °C fallback above is fine for a consumption estimate
-        and wrong for a snow flag — a made-up spring day can never say
-        "freezing", so that caller asks here."""
-        # Try configured entity first
-        temp_entity = self.config.get("outdoor_temperature_entity", "")
-        if temp_entity:
-            state = self.hass.states.get(temp_entity)
-            if state and state.state not in ("unknown", "unavailable"):
-                try:
-                    return float(state.state)
-                except (ValueError, TypeError):
-                    pass
+        """(#1082) THE outdoor temperature, in °C, or None — the one source
+        the car taper, the battery night record, the snow flag and the
+        home-load forecast all read.
 
-        # Fall back to any weather entity
-        for state in self.hass.states.async_all("weather"):
-            temp = state.attributes.get("temperature")
+        Order: the user's pick (``outdoor_temperature_entity``, a sensor or
+        a weather entity); else the crawler's outdoor thermometer (found by
+        what it says about itself — never a brand); else the first real
+        weather entity (``weather.forecast_*`` never). None when nothing
+        reads: a made-up value is wrong for a snow flag, so callers that can
+        live with a default choose it themselves. Publishes the source kind
+        (never an entity id) for diagnostics."""
+        from ..hardware_detection import (find_outdoor_temperature_sensors,
+                                          temperature_c, weather_entities)
+        hass = getattr(self, "hass", None)
+        if hass is None:
+            return None
+        picked = (getattr(self, "config", None) or {}).get(CONF_OUTDOOR_TEMPERATURE_ENTITY) or None
+        tried: list = []
+        if picked:
+            tried.append(("configured", picked))
+        now = time.monotonic()
+        found = getattr(self, "_outdoor_temp_found", None)
+        if found is None or (not found and now - getattr(
+                self, "_outdoor_temp_scanned_at", 0.0) > self._OUTDOOR_TEMP_RESCAN_S):
+            try:
+                found = find_outdoor_temperature_sensors(hass)
+            except Exception:  # noqa: BLE001 — a crawl never costs a cycle
+                found = []
+            self._outdoor_temp_found = found
+            self._outdoor_temp_scanned_at = now
+        tried += [("detected", r["entity_id"]) for r in (found or [])[:3]]
+        weather_states = {}
+        try:
+            weather_states = {str(w.entity_id): w for w in hass.states.async_all("weather")}
+            tried += [("weather", w) for w in weather_entities(hass)]
+        except Exception:  # noqa: BLE001
+            pass
+        for kind, eid in tried:
+            if kind == "weather":
+                st = weather_states.get(eid)
+            else:
+                try:
+                    st = hass.states.get(eid)
+                except Exception:  # noqa: BLE001
+                    st = None
+            if st is None and kind == "detected":
+                self._outdoor_temp_found = []  # gone: look again on the next rescan
+                continue
+            temp = temperature_c(st, assume_celsius=(kind == "configured"))
             if temp is not None:
-                try:
-                    return float(temp)
-                except (ValueError, TypeError):
-                    pass
-
+                self._outdoor_temp_status = {"source": kind, "celsius": round(temp, 1),
+                                             "candidates": len(found or [])}
+                return temp
+        self._outdoor_temp_status = {"source": "none", "celsius": None,
+                                     "candidates": len(found or [])}
         return None
+
+    #: (#1082) temperature forecast refresh interval
+    _TEMP_FORECAST_REFRESH_S = 1800
+
+    def _forecast_weather_entity(self) -> Optional[str]:
+        """The weather entity whose forecast SEM reads: the user's pick when
+        it is a weather entity, else the first real one."""
+        from ..hardware_detection import weather_entities
+        picked = (self.config or {}).get(CONF_OUTDOOR_TEMPERATURE_ENTITY) or ""
+        if str(picked).startswith("weather.") and not str(picked).startswith("weather.forecast_"):
+            return picked
+        try:
+            ws = weather_entities(self.hass)
+        except Exception:  # noqa: BLE001
+            ws = []
+        return ws[0] if ws else None
+
+    def _maybe_refresh_temperature_forecast(self) -> None:
+        """Ask for a fresh temperature forecast every half hour, in the
+        background — a slow weather service never holds a cycle."""
+        now = time.monotonic()
+        if now - getattr(self, "_temp_forecast_at", -1e9) < self._TEMP_FORECAST_REFRESH_S:
+            return
+        if getattr(self, "_temp_forecast_task", None) is not None and not self._temp_forecast_task.done():
+            return
+        self._temp_forecast_at = now
+        try:
+            self._temp_forecast_task = self.hass.async_create_task(
+                self._refresh_temperature_forecast())
+        except Exception:  # noqa: BLE001 — no loop (a test double): no forecast
+            self._temp_forecast_task = None
+
+    async def _refresh_temperature_forecast(self) -> None:
+        """(#1082) HA's standard ``weather.get_forecasts``: hourly when the
+        integration offers it, else daily (the mean of high and low). Stored
+        as [(start datetime, °C)]. Any failure keeps the last forecast."""
+        weid = self._forecast_weather_entity()
+        if not weid:
+            self._temp_forecast = []
+            return
+        for kind in ("hourly", "daily"):
+            try:
+                resp = await self.hass.services.async_call(
+                    "weather", "get_forecasts", {"entity_id": weid, "type": kind},
+                    blocking=True, return_response=True)
+            except Exception:  # noqa: BLE001 — this kind is not offered
+                continue
+            rows = ((resp or {}).get(weid) or {}).get("forecast") or []
+            st = self.hass.states.get(weid)
+            unit = ((getattr(st, "attributes", {}) or {}).get("temperature_unit") or "°C")
+            out = []
+            for r in rows:
+                try:
+                    start = dt_util.parse_datetime(str(r.get("datetime")))
+                    hi = r.get("temperature")
+                    lo = r.get("templow")
+                    t = float(hi) if lo is None or kind == "hourly" else (float(hi) + float(lo)) / 2
+                except (TypeError, ValueError):
+                    continue
+                if start is None:
+                    continue
+                if str(unit).strip().lower() in ("°f", "f"):
+                    t = (t - 32.0) * 5.0 / 9.0
+                out.append((start, t, kind))
+            if out:
+                self._temp_forecast = sorted(out, key=lambda x: x[0])
+                return
+
+    def _temperature_at(self, when) -> Optional[float]:
+        """(#1082) The temperature at ``when``: measured now for the current
+        hour, else the forecast row that covers it (an hour; a whole day
+        for a daily forecast). None beyond the forecast."""
+        try:
+            now = dt_util.now()
+            if when <= now + timedelta(minutes=30):
+                return self._outdoor_temperature_or_none()
+            best = None
+            for start, t, kind in getattr(self, "_temp_forecast", None) or []:
+                span = timedelta(hours=1) if kind == "hourly" else timedelta(days=1)
+                if start <= when < start + span:
+                    best = t
+            return best
+        except Exception:  # noqa: BLE001
+            return None
 
     def _hint_facts(self, power, energy, costs, performance, tariff_data,
                     now_mono: Optional[float] = None):
@@ -14629,6 +14755,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             daily_home_kwh=float(getattr(energy, "daily_home", 0.0) or 0.0),
             daily_ev_kwh=float(getattr(energy, "daily_ev", 0.0) or 0.0),
             daily_cost=float(getattr(costs, "daily_net_cost", 0.0) or 0.0),
+            daily_co2_kg=getattr(costs, "daily_co2_avoided_kg", None),
             self_use_pct=float(getattr(performance, "self_consumption_rate", 0.0) or 0.0),
             currency=currency if isinstance(currency, str) else "",
             dark_inputs=dark,

@@ -3206,6 +3206,169 @@ def read_co2_intensity_kg(state: Any) -> Optional[float]:
     return kg
 
 
+# ── (#1082) outdoor temperature — one source every part of SEM reads ──
+#
+# The car's cold-weather taper, the battery night record, the snow flag and
+# the home-load forecast all want the temperature OUTSIDE. A temperature
+# sensor is everywhere in a house; what makes one "outside" is what it
+# says about itself (its name, its device's name), never a brand. A sensor
+# on an indoor, heat-pump, boiler, water or electronics device is never it.
+
+#: words that say "outside" by themselves (lower case; matched as whole
+#: words, or inside a longer joined name when the word has 6+ letters)
+OUTDOOR_STRONG: Tuple[str, ...] = (
+    "outdoor", "outside", "exterior", "external", "aussen", "außen",
+    "aussentemperatur", "außentemperatur", "buiten", "buitentemperatuur",
+    "exterieur", "extérieur", "esterno", "esterna", "utomhus", "utendørs",
+    "ulko", "venku", "zewnatrz", "zewnętrz",
+)
+#: words that point outside but are not proof alone
+OUTDOOR_WEAK: Tuple[str, ...] = (
+    "weather", "wetter", "weerstation", "wetterstation", "station",
+    "garden", "garten", "tuin", "balcony", "balkon", "terrace", "terrasse",
+)
+#: a station that measures the air (ranks above a weather report)
+OUTDOOR_STATION: Tuple[str, ...] = ("station", "wetterstation", "weerstation", "weatherstation")
+#: in the sensor's OWN name: this is not the air outside, whatever else it says
+NOT_OUTDOOR_READING: Tuple[str, ...] = (
+    "indoor", "inside", "innen", "binnen", "room", "zimmer", "raum", "kamer",
+    "water", "wasser", "warmwasser", "tank", "dhw", "flow", "return",
+    "vorlauf", "rücklauf", "ruecklauf", "supply", "compressor", "kompressor",
+    "cpu", "chip", "board", "floor", "boden", "radiator", "pool",
+    "forecast", "today", "tomorrow", "max", "min", "high", "low", "feels",
+    "dew", "taupunkt", "apparent", "gefühlt", "setpoint", "target", "soll",
+)
+#: a device that is not a thermometer outside — counts only when the
+#: sensor's own name has no strong outdoor word (a heat pump's "outdoor
+#: temperature" IS the air outside; its "inverter temperature" is not)
+NOT_OUTDOOR_DEVICE: Tuple[str, ...] = (
+    "living", "wohn", "kitchen", "küche", "kueche", "bath", "bedroom",
+    "schlaf", "office", "buero", "büro", "boiler", "heatpump", "wärmepumpe",
+    "waermepumpe", "warmtepomp", "battery", "batterie", "accu", "inverter",
+    "wechselrichter", "omvormer", "charger", "wallbox", "laadpaal", "fridge",
+    "freezer", "kühl", "kuehl", "heizung", "heating", "verwarming",
+    "thermostat", "climate", "printer", "router", "server", "nas",
+)
+#: units a temperature arrives in -> to °C
+_TEMP_UNITS = {"°c": "c", "c": "c", "°f": "f", "f": "f", "k": "k"}
+#: an outdoor reading outside this band is a sensor fault, not weather
+OUTDOOR_TEMP_MIN_C, OUTDOOR_TEMP_MAX_C = -60.0, 60.0
+
+
+def _words_of(text: Any) -> List[str]:
+    return [w for w in re.split(r"[^0-9a-zäöüßéèàåæø]+", str(text or "").lower()) if w]
+
+
+def _says(words: List[str], joined: str, vocab: Tuple[str, ...]) -> bool:
+    """Whole-word match, or a long vocabulary word inside a joined name
+    ("wetterstationrempfer" says "wetterstation")."""
+    for v in vocab:
+        if v in words or (len(v) >= 6 and v in joined):
+            return True
+    return False
+
+
+def temperature_c(state: Any, assume_celsius: bool = False) -> Optional[float]:
+    """(#1082) A temperature state in °C, or None: unavailable, not a
+    number, not a temperature unit, or outside the plausible band. A weather
+    entity's own ``temperature`` attribute counts, in its unit.
+    ``assume_celsius``: a sensor the USER picked that states no unit at all
+    is read as °C (a stated other unit, like kWh, still is not)."""
+    if state is None:
+        return None
+    attrs = getattr(state, "attributes", {})
+    if not isinstance(attrs, dict):
+        attrs = {}
+    eid = str(getattr(state, "entity_id", ""))
+    if eid.startswith("weather."):
+        raw = attrs.get("temperature")
+        unit = attrs.get("temperature_unit") or "°C"
+    else:
+        raw = getattr(state, "state", None)
+        unit = attrs.get("unit_of_measurement")
+    unit_s = str(unit or "").strip().lower()
+    kind = _TEMP_UNITS.get(unit_s)
+    if kind is None and assume_celsius and not unit_s:
+        kind = "c"
+    if kind is None:
+        return None
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if kind == "f":
+        v = (v - 32.0) * 5.0 / 9.0
+    elif kind == "k":
+        v = v - 273.15
+    if not (OUTDOOR_TEMP_MIN_C <= v <= OUTDOOR_TEMP_MAX_C):
+        return None
+    return v
+
+
+def find_outdoor_temperature_sensors(hass: Optional[HomeAssistant]) -> List[Dict[str, Any]]:
+    """(#1082) Temperature sensors that say they measure the air OUTSIDE,
+    best first. A sensor counts when its own name or its device's name says
+    outside, and nothing in either says indoor, water, heat pump, boiler or
+    electronics. SEM's own sensors never count. Ties: a sensor that reads a
+    value now before one that does not, then by entity id (a stable pick)."""
+    if hass is None or not hasattr(hass, "states"):
+        return []
+    try:
+        ent_reg = entity_registry.async_get(hass)
+        from homeassistant.helpers import device_registry as _dr
+        dev_reg = _dr.async_get(hass)
+    except Exception:  # noqa: BLE001 — no registry: names alone decide
+        ent_reg = dev_reg = None
+    out: List[Dict[str, Any]] = []
+    for st in hass.states.async_all("sensor"):
+        attrs = getattr(st, "attributes", {}) or {}
+        unit = str(attrs.get("unit_of_measurement") or "").strip().lower()
+        if attrs.get("device_class") != "temperature" and unit not in ("°c", "°f"):
+            continue
+        eid = str(st.entity_id)
+        if is_sem_entity(hass, eid):
+            continue
+        dev_name = ""
+        if ent_reg is not None:
+            reg = ent_reg.async_get(eid)
+            if reg is not None and reg.device_id and dev_reg is not None:
+                dev = dev_reg.async_get(reg.device_id)
+                if dev is not None:
+                    dev_name = " ".join(str(x) for x in (dev.name_by_user, dev.name, dev.model) if x)
+        own = _words_of(f"{eid} {attrs.get('friendly_name', '')}")
+        own_j = "".join(own)
+        dev = _words_of(dev_name)
+        dev_j = "".join(dev)
+        if _says(own, own_j, NOT_OUTDOOR_READING):
+            continue
+        strong = _says(own, own_j, OUTDOOR_STRONG)
+        if not strong and _says(own + dev, own_j + dev_j, NOT_OUTDOOR_DEVICE):
+            continue
+        weak = _says(own + dev, own_j + dev_j, OUTDOOR_WEAK + OUTDOOR_STRONG)
+        if not (strong or weak):
+            continue
+        # rank: says "outside" (3) > a station that MEASURES (2) > a weather
+        # report or a place word (1)
+        station = _says(own + dev, own_j + dev_j, OUTDOOR_STATION)
+        out.append({"entity_id": eid,
+                    "strong": strong,
+                    "rank": 3 if strong else (2 if station else 1),
+                    "reads": temperature_c(st) is not None,
+                    "on_device": bool(dev_name)})
+    out.sort(key=lambda r: (not r["reads"], -r["rank"], r["entity_id"]))
+    return out
+
+
+def weather_entities(hass: Optional[HomeAssistant]) -> List[str]:
+    """(#1082) Real weather entities, sorted. ``weather.forecast_*`` is
+    HA's own auto-made twin of an integration's entity and is never used
+    (the standing gotcha — the dashboard generator filters it too)."""
+    if hass is None or not hasattr(hass, "states"):
+        return []
+    return sorted(str(s.entity_id) for s in hass.states.async_all("weather")
+                  if not str(s.entity_id).startswith("weather.forecast_"))
+
+
 def entity_evidence(e, state_of=None) -> Dict[str, Any]:
     """(#1092) One entity as the crawler READ it: what a user's diagnostics
     must carry for the download to replay as a test of the same install.

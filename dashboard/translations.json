@@ -1596,6 +1596,7 @@
     "hint_msg_grid_rise": "Odběr ze sítě stoupl na {kwh} kWh (obvykle {usual}) při stejném slunci.",
     "hint_msg_cheap_now": "Elektřina je teď levná. {cars}: připojeno a nenabíjí.",
     "hint_msg_weekly_summary": "Tento týden: {solar} kWh slunce · {self_use} % vlastní spotřeby · {grid} kWh ze sítě · {ev} kWh do auta · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Vaše solární energie tento týden ušetřila {co2} kg CO₂.",
     "hints": "Tipy",
     "weekly": "Týdenní zpráva",
     "all": "Všechny tipy",
@@ -1607,6 +1608,7 @@
     "sessions_col_session": "Relace",
     "sessions_col_solar": "Slunce",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "slunce",
     "sessions_csv": "CSV",
     "sessions_none": "Tento měsíc žádné relace",
@@ -1677,7 +1679,9 @@
     "operator_limit_banner": "Provozovatel sítě: limit {kw} kW od {time} — solár navíc je povolen",
     "locked_by_grid_operator": "Zablokováno provozovatelem sítě",
     "config_grid_co2_entity": "Senzor CO₂ sítě",
-    "config_help_grid_co2_entity": "Najde se podle jednotky (g nebo kg CO₂ na kWh). Vyberte jen tehdy, když SEM našel špatný."
+    "config_help_grid_co2_entity": "Najde se podle jednotky (g nebo kg CO₂ na kWh). Vyberte jen tehdy, když SEM našel špatný.",
+    "config_outdoor_temperature_entity": "Venkovní teplota",
+    "config_help_outdoor_temperature_entity": "Najde se podle názvu, jinak vaše entita počasí. Vyberte jen tehdy, když SEM zvolil špatně."
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3276,6 +3280,7 @@
     "hint_msg_grid_rise": "Netforbrug steg til {kwh} kWh (normalt {usual}) med samme sol.",
     "hint_msg_cheap_now": "Strømmen er billig nu. {cars}: tilsluttet og lader ikke.",
     "hint_msg_weekly_summary": "Denne uge: {solar} kWh sol · {self_use} % egetforbrug · {grid} kWh fra nettet · {ev} kWh i bilen · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Din solstrøm undgik {co2} kg CO₂ denne uge.",
     "hints": "Tips",
     "weekly": "Ugebesked",
     "all": "Alle tips",
@@ -3287,6 +3292,7 @@
     "sessions_col_session": "Session",
     "sessions_col_solar": "Sol",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "sol",
     "sessions_csv": "CSV",
     "sessions_none": "Ingen sessioner denne måned",
@@ -3357,7 +3363,9 @@
     "operator_limit_banner": "Netselskab: grænse {kw} kW siden {time} — sol oveni er tilladt",
     "locked_by_grid_operator": "Låst af netselskabet",
     "config_grid_co2_entity": "Nettets CO₂-sensor",
-    "config_help_grid_co2_entity": "Findes via enheden (g eller kg CO₂ pr. kWh). Vælg kun én, hvis SEM fandt den forkerte."
+    "config_help_grid_co2_entity": "Findes via enheden (g eller kg CO₂ pr. kWh). Vælg kun én, hvis SEM fandt den forkerte.",
+    "config_outdoor_temperature_entity": "Udetemperatur",
+    "config_help_outdoor_temperature_entity": "Findes via navnet, ellers din vejr-entitet. Vælg kun én, hvis SEM valgte forkert."
   },
   "de": {
     "% of limit": "% des Limits",
@@ -4956,6 +4964,7 @@
     "hint_msg_grid_rise": "Netzbezug heute {kwh} kWh (sonst {usual}) bei gleicher Sonne.",
     "hint_msg_cheap_now": "Strom ist jetzt günstig. {cars}: steckt und lädt nicht.",
     "hint_msg_weekly_summary": "Diese Woche: {solar} kWh Solar · {self_use} % Eigenverbrauch · {grid} kWh aus dem Netz · {ev} kWh ins Auto · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Ihr Solarstrom hat diese Woche {co2} kg CO₂ vermieden.",
     "hints": "Hinweise",
     "weekly": "Wochennotiz",
     "all": "Alle Hinweise",
@@ -4967,6 +4976,7 @@
     "sessions_col_session": "Ladevorgang",
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "Solar",
     "sessions_csv": "CSV",
     "sessions_none": "Keine Ladevorgänge diesen Monat",
@@ -5037,7 +5047,9 @@
     "operator_limit_banner": "Netzbetreiber: Limit {kw} kW seit {time} — Solarstrom zusätzlich ist erlaubt",
     "locked_by_grid_operator": "Vom Netzbetreiber gesperrt",
     "config_grid_co2_entity": "CO₂-Sensor des Netzes",
-    "config_help_grid_co2_entity": "Wird über die Einheit gefunden (g oder kg CO₂ pro kWh). Wähle nur einen, wenn SEM den falschen fand."
+    "config_help_grid_co2_entity": "Wird über die Einheit gefunden (g oder kg CO₂ pro kWh). Wähle nur einen, wenn SEM den falschen fand.",
+    "config_outdoor_temperature_entity": "Aussentemperatur",
+    "config_help_outdoor_temperature_entity": "Wird über den Namen gefunden, sonst Ihre Wetter-Entität. Nur wählen, wenn SEM das falsche gewählt hat."
   },
   "en": {
     "% of limit": "% of limit",
@@ -6636,6 +6648,7 @@
     "hint_msg_grid_rise": "Grid use rose to {kwh} kWh (usually {usual}) with the same sun.",
     "hint_msg_cheap_now": "Power is cheap now. {cars}: plugged in and not charging.",
     "hint_msg_weekly_summary": "This week: {solar} kWh solar · {self_use} % self-use · {grid} kWh from the grid · {ev} kWh into the car · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Your solar avoided {co2} kg of CO₂ this week.",
     "hints": "Hints",
     "weekly": "Weekly note",
     "all": "All hints",
@@ -6647,6 +6660,7 @@
     "sessions_col_session": "Session",
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "solar",
     "sessions_csv": "CSV",
     "sessions_none": "No sessions this month",
@@ -6717,7 +6731,9 @@
     "operator_limit_banner": "Grid operator: limit {kw} kW since {time} — solar on top is fine",
     "locked_by_grid_operator": "Locked by the grid operator",
     "config_grid_co2_entity": "Grid CO₂ sensor",
-    "config_help_grid_co2_entity": "Found by its unit (g or kg CO₂ per kWh). Pick one only if SEM found the wrong one."
+    "config_help_grid_co2_entity": "Found by its unit (g or kg CO₂ per kWh). Pick one only if SEM found the wrong one.",
+    "config_outdoor_temperature_entity": "Outdoor temperature",
+    "config_help_outdoor_temperature_entity": "Found by its name, else your weather entity. Pick one only if SEM chose the wrong one."
   },
   "es": {
     "% of limit": "% del límite",
@@ -8316,6 +8332,7 @@
     "hint_msg_grid_rise": "El consumo de red subió a {kwh} kWh (normalmente {usual}) con el mismo sol.",
     "hint_msg_cheap_now": "La energía es barata ahora. {cars}: enchufado y sin cargar.",
     "hint_msg_weekly_summary": "Esta semana: {solar} kWh solar · {self_use} % autoconsumo · {grid} kWh de la red · {ev} kWh al coche · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Tu energía solar evitó {co2} kg de CO₂ esta semana.",
     "hints": "Avisos",
     "weekly": "Nota semanal",
     "all": "Todos los avisos",
@@ -8327,6 +8344,7 @@
     "sessions_col_session": "Sesión",
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "solar",
     "sessions_csv": "CSV",
     "sessions_none": "Sin sesiones este mes",
@@ -8397,7 +8415,9 @@
     "operator_limit_banner": "Distribuidora: límite {kw} kW desde las {time} — la solar adicional está permitida",
     "locked_by_grid_operator": "Bloqueado por la distribuidora",
     "config_grid_co2_entity": "Sensor de CO₂ de la red",
-    "config_help_grid_co2_entity": "Se encuentra por su unidad (g o kg de CO₂ por kWh). Elija uno solo si SEM encontró el equivocado."
+    "config_help_grid_co2_entity": "Se encuentra por su unidad (g o kg de CO₂ por kWh). Elija uno solo si SEM encontró el equivocado.",
+    "config_outdoor_temperature_entity": "Temperatura exterior",
+    "config_help_outdoor_temperature_entity": "Se encuentra por su nombre; si no, tu entidad meteorológica. Elige uno solo si SEM se equivocó."
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -9996,6 +10016,7 @@
     "hint_msg_grid_rise": "Verkosta otto nousi {kwh} kWh:iin (yleensä {usual}) samalla auringolla.",
     "hint_msg_cheap_now": "Sähkö on nyt halpaa. {cars}: kytketty eikä lataa.",
     "hint_msg_weekly_summary": "Tällä viikolla: {solar} kWh aurinkoa · {self_use} % omaa käyttöä · {grid} kWh verkosta · {ev} kWh autoon · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Aurinkosähkösi vältti tällä viikolla {co2} kg CO₂-päästöjä.",
     "hints": "Vihjeet",
     "weekly": "Viikkoviesti",
     "all": "Kaikki vihjeet",
@@ -10007,6 +10028,7 @@
     "sessions_col_session": "Lataus",
     "sessions_col_solar": "Aurinko",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "aurinkoa",
     "sessions_csv": "CSV",
     "sessions_none": "Ei latauksia tässä kuussa",
@@ -10077,7 +10099,9 @@
     "operator_limit_banner": "Verkkoyhtiö: raja {kw} kW klo {time} alkaen — aurinkosähkö päälle on sallittu",
     "locked_by_grid_operator": "Verkkoyhtiön lukitsema",
     "config_grid_co2_entity": "Sähköverkon CO₂-anturi",
-    "config_help_grid_co2_entity": "Löytyy yksiköstä (g tai kg CO₂ / kWh). Valitse vain, jos SEM löysi väärän."
+    "config_help_grid_co2_entity": "Löytyy yksiköstä (g tai kg CO₂ / kWh). Valitse vain, jos SEM löysi väärän.",
+    "config_outdoor_temperature_entity": "Ulkolämpötila",
+    "config_help_outdoor_temperature_entity": "Löytyy nimen perusteella, muuten sääentiteettisi. Valitse vain, jos SEM valitsi väärin."
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -11676,6 +11700,7 @@
     "hint_msg_grid_rise": "Soutirage réseau monté à {kwh} kWh (d'habitude {usual}) avec le même soleil.",
     "hint_msg_cheap_now": "Le courant est bon marché. {cars} : branchée et ne charge pas.",
     "hint_msg_weekly_summary": "Cette semaine : {solar} kWh solaire · {self_use} % autoconsommation · {grid} kWh du réseau · {ev} kWh dans la voiture · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Votre solaire a évité {co2} kg de CO₂ cette semaine.",
     "hints": "Indices",
     "weekly": "Note hebdomadaire",
     "all": "Tous les indices",
@@ -11687,6 +11712,7 @@
     "sessions_col_session": "Session",
     "sessions_col_solar": "Solaire",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "solaire",
     "sessions_csv": "CSV",
     "sessions_none": "Aucune session ce mois",
@@ -11757,7 +11783,9 @@
     "operator_limit_banner": "Gestionnaire de réseau : limite {kw} kW depuis {time} — le solaire en plus reste permis",
     "locked_by_grid_operator": "Bloqué par le gestionnaire de réseau",
     "config_grid_co2_entity": "Capteur CO₂ du réseau",
-    "config_help_grid_co2_entity": "Trouvé par son unité (g ou kg de CO₂ par kWh). N'en choisissez un que si SEM a trouvé le mauvais."
+    "config_help_grid_co2_entity": "Trouvé par son unité (g ou kg de CO₂ par kWh). N'en choisissez un que si SEM a trouvé le mauvais.",
+    "config_outdoor_temperature_entity": "Température extérieure",
+    "config_help_outdoor_temperature_entity": "Trouvé par son nom, sinon votre entité météo. Choisissez-en un seulement si SEM s'est trompé."
   },
   "hu": {
     "% of limit": "% a határból",
@@ -13356,6 +13384,7 @@
     "hint_msg_grid_rise": "A hálózati fogyasztás {kwh} kWh-ra nőtt (szokásos {usual}) azonos napsütésnél.",
     "hint_msg_cheap_now": "Az áram most olcsó. {cars}: csatlakoztatva, nem tölt.",
     "hint_msg_weekly_summary": "Ezen a héten: {solar} kWh nap · {self_use} % saját fogyasztás · {grid} kWh a hálózatból · {ev} kWh az autóba · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "A napenergiád ezen a héten {co2} kg CO₂-t takarított meg.",
     "hints": "Tippek",
     "weekly": "Heti üzenet",
     "all": "Minden tipp",
@@ -13367,6 +13396,7 @@
     "sessions_col_session": "Töltés",
     "sessions_col_solar": "Nap",
     "sessions_col_min": "Perc",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "nap",
     "sessions_csv": "CSV",
     "sessions_none": "Nincs töltés ebben a hónapban",
@@ -13437,7 +13467,9 @@
     "operator_limit_banner": "Hálózati szolgáltató: korlát {kw} kW {time} óta — a napenergia ezen felül megengedett",
     "locked_by_grid_operator": "A hálózati szolgáltató letiltotta",
     "config_grid_co2_entity": "A hálózat CO₂-érzékelője",
-    "config_help_grid_co2_entity": "Az egysége alapján találja meg (g vagy kg CO₂/kWh). Csak akkor válasszon, ha a SEM rosszat talált."
+    "config_help_grid_co2_entity": "Az egysége alapján találja meg (g vagy kg CO₂/kWh). Csak akkor válasszon, ha a SEM rosszat talált.",
+    "config_outdoor_temperature_entity": "Külső hőmérséklet",
+    "config_help_outdoor_temperature_entity": "Név alapján találja meg, különben az időjárás-entitást. Csak akkor válasszon, ha a SEM rosszat választott."
   },
   "it": {
     "% of limit": "% del limite",
@@ -15036,6 +15068,7 @@
     "hint_msg_grid_rise": "Prelievo dalla rete salito a {kwh} kWh (di solito {usual}) con lo stesso sole.",
     "hint_msg_cheap_now": "L'energia ora è economica. {cars}: collegata e non in carica.",
     "hint_msg_weekly_summary": "Questa settimana: {solar} kWh solare · {self_use} % autoconsumo · {grid} kWh dalla rete · {ev} kWh nell'auto · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Il tuo solare ha evitato {co2} kg di CO₂ questa settimana.",
     "hints": "Avvisi",
     "weekly": "Nota settimanale",
     "all": "Tutti gli avvisi",
@@ -15047,6 +15080,7 @@
     "sessions_col_session": "Sessione",
     "sessions_col_solar": "Solare",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "solare",
     "sessions_csv": "CSV",
     "sessions_none": "Nessuna sessione questo mese",
@@ -15117,7 +15151,9 @@
     "operator_limit_banner": "Gestore di rete: limite {kw} kW dalle {time} — il solare in più è consentito",
     "locked_by_grid_operator": "Bloccato dal gestore di rete",
     "config_grid_co2_entity": "Sensore CO₂ della rete",
-    "config_help_grid_co2_entity": "Trovato dalla sua unità (g o kg di CO₂ per kWh). Sceglierne uno solo se SEM ha trovato quello sbagliato."
+    "config_help_grid_co2_entity": "Trovato dalla sua unità (g o kg di CO₂ per kWh). Sceglierne uno solo se SEM ha trovato quello sbagliato.",
+    "config_outdoor_temperature_entity": "Temperatura esterna",
+    "config_help_outdoor_temperature_entity": "Trovato dal nome, altrimenti la tua entità meteo. Sceglilo solo se SEM ha sbagliato."
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -16716,6 +16752,7 @@
     "hint_msg_grid_rise": "Netverbruik steeg naar {kwh} kWh (normaal {usual}) bij dezelfde zon.",
     "hint_msg_cheap_now": "Stroom is nu goedkoop. {cars}: aangesloten en laadt niet.",
     "hint_msg_weekly_summary": "Deze week: {solar} kWh zon · {self_use} % eigen verbruik · {grid} kWh van het net · {ev} kWh in de auto · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Je zonnestroom vermeed deze week {co2} kg CO₂.",
     "hints": "Hints",
     "weekly": "Weekbericht",
     "all": "Alle hints",
@@ -16727,6 +16764,7 @@
     "sessions_col_session": "Sessie",
     "sessions_col_solar": "Zon",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "zon",
     "sessions_csv": "CSV",
     "sessions_none": "Geen sessies deze maand",
@@ -16797,7 +16835,9 @@
     "operator_limit_banner": "Netbeheerder: limiet {kw} kW sinds {time} — zon erbovenop mag",
     "locked_by_grid_operator": "Geblokkeerd door de netbeheerder",
     "config_grid_co2_entity": "CO₂-sensor van het net",
-    "config_help_grid_co2_entity": "Gevonden via de eenheid (g of kg CO₂ per kWh). Kies er alleen een als SEM de verkeerde vond."
+    "config_help_grid_co2_entity": "Gevonden via de eenheid (g of kg CO₂ per kWh). Kies er alleen een als SEM de verkeerde vond.",
+    "config_outdoor_temperature_entity": "Buitentemperatuur",
+    "config_help_outdoor_temperature_entity": "Gevonden aan de naam, anders je weer-entiteit. Kies er alleen een als SEM de verkeerde koos."
   },
   "no": {
     "% of limit": "% av grense",
@@ -18396,6 +18436,7 @@
     "hint_msg_grid_rise": "Nettforbruket steg til {kwh} kWh (normalt {usual}) med samme sol.",
     "hint_msg_cheap_now": "Strømmen er billig nå. {cars}: tilkoblet og lader ikke.",
     "hint_msg_weekly_summary": "Denne uken: {solar} kWh sol · {self_use} % egenforbruk · {grid} kWh fra nettet · {ev} kWh i bilen · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Solstrømmen din unngikk {co2} kg CO₂ denne uken.",
     "hints": "Tips",
     "weekly": "Ukemelding",
     "all": "Alle tips",
@@ -18407,6 +18448,7 @@
     "sessions_col_session": "Økt",
     "sessions_col_solar": "Sol",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "sol",
     "sessions_csv": "CSV",
     "sessions_none": "Ingen økter denne måneden",
@@ -18477,7 +18519,9 @@
     "operator_limit_banner": "Nettselskap: grense {kw} kW siden {time} — sol i tillegg er tillatt",
     "locked_by_grid_operator": "Låst av nettselskapet",
     "config_grid_co2_entity": "Nettets CO₂-sensor",
-    "config_help_grid_co2_entity": "Finnes via enheten (g eller kg CO₂ per kWh). Velg én bare hvis SEM fant feil."
+    "config_help_grid_co2_entity": "Finnes via enheten (g eller kg CO₂ per kWh). Velg én bare hvis SEM fant feil.",
+    "config_outdoor_temperature_entity": "Utetemperatur",
+    "config_help_outdoor_temperature_entity": "Finnes ut fra navnet, ellers vær-entiteten din. Velg bare hvis SEM valgte feil."
   },
   "pl": {
     "% of limit": "% limitu",
@@ -20076,6 +20120,7 @@
     "hint_msg_grid_rise": "Pobór z sieci wzrósł do {kwh} kWh (zwykle {usual}) przy tym samym słońcu.",
     "hint_msg_cheap_now": "Prąd jest teraz tani. {cars}: podłączone i nie ładuje.",
     "hint_msg_weekly_summary": "W tym tygodniu: {solar} kWh słońca · {self_use} % zużycia własnego · {grid} kWh z sieci · {ev} kWh do auta · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Twoja energia słoneczna pozwoliła w tym tygodniu uniknąć {co2} kg CO₂.",
     "hints": "Wskazówki",
     "weekly": "Notka tygodniowa",
     "all": "Wszystkie wskazówki",
@@ -20087,6 +20132,7 @@
     "sessions_col_session": "Sesja",
     "sessions_col_solar": "Słońce",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "słońca",
     "sessions_csv": "CSV",
     "sessions_none": "Brak sesji w tym miesiącu",
@@ -20157,7 +20203,9 @@
     "operator_limit_banner": "Operator sieci: limit {kw} kW od {time} — słońce ponad to jest dozwolone",
     "locked_by_grid_operator": "Zablokowane przez operatora sieci",
     "config_grid_co2_entity": "Czujnik CO₂ sieci",
-    "config_help_grid_co2_entity": "Znajdowany po jednostce (g lub kg CO₂ na kWh). Wybierz go tylko, jeśli SEM znalazł zły."
+    "config_help_grid_co2_entity": "Znajdowany po jednostce (g lub kg CO₂ na kWh). Wybierz go tylko, jeśli SEM znalazł zły.",
+    "config_outdoor_temperature_entity": "Temperatura zewnętrzna",
+    "config_help_outdoor_temperature_entity": "Znajdowany po nazwie, w przeciwnym razie encja pogody. Wybierz tylko, jeśli SEM wybrał źle."
   },
   "pt": {
     "% of limit": "% do limite",
@@ -21756,6 +21804,7 @@
     "hint_msg_grid_rise": "O consumo da rede subiu para {kwh} kWh (normalmente {usual}) com o mesmo sol.",
     "hint_msg_cheap_now": "A energia está barata agora. {cars}: ligado e sem carregar.",
     "hint_msg_weekly_summary": "Esta semana: {solar} kWh solar · {self_use} % autoconsumo · {grid} kWh da rede · {ev} kWh para o carro · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "A sua energia solar evitou {co2} kg de CO₂ esta semana.",
     "hints": "Dicas",
     "weekly": "Nota semanal",
     "all": "Todas as dicas",
@@ -21767,6 +21816,7 @@
     "sessions_col_session": "Sessão",
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "solar",
     "sessions_csv": "CSV",
     "sessions_none": "Sem sessões este mês",
@@ -21837,7 +21887,9 @@
     "operator_limit_banner": "Operador da rede: limite {kw} kW desde {time} — solar adicional é permitido",
     "locked_by_grid_operator": "Bloqueado pelo operador da rede",
     "config_grid_co2_entity": "Sensor de CO₂ da rede",
-    "config_help_grid_co2_entity": "Encontrado pela unidade (g ou kg de CO₂ por kWh). Escolha um só se o SEM encontrou o errado."
+    "config_help_grid_co2_entity": "Encontrado pela unidade (g ou kg de CO₂ por kWh). Escolha um só se o SEM encontrou o errado.",
+    "config_outdoor_temperature_entity": "Temperatura exterior",
+    "config_help_outdoor_temperature_entity": "Encontrado pelo nome; senão, a sua entidade meteorológica. Escolha um só se o SEM errou."
   },
   "ro": {
     "% of limit": "% din limită",
@@ -23436,6 +23488,7 @@
     "hint_msg_grid_rise": "Consumul din rețea a crescut la {kwh} kWh (de obicei {usual}) cu același soare.",
     "hint_msg_cheap_now": "Energia e ieftină acum. {cars}: conectată și nu încarcă.",
     "hint_msg_weekly_summary": "Săptămâna aceasta: {solar} kWh solar · {self_use} % consum propriu · {grid} kWh din rețea · {ev} kWh în mașină · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Energia solară a evitat săptămâna aceasta {co2} kg de CO₂.",
     "hints": "Indicii",
     "weekly": "Notă săptămânală",
     "all": "Toate indiciile",
@@ -23447,6 +23500,7 @@
     "sessions_col_session": "Sesiune",
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "solar",
     "sessions_csv": "CSV",
     "sessions_none": "Nicio sesiune luna aceasta",
@@ -23517,7 +23571,9 @@
     "operator_limit_banner": "Operator de rețea: limită {kw} kW din {time} — solarul în plus este permis",
     "locked_by_grid_operator": "Blocat de operatorul de rețea",
     "config_grid_co2_entity": "Senzorul CO₂ al rețelei",
-    "config_help_grid_co2_entity": "Găsit după unitate (g sau kg CO₂ pe kWh). Alegeți unul doar dacă SEM a găsit unul greșit."
+    "config_help_grid_co2_entity": "Găsit după unitate (g sau kg CO₂ pe kWh). Alegeți unul doar dacă SEM a găsit unul greșit.",
+    "config_outdoor_temperature_entity": "Temperatura exterioară",
+    "config_help_outdoor_temperature_entity": "Găsit după nume, altfel entitatea meteo. Alegeți doar dacă SEM a ales greșit."
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -25116,6 +25172,7 @@
     "hint_msg_grid_rise": "Nätuttaget steg till {kwh} kWh (normalt {usual}) med samma sol.",
     "hint_msg_cheap_now": "Elen är billig nu. {cars}: inkopplad och laddar inte.",
     "hint_msg_weekly_summary": "Denna vecka: {solar} kWh sol · {self_use} % egenanvändning · {grid} kWh från nätet · {ev} kWh i bilen · {cost:.2f} {currency}.",
+    "hint_msg_weekly_co2": "Din solel undvek {co2} kg CO₂ den här veckan.",
     "hints": "Tips",
     "weekly": "Veckonotis",
     "all": "Alla tips",
@@ -25127,6 +25184,7 @@
     "sessions_col_session": "Session",
     "sessions_col_solar": "Sol",
     "sessions_col_min": "Min",
+    "sessions_col_co2": "CO₂ kg",
     "sessions_solar_word": "sol",
     "sessions_csv": "CSV",
     "sessions_none": "Inga sessioner denna månad",
@@ -25197,7 +25255,9 @@
     "operator_limit_banner": "Nätbolag: gräns {kw} kW sedan {time} — sol utöver är tillåten",
     "locked_by_grid_operator": "Låst av nätbolaget",
     "config_grid_co2_entity": "Nätets CO₂-sensor",
-    "config_help_grid_co2_entity": "Hittas via enheten (g eller kg CO₂ per kWh). Välj en bara om SEM hittade fel."
+    "config_help_grid_co2_entity": "Hittas via enheten (g eller kg CO₂ per kWh). Välj en bara om SEM hittade fel.",
+    "config_outdoor_temperature_entity": "Utomhustemperatur",
+    "config_help_outdoor_temperature_entity": "Hittas via namnet, annars din väderentitet. Välj bara om SEM valde fel."
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -26796,6 +26856,7 @@
     "hint_msg_grid_rise": "电网用电升至 {kwh} kWh（平常 {usual}），日照相同。",
     "hint_msg_cheap_now": "现在电价便宜。{cars}：已插上但未充电。",
     "hint_msg_weekly_summary": "本周：光伏 {solar} kWh · 自用 {self_use} % · 电网 {grid} kWh · 充入车辆 {ev} kWh · {cost:.2f} {currency}。",
+    "hint_msg_weekly_co2": "本周您的太阳能避免了 {co2} 公斤 CO₂ 排放。",
     "hints": "提示",
     "weekly": "每周摘要",
     "all": "全部提示",
@@ -26807,6 +26868,7 @@
     "sessions_col_session": "充电",
     "sessions_col_solar": "光伏",
     "sessions_col_min": "分钟",
+    "sessions_col_co2": "CO₂ 公斤",
     "sessions_solar_word": "光伏",
     "sessions_csv": "CSV",
     "sessions_none": "本月无充电记录",
@@ -26877,6 +26939,8 @@
     "operator_limit_banner": "电网运营商：自 {time} 起限值 {kw} kW — 额外的太阳能不受限制",
     "locked_by_grid_operator": "被电网运营商锁定",
     "config_grid_co2_entity": "电网 CO₂ 传感器",
-    "config_help_grid_co2_entity": "按单位查找（g 或 kg CO₂/kWh）。仅在 SEM 找错时才手动选择。"
+    "config_help_grid_co2_entity": "按单位查找（g 或 kg CO₂/kWh）。仅在 SEM 找错时才手动选择。",
+    "config_outdoor_temperature_entity": "室外温度",
+    "config_help_outdoor_temperature_entity": "按名称查找，否则使用您的天气实体。只有 SEM 选错时才需要选择。"
   }
 }

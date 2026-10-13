@@ -3276,6 +3276,14 @@ class EnergyCalculator:
         self._grid_co2_kg = kg_per_kwh
         self._co2_live = bool(live)
 
+    def grid_co2_kg_now(self) -> float:
+        """(#1088) The kg/kWh a grid kWh counts at right now: the live
+        intensity when the soak flag lets it count and a reading exists,
+        else the fixed Swiss average — one rule for every CO2 number."""
+        if self._co2_live and self._grid_co2_kg is not None:
+            return float(self._grid_co2_kg)
+        return GRID_CO2_KG_PER_KWH
+
     def _co2_correction(self, period: str, key) -> float:
         """(#1088) The accumulated live-intensity correction, unrounded."""
         c = CO2_CORRECTION_CATEGORY

@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 # [Unreleased]
 
 - ✨ **SEM finds your grid CO₂ sensor by its unit** (#1088). CO₂ avoided can use its live value, not a fixed average. Off by default.
+- ✨ **One outdoor temperature for all of SEM** (#1082). Found by its name or your weather entity; car taper, snow and battery nights use it.
+- ✨ **The home forecast learns how cold days raise your load** (#1082). The plans use it only when switched on. Off by default.
+- ✨ **Each car session shows its CO₂** (#1088), in the session list and the CSV. The weekly summary adds what your solar avoided.
 - 🐛 **SEM no longer guesses its own sensor as your grid meter** (#1103) — thanks @LightBridge16. The Grid power pick now works with an Energy Dashboard.
 
 # [2.2.0-beta.17] — 13.10.2026

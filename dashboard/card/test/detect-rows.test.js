@@ -65,3 +65,12 @@ test('(#1088) the CO2 picker shows sensors by unit, whatever their integration',
     assert.equal(isCo2IntensityEntity(st('%')), false);            // fossil fuel share
     assert.equal(isCo2IntensityEntity({}), false);
 });
+
+test('(#1082) the outdoor temperature picker shows thermometers and real weather entities', async () => {
+    const { isOutdoorTemperatureCandidate: f } = await import('../src/util/detect-rows.js');
+    assert.equal(f({ entity_id: 'sensor.wetterstation_temp', attributes: { device_class: 'temperature' } }), true);
+    assert.equal(f({ entity_id: 'sensor.t', attributes: { unit_of_measurement: '°F' } }), true);
+    assert.equal(f({ entity_id: 'weather.erlen', attributes: {} }), true);
+    assert.equal(f({ entity_id: 'weather.forecast_home', attributes: {} }), false);
+    assert.equal(f({ entity_id: 'sensor.power', attributes: { unit_of_measurement: 'W' } }), false);
+});
