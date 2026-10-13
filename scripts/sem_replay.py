@@ -103,7 +103,7 @@ def main() -> int:
         base_res = inv.check(bb, None) if bb is not None else None
         block = inv.blocking(res, b.tags, base_res)
 
-        def _mark(k, r):
+        def _mark(k, r, base_res=base_res, block=block):
             if r.ok:
                 fixed = base_res is not None and k in base_res and not base_res[k].ok \
                     and r.kind == "exact"
