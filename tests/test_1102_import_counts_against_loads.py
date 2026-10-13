@@ -12,11 +12,12 @@ With 2 kW imported and the 3 kW boiler on, the pool read 3 kW instead of
 1 kW; after the boiler's own debit the walk sat at −50 W, inside the −100 W
 LIFO band, for as long as the sun stayed above 3 kW. Nothing stopped it.
 
-The fix gives the pool the import back. The battery charge is the first
-thing an import can be explained by — #938 already takes the import off the
-reclaim (``charge − import``) — so only the import the charge does not
-explain comes off the export side. Together the two addends are the full
-balance: ``draw + export + charge − import``, still bounded by the sun.
+The fix gives the pool the import back — an import that lasted two minutes
+(a charger's power sensor can trail the meter at a start), less what the
+chargers' draw explains (a charger leaves a running load above it its sun,
+#885), less a 100 W deadband (a zero-export inverter's own setpoint). The
+#938 reclaim takes off only the import this side could not, so the two
+addends together are ``draw + export + charge − import``, running or not.
 
 A second count lived in the same walk: a running variable load (a watt
 setpoint, a current knob) was offered ``remaining + its own draw``, but the
@@ -35,11 +36,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from custom_components.solar_energy_management.coordinator.energy_reclaim import (
+    LOADS_IMPORT_SUSTAIN_S,
     reclaimable_battery_w,
+    sustained_import,
 )
 from custom_components.solar_energy_management.coordinator.surplus_controller import (
     IMPORT_DEADBAND_W,
     SurplusController,
+    import_absorbed_by_loads_w,
     solar_bounded_reclaim,
     solar_bounded_surplus,
 )
@@ -104,14 +108,40 @@ class TestThePoolKeepsTheImport:
             grid_import_w=3000.0, ev_draw_w=1000.0,
         ) == pytest.approx(BOILER_W - 2000.0 + IMPORT_DEADBAND_W)
 
-    def test_a_grid_charging_battery_does_not_excuse_the_import(self):
+    @staticmethod
+    def _addends(*, solar, draw, charge, imp, export=0.0):
+        surplus = solar_bounded_surplus(
+            grid_export_w=export, active_draw_w=draw, solar_w=solar,
+            grid_import_w=imp)
+        absorbed = import_absorbed_by_loads_w(
+            grid_export_w=export, active_draw_w=draw, grid_import_w=imp)
+        reclaim = solar_bounded_reclaim(
+            reclaimable_battery_w(
+                battery_charge_power=charge, soc=60.0, priority_soc=30.0,
+                battery_commanded=False, grid_import_w=imp,
+                absorbed_w=absorbed),
+            surplus_w=surplus, solar_w=solar)
+        return surplus, reclaim
+
+    def test_a_load_below_a_grid_charging_battery_pays_the_import(self):
         # An inverter's own daytime grid charge (5 kW): sun 4 kW, house
         # 0.5 kW, boiler 3 kW → 4.5 kW imported. The pack does not yield,
-        # so the boiler is on the grid: the pool must not carry it.
-        assert solar_bounded_surplus(
-            grid_export_w=0.0, active_draw_w=BOILER_W, solar_w=4000.0,
-            grid_import_w=4500.0,
-        ) == 0.0
+        # so a boiler BELOW the battery (export side only) is on the grid.
+        surplus, _ = self._addends(solar=4000.0, draw=BOILER_W,
+                                   charge=5000.0, imp=4500.0)
+        assert surplus == 0.0
+
+    def test_a_load_above_a_charging_pack_pays_the_import_once(self):
+        # A single-phase hybrid on a summed meter: sun 4.3 kW, house 1.5 kW,
+        # and the meter shows 300 W of import while the pack charges from
+        # the sun. A 1 kW pump above the battery takes its watts from the
+        # pack's charge. The pool must read the same with the pump off and
+        # on — paying the 300 W twice once running made it cycle.
+        imp = 300.0
+        off_s, off_r = self._addends(solar=4300.0, draw=0.0, charge=3100.0, imp=imp)
+        on_s, on_r = self._addends(solar=4300.0, draw=1000.0, charge=2100.0, imp=imp)
+        assert on_s + on_r == pytest.approx(off_s + off_r)
+        assert off_s + off_r == pytest.approx(3100.0 - imp)
 
     def test_meter_never_read_takes_nothing_off(self):
         # None = no readable meter yet this lifetime: the running loads keep
@@ -133,11 +163,10 @@ class TestThePoolKeepsTheImport:
 
     def test_the_two_addends_are_the_whole_balance(self):
         """Over a grid of meter / pack / load states: export surplus plus
-        the reclaim is ``draw + export + charge − import`` (past the
-        deadband), bounded by 0 and the sun — exactly, whenever the pack
-        charges from the sun (no import beside it); never more when it
-        charges from the grid. Before the fix the sum lost the import
-        whenever no charge stood beside it."""
+        the reclaim is ``draw + export + charge − import``, bounded by 0 and
+        the sun (the 100 W deadband excused only where no charge stands
+        beside the import). Before the fix the sum lost the import whenever
+        no charge stood beside it."""
         exact = overlap = 0
         for solar in (0.0, 800.0, 5200.0):
             for draw in (0.0, 1000.0, 3000.0):
@@ -151,12 +180,19 @@ class TestThePoolKeepsTheImport:
                             reclaimable_battery_w(
                                 battery_charge_power=charge, soc=60.0,
                                 priority_soc=30.0, battery_commanded=False,
-                                grid_import_w=imp),
+                                grid_import_w=imp,
+                                absorbed_w=import_absorbed_by_loads_w(
+                                    grid_export_w=export, active_draw_w=draw,
+                                    grid_import_w=imp)),
                             surplus_w=s, solar_w=solar)
                         counted = max(0.0, imp - IMPORT_DEADBAND_W)
                         want = min(solar, max(0.0, draw + export + charge - counted))
                         if charge > 0.0 and imp > 0.0:
-                            assert s + r <= want + 1e-6, (solar, draw, charge, grid)
+                            # the reclaim keeps #938's raw import: the
+                            # deadband is not excused on the pack's side
+                            raw = min(solar, max(0.0, draw + export + charge - imp))
+                            assert s + r == pytest.approx(raw), (
+                                solar, draw, charge, grid)
                             overlap += 1
                         else:
                             assert s + r == pytest.approx(want), (
@@ -221,12 +257,16 @@ async def _afternoon(sc, *, house_w, cycles, with_import, solar_w=SOLAR_W):
     """No battery. Each cycle the meter reads what the house, the loads and
     the sun leave; the pool is built the way the coordinator builds it."""
     imports = []
-    for _ in range(cycles):
+    window = []
+    for i in range(cycles):
         draw = sc.active_surplus_draw_w()
         grid = solar_w - house_w - draw
         export, imp = max(0.0, grid), max(0.0, -grid)
         imports.append(imp)
-        kw = {"grid_import_w": imp} if with_import else {}
+        # 10 s cycles; the coordinator hands in the import that LASTED
+        held = sustained_import(window, i * 10.0, grid_import_w=imp,
+                                grid_import_known=True)
+        kw = {"grid_import_w": held} if with_import else {}
         pool = solar_bounded_surplus(
             grid_export_w=export, active_draw_w=draw, solar_w=solar_w, **kw)
         await sc.update(pool, price_level="normal", grid_import_w=imp)
@@ -240,7 +280,7 @@ class TestTheBoilerStopsWhenTheHouseImports:
         sc = SurplusController(MagicMock())
         boiler = _boiler()
         sc.register_device(boiler)
-        await _afternoon(sc, house_w=4200.0, cycles=12, with_import=True)
+        await _afternoon(sc, house_w=4200.0, cycles=30, with_import=True)
         boiler.deactivate.assert_awaited()
 
     async def test_without_the_import_it_never_stops(self):
@@ -249,7 +289,7 @@ class TestTheBoilerStopsWhenTheHouseImports:
         sc = SurplusController(MagicMock())
         boiler = _boiler()
         sc.register_device(boiler)
-        imports = await _afternoon(sc, house_w=4200.0, cycles=12, with_import=False)
+        imports = await _afternoon(sc, house_w=4200.0, cycles=30, with_import=False)
         boiler.deactivate.assert_not_awaited()
         assert min(imports) == pytest.approx(2000.0)
 
@@ -266,7 +306,7 @@ class TestTheBoilerStopsWhenTheHouseImports:
         sc = SurplusController(MagicMock())
         boiler = _boiler()
         sc.register_device(boiler)
-        await _afternoon(sc, house_w=4200.0, cycles=12, with_import=True)
+        await _afternoon(sc, house_w=4200.0, cycles=30, with_import=True)
         assert boiler.is_active is False
         await _afternoon(sc, house_w=4200.0, cycles=12, with_import=True)
         boiler.activate.assert_not_awaited()
@@ -431,6 +471,7 @@ class TestAVariableLoadFollowsTheSun:
         heater = PowerSetpointDevice(
             hass=hass, device_id="heater", name="Heater",
             rated_power=9000.0, min_power_threshold=500.0, entity_id=ENTITY)
+        heater.control_mode = DeviceControlMode.SURPLUS
         heater.adopt_if_running()
         assert heater.is_active
         sc = SurplusController(hass)
@@ -441,6 +482,20 @@ class TestAVariableLoadFollowsTheSun:
         assert hass.value == pytest.approx(3150.0, abs=60.0)
         assert heater.is_active
         assert max(imports[-10:]) == 0.0
+
+    async def test_a_peak_only_setpoint_is_left_where_the_user_put_it(self):
+        # peak_only is the user's load: SEM sheds it on a peak, nothing
+        # more. The walk used to steer it — to its maximum, before this fix.
+        hass = _Hass(2000.0)
+        heater = PowerSetpointDevice(
+            hass=hass, device_id="heater", name="Heater",
+            rated_power=9000.0, min_power_threshold=500.0, entity_id=ENTITY)
+        assert heater.control_mode == DeviceControlMode.PEAK_ONLY
+        heater.adopt_if_running()
+        sc = SurplusController(hass)
+        sc.register_device(heater)
+        await _afternoon(sc, house_w=2000.0, cycles=20, with_import=True)
+        assert hass.value == pytest.approx(2000.0)
 
     def test_the_walk_offers_a_running_load_the_pool_once(self):
         # Source pin: the active branch hands ``adjust_power`` the remaining
@@ -507,22 +562,125 @@ class TestCoordinatorWiringGuard:
     back on the grid) and the chargers' draw (one that drops it stops a
     load ranked above a charger whenever the car imports)."""
 
-    def test_every_pool_call_carries_the_import(self):
-        tree = ast.parse(_COORD.read_text(encoding="utf-8"))
-        calls = [n for n in ast.walk(tree)
-                 if isinstance(n, ast.Call) and _callee(n) == "solar_bounded_surplus"]
+    def setup_method(self):
+        self.tree = ast.parse(_COORD.read_text(encoding="utf-8"))
+
+    def _calls(self, name):
+        return [n for n in ast.walk(self.tree)
+                if isinstance(n, ast.Call) and _callee(n) == name]
+
+    def _sources(self, value, scope):
+        if isinstance(value, ast.Call):
+            return [value]
+        assert isinstance(value, ast.Name), ast.unparse(value)
+        srcs = _bindings(value.id, scope)
+        assert srcs, f"{value.id} is never assigned"
+        return srcs
+
+    def _sustained(self, call, kw):
+        """``kw`` of ``call`` is a name bound only to ``sustained_import(…)``
+        of the live import, driven by the reader's dark flag."""
+        scope = _enclosing(self.tree, call)
+        val = _kw(call, kw)
+        assert val is not None, f"{_callee(call)}() called without {kw}"
+        for s in self._sources(val, scope):
+            assert isinstance(s, ast.Call) and _callee(s) == "sustained_import", (
+                f"{kw} must come from sustained_import(), got {ast.unparse(s)}")
+            live = _kw(s, "grid_import_w")
+            known = _kw(s, "grid_import_known")
+            assert live is not None and "grid_import_power" in ast.unparse(live)
+            assert known is not None
+            known_src = " ".join(ast.unparse(b) for b in (
+                self._sources(known, scope) if isinstance(known, ast.Name) else [known]))
+            assert "grid_power_unavailable" in known_src
+        return ast.unparse(val)
+
+    def test_every_pool_call_carries_the_sustained_import(self):
+        calls = self._calls("solar_bounded_surplus")
         assert calls, "solar_bounded_surplus() is no longer called from the coordinator"
         for c in calls:
-            scope = _enclosing(tree, c)
-            imp = _kw(c, "grid_import_w")
-            assert imp is not None, "solar_bounded_surplus() called without grid_import_w"
-            srcs = [imp] if isinstance(imp, ast.Call) else _bindings(
-                getattr(imp, "id", ""), scope)
-            assert srcs, f"grid_import_w={ast.unparse(imp)} is never assigned"
-            for s in srcs:
-                assert isinstance(s, ast.Call) and _callee(s) == "held_grid_import", (
-                    f"grid_import_w must come from held_grid_import(), got {ast.unparse(s)}")
+            self._sustained(c, "grid_import_w")
             ev = _kw(c, "ev_draw_w")
-            assert ev is not None and "ev_power" in ast.unparse(ev), (
+            scope = _enclosing(self.tree, c)
+            ev_src = " ".join(ast.unparse(b) for b in (
+                self._sources(ev, scope) if isinstance(ev, ast.Name) else [ev]))
+            assert ev is not None and "ev_power" in ev_src, (
                 "solar_bounded_surplus() must be handed the chargers' draw")
-            assert "grid_export_power" in ast.unparse(_kw(c, "grid_export_w"))
+
+    def test_the_reclaim_is_told_what_the_pool_already_took(self):
+        pools = self._calls("solar_bounded_surplus")
+        absorbed = self._calls("import_absorbed_by_loads_w")
+        assert absorbed, "import_absorbed_by_loads_w() is not called"
+        pool_imp = {self._sustained(c, "grid_import_w") for c in pools}
+        for c in absorbed:
+            assert self._sustained(c, "grid_import_w") in pool_imp, (
+                "the reclaim's share must be judged on the pool's own import")
+        for c in self._calls("reclaimable_battery_w"):
+            scope = _enclosing(self.tree, c)
+            val = _kw(c, "absorbed_w")
+            assert val is not None, "reclaimable_battery_w() called without absorbed_w"
+            for s in self._sources(val, scope):
+                assert isinstance(s, ast.Call) and _callee(s) == "import_absorbed_by_loads_w"
+
+
+# ── 5. the import that lasted ────────────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestOnlyAnImportThatLastedCounts:
+    def test_lowest_reading_of_the_window(self):
+        w = []
+        assert sustained_import(w, 0.0, grid_import_w=0.0, grid_import_known=True) == 0.0
+        assert sustained_import(w, 10.0, grid_import_w=8000.0, grid_import_known=True) == 0.0
+        assert sustained_import(w, 130.0, grid_import_w=8000.0, grid_import_known=True) == 8000.0
+
+    def test_a_dark_meter_is_no_evidence(self):
+        w = []
+        sustained_import(w, 0.0, grid_import_w=2000.0, grid_import_known=True)
+        assert sustained_import(w, 10.0, grid_import_w=0.0, grid_import_known=False) is None
+        assert len(w) == 1
+
+    def test_negative_reads_as_zero(self):
+        assert sustained_import([], 0.0, grid_import_w=-300.0, grid_import_known=True) == 0.0
+
+    def test_the_window_is_two_minutes(self):
+        assert LOADS_IMPORT_SUSTAIN_S == 120.0
+
+
+async def _car_start(sc, *, sensor_lag_cycles, sustained):
+    """Sun 6 kW, house 1 kW, the 3 kW boiler running above the charger.
+    At cycle 3 a car starts at 11 kW (Now); the charger's power sensor
+    reads 0 for ``sensor_lag_cycles`` cycles (10 s each), then 11 kW."""
+    window = []
+    for i in range(40):
+        car_w = 11000.0 if i >= 3 else 0.0
+        car_seen = car_w if i >= 3 + sensor_lag_cycles else 0.0
+        on_w = sc.active_surplus_draw_w()
+        grid = 6000.0 - 1000.0 - on_w - car_w
+        export, imp = max(0.0, grid), max(0.0, -grid)
+        held = (sustained_import(window, i * 10.0, grid_import_w=imp,
+                                 grid_import_known=True)
+                if sustained else imp)
+        pool = solar_bounded_surplus(
+            grid_export_w=export, active_draw_w=on_w, solar_w=6000.0,
+            grid_import_w=held, ev_draw_w=car_seen)
+        await sc.update(pool, price_level="normal", grid_import_w=imp)
+
+
+@pytest.mark.asyncio
+class TestACarStartDoesNotStopTheBoiler:
+    async def test_a_minute_of_sensor_lag_is_the_cars(self):
+        sc = SurplusController(MagicMock())
+        boiler = _boiler()
+        sc.register_device(boiler)
+        await _car_start(sc, sensor_lag_cycles=6, sustained=True)
+        boiler.deactivate.assert_not_awaited()
+
+    async def test_without_the_window_the_lag_stops_it(self):
+        # Non-vacuous: the raw import books the car's first minute to the
+        # house and the boiler goes off.
+        sc = SurplusController(MagicMock())
+        boiler = _boiler()
+        sc.register_device(boiler)
+        await _car_start(sc, sensor_lag_cycles=6, sustained=False)
+        boiler.deactivate.assert_awaited()

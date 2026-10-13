@@ -389,12 +389,15 @@ def solar_bounded_surplus(
       import on purpose (Victron ESS: +50 W by default), and the LIFO band
       leaves only 50 W past the export offset.
 
-    A battery charging while the meter imports is a GRID charge (a TOU window,
-    a command): it does not yield, so its import comes off here AND off the
-    reclaim (``reclaimable_battery_w``, #938) — loads yield to it, as they do
-    to a commanded charge. Without that overlap the two addends sum to the
-    whole balance: ``draw + export + charge − import``.
-    ``grid_import_w=None`` (meter not read once this lifetime) takes nothing
+    The import comes off here first; the reclaim (``reclaimable_battery_w``,
+    #938) takes off only what this side could not (``import_absorbed_by_loads_w``).
+    So a load BELOW the battery pays the whole import — a pack charging from
+    the grid does not yield to it — and the two addends together are the whole
+    balance, ``draw + export + charge − import``, whether a load runs or not.
+    The coordinator hands in a SUSTAINED import (``sustained_import``: the
+    lowest reading of the last two minutes, ``None`` on a dark meter): a
+    charger's power sensor can trail the meter by a minute at a start or a
+    ramp, and that import is the car's. ``grid_import_w=None`` takes nothing
     off: the running loads hold, and nothing new can start on a dark meter.
 
     The result is then clamped to ``[0, solar]``: **you cannot have more SOLAR
@@ -405,15 +408,40 @@ def solar_bounded_surplus(
     hit when a load ran off the battery at night). ``solar_w=None`` (sensor
     unavailable) skips the cap and falls back to the raw add-back.
     """
-    deficit = 0.0
-    if grid_import_w is not None:
-        deficit = max(0.0, float(grid_import_w)
-                      - max(0.0, float(ev_draw_w or 0.0))
-                      - IMPORT_DEADBAND_W)
+    deficit = loads_import_deficit_w(grid_import_w, ev_draw_w=ev_draw_w)
     surplus = float(grid_export_w) - deficit + float(active_draw_w)
     if solar_w is not None:
         surplus = min(surplus, float(solar_w))
     return max(0.0, surplus)
+
+
+def loads_import_deficit_w(
+    grid_import_w: "Optional[float]", *, ev_draw_w: float = 0.0,
+) -> float:
+    """(#1102) The import the loads' pool carries: the meter's import less
+    what the chargers' draw explains and less ``IMPORT_DEADBAND_W``.
+    ``None`` (no live reading) is no evidence — nothing."""
+    if grid_import_w is None:
+        return 0.0
+    return max(0.0, float(grid_import_w)
+               - max(0.0, float(ev_draw_w or 0.0)) - IMPORT_DEADBAND_W)
+
+
+def import_absorbed_by_loads_w(
+    *,
+    grid_export_w: float,
+    active_draw_w: float,
+    grid_import_w: "Optional[float]",
+    ev_draw_w: float = 0.0,
+) -> float:
+    """(#1102) How much of the import the loads' pool has already taken off
+    — at most down to 0, so at most their own credited draw. The reclaim
+    (#938) takes off only the rest. Without this a load above a charging
+    pack paid the same import twice once it ran (pool AND reclaim) but once
+    at its start, and cycled on a steady import (a single-phase hybrid on a
+    summed meter, a Victron setpoint above 100 W)."""
+    deficit = loads_import_deficit_w(grid_import_w, ev_draw_w=ev_draw_w)
+    return min(deficit, max(0.0, float(grid_export_w) + float(active_draw_w)))
 
 
 def solar_bounded_reclaim(
@@ -1962,7 +1990,12 @@ class SurplusController:
                 # dates from the export-only pool of v1.0 and counted the
                 # draw twice — a watt setpoint ramped to its maximum on the
                 # grid. On/off loads ignore the figure and are unchanged.
-                consumed = await device.adjust_power(remaining_surplus)
+                if device.control_mode == DeviceControlMode.SURPLUS:
+                    consumed = await device.adjust_power(remaining_surplus)
+                else:
+                    # (#1102) peak_only is the user's: SEM only sheds it
+                    # (the desired-state twin leaves it alone too).
+                    consumed = float(device.get_current_consumption() or 0.0)
                 # (#688) Debit the FULL draw, not just its change. The pool was
                 # credited with every active device's draw (the feedback-free
                 # add-back), so leaving the draw in after walking past the

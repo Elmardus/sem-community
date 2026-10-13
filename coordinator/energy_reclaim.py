@@ -58,6 +58,7 @@ def reclaimable_battery_w(
     priority_soc: float,
     battery_commanded: bool,
     grid_import_w: Optional[float] = 0.0,
+    absorbed_w: float = 0.0,
 ) -> float:
     """Watts of SOLAR currently charging the battery that a higher-priority
     load may take instead.
@@ -96,7 +97,41 @@ def reclaimable_battery_w(
     if grid_import_w is None:
         return 0.0
     charge = max(0.0, float(battery_charge_power))
-    return max(0.0, charge - max(0.0, float(grid_import_w)))
+    # (#1102) ``absorbed_w`` — import the loads' export-side pool already
+    # took off (``import_absorbed_by_loads_w``); it is not taken twice.
+    unpaid = max(0.0, float(grid_import_w) - max(0.0, float(absorbed_w or 0.0)))
+    return max(0.0, charge - unpaid)
+
+
+#: (#1102) How long an import must last before the loads' pool carries it.
+#: A charger's power sensor can trail the meter by a minute at a start or a
+#: ramp (KEBA, cloud boxes) — that import is the car's, not the house's.
+LOADS_IMPORT_SUSTAIN_S: float = 120.0
+
+
+def sustained_import(
+    window: list,
+    now_s: float,
+    *,
+    grid_import_w: float,
+    grid_import_known: bool,
+    hold_s: float = LOADS_IMPORT_SUSTAIN_S,
+) -> Optional[float]:
+    """(#1102) The import the loads' pool carries: the LOWEST reading of the
+    last ``hold_s`` seconds, so only an import that lasted counts. ``window``
+    is the caller's list of ``(seconds, watts)``, kept here.
+
+    A dark meter is ``None`` — no evidence, and unlike the reclaim's
+    ``held_grid_import`` this figure STOPS loads, so a held value would act
+    on a blink (#934: a blink holds, it does not act). Dark cycles add
+    nothing to the window.
+    """
+    if not grid_import_known:
+        return None
+    window.append((float(now_s), max(0.0, float(grid_import_w or 0.0))))
+    while window and float(now_s) - window[0][0] > hold_s:
+        window.pop(0)
+    return min(w for _, w in window)
 
 
 def held_grid_import(
