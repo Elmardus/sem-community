@@ -1409,8 +1409,12 @@ class SensorReader:
         return {
             "grid_detected": self._grid_sign_detected,
             "grid_inverted": self._grid_sign_inverted,
-            # (#1103) which source the lock is about — see restore
-            "grid_source": self._grid_source_key,
+            # (#1103) which source the lock is about — see restore. Before
+            # this run's first source is known, keep the one restored.
+            "grid_source": (self._grid_source_key
+                            if self._grid_source_key is not None
+                            or self._restored_grid_source is _UNSET
+                            else self._restored_grid_source),
             "battery_detected": dict(self._battery_sign_detected),
             "battery_inverted": dict(self._battery_sign_inverted),
         }
@@ -1450,6 +1454,18 @@ class SensorReader:
                         "negating" if bi[bid] else "no correction",
                     )
 
+    def _manual_grid_pair(self):
+        """(#1103) The manual import/export pair, minus SEM's own sensors.
+        If either half is SEM's own, the pair is no pair: the other half
+        alone would read as a meter that only exports (review M1 — the old
+        guess Repair's own pair turned Envoy solar into grid export)."""
+        raw_i = self._raw_config.get("grid_import_power_entity")
+        raw_e = self._raw_config.get("grid_export_power_entity")
+        imp, exp = self._not_own_pick(raw_i), self._not_own_pick(raw_e)
+        if (raw_i and not imp) or (raw_e and not exp):
+            return None, None
+        return imp, exp
+
     def _not_own_pick(self, entity_id):
         """(#1103) A grid pick that is one of SEM's own sensors is no pick.
         ``sensor.sem_grid_power`` is worked out from the grid meter; read as
@@ -1480,6 +1496,21 @@ class SensorReader:
             return          # nothing to check, or nothing read yet
         self._restored_grid_source = _UNSET
         if recorded == self._grid_source_key:
+            return
+        kind = self._grid_source_key.split(":", 1)[0]
+        if kind not in ("combined", "sum"):
+            # A pair (manual, dashboard pair, discovered) has its sign BY
+            # DECLARATION: export minus import, and its read path sets the
+            # lock itself. Unlocking it would let the brand seed negate a
+            # pair (review N1). Only an inversion carried over from another
+            # source is wrong here — a pair is never negated.
+            if self._grid_sign_inverted:
+                _LOGGER.info(
+                    "grid sign: the saved lock (%s) negated the grid; %s is "
+                    "a pair and is not negated (#1103)",
+                    recorded, self._grid_source_key)
+            self._grid_sign_inverted = False
+            self._brand_seed_done = True
             return
         _LOGGER.info(
             "grid sign: the saved lock was learned on %s, the grid is now "
@@ -2298,10 +2329,7 @@ class SensorReader:
         #    read_power() auto-detects and corrects the sign after calculate_derived()
         # 2. Split sensors (Growatt, DSMR/P1): separate import + export power sensors
         #    Both always positive — SEM calculates: grid_power = export - import
-        manual_import = self._not_own_pick(
-            self._raw_config.get("grid_import_power_entity"))
-        manual_export = self._not_own_pick(
-            self._raw_config.get("grid_export_power_entity"))
+        manual_import, manual_export = self._manual_grid_pair()
         # (#1103) The Config card's "Grid power" pick: one signed sensor,
         # its sign found the same way as a dashboard one. It was read on the
         # legacy path only, so on a home WITH an Energy Dashboard the pick
@@ -4197,10 +4225,7 @@ class SensorReader:
         # both sides positive, and the convention is fixed BY DECLARATION so
         # no sign detection is needed (the solar voter computes the same
         # sign and therefore never flips it).
-        manual_import = self._not_own_pick(
-            self._raw_config.get("grid_import_power_entity"))
-        manual_export = self._not_own_pick(
-            self._raw_config.get("grid_export_power_entity"))
+        manual_import, manual_export = self._manual_grid_pair()
         grid_override = self._not_own_pick(self.config.grid_power_sensor)
         if manual_import and manual_export:
             import_w = self._read_sensor(manual_import, "grid_import")
