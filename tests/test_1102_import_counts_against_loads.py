@@ -36,6 +36,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from custom_components.solar_energy_management.coordinator.energy_reclaim import (
+    CAR_START_HOLD_S,
     LOADS_IMPORT_SUSTAIN_S,
     car_may_be_charging,
     reclaimable_battery_w,
@@ -717,7 +718,7 @@ async def _car_start(sc, *, sensor_lag_cycles, sustained, signal="plug"):
     ``signal`` — what opens the window: ``"plug"`` is production
     (``car_may_be_charging``); ``"ev_charging"`` is the reader's charging
     flag, which #739 holds False until the power reads above 500 W."""
-    window = {}
+    window, starts = {}, {}
     for i in range(50):
         car_w = 11000.0 if i >= 15 else 0.0
         car_seen = car_w if i >= 15 + sensor_lag_cycles else 0.0
@@ -725,8 +726,8 @@ async def _car_start(sc, *, sensor_lag_cycles, sustained, signal="plug"):
         grid = 6000.0 - 1000.0 - on_w - car_w
         export, imp = max(0.0, grid), max(0.0, -grid)
         if signal == "plug":
-            car = car_may_be_charging(plugged=i >= 15, commanded_amps=0,
-                                      ev_draw_w=car_seen)
+            car = car_may_be_charging(starts, i * 10.0, plugged=i >= 15,
+                                      commanded_amps=0, ev_draw_w=car_seen)
         else:
             car = car_seen > 500.0
         held = (sustained_import(window, i * 10.0, grid_import_w=imp,
@@ -780,32 +781,52 @@ class TestACarStartDoesNotStopTheBoiler:
 
 @pytest.mark.unit
 class TestWhatOpensTheWindow:
-    def test_a_plugged_car_or_seMs_offer_or_a_real_draw(self):
-        assert car_may_be_charging(plugged=True, commanded_amps=0, ev_draw_w=0.0)
-        assert car_may_be_charging(plugged=False, commanded_amps=6, ev_draw_w=0.0)
-        assert car_may_be_charging(plugged=False, commanded_amps=0, ev_draw_w=4200.0)
+    @staticmethod
+    def _at(st, t, *, plugged=False, amps=0, draw=0.0):
+        return car_may_be_charging(st, t, plugged=plugged,
+                                   commanded_amps=amps, ev_draw_w=draw)
+
+    def test_a_plug_in_opens_it_for_a_while_then_it_closes(self):
+        st = {}
+        assert not self._at(st, 0.0)
+        assert self._at(st, 10.0, plugged=True)                # plugged in
+        assert self._at(st, 10.0 + CAR_START_HOLD_S, plugged=True)
+        # still plugged, full, drawing nothing: the window closes
+        assert not self._at(st, 20.0 + CAR_START_HOLD_S, plugged=True)
+
+    def test_a_rising_offer_opens_it_a_steady_one_does_not_keep_it(self):
+        st = {}
+        assert self._at(st, 0.0, plugged=True, amps=6)
+        assert not self._at(st, 10.0 + CAR_START_HOLD_S, plugged=True, amps=6)
+        assert self._at(st, 20.0 + CAR_START_HOLD_S, plugged=True, amps=10)
+
+    def test_a_real_draw_keeps_it_open(self):
+        st = {}
+        self._at(st, 0.0, plugged=True, amps=16)
+        assert self._at(st, 3600.0, plugged=True, amps=16, draw=11000.0)
 
     def test_a_chargers_standby_is_not_a_car(self):
         # KEBA idles at 110-140 W (#739): that must not hold the window
         # open all day.
         for standby in (0.0, 90.0, 140.0, 500.0):
-            assert not car_may_be_charging(
-                plugged=False, commanded_amps=0, ev_draw_w=standby)
+            assert not self._at({}, 0.0, draw=standby)
 
 
-async def _square_wave(sc, *, standby_w=0.0, car_active=None):
+async def _square_wave(sc, *, standby_w=0.0, car_active=None,
+                       plugged=False, amps=0):
     """The reporter's 12:30–12:45 square wave: sun 5.3 kW, house 2.2 kW,
-    a 4 kW load 110 s on / 60 s off, no car. ``standby_w`` — an idle
-    charger's own draw. ``car_active`` forces the window (None = what
-    production decides)."""
-    window = {}
-    for i in range(60):
+    a 4 kW load 110 s on / 60 s off, no car charging. ``standby_w`` — an
+    idle charger's own draw; ``plugged`` / ``amps`` — a car left plugged in
+    (full), and what SEM offers it. ``car_active`` forces the window (None =
+    what production decides)."""
+    window, starts = {}, {}
+    for i in range(180):
         extra = 4000.0 if (i % 17) < 11 else 0.0
         on_w = sc.active_surplus_draw_w()
         grid = 5300.0 - 2200.0 - standby_w - extra - on_w
         export, imp = max(0.0, grid), max(0.0, -grid)
-        car = (car_may_be_charging(plugged=False, commanded_amps=0,
-                                   ev_draw_w=standby_w)
+        car = (car_may_be_charging(starts, i * 10.0, plugged=plugged,
+                                   commanded_amps=amps, ev_draw_w=standby_w)
                if car_active is None else car_active)
         held = sustained_import(window, i * 10.0, grid_import_w=imp,
                                 grid_import_known=True, car_active=car)
@@ -832,6 +853,16 @@ class TestACyclingHouseLoadStillCounts:
             boiler = _boiler()
             sc.register_device(boiler)
             await _square_wave(sc, standby_w=standby)
+            boiler.deactivate.assert_awaited()
+
+    async def test_a_full_car_left_plugged_in_does_not_hide_it(self):
+        # Plugged in all afternoon, drawing 0 W; SEM may keep offering it
+        # 6 A. Neither is a start, so the window closes.
+        for amps in (0, 6):
+            sc = SurplusController(MagicMock())
+            boiler = _boiler()
+            sc.register_device(boiler)
+            await _square_wave(sc, plugged=True, amps=amps)
             boiler.deactivate.assert_awaited()
 
     async def test_an_open_window_would_hide_it(self):
@@ -951,3 +982,25 @@ class TestALoadWaitingToStopIsStillDebited:
         sc.register_device(pump)
         await _cycles(sc, solar_w=4000.0, house_w=500.0, n=6, price="normal")
         pump.activate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+class TestTheStopPassGivesBackWhatItTook:
+    async def test_a_battery_covered_load_below_is_not_stopped_for_one_above(self):
+        # Pool 1 kW + 500 W reclaim; battery at priority 5. The 3 kW boiler
+        # at priority 1 overdraws. A 2 kW heater at priority 6 runs on its
+        # battery share (Tier-1). Stopping the heater gives the pool nothing
+        # back; crediting its full draw ended the pass before the boiler.
+        sc = SurplusController(MagicMock())
+        boiler = _load("boiler", 3000.0, 1)
+        heater = _load("heater", 2000.0, 6)
+        heater.battery_assist_enabled = True
+        sc.register_device(boiler)
+        sc.register_device(heater)
+        await sc.update(1000.0, price_level="normal", reclaim_w=500.0,
+                        battery_priority=5, battery_soc=80.0,
+                        battery_buffer_soc=20.0, battery_reserve_soc=10.0,
+                        battery_assist_budget_w=2000.0)
+        assert heater._tier1_batt_w == pytest.approx(2000.0)
+        boiler.deactivate.assert_awaited()
+        heater.deactivate.assert_not_awaited()

@@ -444,6 +444,13 @@ def import_absorbed_by_loads_w(
     return min(deficit, max(0.0, float(grid_export_w) + float(active_draw_w)))
 
 
+def _walk_charge_w(device, consumption_w) -> float:
+    """(#1102) What the walk took from the pool for a running load: its
+    draw less the battery's Tier-1 share (``_tier1_batt_w``, #885)."""
+    return max(0.0, float(consumption_w or 0.0)
+               - max(0.0, float(getattr(device, "_tier1_batt_w", 0.0) or 0.0)))
+
+
 def reclaim_handed_back(remaining_w: float, reclaim_w: float) -> float:
     """(#576, #1102) The walk's pool after it crosses the battery's slot.
 
@@ -1953,8 +1960,13 @@ class SurplusController:
                         # take): its draw sits in the pool's add-back, so it
                         # is debited like any running load. Skipping it gave
                         # its watts to every load below it.
-                        remaining_surplus -= max(
+                        _held = max(
                             0.0, float(device.get_current_consumption() or 0.0))
+                        if (device._offpeak_forced or getattr(
+                                device, "_batt_overnight_forced", False)):
+                            # a paid run takes the sun that is left, no more
+                            _held = min(_held, max(0.0, remaining_surplus))
+                        remaining_surplus -= _held
                     allocations.append(SurplusAllocation(
                         device_id=device.device_id,
                         device_name=device.name,
@@ -2111,8 +2123,16 @@ class SurplusController:
                     continue
                 if device.is_active and device.can_deactivate():
                     consumption = device.get_current_consumption()
+                    # (#1102) Give back what the walk took from the pool. A
+                    # Tier-1 load's battery share was never taken, so it is
+                    # not given back; a load the battery covers in full
+                    # costs the sun nothing, and stopping it recovers
+                    # nothing — the pass moves on to the load that does.
+                    charged = _walk_charge_w(device, consumption)
+                    if charged <= 0.0:
+                        continue
                     if await _deactivate_owned(device):
-                        remaining_surplus += consumption
+                        remaining_surplus += charged
                         active_count -= 1
                         _LOGGER.info(
                             "Deactivated %s (priority %d) to recover %.0fW",
@@ -2123,7 +2143,8 @@ class SurplusController:
                             if dep.is_active and dep.can_deactivate():
                                 dep_consumption = dep.get_current_consumption()
                                 if await _deactivate_owned(dep):
-                                    remaining_surplus += dep_consumption
+                                    remaining_surplus += _walk_charge_w(
+                                        dep, dep_consumption)
                                     active_count -= 1
                                     _LOGGER.info(
                                         "Cascade deactivated %s (depends on %s)",

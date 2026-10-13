@@ -109,24 +109,48 @@ def reclaimable_battery_w(
 LOADS_IMPORT_SUSTAIN_S: float = 120.0
 
 
+#: (#1102) How long a car's start keeps the window open: the window itself
+#: plus the minute a charger's power sensor can trail the meter.
+CAR_START_HOLD_S: float = LOADS_IMPORT_SUSTAIN_S + 60.0
+
+
 def car_may_be_charging(
-    *, plugged: bool, commanded_amps: float, ev_draw_w: float,
+    state: dict,
+    now_s: float,
+    *,
+    plugged: bool,
+    commanded_amps: float,
+    ev_draw_w: float,
+    hold_s: float = CAR_START_HOLD_S,
 ) -> bool:
     """(#1102) May a car be drawing now, before its power sensor says so?
 
     This opens the two-minute window in ``sustained_import``, so it must be
-    true BEFORE the charger's power reading catches up. The reader's
-    ``ev_charging`` is not that signal: since #739 it is held False until the
-    car's power reads above ``EV_ACTIVE_CHARGE_FLOOR_W``, so it turns on with
-    the lagging sensor, not ahead of it. A plugged car and SEM's own offer
-    this cycle both come first. The power floor is the 500 W of #739: a
-    charger's standby (KEBA 110-140 W) is not a car charging, and would keep
-    the window open all day.
+    true BEFORE the charger's power reading catches up — and only around a
+    START. A plugged car that is full, or a 6 A offer a car does not take,
+    lasts all afternoon; read as "may charge" it held the window open, and
+    a house import that paused once every two minutes was never counted
+    (found in review: the reporter's own square wave, boiler never stopped).
+
+    So the window opens for ``hold_s`` after a start EVENT — a car plugged
+    in, or SEM's offer rising this cycle — and stays open while the car
+    really draws more than ``EV_ACTIVE_CHARGE_FLOOR_W`` (#739's 500 W: a
+    charger's standby, KEBA 110-140 W, is not a car charging). Not the
+    reader's ``ev_charging``: #739 holds it False until the power reads
+    500 W, so it lags with the sensor. A plugged car seen at start-up counts
+    as a plug-in. ``state`` is the caller's dict, kept here.
     """
     from .sensor_reader import EV_ACTIVE_CHARGE_FLOOR_W
-    return (bool(plugged)
-            or float(commanded_amps or 0) > 0
-            or float(ev_draw_w or 0.0) > EV_ACTIVE_CHARGE_FLOOR_W)
+    now = float(now_s)
+    amps = float(commanded_amps or 0)
+    if ((plugged and not state.get("plugged", False))
+            or amps > float(state.get("amps", 0.0))):
+        state["start"] = now
+    state["plugged"] = bool(plugged)
+    state["amps"] = amps
+    start = state.get("start")
+    return (float(ev_draw_w or 0.0) > EV_ACTIVE_CHARGE_FLOOR_W
+            or (start is not None and now - start <= hold_s))
 
 
 def sustained_import(

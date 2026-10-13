@@ -6304,17 +6304,19 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # explains: a charger leaves a running load above it its sun (#885).
             if not hasattr(self, "_loads_import_window"):
                 self._loads_import_window = {}
+                self._loads_car_start = {}
             # FLEET-READ: every charger's grid draw is its own, not the loads'
             ev_draw_w = float(getattr(power, "ev_power", 0.0) or 0.0)
             loads_import_w = sustained_import(
                 self._loads_import_window, _now_mono,
                 grid_import_w=float(getattr(power, "grid_import_power", 0.0) or 0.0),
                 grid_import_known=_grid_known,
-                # a plugged car or SEM's own offer this cycle — both come
+                # a car plugged in, or SEM's offer rising — both come
                 # before a lagging power sensor reads the car's draw. Not
                 # ``ev_charging``: #739 holds it False until that sensor
                 # reads 500 W, so it lags with it.
                 car_active=car_may_be_charging(
+                    self._loads_car_start, _now_mono,
                     # FLEET-READ: any plugged car may start and lag
                     plugged=bool(getattr(power, "ev_connected", False)),
                     commanded_amps=getattr(
