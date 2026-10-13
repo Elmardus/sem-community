@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 # [Unreleased]
 
 - 🐛 **SEM no longer guesses its own sensor as your grid meter** (#1103) — thanks @LightBridge16. The Grid power pick now works with an Energy Dashboard.
+- 🐛 **A "Solar only" load now stops when your house buys from the grid** (#1102) — thanks @lostcontrol. Before, SEM did not count the grid import.
 
 # [2.2.0-beta.17] — 13.10.2026
 
