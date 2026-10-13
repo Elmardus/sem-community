@@ -3263,6 +3263,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         if self._storage is None and self.config_entry:
             self._storage = SEMStorage(self.hass, self.config_entry.entry_id)
             await self._storage.async_load()
+            # (#1083) a restart makes that day's data less trustworthy for
+            # a replay; the day tagger reads this mark
+            self._storage.note_start(dt_util.now().date().isoformat())
             # Restore energy calculator state
             state = self._storage.export_energy_calculator_state()
             self._energy_calculator.restore_state(state)
