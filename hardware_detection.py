@@ -31,6 +31,7 @@ from .consts.devices import (
     REBOOT_DEVICE_CLASS, names_a_charge_pause, names_a_reboot)
 from .utils.select_option import pick_listed
 from .utils.switch_sense import charge_pause_twin, integration_name
+from .utils.own_entity import is_sem_entity  # (#1103)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1482,13 +1483,18 @@ def power_sensor_ids(hass) -> List[str]:
         registry = entity_registry.async_get(hass)
         for e in registry.entities.values():
             eid = str(e.entity_id)
+            # (#1103) SEM's own power sensors are SEM's results: picked as a
+            # source, SEM would read back what it worked out from it.
             if eid.startswith("sensor.") and not e.disabled_by \
-                    and _roles_dc(e) == "power":
+                    and _roles_dc(e) == "power" \
+                    and str(e.platform or "") != "solar_energy_management":
                 out.add(eid)
     except Exception:  # noqa: BLE001 — the registry half stands alone
         pass
     try:
         for st in hass.states.async_all("sensor"):
+            if is_sem_entity(hass, st.entity_id):
+                continue
             attrs = getattr(st, "attributes", None) or {}
             dc = attrs.get("device_class")
             unit = attrs.get("unit_of_measurement")
