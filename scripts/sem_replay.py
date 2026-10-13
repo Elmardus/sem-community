@@ -43,12 +43,24 @@ def layout(tree: Path, name: str) -> Path:
     return root
 
 
+#: per tree; a day takes ~0.2 s, so this is room for hundreds of days.
+#: The autopilot runs this before a merge — a hang must not hold it up.
+TREE_TIMEOUT_S = int(os.environ.get("SEM_REPLAY_TIMEOUT_S", "600"))
+
+
+class ReplayTimeout(Exception):
+    pass
+
+
 def run_tree(root: Path, days: list) -> dict:
     out = {}
-    proc = subprocess.run(
-        [PY, "-m", f"{PKG.replace('/', '.')}.tools.replay.run_tree", *map(str, days)],
-        cwd=root, env={**os.environ, "PYTHONPATH": str(root)},
-        capture_output=True, text=True, timeout=3600)
+    try:
+        proc = subprocess.run(
+            [PY, "-m", f"{PKG.replace('/', '.')}.tools.replay.run_tree", *map(str, days)],
+            cwd=root, env={**os.environ, "PYTHONPATH": str(root)},
+            capture_output=True, text=True, timeout=TREE_TIMEOUT_S)
+    except subprocess.TimeoutExpired as err:
+        raise ReplayTimeout(f"replay timed out after {TREE_TIMEOUT_S} s in {root}") from err
     if proc.returncode != 0:
         raise SystemExit(f"replay failed in {root}:\n{proc.stderr[-3000:]}")
     for line in proc.stdout.splitlines():
@@ -87,8 +99,17 @@ def main() -> int:
         print("sem-replay: no days in the corpus match — nothing proven", file=sys.stderr)
         return 2
 
-    branch = run_tree(layout(a.branch.resolve(), "branch"), days)
-    base = run_tree(layout(a.base.resolve(), "base"), days) if a.base else {}
+    try:
+        branch = run_tree(layout(a.branch.resolve(), "branch"), days)
+        base = run_tree(layout(a.base.resolve(), "base"), days) if a.base else {}
+    except ReplayTimeout as err:
+        # fail closed: a replay that did not finish proves nothing
+        print(f"REFUSED: {err}")
+        if a.report:
+            a.report.expanduser().write_text(json.dumps(
+                {"branch": str(a.branch), "base": str(a.base), "days": [],
+                 "refused": True, "error": str(err)}, indent=1))
+        return 1
 
     def _run(d):
         return DayRun(date=d["date"], tags=d["tags"], writes=d["writes"], notes=d["notes"],
