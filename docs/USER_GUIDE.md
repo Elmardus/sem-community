@@ -98,7 +98,7 @@ supported: open an issue with the list shown. Devices on shared transports
 (MQTT, Modbus) only appear here when they actually look like energy hardware —
 your Zigbee bridge is not a near-miss. The same report is in the
 diagnostics download (Settings → Devices & Services → SEM → ⋮ → Download
-diagnostics). Wrong detections are corrected in place with the pickers in the
+diagnostics). It also lists the units, short states and services SEM read from each charger. Your charger's own name shows as box_1, box_2 and so on, so you can attach the file to an issue. Wrong detections are corrected in place with the pickers in the
 charger and sensor-source sections — no reinstall. The full support matrix with
 an honest per-brand status is [docs/SUPPORTED_HARDWARE.md](SUPPORTED_HARDWARE.md).
 
