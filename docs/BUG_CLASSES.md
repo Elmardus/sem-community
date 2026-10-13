@@ -5825,7 +5825,16 @@ Refs #1076 #586 #704 #645.
 **Left for Guido:** the flag flips on after the PROD soak; a grey morning followed by a sunny afternoon must recover (watch that day shape).
 Refs #1068 #775 #598 #416.
 
-### 135. The crawler and setup answer the same question with two rules — GUARDED
+### 135. A word inside a word — a name read for meaning — GUARDED
+**Symptom:** rdehuyss's first install (2.2.0-beta.15, 11.10.2026): no car, yet setup showed an EV with `sensor.bedverwarming_device_power` — a bed-heating smart plug (#1051).
+**Root shape:** the Energy Dashboard's individual devices were scanned for the letters `ev`, `charger`, `wallbox` … anywhere in the entity id. "device" holds "ev". A name says what someone typed, not what a thing is.
+**Where it lives:** `ha_energy_reader.py::_extract_ev_from_devices` (**fixed**). Same report: a tip whose words held live numbers rewrote a sensor state every cycle (**fixed**, `analytics/energy_assistant.py`); a price slot's `all_in` was not a price key (**fixed**, `tariff/tariff_provider.py::SLOT_PRICE_KEYS`).
+**Closure:** an Energy Dashboard device is the EV only when the entity registry says its integration is one the crawler knows as a charger (`known_charger_domains`). No registry, no EV.
+**Guard:** `tests/test_1051_first_install.py` — his plug is not the EV; a KEBA device still is; names alone never are; a tip holds its words between rotations; >100 % export gives no tip; `all_in` is the slot price.
+**Sweep question:** where else does SEM read a substring of an entity id as a fact about what the entity is?
+Refs #1051 #829.
+
+### 136. The crawler and setup answer the same question with two rules — GUARDED
 **Symptom:** the #1092 lifecycle suite, 11.10.2026: the crawler offered myenergi and Ohme (a charge-mode select only) and a Zaptec without current rights (start/stop only); setup dropped all three ("missing power sensor or control method") and SEM ran nothing (#1095). A plain `number.<box>_charging_current` was not read as the current control (#1096). A service keyed by `device_id` was offered without the id, so the created charger called it for no box (#1097).
 **Root shape:** "what makes a charger" and "which box" were answered twice. Setup kept its own control list (a current service or a current entity) beside the crawler's (`_offer_missing`: a power reading and any way to act). The lexicon said the charger-only names (`amp`, `charge_rate`) count "for kind=charger and nowhere else", but the reader applied them on every device — so adding `charging_current` there would have read an inverter's battery limit as an EV control (#809's trap). The offer filled a box NAME field (`charger_name`) but not the registry id a `device_id` field wants. Kin of class 132 (one fact, two readers).
 **Where it lives:** `__init__.py` charger setup (**fixed**: asks `charger_is_complete`, the crawler's rule). `hardware_detection._current_number_role` (**fixed**: charger-only names count on a device the roster calls a charger or that carries a plug or charging reading; a charger's companion keeps them). `read_charger_roles` and `charger_from_near_miss` (**fixed**: a current service whose fields include `device_id` sets `ev_service_device_id`, the key the device already sends).
