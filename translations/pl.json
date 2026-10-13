@@ -1888,7 +1888,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM is checking two guessed grid meters",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Configuration**, section **Sensor sources**, and set **Grid power**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
+      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguracja**, and switch on **Zaawansowane** at the top. Then set **Moc sieci** in section **Źródła czujników**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
     },
     "battery_control_write_not_taken": {
       "title": "Zapis sterowania baterią nie został przyjęty: {entity_id}",
@@ -1908,7 +1908,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM could not find your grid power meters",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Configuration**, section **Sensor sources**, and set **Grid power**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
+      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguracja**, and switch on **Zaawansowane** at the top. Then set **Moc sieci** in section **Źródła czujników**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
     }
   },
   "selector": {

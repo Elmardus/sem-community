@@ -483,6 +483,9 @@ def _spec_from_registry(hass: HomeAssistant, registry=None) -> Dict[str, str]:
     for e in entries:
         if getattr(e, "disabled_by", None):
             continue
+        # (#1103) SEM's own number.sem_battery_capacity holds the SAVED size.
+        if getattr(e, "platform", None) == DOMAIN:
+            continue
         eid = str(e.entity_id)
         if not eid.startswith(("sensor.", "number.")):
             continue

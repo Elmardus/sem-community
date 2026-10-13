@@ -201,6 +201,34 @@ class TestTheGridPickIsRead:
         assert readings.grid_power == -1200.0
         assert reader._grid_source_key == "combined:sensor.solaredge_m1_ac_power"
 
+    def test_an_export_half_gives_way_to_the_pick_too(self):
+        # Review M2: the give-way rule checked the import half only, so an
+        # export-only half read "export minus 0" and hid every import.
+        states = _reporter_states(**{"sensor.p1_export": _state(0, device_class="power")})
+        reader, readings, _ri = self._read(states=states, extra_config={
+            "grid_power_sensor": "sensor.solaredge_m1_ac_power",
+            "grid_export_power_entity": "sensor.p1_export",
+        })
+        assert readings.grid_power == -1200.0
+        assert reader._grid_source_key == "combined:sensor.solaredge_m1_ac_power"
+
+    def test_sems_own_sensor_picked_by_hand_is_ignored(self, caplog):
+        # Review H1: the card's picker lists SEM's own power sensors. Read
+        # as the meter, sensor.sem_grid_power is SEM's last answer, for ever.
+        states = _reporter_states(**{"sensor.sem_grid_power": _state(1234, device_class="power")})
+        reader = _make_reader_with_states(
+            MagicMock(), states, _reporter_ed(),
+            {"grid_power_sensor": "sensor.sem_grid_power"})
+        reg = _registry({"sensor.sem_grid_power": DOMAIN,
+                         "sensor.sem_grid_import_power": DOMAIN})
+        with patch(f"{SR}.er.async_get", return_value=reg), patch(f"{SR}._ri"):
+            with caplog.at_level("WARNING"):
+                readings = reader._read_from_energy_dashboard()
+                reader._read_from_energy_dashboard()
+        assert readings.grid_power == 0.0
+        assert reader._grid_source_key != "combined:sensor.sem_grid_power"
+        assert caplog.text.count("sensor.sem_grid_power is one of SEM's own") == 1
+
     def test_without_a_pick_the_dashboard_home_is_unchanged(self):
         ed = _reporter_ed()
         ed.grid_import_power = "sensor.solaredge_m1_ac_power"
@@ -208,6 +236,65 @@ class TestTheGridPickIsRead:
         reader, readings, _ri = self._read(ed=ed)
         assert readings.grid_power == -1200.0
         assert reader._grid_source_key == "combined:sensor.solaredge_m1_ac_power"
+
+
+# ── 2b. a saved sign lock belongs to the source it was learned on ───────────
+
+@pytest.mark.unit
+class TestASavedLockKeepsItsSource:
+    """Review H2. Every pair path sets the grid lock, and the lock was saved
+    with no source. After the reload that applies a Grid power pick, the old
+    lock skipped every detector: a pick in HA convention read import as
+    export. The lock now carries its source, like the one-tap flip (#971)."""
+
+    def _reader(self, saved):
+        ed = _reporter_ed()
+        reader = _make_reader_with_states(
+            MagicMock(), _reporter_states(), ed,
+            {"grid_power_sensor": "sensor.solaredge_m1_ac_power"})
+        reader.restore_sign_state(saved)
+        return reader
+
+    def _read_power(self, reader):
+        with patch(f"{SR}.er.async_get", return_value=_registry(**_REPORTER_REG)), \
+                patch(f"{SR}._ri"):
+            return reader.read_power()
+
+    def test_the_lock_is_saved_with_its_source(self):
+        reader = self._reader(None)
+        self._read_power(reader)
+        assert reader.export_sign_state()["grid_source"] == \
+            "combined:sensor.solaredge_m1_ac_power"
+
+    def test_a_lock_from_another_source_is_dropped(self):
+        reader = self._reader({"grid_detected": True, "grid_inverted": False,
+                               "grid_source": "manual:sensor.a|sensor.b"})
+        assert reader._grid_sign_detected is True
+        self._read_power(reader)
+        assert reader._grid_sign_detected is False
+
+    def test_a_lock_from_the_same_source_is_kept(self):
+        reader = self._reader({"grid_detected": True, "grid_inverted": True,
+                               "grid_source": "combined:sensor.solaredge_m1_ac_power"})
+        power = self._read_power(reader)
+        assert reader._grid_sign_detected is True
+        assert power.grid_power == 1200.0          # the kept lock negates
+
+    def test_a_store_from_before_the_source_is_kept_as_it_was(self):
+        reader = self._reader({"grid_detected": True, "grid_inverted": True})
+        self._read_power(reader)
+        assert reader._grid_sign_detected is True
+
+    def test_the_brand_seed_reads_the_pick_through_read_power(self):
+        # The pick is a SolarEdge meter: the brand table says it reports
+        # import as positive, so SEM negates it from the first cycle.
+        reader = self._reader(None)
+        reg = _registry({"sensor.solaredge_m1_ac_power": "solaredge"},
+                        {"sensor.solaredge_m1_imported_kwh": "m1"})
+        with patch(f"{SR}.er.async_get", return_value=reg), patch(f"{SR}._ri"):
+            power = reader.read_power()
+        assert reader._grid_sign_detected is True
+        assert power.grid_power == 1200.0
 
 
 # ── 3. half a pair is not "being checked" ───────────────────────────────────
@@ -386,21 +473,28 @@ class TestEveryScanAsksWhoOwnsTheEntity:
 
 @pytest.mark.unit
 class TestTheRepairNamesARealPlace:
-    def _labels(self):
-        cards = json.loads((_ROOT / "dashboard" / "translations.json").read_text(
-            encoding="utf-8"))["en"]
-        return cards
-
+    @pytest.mark.parametrize("lang", sorted(
+        p.stem for p in (_ROOT / "translations").glob("*.json")))
     @pytest.mark.parametrize("key", ["split_grid_guessed", "split_grid_rejected"])
-    def test_the_way_out_is_on_the_config_card(self, key):
-        text = json.loads((_ROOT / "translations" / "en.json").read_text(
+    def test_the_way_out_names_what_that_card_shows(self, key, lang):
+        # The reporter's card is Dutch. A Repair naming "Sensor sources" on a
+        # card that says "Sensorbronnen" sends them hunting again — and both
+        # places are hidden until Advanced is on (review M1).
+        text = json.loads((_ROOT / "translations" / f"{lang}.json").read_text(
             encoding="utf-8"))["issues"][key]["description"]
         assert "Configure → Sensors" not in text   # no such page (#1103)
-        labels = self._labels()
-        for label_key in ("config_section_sensor_sources", "config_grid_power_sensor",
+        assert "→ Sensoren" not in text
+        cards = json.loads((_ROOT / "dashboard" / "translations.json").read_text(
+            encoding="utf-8"))
+        labels = {**cards["en"], **cards["zh" if lang == "zh-Hans" else lang]}
+        for label_key in ("Configuration", "config_advanced_label",
+                          "config_section_sensor_sources", "config_grid_power_sensor",
                           "config_section_tariff", "config_grid_import_entity",
                           "config_grid_export_entity"):
-            assert f"**{labels[label_key]}**" in text, label_key
+            want = labels.get(label_key) or label_key
+            assert f"**{want}**" in text, (lang, label_key)
+
+    def test_both_places_are_on_the_config_card(self):
         card = (_ROOT / "dashboard" / "card" / "src" / "cards"
                 / "sem-config-card.js").read_text(encoding="utf-8")
         body = card.split("_renderSensorSources(T) {", 1)[1].split("\n    }", 1)[0]

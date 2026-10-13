@@ -405,6 +405,10 @@ class SensorReader:
         #: (#971) Which branch produced this cycle's grid_power — the key a
         #: one-tap user flip is bound to. ``None`` until the first read.
         self._grid_source_key = None
+        #: (#1103) The source a restored grid lock was learned on; checked
+        #: once, on the first read. ``_UNSET``: nothing to check (no lock,
+        #: or a store from before the lock carried its source).
+        self._restored_grid_source = _UNSET
         self._flip_ignored_logged = False
         # #461: accumulated sign-of-correlation evidence. The old ±1 vote
         # locked after three *consecutive* instantaneous matches — and a
@@ -888,6 +892,7 @@ class SensorReader:
             readings = self._read_from_energy_dashboard()
         else:
             readings = self._read_from_legacy_config()
+        self._check_restored_grid_lock()
         # (#902) A value no battery can produce is a dark read, not a number.
         self._gate_battery_power(readings)
         # (#758) An unreadable battery power sensor reads as 0.0 W, which is
@@ -1404,6 +1409,8 @@ class SensorReader:
         return {
             "grid_detected": self._grid_sign_detected,
             "grid_inverted": self._grid_sign_inverted,
+            # (#1103) which source the lock is about — see restore
+            "grid_source": self._grid_source_key,
             "battery_detected": dict(self._battery_sign_detected),
             "battery_inverted": dict(self._battery_sign_inverted),
         }
@@ -1423,6 +1430,8 @@ class SensorReader:
         ):
             self._grid_sign_detected = True
             self._grid_sign_inverted = state["grid_inverted"]
+            if "grid_source" in state:
+                self._restored_grid_source = state["grid_source"]
             _LOGGER.info(
                 "Restored grid sign from storage: %s",
                 "negating (HA convention)" if self._grid_sign_inverted
@@ -1440,6 +1449,47 @@ class SensorReader:
                         bid,
                         "negating" if bi[bid] else "no correction",
                     )
+
+    def _not_own_pick(self, entity_id):
+        """(#1103) A grid pick that is one of SEM's own sensors is no pick.
+        ``sensor.sem_grid_power`` is worked out from the grid meter; read as
+        the meter, it would read SEM's last answer back for ever. The
+        pickers list SEM's sensors too, so this is said once and ignored."""
+        if not entity_id or not is_sem_entity(self.hass, entity_id):
+            return entity_id
+        said = getattr(self, "_own_pick_said", None)
+        if said is None:
+            said = self._own_pick_said = set()
+        if entity_id not in said:
+            said.add(entity_id)
+            _LOGGER.warning(
+                "%s is one of SEM's own sensors, so it cannot be the grid "
+                "meter — ignored. Pick the meter's own sensor. (#1103)",
+                entity_id)
+        return None
+
+    def _check_restored_grid_lock(self) -> None:
+        """(#1103) A restored grid sign lock is about ONE source. If the grid
+        is now read from another — the Grid power pick that the reload just
+        applied, a pair removed, a new dashboard sensor — the lock says
+        nothing about it, and kept, it skipped every detector: a pick in HA
+        convention read import as export. Drop it then, once, so the new
+        source is judged. Same binding as the one-tap flip (#971)."""
+        recorded = self._restored_grid_source
+        if recorded is _UNSET or self._grid_source_key is None:
+            return          # nothing to check, or nothing read yet
+        self._restored_grid_source = _UNSET
+        if recorded == self._grid_source_key:
+            return
+        _LOGGER.info(
+            "grid sign: the saved lock was learned on %s, the grid is now "
+            "read from %s — learning the sign again (#1103)",
+            recorded, self._grid_source_key)
+        self._grid_sign_detected = False
+        self._grid_sign_inverted = False
+        self._grid_sign_evidence = 0.0
+        self._grid_sign_total_mag = 0.0
+        self._brand_seed_done = False
 
     def reset_sign_state(self) -> None:
         """Forget all sign-detection locks and re-learn from scratch.
@@ -2248,18 +2298,31 @@ class SensorReader:
         #    read_power() auto-detects and corrects the sign after calculate_derived()
         # 2. Split sensors (Growatt, DSMR/P1): separate import + export power sensors
         #    Both always positive — SEM calculates: grid_power = export - import
-        manual_import = self._raw_config.get("grid_import_power_entity")
-        manual_export = self._raw_config.get("grid_export_power_entity")
+        manual_import = self._not_own_pick(
+            self._raw_config.get("grid_import_power_entity"))
+        manual_export = self._not_own_pick(
+            self._raw_config.get("grid_export_power_entity"))
         # (#1103) The Config card's "Grid power" pick: one signed sensor,
         # its sign found the same way as a dashboard one. It was read on the
         # legacy path only, so on a home WITH an Energy Dashboard the pick
         # changed nothing and the name guess ran on. It stands above all the
         # dashboard gives, as the card says; a whole manual pair stands
         # above it.
-        grid_override = self.config.grid_power_sensor
+        grid_override = self._not_own_pick(self.config.grid_power_sensor)
         combined = grid_override or ed.grid_import_power
+        if grid_override and not getattr(self, "_grid_override_said", False):
+            self._grid_override_said = True
+            replaced = ed.grid_import_power or (
+                f"{ed.grid_power_from} / {ed.grid_power_to}"
+                if ed.grid_power_from and ed.grid_power_to else None)
+            if replaced and replaced != grid_override:
+                _LOGGER.warning(
+                    "Grid power is read from %s (Configuration → Sensor "
+                    "sources), not from the Energy Dashboard's %s. Clear the "
+                    "pick to use the dashboard again. (#1103)",
+                    grid_override, replaced)
         guessing = False                # (#933) set by the discovery branch only
-        if (manual_import and not manual_export) and combined:
+        if bool(manual_import) != bool(manual_export) and combined:
             # (07.09 re-audit) HALF a manual pair, and a combined sensor
             # exists: prefer the combined one. Reading the import half alone
             # says "export − import" with export pinned at 0.0 — a house
@@ -2271,10 +2334,11 @@ class SensorReader:
             if not getattr(self, "_half_pair_ed_warned", False):
                 self._half_pair_ed_warned = True
                 _LOGGER.warning(
-                    "Only grid_import_power_entity is set (%s) with no export "
-                    "half — using the combined grid sensor %s instead, so "
-                    "export is measured rather than assumed 0",
-                    manual_import, combined)
+                    "Only one of grid_import_power_entity / "
+                    "grid_export_power_entity is set (%s / %s) — using the "
+                    "combined grid sensor %s instead, so both directions are "
+                    "measured rather than one assumed 0",
+                    manual_import, manual_export, combined)
             readings.grid_power = self._read_sensor(combined, "grid")
             self._grid_source_key = f"combined:{combined}"
         elif manual_import or manual_export:
@@ -3975,11 +4039,8 @@ class SensorReader:
             if disc.get("guess_reported") != pair:
                 disc["guess_reported"] = pair
                 if half:
-                    _LOGGER.warning(
-                        "Split-grid: only an EXPORT sensor matched by name "
-                        "(%s), no import half — SEM reads no grid power. Set "
-                        "the grid power sensor. (#1103)", pair[1],
-                    )
+                    # The read path's "Only a grid EXPORT power sensor was
+                    # found" warning says it in the log; this is the Repair.
                     _ri.raise_split_grid_rejected(
                         self.hass, import_entity=None, export_entity=pair[1],
                     )
@@ -4136,8 +4197,11 @@ class SensorReader:
         # both sides positive, and the convention is fixed BY DECLARATION so
         # no sign detection is needed (the solar voter computes the same
         # sign and therefore never flips it).
-        manual_import = self._raw_config.get("grid_import_power_entity")
-        manual_export = self._raw_config.get("grid_export_power_entity")
+        manual_import = self._not_own_pick(
+            self._raw_config.get("grid_import_power_entity"))
+        manual_export = self._not_own_pick(
+            self._raw_config.get("grid_export_power_entity"))
+        grid_override = self._not_own_pick(self.config.grid_power_sensor)
         if manual_import and manual_export:
             import_w = self._read_sensor(manual_import, "grid_import")
             export_w = self._read_sensor(manual_export, "grid_export")
@@ -4158,13 +4222,10 @@ class SensorReader:
                     "grid_export_power_entity is set (%s / %s) — a split pair "
                     "needs both; ignoring it and using the combined grid sensor",
                     manual_import, manual_export)
-            if self.config.grid_power_sensor:
-                readings.grid_power = self._read_sensor(
-                    self.config.grid_power_sensor, "grid")
-        elif self.config.grid_power_sensor:
-            readings.grid_power = self._read_sensor(
-                self.config.grid_power_sensor, "grid"
-            )
+            if grid_override:
+                readings.grid_power = self._read_sensor(grid_override, "grid")
+        elif grid_override:
+            readings.grid_power = self._read_sensor(grid_override, "grid")
 
         # Battery power
         if self.config.battery_power_sensor:
