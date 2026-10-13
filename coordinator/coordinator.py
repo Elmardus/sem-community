@@ -37,6 +37,7 @@ from homeassistant.util import dt as dt_util
 
 from ..consts.core import CAPABILITY_MISS_CONFIRM_READS, CAPABILITY_MISS_HOLD_S
 from ..consts.core import CONF_INTRADAY_FORECAST, DEFAULT_INTRADAY_FORECAST
+from ..consts.core import CONF_DAY_TAGS, DEFAULT_DAY_TAGS
 from ..consts.core import (CONF_SHED_SIGNAL_ENTITY, CONF_SHED_SIGNAL_LIMIT,
                            DEFAULT_SHED_SIGNAL_LIMIT)
 from ..const import (
@@ -3265,7 +3266,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             await self._storage.async_load()
             # (#1083) a restart makes that day's data less trustworthy for
             # a replay; the day tagger reads this mark
-            self._storage.note_start(dt_util.now().date().isoformat())
+            if (self.config or {}).get(CONF_DAY_TAGS, DEFAULT_DAY_TAGS):
+                try:
+                    self._storage.note_start(dt_util.now().date().isoformat())
+                except Exception:  # noqa: BLE001 — a tag mark never costs a refresh
+                    _LOGGER.debug("could not note the start for day tags")
             # Restore energy calculator state
             state = self._storage.export_energy_calculator_state()
             self._energy_calculator.restore_state(state)
