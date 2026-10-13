@@ -275,3 +275,23 @@ class TestTheCoordinatorPicksTheSource:
 def test_the_pick_is_redacted_in_diagnostics():
     from custom_components.solar_energy_management.diagnostics import REDACT_CONFIG_KEYS
     assert "grid_co2_entity" in REDACT_CONFIG_KEYS
+
+
+@pytest.mark.unit
+def test_a_removed_sensor_is_replaced_after_the_rescan(monkeypatch):
+    """The detected sensor disappears (integration removed) and another
+    appears: SEM drops the dead id and finds the new one on the rescan."""
+    import time as _time
+    first = _state(96.0, PROD_ATTRS)
+    states = [first]
+    fake, read = _coord(states)
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(_time, "monotonic", lambda: clock["t"])
+    assert read() == pytest.approx(0.096)
+    states.clear()
+    second = _state(0.2, {"unit_of_measurement": "kgCO2/kWh"}, "sensor.new_source")
+    states.append(second)
+    fake.hass.states.get = lambda eid: second if eid == "sensor.new_source" else None
+    assert read() is None                     # the old id is gone
+    clock["t"] += fake._GRID_CO2_RESCAN_S + 1
+    assert read() == pytest.approx(0.2)

@@ -9288,6 +9288,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         has_forecast = False
         if eid:
             st = self.hass.states.get(eid)
+            if st is None and source == "detected":
+                # the found sensor is gone (integration removed): look again
+                # on the next rescan instead of holding a dead id forever
+                self._grid_co2_found = []
+                self._grid_co2_scanned_at = time.monotonic()
             kg = read_co2_intensity_kg(st)
             if st is not None:
                 from ..hardware_detection import series_attribute
