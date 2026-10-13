@@ -114,3 +114,60 @@ def test_prod_12_10_frozen_counter_is_stored_as_a_gap():
     assert out is not None and "gap" in out["tags"]
     assert st.get_day_tags()[-1]["date"] == "2026-10-12"
     assert getattr(st, "saved", False)
+
+
+# ── diagnostics: the last 7 tags, dates and tags only ───────────────────
+
+async def test_diagnostics_show_the_last_seven_day_tags(tmp_path):
+    import json as _json
+    from unittest.mock import MagicMock
+
+    from custom_components.solar_energy_management.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+    hass = MagicMock()
+    hass.config.config_dir = str(tmp_path)
+
+    async def _executor(func, *args, **kwargs):
+        return func(*args, **kwargs)
+    hass.async_add_executor_job = _executor
+    entry = MagicMock()
+    entry.entry_id = "e1083"
+    entry.version = 1
+    entry.title = "Solar Energy Management"
+    entry.domain = "solar_energy_management"
+    entry.data, entry.options = {}, {}
+    st = _storage()
+    for d in range(1, 10):
+        st.put_day_tag({"date": f"2026-10-0{d}", "tags": ["grey"], "gap_why": [],
+                        "secret": "never shown"})
+    coord = MagicMock()
+    coord.last_update_success = True
+    coord.update_interval = timedelta(seconds=10)
+    coord._observer_mode = False
+    coord._load_manager = None
+    coord._energy_dashboard_config = None
+    coord.config = {"day_tags": True}
+    coord.data = {}
+    coord._storage = st
+    entry.runtime_data = coord
+    hass.data = {"solar_energy_management": {entry.entry_id: coord}}
+    out = await async_get_config_entry_diagnostics(hass, entry)
+    block = _json.loads(_json.dumps(out, default=str))
+    found = []
+
+    def _walk(o):
+        if isinstance(o, dict):
+            if "day_tags" in o and isinstance(o["day_tags"], dict):
+                found.append(o["day_tags"])
+            for v in o.values():
+                _walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                _walk(v)
+    _walk(block)
+    assert found, "no day_tags block in the download"
+    tags = found[0]
+    assert tags["enabled"] is True
+    assert [t["date"] for t in tags["last_7"]] == [f"2026-10-0{d}" for d in range(3, 10)]
+    assert "never shown" not in _json.dumps(tags)
