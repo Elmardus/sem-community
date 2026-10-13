@@ -6247,7 +6247,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         try:
             # #508 W7 — feed the TRUE house surplus, not the EV budget.
             # ``grid_export_power`` is what the house is exporting after the
-            # EV and battery take their share; add back this controller's
+            # EV and battery take their share (less the import, #1102 below);
+            # add back this controller's
             # own active device draw so the signal is feedback-free (a
             # device it turned on doesn't shrink the surplus it reads next
             # cycle and oscillate). Heat pump / hot water now boost on real
@@ -6294,15 +6295,15 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # a noisy sensor, or battery→grid flow (@onkelfu's night report).
             # (#1102) The same held import, signed into the pool: export alone
             # read 2 kW of import as 0 W and a 3 kW boiler rode its own
-            # add-back. The share the pack's charge explains stays with the
-            # reclaim below, so the import is taken off exactly once.
+            # add-back. The share the chargers' draw explains is theirs —
+            # a charger already leaves a running load above it its sun (#885).
             true_surplus_w = solar_bounded_surplus(
                 grid_export_w=float(getattr(power, "grid_export_power", 0.0) or 0.0),
                 active_draw_w=self._surplus_controller.active_surplus_draw_w(),
                 solar_w=getattr(power, "solar_power", None),
                 grid_import_w=reclaim_import_w,
-                battery_charge_w=float(
-                    getattr(power, "battery_charge_power", 0.0) or 0.0),
+                # FLEET-READ: every charger's grid draw is its own, not the loads'
+                ev_draw_w=float(getattr(power, "ev_power", 0.0) or 0.0),
             )
             _now_mono = time.monotonic()
             if _grid_known:

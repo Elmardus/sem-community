@@ -33,6 +33,9 @@ _LOGGER = logging.getLogger(__name__)
 # Defaults
 DEFAULT_REGULATION_OFFSET = 50  # Watts - always keep small export
 DEFAULT_MIN_SURPLUS_CHANGE = 100  # Watts - suppress adjustments below this
+# (#1102) Import the loads' pool ignores — a zero-export inverter's own grid
+# setpoint (Victron ESS +50 W) plus meter noise. See solar_bounded_surplus.
+IMPORT_DEADBAND_W = 100.0
 
 
 @dataclass(frozen=True)
@@ -363,7 +366,7 @@ def solar_bounded_surplus(
     solar_w: "Optional[float]" = None,
     *,
     grid_import_w: "Optional[float]" = 0.0,
-    battery_charge_w: float = 0.0,
+    ev_draw_w: float = 0.0,
 ) -> float:
     """The feedback-free SOLAR surplus, physically bounded by production (#620).
 
@@ -376,10 +379,21 @@ def solar_bounded_surplus(
     own draw came back whole. @lostcontrol's 3 kW boiler (no battery) ran on
     with 2 kW imported — the pool said 3 kW, not 1 kW, and after its own debit
     the walk sat at −50 W, inside the −100 W LIFO band, while the sun stayed
-    above 3 kW. So the import comes off too — except the share a charging
-    battery explains: that share is the grid filling the pack, and
-    ``reclaimable_battery_w`` already takes it off the reclaim (#938). With
-    both, ``surplus + reclaim = draw + export + charge − import``.
+    above 3 kW. So the import comes off, with two exceptions:
+
+    * the share the chargers' draw explains (``ev_draw_w``, fleet). A charger
+      is decided before the loads and already leaves a running load above it
+      its sun (#885); what it draws past that — a Min floor, Now, a cheap-hour
+      plan — is the charger's own grid, and must not stop that load.
+    * the first ``IMPORT_DEADBAND_W``: a zero-export inverter holds a small
+      import on purpose (Victron ESS: +50 W by default), and the LIFO band
+      leaves only 50 W past the export offset.
+
+    A battery charging while the meter imports is a GRID charge (a TOU window,
+    a command): it does not yield, so its import comes off here AND off the
+    reclaim (``reclaimable_battery_w``, #938) — loads yield to it, as they do
+    to a commanded charge. Without that overlap the two addends sum to the
+    whole balance: ``draw + export + charge − import``.
     ``grid_import_w=None`` (meter not read once this lifetime) takes nothing
     off: the running loads hold, and nothing new can start on a dark meter.
 
@@ -394,7 +408,8 @@ def solar_bounded_surplus(
     deficit = 0.0
     if grid_import_w is not None:
         deficit = max(0.0, float(grid_import_w)
-                      - max(0.0, float(battery_charge_w or 0.0)))
+                      - max(0.0, float(ev_draw_w or 0.0))
+                      - IMPORT_DEADBAND_W)
     surplus = float(grid_export_w) - deficit + float(active_draw_w)
     if solar_w is not None:
         surplus = min(surplus, float(solar_w))
@@ -1334,7 +1349,8 @@ class SurplusController:
         has activated (#508 W7).
 
         The coordinator builds a *feedback-free* true house surplus as
-        ``grid_export + active_surplus_draw_w()``. Without the addback,
+        signed grid + ``active_surplus_draw_w()`` (#1102: export minus the
+        import, see ``solar_bounded_surplus``). Without the addback,
         every device the controller turns on shrinks the grid export it
         reads next cycle, so the surplus signal would chase its own tail
         and the device would oscillate. Adding back the controller's own
@@ -1344,11 +1360,20 @@ class SurplusController:
         Externally-managed devices (the EV, driven by the decide/actuate
         path) are excluded — their draw is already reflected in grid
         export and must not be re-credited here.
+
+        (#1102) So are loads the walk never debits: mode Off (the user's
+        own, e.g. a monitored washer plug the belief sync sees running)
+        and a load behind the operator's relay while it is on (#1021).
+        Crediting them put their draw — and, once the pool saw the import,
+        the import they cause — back on the table for every Solar-only load.
         """
+        from ..devices.base import DeviceControlMode
         return sum(
             d.get_current_consumption()
             for d in self.get_devices_sorted()
             if d.is_active
+            and d.control_mode != DeviceControlMode.OFF
+            and getattr(d, "locked_by_operator", False) is not True
         )
 
     def grid_funded_draw_w(self) -> float:
@@ -1509,7 +1534,7 @@ class SurplusController:
         Args:
             available_power_w: Total available surplus power. Since #508 W7
                 the coordinator passes the feedback-free TRUE house surplus
-                (grid export + this controller's own active draw), not the
+                (signed grid + this controller's own active draw, #1102), not the
                 EV charging budget — heat pump / hot water boost on what the
                 house is actually exporting after the EV and battery take
                 their share.

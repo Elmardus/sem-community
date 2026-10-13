@@ -38,6 +38,7 @@ from custom_components.solar_energy_management.coordinator.energy_reclaim import
     reclaimable_battery_w,
 )
 from custom_components.solar_energy_management.coordinator.surplus_controller import (
+    IMPORT_DEADBAND_W,
     SurplusController,
     solar_bounded_reclaim,
     solar_bounded_surplus,
@@ -61,12 +62,12 @@ BOILER_W = 3000.0
 @pytest.mark.unit
 class TestThePoolKeepsTheImport:
     def test_reporters_numbers(self):
-        # 2 kW imported with the 3 kW boiler on → 1 kW would be left if it
-        # were off. The old pool said 3 kW.
+        # 2 kW imported with the 3 kW boiler on → about 1 kW would be left
+        # if it were off (less the 100 W deadband). The old pool said 3 kW.
         assert solar_bounded_surplus(
             grid_export_w=0.0, active_draw_w=BOILER_W, solar_w=SOLAR_W,
-            grid_import_w=2000.0, battery_charge_w=0.0,
-        ) == pytest.approx(1000.0)
+            grid_import_w=2000.0,
+        ) == pytest.approx(BOILER_W - 2000.0 + IMPORT_DEADBAND_W)
 
     def test_the_old_call_lost_it(self):
         # The pre-fix call shape — no import — is the 3 kW the boiler rode on.
@@ -77,68 +78,92 @@ class TestThePoolKeepsTheImport:
     def test_import_larger_than_the_draw_floors_at_zero(self):
         assert solar_bounded_surplus(
             grid_export_w=0.0, active_draw_w=BOILER_W, solar_w=SOLAR_W,
-            grid_import_w=3500.0, battery_charge_w=0.0,
+            grid_import_w=3500.0,
         ) == 0.0
 
-    def test_import_the_battery_charge_explains_stays_on_the_reclaim(self):
-        # The pack charges 2 kW while the meter imports 1 kW: the grid is
-        # filling the pack (#938), and the reclaim already pays for that.
-        # The export side is untouched.
+    def test_a_zero_export_setpoint_is_not_a_deficit(self):
+        # Victron ESS holds +50 W of import by default: the pool must not
+        # read that as the loads running on the grid.
         assert solar_bounded_surplus(
             grid_export_w=0.0, active_draw_w=BOILER_W, solar_w=SOLAR_W,
-            grid_import_w=1000.0, battery_charge_w=2000.0,
+            grid_import_w=50.0,
+        ) == pytest.approx(BOILER_W)
+        assert IMPORT_DEADBAND_W == 100.0
+
+    def test_the_chargers_own_grid_draw_is_not_the_loads(self):
+        # A Min+Solar car at its 6 A floor (4.14 kW) imports 2.1 kW; a
+        # running boiler ranked above the charger keeps its sun (#885).
+        assert solar_bounded_surplus(
+            grid_export_w=0.0, active_draw_w=BOILER_W, solar_w=6000.0,
+            grid_import_w=2140.0, ev_draw_w=4140.0,
         ) == pytest.approx(BOILER_W)
 
-    def test_only_the_import_past_the_charge_comes_off(self):
+    def test_import_past_the_chargers_draw_is_the_houses(self):
         assert solar_bounded_surplus(
             grid_export_w=0.0, active_draw_w=BOILER_W, solar_w=SOLAR_W,
-            grid_import_w=2500.0, battery_charge_w=1000.0,
-        ) == pytest.approx(BOILER_W - 1500.0)
+            grid_import_w=3000.0, ev_draw_w=1000.0,
+        ) == pytest.approx(BOILER_W - 2000.0 + IMPORT_DEADBAND_W)
+
+    def test_a_grid_charging_battery_does_not_excuse_the_import(self):
+        # An inverter's own daytime grid charge (5 kW): sun 4 kW, house
+        # 0.5 kW, boiler 3 kW → 4.5 kW imported. The pack does not yield,
+        # so the boiler is on the grid: the pool must not carry it.
+        assert solar_bounded_surplus(
+            grid_export_w=0.0, active_draw_w=BOILER_W, solar_w=4000.0,
+            grid_import_w=4500.0,
+        ) == 0.0
 
     def test_meter_never_read_takes_nothing_off(self):
         # None = no readable meter yet this lifetime: the running loads keep
         # what they hold (the export side reads 0 too), nothing new starts.
         assert solar_bounded_surplus(
             grid_export_w=0.0, active_draw_w=BOILER_W, solar_w=SOLAR_W,
-            grid_import_w=None, battery_charge_w=0.0,
+            grid_import_w=None,
         ) == pytest.approx(BOILER_W)
 
     def test_export_and_sun_cap_unchanged(self):
         assert solar_bounded_surplus(
             grid_export_w=500.0, active_draw_w=1000.0, solar_w=5000.0,
-            grid_import_w=0.0, battery_charge_w=0.0,
+            grid_import_w=0.0,
         ) == pytest.approx(1500.0)
         assert solar_bounded_surplus(
             grid_export_w=0.0, active_draw_w=1600.0, solar_w=800.0,
-            grid_import_w=0.0, battery_charge_w=0.0,
+            grid_import_w=0.0,
         ) == pytest.approx(800.0)
 
     def test_the_two_addends_are_the_whole_balance(self):
         """Over a grid of meter / pack / load states: export surplus plus
-        the reclaim is ``draw + export + charge − import``, bounded by 0 and
-        the sun. Before the fix the sum lost ``import − charge`` whenever the
-        import was larger."""
-        checked = 0
+        the reclaim is ``draw + export + charge − import`` (past the
+        deadband), bounded by 0 and the sun — exactly, whenever the pack
+        charges from the sun (no import beside it); never more when it
+        charges from the grid. Before the fix the sum lost the import
+        whenever no charge stood beside it."""
+        exact = overlap = 0
         for solar in (0.0, 800.0, 5200.0):
             for draw in (0.0, 1000.0, 3000.0):
                 for charge in (0.0, 1000.0, 3000.0):
-                    for grid in (-4000.0, -2000.0, -500.0, 0.0, 700.0, 2500.0):
+                    for grid in (-4000.0, -2000.0, -500.0, -60.0, 0.0, 700.0, 2500.0):
                         export, imp = max(0.0, grid), max(0.0, -grid)
                         s = solar_bounded_surplus(
                             grid_export_w=export, active_draw_w=draw,
-                            solar_w=solar, grid_import_w=imp,
-                            battery_charge_w=charge)
+                            solar_w=solar, grid_import_w=imp)
                         r = solar_bounded_reclaim(
                             reclaimable_battery_w(
                                 battery_charge_power=charge, soc=60.0,
                                 priority_soc=30.0, battery_commanded=False,
                                 grid_import_w=imp),
                             surplus_w=s, solar_w=solar)
-                        want = min(solar, max(0.0, draw + export + charge - imp))
-                        assert s + r == pytest.approx(want), (
-                            solar, draw, charge, grid)
-                        checked += 1
-        assert checked == 3 * 3 * 3 * 6
+                        counted = max(0.0, imp - IMPORT_DEADBAND_W)
+                        want = min(solar, max(0.0, draw + export + charge - counted))
+                        if charge > 0.0 and imp > 0.0:
+                            assert s + r <= want + 1e-6, (solar, draw, charge, grid)
+                            overlap += 1
+                        else:
+                            assert s + r == pytest.approx(want), (
+                                solar, draw, charge, grid)
+                            exact += 1
+        assert exact == 3 * 3 * 1 * 7 + 3 * 3 * 2 * 3
+        assert overlap == 3 * 3 * 2 * 4
 
 
 # ── 2. the reporter's afternoon, closed loop ─────────────────────────────
@@ -201,7 +226,7 @@ async def _afternoon(sc, *, house_w, cycles, with_import, solar_w=SOLAR_W):
         grid = solar_w - house_w - draw
         export, imp = max(0.0, grid), max(0.0, -grid)
         imports.append(imp)
-        kw = {"grid_import_w": imp, "battery_charge_w": 0.0} if with_import else {}
+        kw = {"grid_import_w": imp} if with_import else {}
         pool = solar_bounded_surplus(
             grid_export_w=export, active_draw_w=draw, solar_w=solar_w, **kw)
         await sc.update(pool, price_level="normal", grid_import_w=imp)
@@ -271,12 +296,15 @@ def _load(device_id, draw, priority, *, paid=False):
 
 async def _cycles(sc, *, solar_w, house_w, n, price="cheap"):
     for _ in range(n):
+        # What the meter sees: every load that is on, credited or not.
+        on_w = sum(d.get_current_consumption()
+                   for d in sc._devices.values() if d.is_active)
         draw = sc.active_surplus_draw_w()
-        grid = solar_w - house_w - draw
+        grid = solar_w - house_w - on_w
         export, imp = max(0.0, grid), max(0.0, -grid)
         pool = solar_bounded_surplus(
             grid_export_w=export, active_draw_w=draw, solar_w=solar_w,
-            grid_import_w=imp, battery_charge_w=0.0)
+            grid_import_w=imp)
         await sc.update(pool, price_level=price, grid_import_w=imp)
 
 
@@ -317,6 +345,54 @@ class TestAPaidLoadDoesNotStopASolarOne:
         await _cycles(sc, solar_w=0.0, house_w=500.0, n=6)
         pump.deactivate.assert_awaited()
         boiler.deactivate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+class TestOnlyLoadsTheWalkDebitsAreCredited:
+    """The add-back is for loads the walk debits. A load in mode Off is the
+    user's — the belief sync sees it running, the walk skips it — and one
+    behind the operator's relay is cut by the relay. Crediting either hands
+    its draw, and the import it causes, to the Solar-only loads."""
+
+    def _washer(self):
+        washer = _load("washer", 2000.0, 3)
+        washer.control_mode = DeviceControlMode.OFF
+        washer._sem_owned = False   # the user started it
+        return washer
+
+    def test_mode_off_and_relay_locked_loads_are_not_credited(self):
+        sc = SurplusController(MagicMock())
+        locked = _load("heat_pump", 2500.0, 4)
+        locked.locked_by_operator = True
+        running = _load("boiler", 3000.0, 1)
+        for d in (self._washer(), locked, running):
+            sc.register_device(d)
+        assert sc.active_surplus_draw_w() == pytest.approx(3000.0)
+
+    async def test_a_users_washer_is_not_spare_sun(self):
+        # Sun 3 kW, house 1 kW, the user's 2 kW washer on: nothing spare.
+        sc = SurplusController(MagicMock())
+        pump = _load("pump", 1500.0, 2)
+        pump.is_active = False
+        sc.register_device(self._washer())
+        sc.register_device(pump)
+        await _cycles(sc, solar_w=3000.0, house_w=1000.0, n=12, price="normal")
+        pump.activate.assert_not_awaited()
+        assert sc._devices["washer"].deactivate.await_count == 0
+
+    async def test_crediting_the_washer_started_the_pump(self):
+        # Non-vacuous: the same meter with the washer's 2 kW credited.
+        sc = SurplusController(MagicMock())
+        pump = _load("pump", 1500.0, 2)
+        pump.is_active = False
+        sc.register_device(self._washer())
+        sc.register_device(pump)
+        for _ in range(12):
+            pool = solar_bounded_surplus(
+                grid_export_w=0.0, active_draw_w=2000.0, solar_w=3000.0,
+                grid_import_w=0.0)
+            await sc.update(pool, price_level="normal", grid_import_w=0.0)
+        pump.activate.assert_awaited()
 
 
 # ── 3. a variable load is offered its pool once, not twice ───────────────
@@ -427,8 +503,9 @@ def _bindings(name: str, scope: ast.AST):
 @pytest.mark.unit
 class TestCoordinatorWiringGuard:
     """Every ``solar_bounded_surplus`` call in the coordinator carries the
-    held meter import and the pack's charge — a refactor that drops either
-    puts the reporter's boiler back on the grid."""
+    held meter import (a refactor that drops it puts the reporter's boiler
+    back on the grid) and the chargers' draw (one that drops it stops a
+    load ranked above a charger whenever the car imports)."""
 
     def test_every_pool_call_carries_the_import(self):
         tree = ast.parse(_COORD.read_text(encoding="utf-8"))
@@ -445,7 +522,7 @@ class TestCoordinatorWiringGuard:
             for s in srcs:
                 assert isinstance(s, ast.Call) and _callee(s) == "held_grid_import", (
                     f"grid_import_w must come from held_grid_import(), got {ast.unparse(s)}")
-            charge = _kw(c, "battery_charge_w")
-            assert charge is not None and "battery_charge_power" in ast.unparse(charge), (
-                "solar_bounded_surplus() must be handed the pack's charge power")
+            ev = _kw(c, "ev_draw_w")
+            assert ev is not None and "ev_power" in ast.unparse(ev), (
+                "solar_bounded_surplus() must be handed the chargers' draw")
             assert "grid_export_power" in ast.unparse(_kw(c, "grid_export_w"))
