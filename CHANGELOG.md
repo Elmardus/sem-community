@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+# [2.2.0-beta.17] — 13.10.2026
+
 - 🐛 **A smart plug is no longer taken for your EV charger** (#1051) — thanks @rdehuyss. Only a charger integration makes an Energy Dashboard device the EV.
 - 🐛 **A tip no longer writes an Activity row every cycle** (#1051). Its words hold until it rotates; more export than solar gives no tip.
 - 🐛 **Belgian price sensors are read at the all-in price** (#1051). Their slots also list energy, network and taxes parts.
