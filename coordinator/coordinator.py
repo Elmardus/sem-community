@@ -1913,6 +1913,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         if not holding:
             self._shown_home_last = (
                 float(power.home_consumption_power or 0.0), now)
+            if (getattr(power, "grid_power_unavailable", False)
+                    or getattr(power, "battery_power_all_unavailable", False)):
+                # (#1105 review) a 0 W fallback is no baseline for the
+                # battery-stop check: forget it instead.
+                self._shown_home_inputs = None
+                return
             self._shown_home_inputs = (
                 float(getattr(power, "grid_import_power", 0.0) or 0.0),
                 float(getattr(power, "battery_discharge_power", 0.0) or 0.0))

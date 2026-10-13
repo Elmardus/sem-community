@@ -97,3 +97,17 @@ def test_no_battery_discharge_no_hold():
     p = _p(2100, 2100, 0)
     c._hold_shown_home(p)
     assert _shown(p) == pytest.approx(2100)
+
+
+def test_a_meter_back_after_a_long_outage_is_no_battery_stop():
+    """(Review) A grid outage past the grace leaves a 0 W fallback; that is
+    no baseline, so the meter's return is shown at once."""
+    clock = [1000.0]
+    c = _coord(clock)
+    c._hold_shown_home(_p(1537, 2, 1535))
+    clock[0] = 1300.0                      # dark past the grace: not holding
+    c._hold_shown_home(_p(1537, 0, 1535, grid_power_unavailable=True))
+    clock[0] = 1310.0
+    p = _p(3064, 1614, 1450)               # meter back, battery still reporting
+    c._hold_shown_home(p)
+    assert _shown(p) == pytest.approx(3064)

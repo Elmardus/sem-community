@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
-- 🐛 **A sunny morning no longer makes the day plan expect too much sun** (#1104). The plan's live solar correction now only lowers the forecast.
+- 🐛 **A sunny morning no longer makes the day plan expect too much sun** (#1104). The live correction never raises it above what history learned.
 - 🐛 **Home power no longer jumps when the battery stops before its sensor says so** (#1105). The shown value holds until the battery reports again.
 - 🐛 **The monthly peak no longer reads 0 kW right after a restart** (#1106). Load management starts before the first update.
 - 🐛 **SEM no longer guesses its own sensor as your grid meter** (#1103) — thanks @LightBridge16. The Grid power pick now works with an Energy Dashboard.

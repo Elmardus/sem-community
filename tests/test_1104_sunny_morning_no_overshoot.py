@@ -17,11 +17,11 @@ _NOW = ("custom_components.solar_energy_management.coordinator."
         "forecast_tracker.dt_util.now")
 
 
-def _tracker(forecast, actual, now, sun=(7.62, 18.67)):
+def _tracker(forecast, actual, now, sun=(7.62, 18.67), learned=0.98):
     t = ForecastTracker()
     t._today_forecast = forecast
     t._today_actual = actual
-    t._correction_factor = 0.98
+    t._correction_factor = learned
     t._get_sun_hours = lambda: sun
     for k in range(36):
         with patch(_NOW, return_value=now - timedelta(minutes=5 * (36 - k))):
@@ -57,3 +57,13 @@ def test_the_published_dampening_factor_still_raises():
     t = _tracker(20.2, 3.64, now)
     with patch(_NOW, return_value=now):
         assert t.dampening_factor > 1.0
+
+
+def test_a_provider_that_forecasts_low_keeps_its_learned_boost():
+    """(Review) History says this provider forecasts 30 % low: the plan
+    keeps that boost — only the morning's live misread is capped."""
+    now = datetime(2026, 10, 13, 10, 0)
+    t = _tracker(20.2, 3.64, now, learned=1.3)
+    with patch(_NOW, return_value=now):
+        r = t.corrected_remaining_kwh(10.0)
+    assert 12.0 <= r <= 13.0
