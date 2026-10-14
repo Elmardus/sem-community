@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+# [2.2.0-beta.18] — 14.10.2026
+
 - 🐛 **A sunny morning no longer makes the day plan expect too much sun** (#1104). The live correction never raises it above what history learned.
 - 🐛 **Home power no longer jumps when the battery stops before its sensor says so** (#1105). The shown value holds until the battery reports again.
 - 🐛 **The monthly peak no longer reads 0 kW right after a restart** (#1106). Load management starts before the first update.
