@@ -1,9 +1,8 @@
 """The load Mode table's promises, each one a test (#1112).
 
-docs/LOAD_PRIORITY.md promises what each Mode and each "Finish overnight
-from" choice does. #1112: "Solar only — never touches the battery" was
-promised and nothing tested it. Each test here quotes one sentence of that
-page and drives the REAL path: a real ``SwitchDevice`` on a fake switch
+docs/LOAD_PRIORITY.md says what each Mode and each "Finish overnight from"
+choice does; the page was written from the code. Each test here quotes one
+sentence of that page and drives the REAL path: a real ``SwitchDevice`` on a fake switch
 entity, the real ``SurplusController.update`` walk, and the pool built the
 way the coordinator builds it (``solar_bounded_surplus`` with the sustained
 import, the #938 reclaim, ``build_battery_tier_context``). The house around
@@ -182,7 +181,8 @@ class _House:
 class TestModeOff:
     async def test_off_is_never_turned_on(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Off** | Monitor only — SEM never turns it on or off."
+        "**Off** | Monitor only. SEM never turns it on or off, and the peak guard
+        does not shed it."
 
         5.5 kW of spare sun and a full pack: SEM still does not switch it on."""
         hass = _Hass()
@@ -192,7 +192,8 @@ class TestModeOff:
 
     async def test_off_is_never_turned_off(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Off** | Monitor only — SEM never turns it on or off."
+        "**Off** | Monitor only. SEM never turns it on or off, and the peak guard
+        does not shed it."
 
         The user switched it on; it is night, the house imports, the pack is
         empty and the peak is in EMERGENCY. SEM still does not switch it off."""
@@ -210,8 +211,8 @@ class TestModeOff:
 class TestModePeakOnly:
     async def test_peak_only_is_never_turned_on(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Peak only** | Your automations run it; SEM only *sheds* it to
-        protect the grid peak."
+        "**Peak only** | Your automations run it. SEM never starts it; it
+        only turns it off while the grid peak is at risk […]"
 
         Spare sun does not start it — your automations run it."""
         hass = _Hass()
@@ -222,8 +223,8 @@ class TestModePeakOnly:
 
     async def test_peak_only_is_not_stopped_for_lack_of_sun(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Peak only** | Your automations run it; SEM only *sheds* it to
-        protect the grid peak."
+        "**Peak only** | Your automations run it. SEM never starts it; it
+        only turns it off while the grid peak is at risk […]"
 
         Your automation started it at night on grid. No peak risk → SEM
         leaves it on."""
@@ -290,8 +291,8 @@ async def _emergency(lm):
 @pytest.mark.asyncio
 async def test_peak_only_is_shed_to_protect_the_peak(shedder):
     """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-    "**Peak only** | Your automations run it; SEM only *sheds* it to protect
-    the grid peak."
+    "**Peak only** | Your automations run it. SEM never starts it; it only
+    turns it off while the grid peak is at risk […]"
 
     The meter is over the peak: the Peak-only load is shed."""
     _shed_row(shedder, "peak_only")
@@ -302,7 +303,8 @@ async def test_peak_only_is_shed_to_protect_the_peak(shedder):
 @pytest.mark.asyncio
 async def test_off_is_not_shed_for_the_peak(shedder):
     """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-    "**Off** | Monitor only — SEM never turns it on or off."
+    "**Off** | Monitor only. SEM never turns it on or off, and the peak guard
+        does not shed it."
 
     The same peak, the same load in Off: the shedder leaves it alone."""
     _shed_row(shedder, "off")
@@ -315,8 +317,9 @@ async def test_off_is_not_shed_for_the_peak(shedder):
 class TestModeSolarOnly:
     async def test_runs_on_pv_surplus(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Solar only** | Runs on PV surplus; never force-imports and never
-        touches the battery."
+        "**Solar only** | Starts on spare sun. Stops when the house buys power
+        from the grid for it, or when the sun makes less than the load draws.
+        It never starts on the battery."
 
         5.5 kW spare, pack full: the boiler starts on the sun."""
         hass = _Hass()
@@ -330,7 +333,8 @@ class TestModeSolarOnly:
 
     async def test_stops_when_the_house_imports(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Solar only** | Runs on PV surplus; never force-imports […]"
+        "**Solar only** | Starts on spare sun. Stops when the house buys power
+        from the grid for it […]"
 
         No battery. A cloud: 5.2 kW sun, house 4.2 kW, the boiler's 3 kW now
         comes 2 kW from the grid. It stops."""
@@ -345,7 +349,8 @@ class TestModeSolarOnly:
 
     async def test_never_force_imports_in_a_cheap_night(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Solar only** | Runs on PV surplus; never force-imports […]"
+        "**Solar only** | Starts on spare sun. Stops when the house buys power
+        from the grid for it […]"
 
         No battery, night, the cheapest hour of the day, 4 h still owed and
         "Finish overnight from" left on Off: it is not started."""
@@ -358,8 +363,9 @@ class TestModeSolarOnly:
 
     async def test_never_touches_a_full_pack_at_night(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Solar only** | Runs on PV surplus; never force-imports and never
-        touches the battery."
+        "**Solar only** | Starts on spare sun. Stops when the house buys power
+        from the grid for it, or when the sun makes less than the load draws.
+        It never starts on the battery."
 
         Night, pack at 100 %, 4 h still owed: it is not started."""
         hass = _Hass()
@@ -370,12 +376,13 @@ class TestModeSolarOnly:
 
     async def test_is_not_started_on_battery_assist_by_day(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Solar only** | Runs on PV surplus; never force-imports and never
-        touches the battery."
+        "**Solar only** | Starts on spare sun. Stops when the house buys power
+        from the grid for it, or when the sun makes less than the load draws.
+        It never starts on the battery."
 
         Day, 1.5 kW spare sun, pack at 95 % with 4.5 kW of assist on offer:
         the 3 kW boiler would need the pack, so it stays off. (The same
-        afternoon starts a "Solar + battery" boiler — see below.)"""
+        afternoon with a full pack starts a "Solar + battery" boiler.)"""
         hass = _Hass()
         dev = _boiler(hass, mode=DeviceControlMode.SURPLUS, deficit=True)
         house = _House(hass, dev, soc=95.0)
@@ -384,8 +391,9 @@ class TestModeSolarOnly:
 
     async def test_stops_at_night_when_the_pack_carries_it(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Solar only** | Runs on PV surplus; never force-imports and never
-        touches the battery."
+        "**Solar only** | Starts on spare sun. Stops when the house buys power
+        from the grid for it, or when the sun makes less than the load draws.
+        It never starts on the battery."
 
         It ran on the afternoon sun. The sun sets (0 W), the pack at 90 %
         covers the house and the boiler, the grid reads 0 W. It stops."""
@@ -397,34 +405,33 @@ class TestModeSolarOnly:
         await house.cycle(solar_w=0.0, is_night=True, n=12)
         assert hass.on[SWITCH] is False
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "#1112: a Solar-only load runs on the home battery — the pool counts "
-        "grid import but not battery discharge"))
-    async def test_stops_when_the_fading_sun_needs_the_pack(self):
-        """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Solar only** | Runs on PV surplus; never force-imports and never
-        touches the battery."
+    async def test_runs_on_while_the_pack_covers_the_fading_sun(self):
+        """docs/LOAD_PRIORITY.md — "Solar only in the evening": "A running
+        Solar-only load keeps going while the sun still makes at least what
+        the load itself draws. If the house then needs more, a home battery
+        covers the gap and the grid reads 0 W, so SEM does not stop the load."
 
-        It ran all afternoon with the pack full. Evening: the sun has faded
-        to 3.2 kW, the house draws 1.5 kW. The 3 kW boiler now takes 1.3 kW
-        from the pack; the grid reads 0 W, so nothing at the meter says
-        "deficit". It must stop."""
+        Edge case — open for discussion, see #1112.
+
+        It ran all afternoon with the pack full. Evening: sun 3.2 kW, house
+        1.5 kW, boiler 3 kW. The boiler runs on and the pack gives 1.3 kW."""
         hass = _Hass()
         dev = _boiler(hass, mode=DeviceControlMode.SURPLUS)
         house = _House(hass, dev, soc=100.0)
         await house.cycle(solar_w=6000.0, n=30)
         assert hass.on[SWITCH] is True
         await house.cycle(solar_w=3200.0, house_w=1500.0, n=30)
-        assert hass.on[SWITCH] is False, (
-            f"still on with the pack discharging {house.last['discharge']:.0f} W")
+        assert hass.on[SWITCH] is True
+        assert house.last["import"] == 0.0
+        assert house.last["discharge"] == pytest.approx(1300.0)
 
 
 @pytest.mark.asyncio
 class TestModeSolarPlusBattery:
     async def test_the_pack_assists_above_the_buffer_by_day(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Solar + battery** | Runs on PV surplus **and** lets the home
-        battery assist above the buffer during the day."
+        "**Solar + battery** | As Solar only, and by day the home battery may
+        help it, down to the Buffer SoC […]"
 
         Day, 1.5 kW spare sun, pack full (buffer 70 %): the 3 kW boiler
         starts with the pack's help."""
@@ -436,33 +443,28 @@ class TestModeSolarPlusBattery:
         assert hass.on[SWITCH] is True
         assert house.last["discharge"] > 0
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "the loads' Solar Gate reads the export-based pool: a pack charging "
-        "from the surplus hides it, so the assist never opens"))
-    async def test_the_pack_assists_while_it_is_charging(self):
-        """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Solar + battery** | Runs on PV surplus **and** lets the home
-        battery assist above the buffer during the day." The same page:
-        "The daytime battery assist ("Solar + battery" mode) mirrors the EV
-        assist (Solar Gate, `battery_assist_min_surplus`)" — and
-        docs/EV_CHARGING_LOGIC.md defines that gate as "Real solar surplus
-        (solar − home)".
+    async def test_no_help_while_the_pack_charges(self):
+        """docs/LOAD_PRIORITY.md — "Solar + battery while the battery
+        charges": "While the battery is still charging from spare sun, little
+        goes to the grid, so the battery's help usually waits until the
+        battery is full."
 
-        Day, 1.5 kW spare sun (solar − home, past the 1.2 kW gate), pack at
-        95 % taking that 1.5 kW as charge: the assist should still start the
-        3 kW boiler."""
+        Edge case — open for discussion, see #1114.
+
+        Day, sun 2 kW, house 0.5 kW, pack at 95 % taking the 1.5 kW spare:
+        the 3 kW boiler stays off."""
         hass = _Hass()
         dev = _boiler(hass, mode=DeviceControlMode.SURPLUS, deficit=True,
                       battery_assist=True)
         house = _House(hass, dev, soc=95.0)
         await house.cycle(solar_w=2000.0, n=12)
-        assert hass.on[SWITCH] is True, (
-            f"pack charging {house.last['charge']:.0f} W, boiler never started")
+        assert house.last["charge"] == pytest.approx(1500.0)
+        assert not hass.turned_on()
 
     async def test_no_assist_below_the_buffer(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Solar + battery** | […] lets the home battery assist above the
-        buffer during the day."
+        "**Solar + battery** | As Solar only, and by day the home battery may
+        help it, down to the Buffer SoC […]"
 
         The pack is not charging (its charge limit is 0 W), so the 1.5 kW
         spare sun is exported. At 60 % (buffer 70 %) there is no assist and
@@ -484,8 +486,8 @@ class TestModeSolarPlusBattery:
 
     async def test_no_daytime_assist_at_night(self):
         """docs/LOAD_PRIORITY.md — "Mode — how SEM drives the load":
-        "**Solar + battery** | […] lets the home battery assist above the
-        buffer during the day."
+        "**Solar + battery** | As Solar only, and by day the home battery may
+        help it, down to the Buffer SoC […]"
 
         Night, pack at 95 %, "Finish overnight from" Off: the daytime
         assist does not start it."""
@@ -504,8 +506,8 @@ class TestModeSolarPlusBattery:
 class TestFinishOvernightFrom:
     async def test_off_waits_for_the_sun(self):
         """docs/LOAD_PRIORITY.md — "Finish overnight from — the overnight
-        source (axis 2)": "**Off** | The load just waits for sun — may miss
-        its target on a dark day."
+        source (axis 2)": "**Off** | Nothing finishes it. The load waits for
+        the sun and may miss its target on a dark day."
 
         Night, 4 h owed, pack full, cheap hour: nothing starts it. The
         morning sun does."""
@@ -520,8 +522,10 @@ class TestFinishOvernightFrom:
 
     async def test_battery_runs_it_overnight(self):
         """docs/LOAD_PRIORITY.md — "Finish overnight from — the overnight
-        source (axis 2)": "**Battery** | Runs off the **home battery**, down
-        to the hard reserve floor — never past it."
+        source (axis 2)": "**Battery** | At night, while runtime is still owed,
+        it runs off the **home battery** and stops at `Battery priority SOC`
+        (default 30 %). It does not start again below it, and it stops at
+        daybreak."
 
         Night, 4 h owed, pack at 80 % (reserve 30 %): it runs."""
         hass = _Hass()
@@ -534,8 +538,10 @@ class TestFinishOvernightFrom:
 
     async def test_battery_stops_at_the_reserve(self):
         """docs/LOAD_PRIORITY.md — "Finish overnight from — the overnight
-        source (axis 2)": "**Battery** | Runs off the **home battery**, down
-        to the hard reserve floor — never past it."
+        source (axis 2)": "**Battery** | At night, while runtime is still owed,
+        it runs off the **home battery** and stops at `Battery priority SOC`
+        (default 30 %). It does not start again below it, and it stops at
+        daybreak."
 
         Running off the pack; the pack falls to the 30 % reserve: it stops,
         and it does not start again below it."""
@@ -555,8 +561,8 @@ class TestFinishOvernightFrom:
 
     async def test_battery_is_night_only(self):
         """docs/LOAD_PRIORITY.md — "Finish overnight from — the overnight
-        source (axis 2)": "**Battery** is night-only (#633): it engages
-        after night mode starts and stops at daybreak."
+        source (axis 2)": "**Battery** | At night […] it stops at
+        daybreak."
 
         A run off the pack at night stops at daybreak, though 4 h are still
         owed and the pack is at 80 %."""
@@ -571,8 +577,9 @@ class TestFinishOvernightFrom:
 
     async def test_grid_runs_it_in_the_cheap_window(self):
         """docs/LOAD_PRIORITY.md — "Finish overnight from — the overnight
-        source (axis 2)": "**Grid** | Runs off the **grid** during your
-        cheap-tariff window."
+        source (axis 2)": "**Grid** | While runtime is still owed and the day
+        left is too short to cover it, it runs off the **grid** in cheap-price
+        hours only."
 
         Night, no battery, 4 h owed, cheap hour: it runs on the grid."""
         hass = _Hass()
@@ -585,8 +592,9 @@ class TestFinishOvernightFrom:
 
     async def test_grid_waits_outside_the_cheap_window(self):
         """docs/LOAD_PRIORITY.md — "Finish overnight from — the overnight
-        source (axis 2)": "**Grid** | Runs off the **grid** during your
-        cheap-tariff window."
+        source (axis 2)": "**Grid** | While runtime is still owed and the day
+        left is too short to cover it, it runs off the **grid** in cheap-price
+        hours only."
 
         The same night in an expensive hour: it waits."""
         hass = _Hass()

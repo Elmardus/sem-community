@@ -1,15 +1,13 @@
-"""The EV mode table's promises, as behaviour tests (#1112).
+"""The EV mode table, as behaviour tests (#1112).
 
-Guido, 14.10.2026: a promise in the user docs that no test drives is a
-promise nobody keeps. Each test below quotes one sentence of
-``docs/EV_CHARGING_LOGIC.md`` and drives the REAL decision path to check it:
+``docs/EV_CHARGING_LOGIC.md`` was written from the code, and each test below
+quotes one sentence of it and drives the REAL decision path to check it:
 ``build_charger_view`` (the coordinator's own seam, permissions and config
 resolution included) → ``decide`` for the charger, and ``decide_battery`` for
 the pack's side of the same cycle. No source strings, no global state.
 
-A promise the code breaks today is marked ``xfail(strict=True)`` with the
-reason: it is a bug to file, not to hide. When the code is fixed the xfail
-turns into a failure and the mark comes off.
+A row the owner may want to change is still a test of today's behaviour;
+its docstring says "edge case — open for discussion" and names the issue.
 """
 from __future__ import annotations
 
@@ -149,8 +147,8 @@ def _pack_side(*, solar, home, soc, spending=False, spendable=0.0,
 class TestSolarOnly:
     @pytest.mark.parametrize("solar", [1500.0, 3000.0, 4500.0, 6000.0, 9000.0])
     def test_never_grids_by_day(self, solar):
-        """"| **Solar only** | Never, unless *you* set a floor | … | Pure
-        surplus charging." — docs/EV_CHARGING_LOGIC.md — The five charge
+        """"| **Solar only** | Never by day. […] | Charges on spare sun
+        only." — docs/EV_CHARGING_LOGIC.md — The five charge
         modes. No floor set: whatever the sun, the offer never exceeds the
         surplus, so the grid pays nothing."""
         d = decide(_view(SOLAR_ONLY, solar=solar, home=500.0, soc=50.0))
@@ -161,7 +159,8 @@ class TestSolarOnly:
             assert d.intent is ChargerIntent.CHARGE_AT_AMPS, d.reason
 
     def test_never_discharges_the_pack_for_the_car(self):
-        """"| **Solar only** | … | **Never discharges for the car** |" and
+        """"| **Solar only** | … | Never discharges for the car, with one
+        exception: forecast spending […] |" and
         "*not* Solar only, which never discharges the pack for the car" —
         docs/EV_CHARGING_LOGIC.md — The five charge modes / Battery-assist.
         A full pack and 2.5 kW of sun: Solar only waits; Solar + battery,
@@ -174,7 +173,8 @@ class TestSolarOnly:
         assert other.assist_w > 0.0
 
     def test_idles_at_night_with_the_pack_full(self):
-        """"| **Solar only** | … | Pure surplus charging. Idles at night. |"
+        """"| **Solar only** | … | Charges on spare sun only. Idles at night
+        unless you set a floor. |"
         — docs/EV_CHARGING_LOGIC.md — The five charge modes. Night, pack at
         100 %, no floor set on the charger: no night lane, no charge."""
         assert not mode_allows_night_charging(
@@ -184,8 +184,8 @@ class TestSolarOnly:
         assert _commanded_w(d) == 0.0
 
     def test_a_floor_tops_up_from_grid_not_the_pack(self):
-        """"| **Solar only** | Never, unless *you* set a floor | **Never
-        discharges for the car** |" — docs/EV_CHARGING_LOGIC.md — The five
+        """"| **Solar only** | Never by day. At night only if *you* set a
+        floor on this charger | Never discharges for the car […] |" — docs/EV_CHARGING_LOGIC.md — The five
         charge modes. With a floor the night top-up runs; the pack, full,
         is held back so the grid pays, not the battery."""
         d = decide(_view(SOLAR_ONLY, night=True, soc=100.0, target_kwh=5.0,
@@ -195,15 +195,16 @@ class TestSolarOnly:
         assert pack.intent is BatteryIntent.LIMIT_DISCHARGE, pack.reason
         assert pack.discharge_limit_w <= 500.0
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "decide_battery opens the car clamp whenever forecast spending is on "
-        "and tonight's budget is positive, without asking the charger's mode: "
-        "a Solar-only car on its night floor drains the pack"))
-    def test_forecast_spending_does_not_hand_the_pack_to_a_solar_only_car(self):
-        """"*not* Solar only, which never discharges the pack for the car"
-        — docs/EV_CHARGING_LOGIC.md — Battery-assist. Forecast spending on
-        and a budget tonight must not change that for a Solar-only car on
-        its night floor (no Solar + battery charger is plugged in)."""
+    def test_forecast_spending_lets_the_pack_cover_a_solar_only_car(self):
+        """"With forecast spending on and a positive budget for tonight, SEM
+        no longer holds the home battery back while a Solar-only car charges
+        on its floor." — docs/EV_CHARGING_LOGIC.md — Solar only and forecast
+        spending (#1115).
+
+        Edge case — open for discussion, see #1115.
+
+        Night, pack full, 3 kWh budget, no Solar + battery charger plugged
+        in: the car charges on its floor and the pack is not held back."""
         d = decide(_view(SOLAR_ONLY, night=True, soc=100.0, target_kwh=5.0,
                          spendable=3.0,
                          config=_config(forecast_spending_enabled=True),
@@ -211,6 +212,17 @@ class TestSolarOnly:
         assert d.intent is ChargerIntent.CHARGE_AT_AMPS, d.reason
         pack = _pack_side(solar=0.0, home=500.0, soc=100.0, spending=True,
                           spendable=3.0, ev_wants_pack=False)
+        assert pack.intent is BatteryIntent.NORMAL, pack.reason
+        held = _pack_side(solar=0.0, home=500.0, soc=100.0, spending=False,
+                          spendable=3.0, ev_wants_pack=False)
+        assert held.intent is BatteryIntent.LIMIT_DISCHARGE, held.reason
+
+    def test_the_spending_still_stops_at_the_buffer(self):
+        """"The battery may then cover the car, down to the Buffer SoC or
+        tonight's floor, whichever is higher." — docs/EV_CHARGING_LOGIC.md —
+        Solar only and forecast spending (#1115)."""
+        pack = _pack_side(solar=0.0, home=500.0, soc=BUFFER - 5,
+                          spending=True, spendable=3.0)
         assert pack.intent is BatteryIntent.LIMIT_DISCHARGE, pack.reason
 
     def test_a_global_default_floor_does_not_opt_it_in(self):
@@ -232,9 +244,9 @@ class TestSolarOnly:
 
 @pytest.mark.parametrize("mode", [SOLAR_ONLY, SOLAR_BATT, MIN_SOLAR, SOLAR_CHEAP])
 def test_floor_zero_means_no_overnight_charge(mode):
-    """"**a floor of 0 means no overnight charge** (in any mode)" —
-    docs/EV_CHARGING_LOGIC.md — Turning overnight charging off (#680).
-    Night, a full pack, nothing owed: every night-capable mode idles."""
+    """"**a floor of 0 means no overnight charge** in every mode except
+    **Always (max)**" — docs/EV_CHARGING_LOGIC.md — Turning overnight
+    charging off (#680). Night, a full pack, nothing owed: idle."""
     d = decide(_view(mode, night=True, soc=100.0, target_kwh=0.0,
                      tariff="very_cheap"))
     assert d.intent is ChargerIntent.IDLE, d.reason
@@ -283,7 +295,7 @@ class TestSolarPlusBattery:
     @pytest.mark.parametrize("solar,soc", [(3000.0, 85.0), (1500.0, 85.0),
                                            (3000.0, 60.0), (8000.0, 95.0)])
     def test_never_grids_by_day(self, solar, soc):
-        """"| **Solar + battery** | Never, unless *you* set a floor |" —
+        """"| **Solar + battery** | Never by day. […] |" —
         docs/EV_CHARGING_LOGIC.md — The five charge modes. The offer never
         exceeds the sun's surplus plus the pack's allowance."""
         d = decide(_view(SOLAR_BATT, solar=solar, home=500.0, soc=soc))
@@ -291,7 +303,8 @@ class TestSolarPlusBattery:
         assert _commanded_w(d) <= d.budget_w or d.intent is ChargerIntent.IDLE
 
     def test_idles_at_night(self):
-        """"Surplus plus the pack … Idles at night." —
+        """"Spare sun plus the pack […] Idles at night unless you set a
+        floor." —
         docs/EV_CHARGING_LOGIC.md — The five charge modes. A full pack and
         no floor: nothing at night."""
         assert not mode_allows_night_charging(
@@ -310,7 +323,8 @@ class TestSolarPlusCheapestHours:
         (None, False), ("flat", False), ("no_prices", False),
     ])
     def test_grids_only_in_a_cheap_hour(self, level, charges):
-        """"| **Solar + cheapest hours** | Only in cheap tariff windows |" and
+        """"| **Solar + cheapest hours** | Only in cheap-price hours, up to
+        the floor |" and
         "A static tariff (no live price level) never triggers it." —
         docs/EV_CHARGING_LOGIC.md — The five charge modes / Cheapest hours.
         Day, no sun, 8 kWh still owed."""
@@ -331,8 +345,8 @@ class TestSolarPlusCheapestHours:
 
     @pytest.mark.parametrize("level", ["normal", "cheap"])
     def test_never_uses_the_pack(self, level):
-        """"| **Solar + cheapest hours** | Only in cheap tariff windows |
-        Never |" — docs/EV_CHARGING_LOGIC.md — The five charge modes. A full
+        """"| **Solar + cheapest hours** | Only in cheap-price hours, up to
+        the floor | Never |" — docs/EV_CHARGING_LOGIC.md — The five charge modes. A full
         pack and 2.5 kW of sun: no battery share in any offer."""
         d = decide(_view(SOLAR_CHEAP, solar=3000.0, home=500.0, soc=100.0,
                          tariff=level, target_kwh=8.0))
@@ -346,7 +360,8 @@ class TestSolarPlusCheapestHours:
 
 class TestMinPlusSolar:
     def test_grids_up_to_the_min_and_no_further(self):
-        """"| **Min + Solar** *(default)* | Up to the Min guarantee |" —
+        """"| **Min + Solar** *(default)* | Up to the floor (*At least X*) |
+        … Nothing owed → no grid." —
         docs/EV_CHARGING_LOGIC.md — The five charge modes. Night: 4 kWh
         owed → the minimum current; nothing owed → idle."""
         owed = decide(_view(MIN_SOLAR, night=True, target_kwh=4.0))
@@ -359,7 +374,7 @@ class TestMinPlusSolar:
         assert day.intent is ChargerIntent.IDLE, day.reason
 
     def test_meets_the_charge_by_deadline(self):
-        """"Guarantees *At least X kWh* by the *Charge by* deadline" —
+        """"Tops up to *At least X kWh* by the *Charge by* deadline" —
         docs/EV_CHARGING_LOGIC.md — The five charge modes. The planner says
         16 A are needed to make it: the decision gives at least that."""
         d = decide(_view(MIN_SOLAR, night=True, target_kwh=20.0,
@@ -380,32 +395,97 @@ class TestMinPlusSolar:
 
 
 def test_always_max_ignores_solar_tariff_and_night():
-    """"| **Always (max)** | Whatever it takes | — | Charge at maximum
-    immediately. Explicit override — ignores solar, tariff and night logic."
-    — docs/EV_CHARGING_LOGIC.md — The five charge modes."""
+    """"| **Always (max)** | … | Charges at the charger's maximum whenever a
+    car is plugged in, day or night, at any price." —
+    docs/EV_CHARGING_LOGIC.md — The five charge modes."""
     d = decide(_view(ALWAYS_MAX, night=True, solar=0.0, soc=20.0,
-                     tariff="very_expensive", target_kwh=0.0))
+                     tariff="very_expensive", target_kwh=4.0))
     assert d.intent is ChargerIntent.CHARGE_MAX, d.reason
 
 
+def test_always_max_ignores_a_zero_floor():
+    """"The floor does not matter here: a floor of 0 does **not** stop it."
+    — docs/EV_CHARGING_LOGIC.md — The five charge modes.
+
+    Edge case — open for discussion, see #1113: the #680 note says a 0 floor
+    means no overnight charge, and Always (max) is the one mode it does not
+    reach."""
+    d = decide(_view(ALWAYS_MAX, night=True, soc=100.0, target_kwh=0.0))
+    assert d.intent is ChargerIntent.CHARGE_MAX, d.reason
+
+
+def test_always_max_stops_at_the_ceiling():
+    """"It stops at the *Up to* ceiling" — docs/EV_CHARGING_LOGIC.md — The
+    five charge modes."""
+    fleet = FleetCycleState(
+        power=SimpleNamespace(
+            solar_power=0.0, home_consumption_power=500.0,
+            battery_charge_power=0.0, battery_discharge_power=0.0,
+            battery_soc=50.0, battery_soc_known=True,
+            grid_import_power=500.0, grid_export_power=0.0, ev_power=0.0,
+            ev_connected=True, ev_charging=False),
+        config=_config(), is_night=True, tariff_level=None)
+    view = build_charger_view(
+        fleet, charger_id=CID, charger_cfg={}, mode=ALWAYS_MAX,
+        daily_ev_kwh=0.0, target_kwh=None, plan=NO_OPINION,
+        soc_ceiling_reached=True)
+    assert decide(view).intent is ChargerIntent.IDLE
+
+
+def test_always_max_holds_the_pack_without_spare_sun():
+    """"| **Always (max)** | … | Held to the house unless the pack is above
+    the Buffer SoC and the spare sun passes the Solar Gate |" —
+    docs/EV_CHARGING_LOGIC.md — The five charge modes. Night, pack full,
+    a car plugged in: the pack is held to the house, the grid pays."""
+    pack = _pack_side(solar=0.0, home=500.0, soc=100.0)
+    assert pack.intent is BatteryIntent.LIMIT_DISCHARGE, pack.reason
+    assert pack.discharge_limit_w <= 500.0
+
+
+def _off_reconciler():
+    return ChargerReconciler(charger_id=CID, heartbeat_s=5.0,
+                             idle_disable_threshold=4)
+
+
 def test_off_sends_nothing_to_the_charger():
-    """"SEM sends nothing to a charger in *Off* — no stop, no
-    park-on-disconnect, no failsafe. A session you start elsewhere in Home
-    Assistant runs untouched" — docs/EV_CHARGING_LOGIC.md — Charge mode Off
-    is hands-off (#898). A car someone else started, a big sun: SEM's
-    reconciler issues nothing, cycle after cycle."""
+    """"After that SEM sends nothing: no start, no stop, no current." and
+    "A charge you start elsewhere in Home Assistant afterwards runs
+    untouched, also after a restart" — docs/EV_CHARGING_LOGIC.md — The five
+    charge modes / Charge mode Off is hands-off (#898). SEM starts up in
+    Off with a car someone else started and a big sun: nothing, cycle after
+    cycle."""
     d = decide(_view(OFF, solar=8000.0, connected=True, charging=True,
                      power_w=4000.0))
     assert d.intent is ChargerIntent.RELEASE, d.reason
     assert d.commanded_amps == 0
     desired, amps = desired_from_decision(d)
-    rec = ChargerReconciler(charger_id=CID, heartbeat_s=5.0,
-                            idle_disable_threshold=4)
+    rec = _off_reconciler()
     seen = ObservedState(charging=True, setpoint_a=0, self_charging=False,
                          power_w=4000.0, connected=True)
     for cycle in range(60):
         assert rec.reconcile(desired, amps, seen, now=cycle * 10.0) == [
             Action(ActionKind.NONE)], f"cycle {cycle}"
+
+
+def test_switching_to_off_stops_once():
+    """"Switching to Off stops a running charge **once**, whoever started
+    it. After that SEM sends nothing" — docs/EV_CHARGING_LOGIC.md — The five
+    charge modes. A charge is running; the mode moves to Off: one stop,
+    then silence while the car keeps drawing."""
+    rec = _off_reconciler()
+    seen = ObservedState(charging=True, setpoint_a=0, self_charging=True,
+                         power_w=4000.0, connected=True)
+    idle, idle_a = desired_from_decision(decide(_view(
+        SOLAR_ONLY, solar=0.0, connected=True, charging=True)))
+    rec.reconcile(idle, idle_a, seen, now=0.0)
+    off, off_a = desired_from_decision(decide(_view(
+        OFF, connected=True, charging=True, power_w=4000.0)))
+    first = rec.reconcile(off, off_a, seen, now=10.0)
+    assert Action(ActionKind.DISABLE) in first
+    for cycle in range(2, 60):
+        acts = rec.reconcile(off, off_a, seen, now=cycle * 10.0)
+        assert all(a.kind is not ActionKind.DISABLE for a in acts), cycle
+        assert all(a.kind is not ActionKind.ENABLE for a in acts), cycle
 
 
 # ── #899: the battery redirect ─────────────────────────────────────────

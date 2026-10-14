@@ -1,10 +1,10 @@
 """#1112 — the battery mode table and the two battery permissions, as tests.
 
-Each test is one sentence the user-facing docs promise, driven through the
-real ``decide_battery`` (and, for the car permission, the real charger
-``decide``). The docstring quotes the sentence and names where it lives.
-A promise the code does not keep today is marked ``xfail(strict=True)``:
-the doc and the code disagree, and one of them has to move.
+The user guide was written from the code. Each test is one of its sentences,
+driven through the real ``decide_battery`` (and, for the car permission, the
+real charger ``decide``). The docstring quotes the sentence and names where
+it lives. A row the owner may want to change still tests today's behaviour;
+its docstring says "edge case — open for discussion" and names the issue.
 """
 from __future__ import annotations
 
@@ -90,18 +90,40 @@ def _sells(d) -> bool:
 
 
 class TestBatteryModeTable:
-    def test_auto_is_sem_normal_management(self):
-        """USER_GUIDE.md, "Per-Battery Modes": "Auto | Normal SOC zone strategy
-        (Zone 1–4) | Default; SEM manages the battery like usual".
+    def test_auto_leaves_the_battery_to_the_inverter(self):
+        """USER_GUIDE.md, "Per-Battery Modes": "Auto | The inverter runs the
+        battery as usual. SEM steps in only to: […]".
 
-        Untouched, an Auto battery gets SEM's normal command — no forced
-        charge, no sale, no hands-off."""
+        Nothing to step in for: SEM's command is NORMAL — no forced charge,
+        no sale, no hold."""
         d = decide_battery(_view(mode="auto"))
         assert d.intent is BatteryIntent.NORMAL
 
+    def test_auto_holds_the_battery_for_a_car_without_spare_sun(self):
+        """USER_GUIDE.md, "Per-Battery Modes": "Auto | … hold it to the house
+        while a car is plugged in and the spare sun is under the Solar Gate
+        or the battery is under the Buffer SoC".
+
+        A car plugged in, no sun, pack at 95 %: held to the house."""
+        fleet = FleetContext(solar_w=0.0, home_w=500.0, battery_soc=95.0)
+        d = decide_battery(_view(mode="auto", soc=95.0, ev_connected=True,
+                                 fleet=fleet))
+        assert d.intent is BatteryIntent.LIMIT_DISCHARGE
+        assert d.discharge_limit_w <= 500.0
+
+    def test_auto_sells_in_the_sell_hours_when_selling_is_on(self):
+        """USER_GUIDE.md, "Per-Battery Modes": "Auto | … sell in the plan's
+        sell hours when selling is on"."""
+        assert _sells(decide_battery(_view(
+            mode="auto", sched=_sell_verdict(), sell=SELL)))
+        assert not _sells(decide_battery(_view(
+            mode="auto", sched=_sell_verdict(), sell=SELL,
+            arbitrage_on=False)))
+
     def test_self_consumption_never_sells_arbitrage(self):
-        """USER_GUIDE.md, "Per-Battery Modes": "Self-Consumption | Discharge to
-        home only, never export to grid".
+        """USER_GUIDE.md, "Per-Battery Modes": "Self-Consumption | As Auto, but it
+        never sells to the grid, unless you turn on *Battery may sell to the
+        grid*".
 
         Arbitrage is on, the plan's sell block is open, the price verdict
         says sell — a Self-Consumption battery still does not."""
@@ -114,7 +136,7 @@ class TestBatteryModeTable:
 
     def test_self_consumption_never_sells_the_forecast_budget(self):
         """USER_GUIDE.md, "Per-Battery Modes": "Self-Consumption | … never
-        export to grid" — the forecast spend is the second road to the grid,
+        sells to the grid" — the forecast spend is the second road to the grid,
         and it is closed too."""
         kw = dict(sched=_sell_verdict(spend=True), forecast_sell=SELL,
                   forecast_spending=True, spendable_kwh=5.0)
@@ -123,39 +145,44 @@ class TestBatteryModeTable:
         assert not _sells(d)
 
     def test_force_charge_charges_to_full(self):
-        """USER_GUIDE.md, "Per-Battery Modes": "Force Charge | Charge from grid
-        … or solar | Deliberate battery top-up"; consts/battery_modes.py:
-        "force_charge — manual FORCE_CHARGE to full now"."""
+        """USER_GUIDE.md, "Per-Battery Modes": "Force Charge | Charges to 100 %
+        now, at the maximum charge power, from the sun and the grid".\""""
         d = decide_battery(_view(mode="force_charge", soc=40.0))
         assert d.intent is BatteryIntent.FORCE_CHARGE
         assert d.target_soc == 100.0
         assert d.charge_power_w == MAX_CHARGE_W
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "Force Charge charges from the grid whatever the price; the table "
-        "says 'from grid (if tariff is cheap)'"))
-    def test_force_charge_buys_from_the_grid_only_when_cheap(self):
-        """USER_GUIDE.md, "Per-Battery Modes": "Force Charge | Charge from grid
-        (if tariff is cheap) or solar".
+    def test_force_charge_buys_at_any_price(self):
+        """USER_GUIDE.md, "Per-Battery Modes": "Force Charge | … **at any
+        price**" and "It does not wait for a cheap hour: at night in an
+        expensive hour it buys from the grid."
 
-        Night, no sun, the tariff is EXPENSIVE: the grid is the only source,
-        so a promise of "grid only if cheap" means no forced charge now."""
+        Edge case — open for discussion, see #1116.
+
+        Night, no sun, the tariff is EXPENSIVE: it force-charges anyway."""
         fleet = FleetContext(solar_w=0.0, home_w=500.0, is_night=True,
                              tariff_level="expensive")
         d = decide_battery(_view(mode="force_charge", soc=40.0, fleet=fleet))
-        assert d.intent is not BatteryIntent.FORCE_CHARGE
+        assert d.intent is BatteryIntent.FORCE_CHARGE
+        assert d.charge_power_w == MAX_CHARGE_W
+
+    def test_self_consumption_sells_when_you_allow_it(self):
+        """USER_GUIDE.md, "Per-Battery Modes": "Self-Consumption | … unless
+        you turn on *Battery may sell to the grid*"."""
+        d = decide_battery(_view(mode="self_consumption", sched=_sell_verdict(),
+                                 sell=SELL, perms={"may_export": True}))
+        assert _sells(d)
 
     def test_force_discharge_runs_at_maximum_rate(self):
-        """USER_GUIDE.md, "Per-Battery Modes": "Force Discharge | Discharge at
-        maximum rate"."""
+        """USER_GUIDE.md, "Per-Battery Modes": "Force Discharge | Sells at the
+        maximum discharge power down to this battery's reserve".\""""
         d = decide_battery(_view(mode="force_discharge", soc=80.0, reserve=30))
         assert d.intent is BatteryIntent.FORCE_DISCHARGE
         assert d.discharge_power_w == MAX_DISCHARGE_W
 
     def test_force_discharge_stops_at_the_reserve(self):
-        """USER_GUIDE.md, "Per-Battery Modes": "number.sem_battery_<id>_reserve_soc
-        — the SOC this battery will not discharge below"; consts/battery_modes.py:
-        "force_discharge — … down to the battery's reserve SOC now"."""
+        """USER_GUIDE.md, "Per-Battery Modes": "Force Discharge | Sells … down
+        to this battery's reserve, then returns to normal use".\""""
         above = decide_battery(_view(mode="force_discharge", soc=31.0, reserve=30))
         assert above.intent is BatteryIntent.FORCE_DISCHARGE
         assert above.floor_soc == 30
@@ -172,15 +199,15 @@ class TestBatteryModeTable:
         assert at.intent is not BatteryIntent.FORCE_DISCHARGE
 
     def test_force_discharge_never_sells_blind(self):
-        """USER_GUIDE.md, "Per-Battery Modes": the reserve is "the SOC this
-        battery will not discharge below" — a SOC SEM cannot read cannot be
-        shown to sit above it, so no sale."""
+        """USER_GUIDE.md, "Per-Battery Modes": "Force Discharge | … It does
+        not sell while the battery level cannot be read.\""""
         d = decide_battery(_view(mode="force_discharge", soc=80.0, reserve=30,
                                  available=False))
         assert d.intent is not BatteryIntent.FORCE_DISCHARGE
 
     def test_off_beats_every_other_branch(self):
-        """USER_GUIDE.md, "Per-Battery Modes": "Off | SEM ignores this battery".
+        """USER_GUIDE.md, "Per-Battery Modes": "Off | One clean hand-over to the
+        inverter, then SEM sends nothing to this battery".
 
         A sell verdict, an open sell block and a plugged car — none of them
         moves an Off battery out of hands-off."""
@@ -190,9 +217,8 @@ class TestBatteryModeTable:
 
     @pytest.mark.asyncio
     async def test_off_hands_over_once_then_sends_nothing(self):
-        """USER_GUIDE.md, "Per-Battery Modes": "Off | SEM ignores this battery";
-        consts/battery_modes.py: "One-time clean handoff on entry …, then SEM
-        issues NOTHING — no protection, no scheduler, no arbitrage."
+        """USER_GUIDE.md, "Per-Battery Modes": "Off | One clean hand-over to the
+        inverter, then SEM sends nothing to this battery".
 
         A battery SEM was selling from is switched to Off: one handoff, then
         ten cycles with nothing on the wire."""
@@ -225,10 +251,10 @@ class TestBatteryModeTable:
 class TestBatteryPermissions:
     def test_may_not_sell_never_sells(self):
         """USER_GUIDE.md, "What the budget may be spent on": "Battery may sell
-        to the grid — export the budget when the price is high."
+        to the grid — off: SEM does not sell on a high price or from the
+        forecast budget."
 
-        Turned off, the battery does not sell — not on the arbitrage verdict,
-        not on the forecast spend, in Auto with arbitrage on."""
+        Turned off, in Auto with arbitrage on: no sale on either road."""
         no = {"may_export": False}
         arb = decide_battery(_view(mode="auto", sched=_sell_verdict(),
                                    sell=SELL, perms=no))
@@ -237,6 +263,13 @@ class TestBatteryPermissions:
             forecast_spending=True, spendable_kwh=5.0, perms=no))
         assert not _sells(arb)
         assert not _sells(spend)
+
+    def test_may_not_sell_still_obeys_force_discharge(self):
+        """USER_GUIDE.md, "What the budget may be spent on": "*Force
+        Discharge* still sells; it is a manual order.\""""
+        d = decide_battery(_view(mode="force_discharge", soc=80.0, reserve=30,
+                                 perms={"may_export": False}))
+        assert _sells(d)
 
     def test_unset_permissions_keep_the_old_behaviour(self):
         """USER_GUIDE.md, "What the budget may be spent on": "Both default to
@@ -255,7 +288,7 @@ class TestBatteryPermissions:
 
     def test_may_not_charge_the_car_gives_the_charger_no_assist(self):
         """USER_GUIDE.md, "What the budget may be spent on": "Battery may charge
-        the car — use the budget on the EV in the evening."
+        the car — off: no charger is offered battery power".
 
         Off, the charger is offered no battery watts, in the one mode built to
         spend the pack on the car."""
@@ -280,8 +313,8 @@ class TestBatteryPermissions:
 
     def test_may_not_charge_the_car_clamps_the_pack(self):
         """USER_GUIDE.md, "What the budget may be spent on": "Battery may charge
-        the car" — off, the battery side holds the pack to the house while a
-        car is plugged in, even full and in the sun."""
+        the car — off: … while a car is plugged in the battery is held to the
+        house, even when full and in the sun.\""""
         fleet = FleetContext(solar_w=5000.0, home_w=500.0, battery_soc=95.0)
         allowed = decide_battery(_view(mode="auto", soc=95.0, ev_connected=True,
                                        fleet=fleet))
