@@ -5903,3 +5903,12 @@ Refs #1106 #1069.
 **Sweep question:** for every counter delta booked as energy, ask whether SEM watched the window the delta claims, and what it saw there.
 **Left for Guido:** (1) `night_backfill` books recorder statistics of the same counter; history has no watch to compare with. (2) Solar counters by day (`_reconcile_solar_energy`): a catch-up while PV reads live is still booked; at night #681 already absorbs it. (3) A box whose live power sensor reads 0 W while it charges (stuck, not dark), with a counter that reports in large steps, now books only what that sensor saw. (4) Unseen time counts at 44 kW: about 15 minutes of SEM down or a dark power read lets an 11 kWh catch-up through, as before. So does a catch-up within `EV_COUNTER_LATE_REPORT_H` of a session whose power read was high, up to that rest. (5) Power dark while charging, then late steps after the box is seen idle: steps above `unreported` are not booked. (6) Why the register caught up is in the bridge or the box, not found here.
 Refs #1101 #1049 #782 #658 #681 #1024.
+
+### 143. A key filled with the English text passes every key-presence test — GUARDED
+**Symptom:** the Configuration tab mixed English labels into French, Czech, Polish … (210 per language), and the setup screens had ~165 English texts per language (#1129). Nothing errors.
+**Root shape:** the parity tests (`test_dashboard_translations.py`, `test_674`) check that every language HAS each key. A new key is added in English and the same text is copied into the 15 others, which satisfies them. #675 fixed the same drift once by hand and added no check, so it came back.
+**Where it lives:** `dashboard/translations.json` (card labels, `config_*` help) and `translations/*.json` (setup steps, Repairs). Both **swept**: ~7,300 texts in 15 languages.
+**Closure:** translated; texts that name a card label (#1040 help, #1103 Repairs) now use the label of that language.
+**Guard:** `tests/test_1129_untranslated_prose.py` — a value with three or more plain English words that equals English fails. Hyphenated or dotted names (`Open-Meteo`) and codes are not words, so no exception list.
+**Left open:** a value of one or two words (`Battery`, `Charge Tonight`) copied from English is not caught.
+Refs #1129 #675 #674.
