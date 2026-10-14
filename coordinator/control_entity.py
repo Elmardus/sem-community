@@ -35,10 +35,11 @@ CONTROL_ENTITY_DOMAINS = (
     "select", "input_select",
 )
 
-#: (#1032, bug class 49) The start/stop field offers ``button`` in the
-#: config flow and the card, and SEM presses it (#804: Wattpilot's "Laden
-#: erzwingen"). Rejecting it filed this Repair on a healthy charger.
-START_STOP_DOMAINS = CONTROL_ENTITY_DOMAINS + ("button",)
+#: (#1032, bug class 49) What SEM can start and stop a charge with: it turns
+#: a switch or an input_boolean on and off, and presses a button (#804:
+#: Wattpilot's "Laden erzwingen"). The config flow and the card offer switch
+#: and button; refusing the button filed this Repair on a healthy charger.
+START_STOP_DOMAINS = ("switch", "input_boolean", "button")
 
 # States that mean "this entity is not currently commandable". ``restored``
 # entities — HA loaded a name from the registry but the platform never

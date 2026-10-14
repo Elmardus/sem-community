@@ -540,7 +540,8 @@ def _card_picker_domains(field):
 
 
 def _flow_picker_domains(field):
-    tree = ast.parse((ROOT / "config_flow.py").read_text(encoding="utf-8"))
+    src = (ROOT / "config_flow.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
     found = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Dict):
@@ -554,7 +555,11 @@ def _flow_picker_domains(field):
                 if (isinstance(sub, ast.keyword) and sub.arg == "domain"):
                     val = ast.literal_eval(sub.value)
                     found.append({val} if isinstance(val, str) else set(val))
-    assert found, field
+    # every picker of the field is read — one rewritten without a visible
+    # ``domain=`` would otherwise drop out of the check unnoticed
+    import re
+    keys = len(re.findall(r'vol\.(?:Optional|Required)\(\s*"' + field + '"', src))
+    assert found and len(found) == keys, (field, len(found), keys)
     return found
 
 
@@ -570,6 +575,21 @@ def test_what_the_setup_offers_the_check_accepts(field, accepted):
     offered = [_card_picker_domains(field)] + _flow_picker_domains(field)
     for domains in offered:
         assert domains <= set(accepted), (field, domains - set(accepted))
+
+
+@pytest.mark.unit
+def test_the_start_stop_domains_are_what_sem_acts_on():
+    """(class 49, other direction) The check accepts no start/stop domain
+    the runtime cannot drive: ``ensure_enabled`` names each one."""
+    from custom_components.solar_energy_management.coordinator.charger_adapters.base import (
+        ChargerAdapter,
+    )
+    src = inspect.getsource(ChargerAdapter.ensure_enabled)
+    for domain in START_STOP_DOMAINS:
+        assert f'"{domain}."' in src, domain
+    assert validate_control_entity(
+        "select.x", lambda e: "on", not_now=None,
+        domains=START_STOP_DOMAINS).reason == "wrong_domain"
 
 
 @pytest.mark.unit
