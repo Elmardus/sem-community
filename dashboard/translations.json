@@ -1608,7 +1608,7 @@
     "sessions_col_solar": "Slunce",
     "sessions_col_min": "Min",
     "sessions_solar_word": "slunce",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Stáhnout .xlsx",
     "sessions_none": "Tento měsíc žádné relace",
     "sessions_loading": "Načítání…",
     "grid_manual": "Oddělené senzory (nastaveno vámi)",
@@ -1675,7 +1675,8 @@
     "cfg_behind_operator_relay": "Za relé provozovatele sítě",
     "cfg_help_behind_operator_relay": "Provozovatel toto zařízení vypíná. SEM ho neplánuje, dokud je relé zapnuté.",
     "operator_limit_banner": "Provozovatel sítě: limit {kw} kW od {time} — solár navíc je povolen",
-    "locked_by_grid_operator": "Zablokováno provozovatelem sítě"
+    "locked_by_grid_operator": "Zablokováno provozovatelem sítě",
+    "sessions_download_failed": "Stažení selhalo — zkuste to znovu"
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3286,7 +3287,7 @@
     "sessions_col_solar": "Sol",
     "sessions_col_min": "Min",
     "sessions_solar_word": "sol",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Hent .xlsx",
     "sessions_none": "Ingen sessioner denne måned",
     "sessions_loading": "Indlæser…",
     "grid_manual": "Opdelte sensorer (valgt af dig)",
@@ -3353,7 +3354,8 @@
     "cfg_behind_operator_relay": "Bag netselskabets relæ",
     "cfg_help_behind_operator_relay": "Netselskabet slukker denne enhed. SEM planlægger den ikke, mens relæet er til.",
     "operator_limit_banner": "Netselskab: grænse {kw} kW siden {time} — sol oveni er tilladt",
-    "locked_by_grid_operator": "Låst af netselskabet"
+    "locked_by_grid_operator": "Låst af netselskabet",
+    "sessions_download_failed": "Download mislykkedes — prøv igen"
   },
   "de": {
     "% of limit": "% des Limits",
@@ -4964,7 +4966,7 @@
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
     "sessions_solar_word": "Solar",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Download .xlsx",
     "sessions_none": "Keine Ladevorgänge diesen Monat",
     "sessions_loading": "Lädt…",
     "grid_manual": "Getrennte Sensoren (von dir gewählt)",
@@ -5031,7 +5033,8 @@
     "cfg_behind_operator_relay": "Hinter dem Relais des Netzbetreibers",
     "cfg_help_behind_operator_relay": "Der Netzbetreiber schaltet dieses Gerät ab. SEM plant es nicht, solange das Relais an ist.",
     "operator_limit_banner": "Netzbetreiber: Limit {kw} kW seit {time} — Solarstrom zusätzlich ist erlaubt",
-    "locked_by_grid_operator": "Vom Netzbetreiber gesperrt"
+    "locked_by_grid_operator": "Vom Netzbetreiber gesperrt",
+    "sessions_download_failed": "Download fehlgeschlagen — bitte erneut versuchen"
   },
   "en": {
     "% of limit": "% of limit",
@@ -6642,7 +6645,7 @@
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solar",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Download .xlsx",
     "sessions_none": "No sessions this month",
     "sessions_loading": "Loading…",
     "grid_manual": "Split sensors (set by you)",
@@ -6709,7 +6712,8 @@
     "cfg_behind_operator_relay": "Behind the grid operator's relay",
     "cfg_help_behind_operator_relay": "The operator switches this device off. SEM will not plan it while the relay is on.",
     "operator_limit_banner": "Grid operator: limit {kw} kW since {time} — solar on top is fine",
-    "locked_by_grid_operator": "Locked by the grid operator"
+    "locked_by_grid_operator": "Locked by the grid operator",
+    "sessions_download_failed": "Download failed — try again"
   },
   "es": {
     "% of limit": "% del límite",
@@ -8320,7 +8324,7 @@
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solar",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Descargar .xlsx",
     "sessions_none": "Sin sesiones este mes",
     "sessions_loading": "Cargando…",
     "grid_manual": "Sensores separados (elegidos por ti)",
@@ -8387,7 +8391,8 @@
     "cfg_behind_operator_relay": "Detrás del relé de la distribuidora",
     "cfg_help_behind_operator_relay": "La distribuidora apaga este aparato. SEM no lo planifica mientras el relé está activo.",
     "operator_limit_banner": "Distribuidora: límite {kw} kW desde las {time} — la solar adicional está permitida",
-    "locked_by_grid_operator": "Bloqueado por la distribuidora"
+    "locked_by_grid_operator": "Bloqueado por la distribuidora",
+    "sessions_download_failed": "Error al descargar — inténtelo de nuevo"
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -9998,7 +10003,7 @@
     "sessions_col_solar": "Aurinko",
     "sessions_col_min": "Min",
     "sessions_solar_word": "aurinkoa",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Lataa .xlsx",
     "sessions_none": "Ei latauksia tässä kuussa",
     "sessions_loading": "Ladataan…",
     "grid_manual": "Erilliset sensorit (itse valittu)",
@@ -10065,7 +10070,8 @@
     "cfg_behind_operator_relay": "Verkkoyhtiön releen takana",
     "cfg_help_behind_operator_relay": "Verkkoyhtiö katkaisee tämän laitteen. SEM ei suunnittele sitä, kun rele on päällä.",
     "operator_limit_banner": "Verkkoyhtiö: raja {kw} kW klo {time} alkaen — aurinkosähkö päälle on sallittu",
-    "locked_by_grid_operator": "Verkkoyhtiön lukitsema"
+    "locked_by_grid_operator": "Verkkoyhtiön lukitsema",
+    "sessions_download_failed": "Lataus epäonnistui — yritä uudelleen"
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -11676,7 +11682,7 @@
     "sessions_col_solar": "Solaire",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solaire",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Télécharger .xlsx",
     "sessions_none": "Aucune session ce mois",
     "sessions_loading": "Chargement…",
     "grid_manual": "Capteurs séparés (choisis par vous)",
@@ -11743,7 +11749,8 @@
     "cfg_behind_operator_relay": "Derrière le relais du gestionnaire de réseau",
     "cfg_help_behind_operator_relay": "Le gestionnaire coupe cet appareil. SEM ne le planifie pas tant que le relais est actif.",
     "operator_limit_banner": "Gestionnaire de réseau : limite {kw} kW depuis {time} — le solaire en plus reste permis",
-    "locked_by_grid_operator": "Bloqué par le gestionnaire de réseau"
+    "locked_by_grid_operator": "Bloqué par le gestionnaire de réseau",
+    "sessions_download_failed": "Échec du téléchargement — réessayez"
   },
   "hu": {
     "% of limit": "% a határból",
@@ -13354,7 +13361,7 @@
     "sessions_col_solar": "Nap",
     "sessions_col_min": "Perc",
     "sessions_solar_word": "nap",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Letöltés .xlsx",
     "sessions_none": "Nincs töltés ebben a hónapban",
     "sessions_loading": "Betöltés…",
     "grid_manual": "Különálló szenzorok (saját választás)",
@@ -13421,7 +13428,8 @@
     "cfg_behind_operator_relay": "A hálózati szolgáltató reléje mögött",
     "cfg_help_behind_operator_relay": "A szolgáltató kikapcsolja ezt az eszközt. A SEM nem tervezi be, amíg a relé be van kapcsolva.",
     "operator_limit_banner": "Hálózati szolgáltató: korlát {kw} kW {time} óta — a napenergia ezen felül megengedett",
-    "locked_by_grid_operator": "A hálózati szolgáltató letiltotta"
+    "locked_by_grid_operator": "A hálózati szolgáltató letiltotta",
+    "sessions_download_failed": "A letöltés nem sikerült — próbáld újra"
   },
   "it": {
     "% of limit": "% del limite",
@@ -15032,7 +15040,7 @@
     "sessions_col_solar": "Solare",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solare",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Scarica .xlsx",
     "sessions_none": "Nessuna sessione questo mese",
     "sessions_loading": "Caricamento…",
     "grid_manual": "Sensori separati (scelti da te)",
@@ -15099,7 +15107,8 @@
     "cfg_behind_operator_relay": "Dietro il relè del gestore di rete",
     "cfg_help_behind_operator_relay": "Il gestore spegne questo dispositivo. SEM non lo pianifica finché il relè è attivo.",
     "operator_limit_banner": "Gestore di rete: limite {kw} kW dalle {time} — il solare in più è consentito",
-    "locked_by_grid_operator": "Bloccato dal gestore di rete"
+    "locked_by_grid_operator": "Bloccato dal gestore di rete",
+    "sessions_download_failed": "Download non riuscito — riprovare"
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -16710,7 +16719,7 @@
     "sessions_col_solar": "Zon",
     "sessions_col_min": "Min",
     "sessions_solar_word": "zon",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Download .xlsx",
     "sessions_none": "Geen sessies deze maand",
     "sessions_loading": "Laden…",
     "grid_manual": "Gescheiden sensoren (door jou gekozen)",
@@ -16777,7 +16786,8 @@
     "cfg_behind_operator_relay": "Achter het relais van de netbeheerder",
     "cfg_help_behind_operator_relay": "De netbeheerder schakelt dit apparaat uit. SEM plant het niet zolang het relais aan is.",
     "operator_limit_banner": "Netbeheerder: limiet {kw} kW sinds {time} — zon erbovenop mag",
-    "locked_by_grid_operator": "Geblokkeerd door de netbeheerder"
+    "locked_by_grid_operator": "Geblokkeerd door de netbeheerder",
+    "sessions_download_failed": "Downloaden mislukt — probeer opnieuw"
   },
   "no": {
     "% of limit": "% av grense",
@@ -18388,7 +18398,7 @@
     "sessions_col_solar": "Sol",
     "sessions_col_min": "Min",
     "sessions_solar_word": "sol",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Last ned .xlsx",
     "sessions_none": "Ingen økter denne måneden",
     "sessions_loading": "Laster…",
     "grid_manual": "Delte sensorer (valgt av deg)",
@@ -18455,7 +18465,8 @@
     "cfg_behind_operator_relay": "Bak nettselskapets relé",
     "cfg_help_behind_operator_relay": "Nettselskapet slår av denne enheten. SEM planlegger den ikke mens reléet er på.",
     "operator_limit_banner": "Nettselskap: grense {kw} kW siden {time} — sol i tillegg er tillatt",
-    "locked_by_grid_operator": "Låst av nettselskapet"
+    "locked_by_grid_operator": "Låst av nettselskapet",
+    "sessions_download_failed": "Nedlasting mislyktes — prøv igjen"
   },
   "pl": {
     "% of limit": "% limitu",
@@ -20066,7 +20077,7 @@
     "sessions_col_solar": "Słońce",
     "sessions_col_min": "Min",
     "sessions_solar_word": "słońca",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Pobierz .xlsx",
     "sessions_none": "Brak sesji w tym miesiącu",
     "sessions_loading": "Ładowanie…",
     "grid_manual": "Rozdzielone czujniki (wybrane przez Ciebie)",
@@ -20133,7 +20144,8 @@
     "cfg_behind_operator_relay": "Za przekaźnikiem operatora sieci",
     "cfg_help_behind_operator_relay": "Operator wyłącza to urządzenie. SEM nie planuje go, gdy przekaźnik jest włączony.",
     "operator_limit_banner": "Operator sieci: limit {kw} kW od {time} — słońce ponad to jest dozwolone",
-    "locked_by_grid_operator": "Zablokowane przez operatora sieci"
+    "locked_by_grid_operator": "Zablokowane przez operatora sieci",
+    "sessions_download_failed": "Pobieranie nie powiodło się — spróbuj ponownie"
   },
   "pt": {
     "% of limit": "% do limite",
@@ -21744,7 +21756,7 @@
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solar",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Transferir .xlsx",
     "sessions_none": "Sem sessões este mês",
     "sessions_loading": "A carregar…",
     "grid_manual": "Sensores separados (escolhidos por si)",
@@ -21811,7 +21823,8 @@
     "cfg_behind_operator_relay": "Atrás do relé do operador da rede",
     "cfg_help_behind_operator_relay": "O operador desliga este aparelho. O SEM não o planeia enquanto o relé estiver ativo.",
     "operator_limit_banner": "Operador da rede: limite {kw} kW desde {time} — solar adicional é permitido",
-    "locked_by_grid_operator": "Bloqueado pelo operador da rede"
+    "locked_by_grid_operator": "Bloqueado pelo operador da rede",
+    "sessions_download_failed": "Falha ao transferir — tente novamente"
   },
   "ro": {
     "% of limit": "% din limită",
@@ -23422,7 +23435,7 @@
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solar",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Descarcă .xlsx",
     "sessions_none": "Nicio sesiune luna aceasta",
     "sessions_loading": "Se încarcă…",
     "grid_manual": "Senzori separați (aleși de tine)",
@@ -23489,7 +23502,8 @@
     "cfg_behind_operator_relay": "În spatele releului operatorului de rețea",
     "cfg_help_behind_operator_relay": "Operatorul oprește acest aparat. SEM nu îl planifică cât timp releul este pornit.",
     "operator_limit_banner": "Operator de rețea: limită {kw} kW din {time} — solarul în plus este permis",
-    "locked_by_grid_operator": "Blocat de operatorul de rețea"
+    "locked_by_grid_operator": "Blocat de operatorul de rețea",
+    "sessions_download_failed": "Descărcarea a eșuat — încercați din nou"
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -25100,7 +25114,7 @@
     "sessions_col_solar": "Sol",
     "sessions_col_min": "Min",
     "sessions_solar_word": "sol",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "Ladda ner .xlsx",
     "sessions_none": "Inga sessioner denna månad",
     "sessions_loading": "Laddar…",
     "grid_manual": "Delade sensorer (valda av dig)",
@@ -25167,7 +25181,8 @@
     "cfg_behind_operator_relay": "Bakom nätbolagets relä",
     "cfg_help_behind_operator_relay": "Nätbolaget stänger av denna enhet. SEM planerar den inte medan reläet är på.",
     "operator_limit_banner": "Nätbolag: gräns {kw} kW sedan {time} — sol utöver är tillåten",
-    "locked_by_grid_operator": "Låst av nätbolaget"
+    "locked_by_grid_operator": "Låst av nätbolaget",
+    "sessions_download_failed": "Nedladdningen misslyckades — försök igen"
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -26778,7 +26793,7 @@
     "sessions_col_solar": "光伏",
     "sessions_col_min": "分钟",
     "sessions_solar_word": "光伏",
-    "sessions_csv": "CSV",
+    "sessions_xlsx": "下载 .xlsx",
     "sessions_none": "本月无充电记录",
     "sessions_loading": "加载中…",
     "grid_manual": "分离传感器（手动选择）",
@@ -26845,6 +26860,7 @@
     "cfg_behind_operator_relay": "在电网运营商继电器之后",
     "cfg_help_behind_operator_relay": "运营商会关闭此设备。继电器开启时 SEM 不会安排它。",
     "operator_limit_banner": "电网运营商：自 {time} 起限值 {kw} kW — 额外的太阳能不受限制",
-    "locked_by_grid_operator": "被电网运营商锁定"
+    "locked_by_grid_operator": "被电网运营商锁定",
+    "sessions_download_failed": "下载失败 — 请重试"
   }
 }
