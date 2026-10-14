@@ -224,6 +224,9 @@ REDACT_CONFIG_KEYS = {
     "ev_charging_power_sensor",
     "ev_charger_service",
     "ev_charger_service_entity_id",
+    # (#1097) the box's registry id the crawler now fills for device-keyed
+    # services — same class as the service entity above
+    "ev_service_device_id",
     "ev_daily_energy_sensor",
     "vehicle_soc_entity",
     "battery_discharge_control_entity",

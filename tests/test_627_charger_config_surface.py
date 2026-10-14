@@ -60,7 +60,9 @@ def _percharger_cfg_keys() -> set[str]:
     # The per-charger registration block; generous window, the regex is anchored
     # on ``_cfg("...")`` which only exists inside it.
     region = src[start:start + 40000]
-    return set(re.findall(r'_cfg\(\s*"([^"]+)"', region))
+    # (#1095) ``_own("key")`` reads the same per-charger card, limited to the
+    # charger's own control keys — it is the same surface, counted the same.
+    return set(re.findall(r'_(?:cfg|own)\(\s*"([^"]+)"', region))
 
 
 def _flow_fields_by_step() -> dict[str, set[str]]:

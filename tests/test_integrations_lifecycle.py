@@ -37,16 +37,6 @@ from .integrations_rig.shapes import SHAPE_GAPS, shape_names, shapes
 #: Known faults, by case: the issue that owns each.
 KNOWN_FAULTS: Dict[str, str] = {
     **SHAPE_GAPS,
-    # The crawler offers a charger that acts through a charge-mode select
-    # or start/stop services only; setup keeps a charger only when it has a
-    # current service or a current entity (__init__.py, "missing power
-    # sensor or control method, skipping"), so SEM runs nothing.
-    "myenergi": "#1092 runtime gap: a charge-mode-only charger is offered, "
-                "then dropped at setup",
-    "ohme": "#1092 runtime gap: a charge-mode-only charger is offered, "
-            "then dropped at setup",
-    "zaptec_no_limit": "#1032 runtime gap: a start/stop-only charger is "
-                       "offered, then dropped at setup",
 }
 
 #: Captures where the crawler offers no charger to create — each with the
