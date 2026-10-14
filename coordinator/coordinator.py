@@ -1911,8 +1911,17 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         if not holding and self._battery_stop_not_reported(power, now):
             holding = True
         if not holding:
-            self._shown_home_last = (
-                float(power.home_consumption_power or 0.0), now)
+            val = float(power.home_consumption_power or 0.0)
+            prev = getattr(self, "_shown_home_last", None)
+            # (#1105, .175 14.10) The value to hold is one that STOOD: seen
+            # on two cycles in a row. A one-cycle jump right before a reading
+            # goes dark can carry an input older than the rest (solar 30 s
+            # stale while the battery's charge fell for a cloud: 2437 W for a
+            # ~550 W house) — the hold froze it for 70 s.
+            if prev is not None and abs(val - prev[0]) <= max(
+                    self.SHOWN_HOME_STABLE_W, 0.15 * abs(prev[0])):
+                self._shown_home_stable = (val, now)
+            self._shown_home_last = (val, now)
             if (getattr(power, "grid_power_unavailable", False)
                     or getattr(power, "battery_power_all_unavailable", False)):
                 # (#1105 review) a 0 W fallback is no baseline for the
@@ -1924,9 +1933,16 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 float(getattr(power, "battery_discharge_power", 0.0) or 0.0))
             return
         last = getattr(self, "_shown_home_last", None)
+        stable = getattr(self, "_shown_home_stable", None)
+        if (stable is not None and last is not None and stable[0] != last[0]
+                and last[1] - stable[1] <= 30.0):
+            last = (stable[0], last[1])   # the jump stood one cycle only
         if last is not None and now - last[1] <= 2 * SENSOR_DARK_READ_GRACE_S:
             power.home_shown_w = last[0]
 
+    #: (#1105) Two cycles closer than this (or 15 %) count as one standing
+    #: value — the one a hold may keep.
+    SHOWN_HOME_STABLE_W = 150.0
     #: (#1105) A grid step this big that matches the battery's still-
     #: reported discharge reads as a battery that stopped before its
     #: register said so.

@@ -111,3 +111,27 @@ def test_a_meter_back_after_a_long_outage_is_no_battery_stop():
     p = _p(3064, 1614, 1450)               # meter back, battery still reporting
     c._hold_shown_home(p)
     assert _shown(p) == pytest.approx(3064)
+
+
+def test_175_14_10_a_one_cycle_jump_is_not_frozen_by_the_hold():
+    """.175 14.10.2026 (UTC): charging 2.7 kW, a cloud. The battery charge
+    fell first (12:38:26 → 831 W) while solar still read 3200 W from 30 s
+    before, so one cycle showed home 2437 W. 0.9 s later the battery went
+    dark and the #1047 hold froze that one-cycle value for 70 s; the house
+    was really ~550–600 W. A value that stood for two cycles is held."""
+    clock = [1000.0]
+    c = _coord(clock)
+    for t, home in ((1000.0, 830), (1010.0, 542), (1020.0, 542), (1030.0, 542)):
+        clock[0] = t
+        c._hold_shown_home(_p(home, 0, 0))
+    clock[0] = 1040.0
+    c._hold_shown_home(_p(2437, 0, 0))                      # stale solar, one cycle
+    for t in (1050.0, 1060.0, 1070.0, 1100.0, 1110.0):
+        clock[0] = t
+        p = _p(600, 0, 0, battery_power_all_unavailable=True)
+        c._hold_shown_home(p)
+        assert _shown(p) == pytest.approx(542), t
+    clock[0] = 1120.0
+    p = _p(588, 0, 0)                                       # battery back
+    c._hold_shown_home(p)
+    assert _shown(p) == pytest.approx(588)
