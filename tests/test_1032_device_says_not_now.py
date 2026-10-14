@@ -577,19 +577,27 @@ def test_what_the_setup_offers_the_check_accepts(field, accepted):
         assert domains <= set(accepted), (field, domains - set(accepted))
 
 
-@pytest.mark.unit
-def test_the_start_stop_domains_are_what_sem_acts_on():
-    """(class 49, other direction) The check accepts no start/stop domain
-    the runtime cannot drive: ``ensure_enabled`` names each one."""
-    from custom_components.solar_energy_management.coordinator.charger_adapters.base import (
-        ChargerAdapter,
+@pytest.mark.asyncio
+@pytest.mark.parametrize("domain", sorted(set(START_STOP_DOMAINS) | {"select"}))
+async def test_the_start_stop_domains_are_what_sem_acts_on(domain):
+    """(class 49, other direction) The check accepts a start/stop domain
+    exactly when the real ``ensure_enabled`` sends something to it — so a
+    start/stop SEM cannot drive is not shown as working."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from custom_components.solar_energy_management.coordinator.charger_adapters.generic import (
+        GenericAdapter,
     )
-    src = inspect.getsource(ChargerAdapter.ensure_enabled)
-    for domain in START_STOP_DOMAINS:
-        assert f'"{domain}."' in src, domain
-    assert validate_control_entity(
-        "select.x", lambda e: "on", not_now=None,
-        domains=START_STOP_DOMAINS).reason == "wrong_domain"
+    eid = f"{domain}.x"
+    dev = SimpleNamespace(hass=MagicMock(), start_stop_entity=eid,
+                          send=AsyncMock(return_value=True))
+    dev.hass.states.get = lambda e: None
+    await GenericAdapter(dev).ensure_enabled()
+    acted = dev.send.await_count > 0
+    accepted = validate_control_entity(
+        eid, lambda e: "off", not_now=None,
+        domains=START_STOP_DOMAINS).reason != "wrong_domain"
+    assert acted == accepted, (domain, acted, accepted)
 
 
 @pytest.mark.unit
