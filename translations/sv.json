@@ -82,25 +82,25 @@
         }
       },
       "sources": {
-        "title": "Name your energy sensors",
-        "description": "Your Home Assistant Energy Dashboard is not set up (or is missing solar or grid), so SEM asked your system directly.\n\nWhat SEM recognised:\n{summary}\n\nConfirm or change each one below. SEM needs solar and grid to work out your surplus; leave battery empty if you have none. You can set up the Energy Dashboard later at {url} — SEM will keep using what you choose here.",
+        "title": "Namnge dina energisensorer",
+        "description": "Din Home Assistant Energi-instrumentpanel är inte konfigurerad (eller saknar sol eller nät), så SEM frågade ditt system direkt.\n\nVad SEM kände igen:\n{summary}\n\nBekräfta eller ändra var och en nedan. SEM behöver sol och nät för att räkna ut ditt överskott; lämna batteri tomt om du inte har något. Du kan konfigurera Energi-instrumentpanelen senare på {url} — SEM fortsätter använda det du väljer här.",
         "data": {
-          "solar_power_sensor": "Solar power",
-          "grid_import_power_sensor": "Grid power",
-          "battery_power_sensor": "Battery power (optional)",
-          "observer_mode": "Observer mode (watch only, command nothing)",
-          "battery_soc_sensor": "Battery charge % (optional)",
-          "grid_import_power_entity": "Grid import power (optional)",
-          "grid_export_power_entity": "Grid export power (optional)"
+          "solar_power_sensor": "Soleffekt",
+          "grid_import_power_sensor": "Näteffekt",
+          "battery_power_sensor": "Battericeffekt (valfri)",
+          "observer_mode": "Observatörsläge (bara bevaka, inget kommando)",
+          "battery_soc_sensor": "Batteriladdning % (valfri)",
+          "grid_import_power_entity": "Nätimporteffekt (valfri)",
+          "grid_export_power_entity": "Nätexporteffekt (valfri)"
         },
         "data_description": {
-          "solar_power_sensor": "Live production in watts — not a daily total.",
-          "grid_import_power_sensor": "Live import/export in watts. One signed sensor is fine; SEM works out which direction is which by watching it.",
-          "battery_power_sensor": "Live charge/discharge in watts. Leave empty if you have no home battery.",
-          "observer_mode": "Recommended for the first days: SEM shows every decision it would make and sends nothing to your hardware.",
-          "battery_soc_sensor": "State of charge in percent — SEM's four battery zones read it.",
-          "grid_import_power_entity": "Only if your meter has no single signed sensor: the import side, always positive. Fill both of these or neither.",
-          "grid_export_power_entity": "The export side, always positive. SEM computes export minus import, so no direction has to be guessed."
+          "solar_power_sensor": "Levande produktion i watt — inte en daglig summa.",
+          "grid_import_power_sensor": "Levande import/export i watt. En tecknad sensor räcker; SEM räknar ut vilken riktning som är vilken genom att bevaka den.",
+          "battery_power_sensor": "Levande laddning/urladdning i watt. Lämna tom om du inte har något husbatteri.",
+          "observer_mode": "Rekommenderas de första dagarna: SEM visar varje beslut den skulle ta och skickar inget till din hårdvara.",
+          "battery_soc_sensor": "Laddningsnivå i procent — SEM:s fyra batterizoner läser den.",
+          "grid_import_power_entity": "Bara om din mätare saknar en enda tecknad sensor: importsidan, alltid positiv. Fyll i båda dessa eller ingen.",
+          "grid_export_power_entity": "Exportsidan, alltid positiv. SEM beräknar export minus import, så ingen riktning behöver gissas."
         }
       }
     },
@@ -108,7 +108,7 @@
       "unknown": "Ett oväntat fel uppstod. Försök igen.",
       "entity_not_found": "Entiteten hittades inte. Kontrollera att entitets-ID:t finns.",
       "service_not_found": "Aviseringstjänsten hittades inte. Kontrollera tjänstens namn (t.ex. notify.mobile_app_your_phone).",
-      "required": "SEM needs this sensor to read your system."
+      "required": "SEM behöver den här sensorn för att läsa ditt system."
     },
     "abort": {
       "already_configured": "Solar Energy Management är redan konfigurerat. Bara en instans tillåts."
@@ -182,7 +182,7 @@
           "diagram_style": "Systemdiagram stil",
           "battery_assist_min_surplus": "Batteristöd – min. solöverskott (W)",
           "grid_sign_invert": "Invertera näteffektens tecken",
-          "battery_operating_mode_entity": "Battery operating-mode entity (watched)"
+          "battery_operating_mode_entity": "Batteriets driftlägesentitet (bevakad)"
         },
         "data_description": {
           "update_interval": "Hur ofta koordinatorn läser sensorer och justerar hårdvaran. 10 s ger den mest exakta energiintegrationen; värden över 30 s underskattar energin. Intervall 10–60 s.",
@@ -208,7 +208,7 @@
           "legionella_interval_hours": "Maximalt antal timmar mellan legionelladesinfektionscykler innan SEM tvingar fram en uppvärmning.",
           "battery_assist_min_surplus": "Minsta verkliga solöverskott innan husbatteriet får hjälpa till att ladda EV:n — i alla laddningslägen. Under detta är batteriet reserverat för huset (bilen drar från nätet + sol). Standard 1200 W. Ställ in 0 för att låta batteriet stödja EV:n överallt, även nattetid.",
           "grid_sign_invert": "Slå på endast om nätimport visas som ett positivt värde (t.ex. Enphase). SEM:s konvention är negativ = import; detta negerar råvärdet och kringgår automatisk teckendetektering.",
-          "battery_operating_mode_entity": "The inverter's operating-policy selector (e.g. Huawei's 'Working mode'). SEM only READS it: the mode is shown beside the battery evidence, and a one-time repair warns when it is not the self-consumption mode SEM's planning assumes. SEM never changes it. Leave empty to disable the watch."
+          "battery_operating_mode_entity": "Växelriktarens driftpolicyväljare (t.ex. Huaweis 'Working mode'). SEM LÄSER den bara: läget visas bredvid batteriunderlaget, och en engångsreparation varnar när det inte är det egenförbrukningsläge SEM:s planering förutsätter. SEM ändrar den aldrig. Lämna tom för att stänga av bevakningen."
         }
       },
       "settings_battery_limit": {
@@ -341,15 +341,15 @@
           "battery_charge_platform": "Batteriets laddplattform",
           "battery_replan_interval_min": "Omplaneringsintervall (min)",
           "battery_prefer_consecutive_window": "Föredra ett sammanhängande laddfönster",
-          "battery_charge_power_limit_entity": "Battery charge-power limit entity (for pacing)",
-          "inverter_ac_limit_w": "Inverter AC output limit"
+          "battery_charge_power_limit_entity": "Entitet för batteriets laddeffektgräns (för dämpning)",
+          "inverter_ac_limit_w": "Växelriktarens AC-uteffektgräns"
         },
         "data_description": {
           "battery_charge_platform": "Vilken växelriktare SEM styr för schemalagd nätladdning. Välj Deye för att visa Deye-kopplingssteget.",
           "battery_replan_interval_min": "Hur ofta laddschemat räknas om utifrån senaste prognos och priser.",
           "battery_prefer_consecutive_window": "På: de billiga timmarna i ett block (färre start/stopp-cykler); av: de enskilt billigaste timmarna, även utspridda.",
-          "battery_charge_power_limit_entity": "The inverter's max-charge-power number that charge pacing writes to (e.g. Huawei's 'Maximum charging power'). Leave empty to keep pacing advisory-only.",
-          "inverter_ac_limit_w": "Your inverter's maximum AC output in watts. Charge pacing opens its cap wherever solar would exceed this, so clipped sun is captured. 0 = not set."
+          "battery_charge_power_limit_entity": "Växelriktarens number-entitet för max laddeffekt som laddningsdämpningen skriver till (t.ex. Huaweis 'Maximum charging power'). Lämna tom för att hålla dämpningen enbart rådgivande.",
+          "inverter_ac_limit_w": "Din växelriktares maximala AC-uteffekt i watt. Laddningsdämpningen öppnar sitt tak där solen annars skulle överstiga detta, så att klippt sol fångas upp. 0 = ej inställt."
         }
       },
       "ev_charger_edit": {
@@ -362,11 +362,11 @@
           "ev_charging_power_sensor": "EV Laddningseffekt",
           "ev_charger_service": "Tjänst för att ställa in laddström (valfri)",
           "ev_charger_service_entity_id": "Målentitet för laddarens tjänstanrop (valfri)",
-          "ev_start_stop_entity": "Start/Stop Entity (optional)",
-          "ev_current_sensor": "Offered Current Sensor (optional)",
-          "ev_charge_mode_entity": "Charge Mode Select (optional)",
-          "ev_charge_mode_start": "Charge Mode — Start Value (optional)",
-          "ev_charge_mode_stop": "Charge Mode — Stop Value (optional)",
+          "ev_start_stop_entity": "Start/stopp-entitet (valfri)",
+          "ev_current_sensor": "Erbjuden strömsensor (valfri)",
+          "ev_charge_mode_entity": "Select för laddningsläge (valfri)",
+          "ev_charge_mode_start": "Laddningsläge — Startvärde (valfri)",
+          "ev_charge_mode_stop": "Laddningsläge — Stoppvärde (valfri)",
           "ev_surplus_priority": "Överskottsprioritet (1=högst)",
           "ev_battery_may_assist": "Batteriet får assistera denna laddare",
           "ev_current_control_entity": "Strömstyrningsentitet (number — Wallbox, go-eCharger)",
@@ -384,7 +384,7 @@
           "ev_phase_switch_entity": "Fasväxlingsentitet (valfritt)",
           "ev_phase_switch_value_1p": "Fasväxling: värde för 1-fas (valfritt)",
           "ev_phase_switch_value_3p": "Fasväxling: värde för 3-fas (valfritt)",
-          "ev_phase_switching_enabled": "Phase switching"
+          "ev_phase_switching_enabled": "Fasväxling"
         },
         "data_description": {
           "charger_name": "Visningsnamn för den här laddaren i instrumentpanelen.",
@@ -393,11 +393,11 @@
           "ev_charging_power_sensor": "Numerisk sensor (W) som rapporterar effekten som den här laddaren levererar.",
           "ev_charger_service": "HA-tjänst som används för att ställa in laddströmmen. Används för KEBA eller Easee.",
           "ev_charger_service_entity_id": "Entitets-ID som skickas som mål för tjänstanropet. Lämna tom om det inte behövs.",
-          "ev_start_stop_entity": "Switch or button that physically starts/stops charging. Set this when dropping to 0 A does not release the charger (Smart EVSE, some OCPP boxes) — SEM opens it instead of leaving the contactor cycling.",
-          "ev_current_sensor": "Sensor reporting the current the charger is actually offering (A). Lets SEM verify a command landed instead of assuming it did.",
-          "ev_charge_mode_entity": "Select entity SEM switches to start/stop charging on boxes that need a mode change rather than a current of 0 A (go-e, Ohme, some OCPP).",
-          "ev_charge_mode_start": "The option SEM selects to START charging (e.g. \"Instant Charging\", \"2\"). Must match the select's option exactly.",
-          "ev_charge_mode_stop": "The option SEM selects to STOP charging. Leave blank if stopping is done by the start/stop entity or by setting 0 A.",
+          "ev_start_stop_entity": "Switch eller knapp som fysiskt startar/stoppar laddning. Ställ in denna när 0 A inte släpper laddaren (Smart EVSE, en del OCPP-boxar) — SEM öppnar den istället för att låta kontaktorn cykla.",
+          "ev_current_sensor": "Sensor som rapporterar den ström laddaren faktiskt erbjuder (A). Låter SEM bekräfta att ett kommando landade istället för att anta det.",
+          "ev_charge_mode_entity": "Select-entitet SEM växlar för att starta/stoppa laddning på boxar som behöver ett lägesbyte istället för en ström på 0 A (go-e, Ohme, en del OCPP).",
+          "ev_charge_mode_start": "Alternativet SEM väljer för att STARTA laddning (t.ex. \"Instant Charging\", \"2\"). Måste matcha selectens alternativ exakt.",
+          "ev_charge_mode_stop": "Alternativet SEM väljer för att STOPPA laddning. Lämna tomt om stopp sker via start/stopp-entiteten eller genom att sätta 0 A.",
           "ev_surplus_priority": "Fördelningsordning för överskott mellan flera laddare. Lägre nummer = högre prioritet.",
           "ev_battery_may_assist": "Låter hembatteriet hjälpa till att ladda detta fordon. Av = denna laddare använder endast sol och nät. Anläggningens batteribehörighet gäller fortfarande.",
           "ev_current_control_entity": "Number-entitet som används för att ställa in laddströmmen (A). För Wallbox, go-eCharger och liknande laddare.",
@@ -415,7 +415,7 @@
           "ev_phase_switch_entity": "Select/number/switch som växlar laddaren mellan 1- och 3-fasladdning (go-e 'psm', KEBA X-serien, openWB). SEM observerar och validerar tills vidare bara — automatisk växling kommer i en senare version.",
           "ev_phase_switch_value_1p": "Vad som skrivs till växlingsentiteten för 1-fasladdning — ett selects alternativnamn, ett numbers värde eller on/off. Krävs för select-entiteter; number-standard 1, switch-standard off.",
           "ev_phase_switch_value_3p": "Vad som skrivs till växlingsentiteten för 3-fasladdning — ett selects alternativnamn, ett numbers värde eller on/off. Krävs för select-entiteter; number-standard 3, switch-standard on.",
-          "ev_phase_switching_enabled": "Off by default while the 1/3-phase model is reworked (it paused chargers that never resumed on some brands). Turn on to test it on your charger."
+          "ev_phase_switching_enabled": "Av som standard medan 1/3-fasmodellen omarbetas (den pausade laddare som aldrig återupptog laddningen på vissa märken). Slå på för att testa på din laddare."
         }
       },
       "ev_charger_add": {
@@ -428,11 +428,11 @@
           "ev_charging_power_sensor": "EV Laddningseffekt",
           "ev_charger_service": "Tjänst för att ställa in laddström (valfri)",
           "ev_charger_service_entity_id": "Målentitet för laddarens tjänstanrop (valfri)",
-          "ev_start_stop_entity": "Start/Stop Entity (optional)",
-          "ev_current_sensor": "Offered Current Sensor (optional)",
-          "ev_charge_mode_entity": "Charge Mode Select (optional)",
-          "ev_charge_mode_start": "Charge Mode — Start Value (optional)",
-          "ev_charge_mode_stop": "Charge Mode — Stop Value (optional)",
+          "ev_start_stop_entity": "Start/stopp-entitet (valfri)",
+          "ev_current_sensor": "Erbjuden strömsensor (valfri)",
+          "ev_charge_mode_entity": "Select för laddningsläge (valfri)",
+          "ev_charge_mode_start": "Laddningsläge — Startvärde (valfri)",
+          "ev_charge_mode_stop": "Laddningsläge — Stoppvärde (valfri)",
           "ev_surplus_priority": "Överskottsprioritet (1=högst)",
           "ev_battery_may_assist": "Batteriet får assistera denna laddare",
           "ev_current_control_entity": "Strömstyrningsentitet (number — Wallbox, go-eCharger)",
@@ -449,7 +449,7 @@
           "ev_phase_switch_entity": "Fasväxlingsentitet (valfritt)",
           "ev_phase_switch_value_1p": "Fasväxling: värde för 1-fas (valfritt)",
           "ev_phase_switch_value_3p": "Fasväxling: värde för 3-fas (valfritt)",
-          "ev_phase_switching_enabled": "Phase switching"
+          "ev_phase_switching_enabled": "Fasväxling"
         },
         "data_description": {
           "charger_name": "Visningsnamn för den här laddaren i instrumentpanelen.",
@@ -458,11 +458,11 @@
           "ev_charging_power_sensor": "Numerisk sensor (W) som rapporterar effekten som den här laddaren levererar.",
           "ev_charger_service": "HA-tjänst som används för att ställa in laddströmmen. Används för KEBA eller Easee.",
           "ev_charger_service_entity_id": "Entitets-ID som skickas som mål för tjänstanropet. Lämna tom om det inte behövs.",
-          "ev_start_stop_entity": "Switch or button that physically starts/stops charging. Set this when dropping to 0 A does not release the charger (Smart EVSE, some OCPP boxes) — SEM opens it instead of leaving the contactor cycling.",
-          "ev_current_sensor": "Sensor reporting the current the charger is actually offering (A). Lets SEM verify a command landed instead of assuming it did.",
-          "ev_charge_mode_entity": "Select entity SEM switches to start/stop charging on boxes that need a mode change rather than a current of 0 A (go-e, Ohme, some OCPP).",
-          "ev_charge_mode_start": "The option SEM selects to START charging (e.g. \"Instant Charging\", \"2\"). Must match the select's option exactly.",
-          "ev_charge_mode_stop": "The option SEM selects to STOP charging. Leave blank if stopping is done by the start/stop entity or by setting 0 A.",
+          "ev_start_stop_entity": "Switch eller knapp som fysiskt startar/stoppar laddning. Ställ in denna när 0 A inte släpper laddaren (Smart EVSE, en del OCPP-boxar) — SEM öppnar den istället för att låta kontaktorn cykla.",
+          "ev_current_sensor": "Sensor som rapporterar den ström laddaren faktiskt erbjuder (A). Låter SEM bekräfta att ett kommando landade istället för att anta det.",
+          "ev_charge_mode_entity": "Select-entitet SEM växlar för att starta/stoppa laddning på boxar som behöver ett lägesbyte istället för en ström på 0 A (go-e, Ohme, en del OCPP).",
+          "ev_charge_mode_start": "Alternativet SEM väljer för att STARTA laddning (t.ex. \"Instant Charging\", \"2\"). Måste matcha selectens alternativ exakt.",
+          "ev_charge_mode_stop": "Alternativet SEM väljer för att STOPPA laddning. Lämna tomt om stopp sker via start/stopp-entiteten eller genom att sätta 0 A.",
           "ev_surplus_priority": "Fördelningsordning för överskott mellan flera laddare. Lägre nummer = högre prioritet.",
           "ev_battery_may_assist": "Låter hembatteriet hjälpa till att ladda detta fordon. Av = denna laddare använder endast sol och nät. Anläggningens batteribehörighet gäller fortfarande.",
           "ev_current_control_entity": "Number-entitet som används för att ställa in laddströmmen (A). För Wallbox, go-eCharger och liknande laddare.",
@@ -479,7 +479,7 @@
           "ev_phase_switch_entity": "Select/number/switch som växlar laddaren mellan 1- och 3-fasladdning (go-e 'psm', KEBA X-serien, openWB). SEM observerar och validerar tills vidare bara — automatisk växling kommer i en senare version.",
           "ev_phase_switch_value_1p": "Vad som skrivs till växlingsentiteten för 1-fasladdning — ett selects alternativnamn, ett numbers värde eller on/off. Krävs för select-entiteter; number-standard 1, switch-standard off.",
           "ev_phase_switch_value_3p": "Vad som skrivs till växlingsentiteten för 3-fasladdning — ett selects alternativnamn, ett numbers värde eller on/off. Krävs för select-entiteter; number-standard 3, switch-standard on.",
-          "ev_phase_switching_enabled": "Off by default while the 1/3-phase model is reworked (it paused chargers that never resumed on some brands). Turn on to test it on your charger."
+          "ev_phase_switching_enabled": "Av som standard medan 1/3-fasmodellen omarbetas (den pausade laddare som aldrig återupptog laddningen på vissa märken). Slå på för att testa på din laddare."
         }
       },
       "pv_naming": {
@@ -506,13 +506,13 @@
           "heat_pump_boost_offset": "Temperaturboost-offset (°C)",
           "heat_pump_max_setpoint": "Maximalt temperaturbörvärde (°C)",
           "heat_pump_priority": "Överskottsprioritet (1=högst)",
-          "heat_pump_sg_ready_service": "SG-Ready service (domain.service)",
-          "heat_pump_sg_ready_service_data": "SG-Ready service data (JSON; placeholders state, relay1, relay2)",
-          "heat_pump_sg_ready_state_entity": "SG-Ready state read-back entity",
-          "heat_pump_relay1_on_value": "SG-Ready contact 1 — ON value",
-          "heat_pump_relay1_off_value": "SG-Ready contact 1 — OFF value",
-          "heat_pump_relay2_on_value": "SG-Ready contact 2 — ON value",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value"
+          "heat_pump_sg_ready_service": "SG-Ready-tjänst (domain.service)",
+          "heat_pump_sg_ready_service_data": "SG-Ready-tjänstdata (JSON; platshållare state, relay1, relay2)",
+          "heat_pump_sg_ready_state_entity": "SG-Ready tillstånd-återläsningsentitet",
+          "heat_pump_relay1_on_value": "SG-Ready kontakt 1 — PÅ-värde",
+          "heat_pump_relay1_off_value": "SG-Ready kontakt 1 — AV-värde",
+          "heat_pump_relay2_on_value": "SG-Ready kontakt 2 — PÅ-värde",
+          "heat_pump_relay2_off_value": "SG-Ready kontakt 2 — AV-värde"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Switch-entitet för SG-Ready-relä 1 (signal för normaldrift). Ange tillsammans med relä 2 för SG-Ready-protokollet.",
@@ -523,10 +523,10 @@
           "heat_pump_boost_offset": "Antal grader Celsius som läggs till det normala börvärdet under en boost med solöverskott.",
           "heat_pump_max_setpoint": "Övre temperaturgräns (°C) som SEM ställer in under en boost-cykel.",
           "heat_pump_priority": "Prioritet vid fördelning av överskott i förhållande till andra enheter. Lägre nummer betjänas först.",
-          "heat_pump_relay1_on_value": "Only for a text/number/select contact: the value SEM writes to close contact 1. Leave empty for a switch.",
-          "heat_pump_relay1_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 1. Leave empty for a switch.",
-          "heat_pump_relay2_on_value": "Only for a text/number/select contact: the value SEM writes to close contact 2. Leave empty for a switch.",
-          "heat_pump_relay2_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 2. Leave empty for a switch."
+          "heat_pump_relay1_on_value": "Bara för en text-/number-/select-kontakt: värdet SEM skriver för att sluta kontakt 1. Lämna tom för en switch.",
+          "heat_pump_relay1_off_value": "Bara för en text-/number-/select-kontakt: värdet SEM skriver för att öppna kontakt 1. Lämna tom för en switch.",
+          "heat_pump_relay2_on_value": "Bara för en text-/number-/select-kontakt: värdet SEM skriver för att sluta kontakt 2. Lämna tom för en switch.",
+          "heat_pump_relay2_off_value": "Bara för en text-/number-/select-kontakt: värdet SEM skriver för att öppna kontakt 2. Lämna tom för en switch."
         }
       },
       "ev_charger_menu": {
@@ -643,11 +643,11 @@
           "deye_program_6_time": "Program 6 — tidslucka-entitet (time.*)",
           "deye_program_6_soc": "Program 6 — mål-SOC-number-entitet",
           "deye_program_6_charge": "Program 6 — nätladdning-select-entitet",
-          "deye_system_work_mode_control": "Control Deye System Work Mode (export policy)",
-          "deye_system_work_mode_entity": "Deye System Work Mode entity",
-          "deye_system_work_mode_selling_option": "Label of the 'Selling First' option",
-          "deye_system_work_mode_zero_load_option": "Label of the 'Zero Export To Load' option",
-          "deye_system_work_mode_zero_ct_option": "Label of the 'Zero Export To CT' option"
+          "deye_system_work_mode_control": "Styr Deye System Work Mode (exportpolicy)",
+          "deye_system_work_mode_entity": "Entitet för Deye System Work Mode",
+          "deye_system_work_mode_selling_option": "Etikett för alternativet 'Selling First'",
+          "deye_system_work_mode_zero_load_option": "Etikett för alternativet 'Zero Export To Load'",
+          "deye_system_work_mode_zero_ct_option": "Etikett för alternativet 'Zero Export To CT'"
         },
         "data_description": {
           "deye_bms_max_charge_current_a": "Valfritt tak från BMS. 0 = ingen BMS-gräns — växelriktarens eget maximum gäller.",
@@ -657,36 +657,36 @@
         }
       },
       "heat_pump_menu": {
-        "title": "Heat pumps",
-        "description": "Your primary heat pump is configured. Add more units, each driven independently by priority.",
+        "title": "Värmepumpar",
+        "description": "Din primära värmepump är konfigurerad. Lägg till fler enheter, var och en styrd oberoende efter prioritet.",
         "data": {
-          "action": "Action"
+          "action": "Åtgärd"
         }
       },
       "heat_pump_unit": {
-        "title": "Additional heat pump",
-        "description": "Configure this unit the same way as the primary: SG-Ready relays, a climate entity, or a service call (for command-driven pumps like Buderus over EMS-ESP).",
+        "title": "Ytterligare värmepump",
+        "description": "Konfigurera den här enheten på samma sätt som den primära: SG-Ready-reläer, en klimatentitet, eller ett tjänsteanrop (för kommandostyrda pumpar som Buderus via EMS-ESP).",
         "data": {
-          "name": "Name",
-          "heat_pump_relay1_entity": "SG-Ready relay 1",
-          "heat_pump_relay2_entity": "SG-Ready relay 2",
-          "heat_pump_invert_sg_ready": "Invert SG-Ready relays (NC wiring)",
-          "heat_pump_climate_entity": "Climate entity",
-          "heat_pump_power_sensor": "Power sensor",
-          "heat_pump_energy_sensor": "Energy sensor",
-          "heat_pump_temperature_sensor": "Temperature sensor",
-          "heat_pump_rated_power": "Rated power",
-          "heat_pump_boost_offset": "Boost offset",
-          "heat_pump_max_setpoint": "Maximum setpoint",
-          "heat_pump_force_on_threshold": "Force-on threshold",
-          "heat_pump_priority": "Priority",
-          "heat_pump_sg_ready_service": "SG-Ready service (domain.service)",
-          "heat_pump_sg_ready_service_data": "SG-Ready service data (JSON; placeholders state, relay1, relay2)",
-          "heat_pump_sg_ready_state_entity": "SG-Ready state read-back entity",
-          "heat_pump_relay1_on_value": "SG-Ready contact 1 — ON value",
-          "heat_pump_relay1_off_value": "SG-Ready contact 1 — OFF value",
-          "heat_pump_relay2_on_value": "SG-Ready contact 2 — ON value",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value"
+          "name": "Namn",
+          "heat_pump_relay1_entity": "SG-Ready relä 1",
+          "heat_pump_relay2_entity": "SG-Ready relä 2",
+          "heat_pump_invert_sg_ready": "Invertera SG-Ready-reläer (NC-koppling)",
+          "heat_pump_climate_entity": "Klimatentitet",
+          "heat_pump_power_sensor": "Effektsensor",
+          "heat_pump_energy_sensor": "Energisensor",
+          "heat_pump_temperature_sensor": "Temperatursensor",
+          "heat_pump_rated_power": "Märkeffekt",
+          "heat_pump_boost_offset": "Boost-offset",
+          "heat_pump_max_setpoint": "Max börvärde",
+          "heat_pump_force_on_threshold": "Tröskel för tvångsstart",
+          "heat_pump_priority": "Prioritet",
+          "heat_pump_sg_ready_service": "SG-Ready-tjänst (domain.service)",
+          "heat_pump_sg_ready_service_data": "SG-Ready-tjänstdata (JSON; platshållare state, relay1, relay2)",
+          "heat_pump_sg_ready_state_entity": "SG-Ready tillstånd-återläsningsentitet",
+          "heat_pump_relay1_on_value": "SG-Ready kontakt 1 — PÅ-värde",
+          "heat_pump_relay1_off_value": "SG-Ready kontakt 1 — AV-värde",
+          "heat_pump_relay2_on_value": "SG-Ready kontakt 2 — PÅ-värde",
+          "heat_pump_relay2_off_value": "SG-Ready kontakt 2 — AV-värde"
         }
       }
     },
@@ -698,11 +698,11 @@
       "deye_program_groups_incomplete": "Alla sex Deye-programgrupper måste ha entiteter för tid, SOC och nätladdning.",
       "deye_work_mode_mapping_not_distinct": "Work Mode-styrning kräver två olika alternativ – ett för Load First och ett för Battery First. Välj båda, och inte samma två gånger.",
       "deye_force_charge_work_mode_invalid": "Välj vilket Work Mode SEM ska använda för att tvångsladda batteriet: Load First eller Battery First.",
-      "deye_system_work_mode_mapping_not_distinct": "The three System Work Mode labels must be filled in and distinct.",
-      "heat_pump_no_control": "Configure at least one control path: both relays, a climate entity, or a service.",
-      "heat_pump_service_invalid": "The SG-Ready service must be domain.service (e.g. ems_esp.send_command).",
-      "heat_pump_service_data_invalid": "The SG-Ready service data must be a JSON object.",
-      "heat_pump_contact_values_missing": "This SG-Ready contact is a text/number/select entity, so SEM needs both the ON and the OFF value to write. Fill both, or pick a switch entity.",
+      "deye_system_work_mode_mapping_not_distinct": "De tre System Work Mode-etiketterna måste fyllas i och vara olika.",
+      "heat_pump_no_control": "Konfigurera minst en styrväg: båda reläerna, en klimatentitet, eller en tjänst.",
+      "heat_pump_service_invalid": "SG-Ready-tjänsten måste vara domain.service (t.ex. ems_esp.send_command).",
+      "heat_pump_service_data_invalid": "SG-Ready-tjänstdatan måste vara ett JSON-objekt.",
+      "heat_pump_contact_values_missing": "Den här SG-Ready-kontakten är en text-/number-/select-entitet, så SEM behöver både PÅ- och AV-värdet för att skriva. Fyll i båda, eller välj en switch-entitet.",
       "calendar_needs_schedule": "Kalenderläget behöver ett schema för högtid. Välj en Schema-hjälpare eller ett annat tariffläge."
     }
   },
@@ -721,7 +721,7 @@
         "name": "Kapacitetsavvikelse"
       },
       "battery_charge_pacing": {
-        "name": "Battery charge pacing"
+        "name": "Batteriets laddningsdämpning"
       },
       "battery_charge_power": {
         "name": "Batteriets laddeffekt"
@@ -922,7 +922,7 @@
         "name": "Nätets teckenkonvention"
       },
       "diag_inputs_degraded": {
-        "name": "Inputs Degraded"
+        "name": "Försämrade ingångar"
       },
       "diag_inverter_l1_current_a": {
         "name": "Växelriktare Load/EPS L1 ström"
@@ -1505,7 +1505,7 @@
         "name": "Prognosstyrd förbrukning"
       },
       "battery_charge_pacing_enabled": {
-        "name": "Battery charge pacing"
+        "name": "Batteriets laddningsdämpning"
       },
       "export_guard_enabled": {
         "name": "Exportvakt"
@@ -1691,7 +1691,7 @@
     },
     "button": {
       "backfill_battery_nights": {
-        "name": "Rebuild battery-night history"
+        "name": "Bygg upp batteriets natthistorik"
       },
       "pause_charging": {
         "name": "{charger} Pausa laddning"
@@ -1770,7 +1770,7 @@
       "fix_flow": {
         "step": {
           "confirm": {
-            "title": "Report this to SEM",
+            "title": "Rapportera detta till SEM",
             "description": "SEM:s senaste 3+ strömkommandon till **{name}** avvisades: `{error}`. Laddaren står INTE under SEM:s kontroll just nu — den fortsätter göra det den senast blev tillsagd (inklusive att ladda för full effekt i läget av). Vanligaste orsakerna: laddarens styrentitet har bytt namn efter en uppdatering av den underliggande integrationen, eller så pekar `ev_charger_service` på en tjänst med ett annat parameterschema. Kontrollera laddarens styrentitet/tjänst i SEM-konfigurationen. Detta problem försvinner automatiskt vid nästa lyckade kommando.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
           }
         }
@@ -1781,7 +1781,7 @@
       "fix_flow": {
         "step": {
           "confirm": {
-            "title": "Report this to SEM",
+            "title": "Rapportera detta till SEM",
             "description": "SEM har beordrat **{name}** att stoppa, men ingen konfigurerad mekanism kan faktiskt öppna kontaktorn — bilen drar fortfarande {power} W. Den enda styrning SEM har för den här laddaren är `{entity}`, och dess minimum ligger över 0 A, så att skriva 0 A gör ingenting (SEM skriver aldrig ett värde som entiteten skulle avvisa). Har du ett hembatteri kommer den här effekten ur det — när som helst på dygnet. Lösning: konfigurera en start/stopp-entitet (`ev_start_stop_entity`), en laddlägesentitet eller en stopptjänst för den här laddaren i SEM:s inställningar. Meddelandet försvinner så snart laddaren slutar dra effekt.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
           }
         }
@@ -1820,7 +1820,7 @@
       "fix_flow": {
         "step": {
           "confirm": {
-            "title": "Report this to SEM",
+            "title": "Rapportera detta till SEM",
             "description": "**{name}** är inställd på ett laddmål i procent, men fordonet rapporterar just nu ingen laddningsnivå — SEM kan därför inte stanna *exakt* vid **{target}%**.\n\nDet laddar ändå inte blint: från den senaste riktiga avläsningen under den här sessionen räknar det den energi som faktiskt levererats och stannar när den uppmätta summan når ditt mål — överskridandet är bara det bilen tagit sedan avläsningen. Om ingen riktig avläsning alls har kommit in under sessionen (eller om SEM startades om mitt i laddningen) saknas referenspunkt, och laddningen pågår tills bilen själv drar ner effekten nära fullt.\n\nFör en gräns som träffar rätt, koppla en **riktig SOC-sensor för fordonet** till den här laddaren (Konfiguration → EV → Fordons-SOC-entitet). Batteriprocenten på instrumentpanelen är SEM:s *uppskattade* SOC, som medvetet ignoreras för den hårda gränsen (den kan driva). Den här reparationen försvinner automatiskt så snart en riktig SOC-avläsning finns igen.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
           }
         }
@@ -1855,12 +1855,12 @@
       "description": "SEM räknar om ampere till watt med **Faser × Volt**. För **{name}** är det **{believed}**, så en ampere borde ge **{nominal} W** — men under **{cycles}** stabila cykler drog laddaren **{watts_per_amp} W per ampere**, vilket passar **{measured}**. Det talet styr strömmen SEM erbjuder och vad nattplanen antar att bilen behöver. **Lösning:** öppna laddarens *Faser*-tal och sätt det till **{measured}**. Försvinner av sig självt när det stämmer."
     },
     "deye_system_work_mode_invalid": {
-      "title": "Deye export control cannot be used: {entity_id}",
-      "description": "SEM cannot use {entity_id} for export control: {reason}. Check the select entity and the three option labels under Configuration → Battery intelligence."
+      "title": "Deye-exportstyrning kan inte användas: {entity_id}",
+      "description": "SEM kan inte använda {entity_id} för exportstyrning: {reason}. Kontrollera select-entiteten och de tre alternativetiketterna under Konfiguration → Batteriintelligens."
     },
     "battery_operating_mode_unexpected": {
-      "title": "Battery is in “{mode}” — SEM plans as if it were “{expected}”",
-      "description": "The operating-mode selector {entity_id} reads “{mode}”. SEM's overnight model and the spendable budget assume “{expected}”; in other modes the inverter follows its own schedule underneath SEM and the plans may not hold. If this mode is deliberate, dismiss this — SEM will not fight your choice. Otherwise set the inverter back to “{expected}”."
+      "title": "Batteriet är i “{mode}” — SEM planerar som om det vore “{expected}”",
+      "description": "Driftlägesväljaren {entity_id} läser “{mode}”. SEM:s nattmodell och den spenderbara budgeten förutsätter “{expected}”; i andra lägen följer växelriktaren sitt eget schema under SEM och planerna kanske inte håller. Om detta läge är avsiktligt, avfärda detta — SEM kämpar inte emot ditt val. Ställ annars tillbaka växelriktaren till “{expected}”."
     },
     "battery_force_discharge_entity_unstable": {
       "title": "Batteriets effektbörvärde blir gång på gång otillgängligt: {entity_id}",
@@ -1883,32 +1883,32 @@
       "description": "Mätaren visar **{grid_import_kw} kW** mot ett mål på **{target_kw} kW**. Även med allt SEM får stänga av redan avstängt skulle **{uncontrolled_kw} kW** återstå — varav **{managed_charger_kw} kW** är en laddare SEM redan styr; dess topp sätts av laddgränsen, inte av bortkoppling. Därför kopplar SEM inte bort något så länge detta varar. **Lösning:** sänk den laddarens gräns, ge SEM den andra lasten, eller höj målet. Försvinner av sig självt när toppen går att nå igen."
     },
     "battery_platform_pinned_generic": {
-      "title": "Battery platform pinned to Generic on a {brand} install",
-      "description": "SEM's battery platform is set to **Generic / other**, but the {brand} integration is loaded. Earlier versions of the options wizard offered only Generic and Deye and defaulted to Generic, so walking through that page once demoted a {brand} install to the generic adapter — no forcible charge, no idempotent register writes. Open **Settings → Integrations → SEM → Configure → Battery scheduler** and set **Battery charge platform** to **Auto-detect**. If Generic is a deliberate choice (a battery with its own control entities), set that entity and this notice goes away."
+      "title": "Batteriplattformen är låst till Generic på en {brand}-installation",
+      "description": "SEM:s batteriplattform är satt till **Generic / annan**, men {brand}-integrationen är laddad. Tidigare versioner av inställningsguiden erbjöd bara Generic och Deye och valde Generic som standard, så att klicka igenom den sidan en gång degraderade en {brand}-installation till den generiska adaptern — ingen tvingad laddning, ingen idempotent registerskrivning. Öppna **Inställningar → Enheter och tjänster → SEM → Konfigurera → Batterischemaläggare** och sätt **Batteriets laddplattform** till **Autodetektera**. Om Generic är ett medvetet val (ett batteri med egna styrentiteter), ange den entiteten så försvinner meddelandet."
     },
     "split_grid_guessed": {
-      "title": "SEM is checking two guessed grid meters",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguration**, and switch on **Avancerat** at the top. Then set **Näteffekt** in section **Sensorkällor**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
+      "title": "SEM kontrollerar två gissade nätmätare",
+      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguration**, and switch on **Avancerat** at the top. Then set **Näteffekt** in section **Sensorkällor**. If your meter has one sensor for import and one for export, set **Nätimportsensor** and **Nätexportsensor** in section **Tariff och priser** instead."
     },
     "battery_control_write_not_taken": {
       "title": "En batteristyrningsskrivning tas inte emot: {entity_id}",
       "description": "SEM satte **`{entity_id}`** till **{wanted}**; på följande cykler lästes fortfarande **{seen}**, {strikes} gånger i rad. Anropet misslyckades inte — registret behöll bara inte värdet. **Lösning:** sätt entiteten för hand i Utvecklarverktyg → Tillstånd. Håller den inte är det fel entitet för rollen: välj en annan i konfigurationskortet. Håller den för hand men inte för SEM, berätta märke och entitet för oss. Försvinner så snart en skrivning speglas."
     },
     "soc_zones_out_of_order": {
-      "title": "Battery SOC zones are out of order",
-      "description": "Your battery zones read **Priority {priority}% · Buffer {buffer}% · Auto-start {auto_start}%**, but SEM expects them to rise in that order: Priority is the reserve you never spend, Buffer is where battery assist stops, and Auto-start is where the pack is full enough to give freely.\n\nSEM is using **{used}** as the boundaries — the same three numbers, sorted — so no zone is skipped and nothing behaves unpredictably. It is telling you because the layout you typed is almost certainly not the one you meant.\n\nFix it in **Settings → Devices & Services → SEM → Configure → Battery** or on the dashboard's Configuration tab. Any values are allowed as long as they ascend; wide zones are fine — 20 / 30 / 50 is a perfectly good layout on a large pack."
+      "title": "Batteriets SOC-zoner ligger i fel ordning",
+      "description": "Dina batterizoner läser **Prioritet {priority}% · Buffert {buffer}% · Autostart {auto_start}%**, men SEM förväntar sig att de stiger i den ordningen: Prioritet är reserven du aldrig spenderar, Buffert är där batteristödet slutar, och Autostart är där paketet är fullt nog för att ge fritt.\n\nSEM använder **{used}** som gränser — samma tre tal, sorterade — så att ingen zon hoppas över och inget beter sig oförutsägbart. Den berättar detta för dig eftersom layouten du skrev nästan säkert inte är den du menade.\n\nFixa det i **Inställningar → Enheter och tjänster → SEM → Konfigurera → Batteri** eller på instrumentpanelens Konfiguration-flik. Alla värden är tillåtna så länge de stiger; breda zoner är bra — 20 / 30 / 50 är en fullt godtagbar layout på ett stort batteri."
     },
     "previous_install_leftovers": {
-      "title": "Files from a previous SEM install were found",
-      "description": "SEM removed {removed} leftover file(s) of its own from an earlier install — those were SEM's and are gone.\n\nWhat is left is yours, and SEM will not take it without being asked: the long-term statistics of the old install's sensors, and the dashboard it generated. If you want those cleared too, run the **Remove leftovers** action (Developer tools → Actions → *SEM: Remove leftovers*). If you would rather keep your history, ignore this — nothing else will be deleted."
+      "title": "Filer från en tidigare SEM-installation hittades",
+      "description": "SEM tog bort {removed} kvarlämnad(e) fil(er) av sina egna från en tidigare installation — de var SEM:s och är borta.\n\nDet som finns kvar är ditt, och SEM tar det inte utan att fråga: den gamla installationens sensorers långtidsstatistik, och instrumentpanelen den skapade. Om du vill rensa bort även det, kör åtgärden **Ta bort kvarlämningar** (Utvecklarverktyg → Åtgärder → *SEM: Ta bort kvarlämningar*). Om du hellre behåller din historik, ignorera detta — inget annat tas bort."
     },
     "heat_pump_contact_values_missing": {
-      "title": "SG-Ready contact {contact} cannot be driven",
-      "description": "**{entity_id}** is set as SG-Ready {contact}, but it is a text/number/select entity and its **{missing}** value is not configured — so SEM has nothing to write and every SG-Ready command for this heat pump fails. Open **Settings → Integrations → SEM → Configure → Heat Pump** (or the dashboard's Configuration tab) and fill both the ON and the OFF value for this contact, or point it at a switch entity instead."
+      "title": "SG-Ready-kontakt {contact} kan inte styras",
+      "description": "**{entity_id}** är inställd som SG-Ready {contact}, men det är en text-/number-/select-entitet och dess **{missing}**-värde är inte konfigurerat — så SEM har inget att skriva och varje SG-Ready-kommando för den här värmepumpen misslyckas. Öppna **Inställningar → Enheter och tjänster → SEM → Konfigurera → Värmepump** (eller instrumentpanelens Konfiguration-flik) och fyll i både PÅ- och AV-värdet för den här kontakten, eller peka den mot en switch-entitet istället."
     },
     "split_grid_rejected": {
-      "title": "SEM could not find your grid power meters",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguration**, and switch on **Avancerat** at the top. Then set **Näteffekt** in section **Sensorkällor**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
+      "title": "SEM kunde inte hitta dina nätmätare",
+      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguration**, and switch on **Avancerat** at the top. Then set **Näteffekt** in section **Sensorkällor**. If your meter has one sensor for import and one for export, set **Nätimportsensor** and **Nätexportsensor** in section **Tariff och priser** instead."
     }
   },
   "selector": {

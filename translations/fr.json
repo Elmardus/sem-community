@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Solar Energy Management Setup",
+        "title": "Configuration de Solar Energy Management",
         "description": "SEM a détecté les capteurs suivants depuis votre tableau de bord Énergie Home Assistant :\n\n{summary}\n\nCliquez sur **Soumettre** pour continuer. Plus qu'une étape. Les chargeurs VE, la pompe à chaleur, le tarif et tous les autres paramètres sont configurés plus tard dans le nouvel onglet **Configuration** du tableau de bord SEM — pas besoin de les renseigner maintenant.",
         "data": {
           "observer_mode": "Mode test (lecture seule — ne pilote pas le matériel)"
@@ -82,25 +82,25 @@
         }
       },
       "sources": {
-        "title": "Name your energy sensors",
-        "description": "Your Home Assistant Energy Dashboard is not set up (or is missing solar or grid), so SEM asked your system directly.\n\nWhat SEM recognised:\n{summary}\n\nConfirm or change each one below. SEM needs solar and grid to work out your surplus; leave battery empty if you have none. You can set up the Energy Dashboard later at {url} — SEM will keep using what you choose here.",
+        "title": "Nommez vos capteurs d'énergie",
+        "description": "Votre tableau de bord Énergie de Home Assistant n'est pas configuré (ou il manque le solaire ou le réseau), donc SEM a interrogé votre système directement.\n\nCe que SEM a reconnu :\n{summary}\n\nConfirmez ou modifiez chaque élément ci-dessous. SEM a besoin du solaire et du réseau pour calculer votre surplus ; laissez la batterie vide si vous n'en avez pas. Vous pouvez configurer le tableau de bord Énergie plus tard à {url} — SEM continuera d'utiliser ce que vous choisissez ici.",
         "data": {
-          "solar_power_sensor": "Solar power",
-          "grid_import_power_sensor": "Grid power",
-          "battery_power_sensor": "Battery power (optional)",
-          "observer_mode": "Observer mode (watch only, command nothing)",
-          "battery_soc_sensor": "Battery charge % (optional)",
-          "grid_import_power_entity": "Grid import power (optional)",
-          "grid_export_power_entity": "Grid export power (optional)"
+          "solar_power_sensor": "Puissance solaire",
+          "grid_import_power_sensor": "Puissance réseau",
+          "battery_power_sensor": "Puissance batterie (optionnel)",
+          "observer_mode": "Mode observateur (surveillance uniquement, aucune commande)",
+          "battery_soc_sensor": "Charge batterie % (optionnel)",
+          "grid_import_power_entity": "Puissance d'import réseau (optionnel)",
+          "grid_export_power_entity": "Puissance d'export réseau (optionnel)"
         },
         "data_description": {
-          "solar_power_sensor": "Live production in watts — not a daily total.",
-          "grid_import_power_sensor": "Live import/export in watts. One signed sensor is fine; SEM works out which direction is which by watching it.",
-          "battery_power_sensor": "Live charge/discharge in watts. Leave empty if you have no home battery.",
-          "observer_mode": "Recommended for the first days: SEM shows every decision it would make and sends nothing to your hardware.",
-          "battery_soc_sensor": "State of charge in percent — SEM's four battery zones read it.",
-          "grid_import_power_entity": "Only if your meter has no single signed sensor: the import side, always positive. Fill both of these or neither.",
-          "grid_export_power_entity": "The export side, always positive. SEM computes export minus import, so no direction has to be guessed."
+          "solar_power_sensor": "Production en direct en watts — pas un total journalier.",
+          "grid_import_power_sensor": "Import/export en direct en watts. Un seul capteur signé suffit ; SEM détermine le sens en l'observant.",
+          "battery_power_sensor": "Charge/décharge en direct en watts. Laissez vide si vous n'avez pas de batterie domestique.",
+          "observer_mode": "Recommandé pour les premiers jours : SEM affiche chaque décision qu'il prendrait et n'envoie rien à votre matériel.",
+          "battery_soc_sensor": "État de charge en pourcentage — les quatre zones de batterie de SEM le lisent.",
+          "grid_import_power_entity": "Uniquement si votre compteur n'a pas de capteur signé unique : le côté import, toujours positif. Remplissez les deux ou aucun.",
+          "grid_export_power_entity": "Le côté export, toujours positif. SEM calcule export moins import, donc aucun sens n'a besoin d'être deviné."
         }
       }
     },
@@ -108,7 +108,7 @@
       "unknown": "Une erreur inattendue s'est produite. Veuillez réessayer.",
       "entity_not_found": "Entité introuvable. Vérifiez que l'ID d'entité existe.",
       "service_not_found": "Service de notification introuvable. Veuillez vérifier le nom du service (par ex. notify.mobile_app_your_phone).",
-      "required": "SEM needs this sensor to read your system."
+      "required": "SEM a besoin de ce capteur pour lire votre système."
     },
     "abort": {
       "already_configured": "Solar Energy Management est déjà configuré. Une seule instance est autorisée."
@@ -182,7 +182,7 @@
           "diagram_style": "Style du diagramme système",
           "battery_assist_min_surplus": "Assistance batterie – surplus solaire min. (W)",
           "grid_sign_invert": "Inverser le signe de la puissance réseau",
-          "battery_operating_mode_entity": "Battery operating-mode entity (watched)"
+          "battery_operating_mode_entity": "Entité de mode de fonctionnement de la batterie (surveillée)"
         },
         "data_description": {
           "update_interval": "Fréquence à laquelle le coordinateur lit les capteurs et ajuste le matériel. 10 s donne l'intégration d'énergie la plus précise ; au-delà de 30 s, l'énergie sera sous-comptée. Plage 10–60 s.",
@@ -208,7 +208,7 @@
           "legionella_interval_hours": "Nombre maximal d'heures entre deux cycles de désinfection anti-légionelle avant que SEM ne force une montée en température.",
           "battery_assist_min_surplus": "Surplus solaire réel minimum avant que la batterie domestique puisse aider à charger le VE — dans tous les modes de charge. En dessous, la batterie est réservée à la maison (la voiture se recharge sur le réseau + solaire). Par défaut 1200 W. Réglez sur 0 pour que la batterie soutienne le VE en toutes circonstances, y compris la nuit.",
           "grid_sign_invert": "À activer uniquement si l'import réseau s'affiche en positif (p. ex. Enphase). La convention de SEM est négatif = import ; ceci inverse la lecture brute et contourne la détection automatique du signe.",
-          "battery_operating_mode_entity": "The inverter's operating-policy selector (e.g. Huawei's 'Working mode'). SEM only READS it: the mode is shown beside the battery evidence, and a one-time repair warns when it is not the self-consumption mode SEM's planning assumes. SEM never changes it. Leave empty to disable the watch."
+          "battery_operating_mode_entity": "Le sélecteur de politique de fonctionnement de l'onduleur (par exemple 'Working mode' chez Huawei). SEM se contente de le LIRE : le mode est affiché à côté des preuves batterie, et une réparation ponctuelle avertit quand ce n'est pas le mode autoconsommation que la planification de SEM suppose. SEM ne le modifie jamais. Laissez vide pour désactiver la surveillance."
         }
       },
       "settings_battery_limit": {
@@ -341,15 +341,15 @@
           "battery_charge_platform": "Plateforme de charge de la batterie",
           "battery_replan_interval_min": "Intervalle de replanification (min)",
           "battery_prefer_consecutive_window": "Préférer une fenêtre de charge continue",
-          "battery_charge_power_limit_entity": "Battery charge-power limit entity (for pacing)",
-          "inverter_ac_limit_w": "Inverter AC output limit"
+          "battery_charge_power_limit_entity": "Entité de limite de puissance de charge batterie (pour le lissage)",
+          "inverter_ac_limit_w": "Limite de sortie AC de l'onduleur"
         },
         "data_description": {
           "battery_charge_platform": "Onduleur que SEM pilote pour la charge réseau planifiée. Choisissez Deye pour afficher l'étape de câblage Deye.",
           "battery_replan_interval_min": "Fréquence de recalcul du plan de charge selon les dernières prévisions et prix.",
           "battery_prefer_consecutive_window": "Activé : heures bon marché en un seul bloc (moins de cycles marche/arrêt) ; désactivé : les heures les moins chères même dispersées.",
-          "battery_charge_power_limit_entity": "The inverter's max-charge-power number that charge pacing writes to (e.g. Huawei's 'Maximum charging power'). Leave empty to keep pacing advisory-only.",
-          "inverter_ac_limit_w": "Your inverter's maximum AC output in watts. Charge pacing opens its cap wherever solar would exceed this, so clipped sun is captured. 0 = not set."
+          "battery_charge_power_limit_entity": "Le nombre de puissance de charge max. de l'onduleur sur lequel le lissage de charge écrit (par exemple 'Maximum charging power' chez Huawei). Laissez vide pour garder le lissage purement indicatif.",
+          "inverter_ac_limit_w": "La sortie AC maximale de votre onduleur en watts. Le lissage de charge ouvre son plafond partout où le solaire dépasserait ce niveau, afin de capter le soleil écrêté. 0 = non défini."
         }
       },
       "ev_charger_edit": {
@@ -362,11 +362,11 @@
           "ev_charging_power_sensor": "Puissance de charge VE",
           "ev_charger_service": "Service de réglage du courant du chargeur (optionnel)",
           "ev_charger_service_entity_id": "Entité cible du service du chargeur (optionnel)",
-          "ev_start_stop_entity": "Start/Stop Entity (optional)",
-          "ev_current_sensor": "Offered Current Sensor (optional)",
-          "ev_charge_mode_entity": "Charge Mode Select (optional)",
-          "ev_charge_mode_start": "Charge Mode — Start Value (optional)",
-          "ev_charge_mode_stop": "Charge Mode — Stop Value (optional)",
+          "ev_start_stop_entity": "Entité marche/arrêt (optionnel)",
+          "ev_current_sensor": "Capteur de courant offert (optionnel)",
+          "ev_charge_mode_entity": "Sélecteur de mode de charge (optionnel)",
+          "ev_charge_mode_start": "Mode de charge — valeur de démarrage (optionnel)",
+          "ev_charge_mode_stop": "Mode de charge — valeur d'arrêt (optionnel)",
           "ev_surplus_priority": "Priorité surplus (1=plus haute)",
           "ev_battery_may_assist": "La batterie peut assister ce chargeur",
           "ev_current_control_entity": "Entité de contrôle du courant (number — Wallbox, go-eCharger)",
@@ -384,7 +384,7 @@
           "ev_phase_switch_entity": "Entité de commutation de phases (optionnel)",
           "ev_phase_switch_value_1p": "Commutation de phases : valeur monophasé (optionnel)",
           "ev_phase_switch_value_3p": "Commutation de phases : valeur triphasé (optionnel)",
-          "ev_phase_switching_enabled": "Phase switching"
+          "ev_phase_switching_enabled": "Commutation de phases"
         },
         "data_description": {
           "charger_name": "Nom convivial de ce chargeur affiché dans le tableau de bord.",
@@ -393,11 +393,11 @@
           "ev_charging_power_sensor": "Capteur numérique (W) indiquant la puissance délivrée par ce chargeur.",
           "ev_charger_service": "Service HA utilisé pour définir le courant de charge. À utiliser pour KEBA ou Easee.",
           "ev_charger_service_entity_id": "ID d'entité transmis comme cible de l'appel de service. Laissez vide si ce n'est pas nécessaire.",
-          "ev_start_stop_entity": "Switch or button that physically starts/stops charging. Set this when dropping to 0 A does not release the charger (Smart EVSE, some OCPP boxes) — SEM opens it instead of leaving the contactor cycling.",
-          "ev_current_sensor": "Sensor reporting the current the charger is actually offering (A). Lets SEM verify a command landed instead of assuming it did.",
-          "ev_charge_mode_entity": "Select entity SEM switches to start/stop charging on boxes that need a mode change rather than a current of 0 A (go-e, Ohme, some OCPP).",
-          "ev_charge_mode_start": "The option SEM selects to START charging (e.g. \"Instant Charging\", \"2\"). Must match the select's option exactly.",
-          "ev_charge_mode_stop": "The option SEM selects to STOP charging. Leave blank if stopping is done by the start/stop entity or by setting 0 A.",
+          "ev_start_stop_entity": "Interrupteur ou bouton qui démarre/arrête physiquement la charge. À définir quand passer à 0 A ne libère pas le chargeur (Smart EVSE, certaines bornes OCPP) — SEM l'ouvre alors au lieu de laisser le contacteur cycler.",
+          "ev_current_sensor": "Capteur indiquant le courant réellement offert par le chargeur (A). Permet à SEM de vérifier qu'une commande a bien été appliquée plutôt que de le supposer.",
+          "ev_charge_mode_entity": "Entité sélecteur que SEM bascule pour démarrer/arrêter la charge sur les bornes nécessitant un changement de mode plutôt qu'un courant de 0 A (go-e, Ohme, certaines OCPP).",
+          "ev_charge_mode_start": "L'option que SEM sélectionne pour DÉMARRER la charge (par exemple \"Instant Charging\", \"2\"). Doit correspondre exactement à l'option du sélecteur.",
+          "ev_charge_mode_stop": "L'option que SEM sélectionne pour ARRÊTER la charge. Laissez vide si l'arrêt se fait via l'entité marche/arrêt ou en réglant 0 A.",
           "ev_surplus_priority": "Ordre de répartition du surplus entre plusieurs chargeurs. Nombre plus bas = priorité plus haute.",
           "ev_battery_may_assist": "Autorise la batterie domestique à participer à la charge de ce véhicule. Désactivé = ce chargeur n'utilise que le solaire et le réseau. L'autorisation batterie de l'installation reste applicable.",
           "ev_current_control_entity": "Entité Number utilisée pour définir le courant de charge (A). Pour Wallbox, go-eCharger et chargeurs similaires.",
@@ -415,7 +415,7 @@
           "ev_phase_switch_entity": "Select/number/switch qui fait passer la borne entre charge mono- et triphasée (go-e « psm », KEBA série X, openWB). SEM se contente pour l'instant d'observer et de valider — la commutation automatique viendra dans une version ultérieure.",
           "ev_phase_switch_value_1p": "Ce qui est écrit dans l'entité de commutation pour la charge monophasée — nom d'option d'un select, valeur d'un number, ou on/off. Requis pour les entités select ; number par défaut 1, switch par défaut off.",
           "ev_phase_switch_value_3p": "Ce qui est écrit dans l'entité de commutation pour la charge triphasée — nom d'option d'un select, valeur d'un number, ou on/off. Requis pour les entités select ; number par défaut 3, switch par défaut on.",
-          "ev_phase_switching_enabled": "Off by default while the 1/3-phase model is reworked (it paused chargers that never resumed on some brands). Turn on to test it on your charger."
+          "ev_phase_switching_enabled": "Désactivé par défaut pendant la refonte du modèle 1/3 phases (cela mettait en pause des chargeurs qui ne reprenaient jamais sur certaines marques). Activez pour le tester sur votre chargeur."
         }
       },
       "ev_charger_add": {
@@ -428,11 +428,11 @@
           "ev_charging_power_sensor": "Puissance de charge VE",
           "ev_charger_service": "Service de réglage du courant du chargeur (optionnel)",
           "ev_charger_service_entity_id": "Entité cible du service du chargeur (optionnel)",
-          "ev_start_stop_entity": "Start/Stop Entity (optional)",
-          "ev_current_sensor": "Offered Current Sensor (optional)",
-          "ev_charge_mode_entity": "Charge Mode Select (optional)",
-          "ev_charge_mode_start": "Charge Mode — Start Value (optional)",
-          "ev_charge_mode_stop": "Charge Mode — Stop Value (optional)",
+          "ev_start_stop_entity": "Entité marche/arrêt (optionnel)",
+          "ev_current_sensor": "Capteur de courant offert (optionnel)",
+          "ev_charge_mode_entity": "Sélecteur de mode de charge (optionnel)",
+          "ev_charge_mode_start": "Mode de charge — valeur de démarrage (optionnel)",
+          "ev_charge_mode_stop": "Mode de charge — valeur d'arrêt (optionnel)",
           "ev_surplus_priority": "Priorité surplus (1=plus haute)",
           "ev_battery_may_assist": "La batterie peut assister ce chargeur",
           "ev_current_control_entity": "Entité de contrôle du courant (number — Wallbox, go-eCharger)",
@@ -449,7 +449,7 @@
           "ev_phase_switch_entity": "Entité de commutation de phases (optionnel)",
           "ev_phase_switch_value_1p": "Commutation de phases : valeur monophasé (optionnel)",
           "ev_phase_switch_value_3p": "Commutation de phases : valeur triphasé (optionnel)",
-          "ev_phase_switching_enabled": "Phase switching"
+          "ev_phase_switching_enabled": "Commutation de phases"
         },
         "data_description": {
           "charger_name": "Nom convivial de ce chargeur affiché dans le tableau de bord.",
@@ -458,11 +458,11 @@
           "ev_charging_power_sensor": "Capteur numérique (W) indiquant la puissance délivrée par ce chargeur.",
           "ev_charger_service": "Service HA utilisé pour définir le courant de charge. À utiliser pour KEBA ou Easee.",
           "ev_charger_service_entity_id": "ID d'entité transmis comme cible de l'appel de service. Laissez vide si ce n'est pas nécessaire.",
-          "ev_start_stop_entity": "Switch or button that physically starts/stops charging. Set this when dropping to 0 A does not release the charger (Smart EVSE, some OCPP boxes) — SEM opens it instead of leaving the contactor cycling.",
-          "ev_current_sensor": "Sensor reporting the current the charger is actually offering (A). Lets SEM verify a command landed instead of assuming it did.",
-          "ev_charge_mode_entity": "Select entity SEM switches to start/stop charging on boxes that need a mode change rather than a current of 0 A (go-e, Ohme, some OCPP).",
-          "ev_charge_mode_start": "The option SEM selects to START charging (e.g. \"Instant Charging\", \"2\"). Must match the select's option exactly.",
-          "ev_charge_mode_stop": "The option SEM selects to STOP charging. Leave blank if stopping is done by the start/stop entity or by setting 0 A.",
+          "ev_start_stop_entity": "Interrupteur ou bouton qui démarre/arrête physiquement la charge. À définir quand passer à 0 A ne libère pas le chargeur (Smart EVSE, certaines bornes OCPP) — SEM l'ouvre alors au lieu de laisser le contacteur cycler.",
+          "ev_current_sensor": "Capteur indiquant le courant réellement offert par le chargeur (A). Permet à SEM de vérifier qu'une commande a bien été appliquée plutôt que de le supposer.",
+          "ev_charge_mode_entity": "Entité sélecteur que SEM bascule pour démarrer/arrêter la charge sur les bornes nécessitant un changement de mode plutôt qu'un courant de 0 A (go-e, Ohme, certaines OCPP).",
+          "ev_charge_mode_start": "L'option que SEM sélectionne pour DÉMARRER la charge (par exemple \"Instant Charging\", \"2\"). Doit correspondre exactement à l'option du sélecteur.",
+          "ev_charge_mode_stop": "L'option que SEM sélectionne pour ARRÊTER la charge. Laissez vide si l'arrêt se fait via l'entité marche/arrêt ou en réglant 0 A.",
           "ev_surplus_priority": "Ordre de répartition du surplus entre plusieurs chargeurs. Nombre plus bas = priorité plus haute.",
           "ev_battery_may_assist": "Autorise la batterie domestique à participer à la charge de ce véhicule. Désactivé = ce chargeur n'utilise que le solaire et le réseau. L'autorisation batterie de l'installation reste applicable.",
           "ev_current_control_entity": "Entité Number utilisée pour définir le courant de charge (A). Pour Wallbox, go-eCharger et chargeurs similaires.",
@@ -479,7 +479,7 @@
           "ev_phase_switch_entity": "Select/number/switch qui fait passer la borne entre charge mono- et triphasée (go-e « psm », KEBA série X, openWB). SEM se contente pour l'instant d'observer et de valider — la commutation automatique viendra dans une version ultérieure.",
           "ev_phase_switch_value_1p": "Ce qui est écrit dans l'entité de commutation pour la charge monophasée — nom d'option d'un select, valeur d'un number, ou on/off. Requis pour les entités select ; number par défaut 1, switch par défaut off.",
           "ev_phase_switch_value_3p": "Ce qui est écrit dans l'entité de commutation pour la charge triphasée — nom d'option d'un select, valeur d'un number, ou on/off. Requis pour les entités select ; number par défaut 3, switch par défaut on.",
-          "ev_phase_switching_enabled": "Off by default while the 1/3-phase model is reworked (it paused chargers that never resumed on some brands). Turn on to test it on your charger."
+          "ev_phase_switching_enabled": "Désactivé par défaut pendant la refonte du modèle 1/3 phases (cela mettait en pause des chargeurs qui ne reprenaient jamais sur certaines marques). Activez pour le tester sur votre chargeur."
         }
       },
       "pv_naming": {
@@ -506,13 +506,13 @@
           "heat_pump_boost_offset": "Décalage de boost de température (°C)",
           "heat_pump_max_setpoint": "Consigne de température maximale (°C)",
           "heat_pump_priority": "Priorité surplus (1=plus haute)",
-          "heat_pump_sg_ready_service": "SG-Ready service (domain.service)",
-          "heat_pump_sg_ready_service_data": "SG-Ready service data (JSON; placeholders state, relay1, relay2)",
-          "heat_pump_sg_ready_state_entity": "SG-Ready state read-back entity",
-          "heat_pump_relay1_on_value": "SG-Ready contact 1 — ON value",
-          "heat_pump_relay1_off_value": "SG-Ready contact 1 — OFF value",
-          "heat_pump_relay2_on_value": "SG-Ready contact 2 — ON value",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value"
+          "heat_pump_sg_ready_service": "Service SG-Ready (domain.service)",
+          "heat_pump_sg_ready_service_data": "Données du service SG-Ready (JSON ; paramètres state, relay1, relay2)",
+          "heat_pump_sg_ready_state_entity": "Entité de lecture de l'état SG-Ready",
+          "heat_pump_relay1_on_value": "Contact 1 SG-Ready — valeur ON",
+          "heat_pump_relay1_off_value": "Contact 1 SG-Ready — valeur OFF",
+          "heat_pump_relay2_on_value": "Contact 2 SG-Ready — valeur ON",
+          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valeur OFF"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Entité switch du relais SG-Ready 1 (signal de fonctionnement normal). À renseigner avec le relais 2 pour utiliser le protocole SG-Ready.",
@@ -523,10 +523,10 @@
           "heat_pump_boost_offset": "Degrés Celsius ajoutés à la consigne normale pendant un boost sur surplus solaire.",
           "heat_pump_max_setpoint": "Limite haute de température (°C) que SEM appliquera pendant un cycle de boost.",
           "heat_pump_priority": "Priorité de répartition du surplus par rapport aux autres appareils. Les nombres les plus bas sont servis en premier.",
-          "heat_pump_relay1_on_value": "Only for a text/number/select contact: the value SEM writes to close contact 1. Leave empty for a switch.",
-          "heat_pump_relay1_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 1. Leave empty for a switch.",
-          "heat_pump_relay2_on_value": "Only for a text/number/select contact: the value SEM writes to close contact 2. Leave empty for a switch.",
-          "heat_pump_relay2_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 2. Leave empty for a switch."
+          "heat_pump_relay1_on_value": "Uniquement pour un contact texte/nombre/sélecteur : la valeur que SEM écrit pour fermer le contact 1. Laissez vide pour un interrupteur.",
+          "heat_pump_relay1_off_value": "Uniquement pour un contact texte/nombre/sélecteur : la valeur que SEM écrit pour ouvrir le contact 1. Laissez vide pour un interrupteur.",
+          "heat_pump_relay2_on_value": "Uniquement pour un contact texte/nombre/sélecteur : la valeur que SEM écrit pour fermer le contact 2. Laissez vide pour un interrupteur.",
+          "heat_pump_relay2_off_value": "Uniquement pour un contact texte/nombre/sélecteur : la valeur que SEM écrit pour ouvrir le contact 2. Laissez vide pour un interrupteur."
         }
       },
       "ev_charger_menu": {
@@ -562,48 +562,48 @@
         }
       },
       "settings_phase_guard": {
-        "title": "Per-phase guard sensors",
+        "title": "Capteurs de garde par phase",
         "description": "Mappez les capteurs pour {topology}. Pour une alimentation monophasée, seule L1 est requise. Pour une alimentation triphasée, sélectionnez une famille complète de courants RMS directs L1-L3 lorsqu'elle est disponible ; sinon, le courant réseau est calculé comme la puissance absolue divisée par la tension. Pour une voie hybride Load/EPS, sélectionnez des capteurs de courant RMS non négatifs pour les phases configurées. Les lectures requises manquantes, obsolètes, invalides ou négatives échouent en toute sécurité (fail closed). L'Observer Mode ne publie que des diagnostics ; il n'envoie aucune commande de contrôle.",
         "data": {
           "phase_guard_enforcement_enabled": "Arrêter la recharge du VE si les limites de phase sont dépassées",
           "phase_guard_notifications_enabled": "Envoyer les alertes de surveillance des phases",
           "phase_guard_recovery_margin_a": "Marge de sécurité sous chaque limite de phase",
           "phase_guard_recovery_cycles": "Mesures sûres avant la reprise de la recharge",
-          "phase_guard_grid_limit_a": "Main-fuse limit per phase",
-          "phase_guard_inverter_limit_a": "Inverter Load/EPS limit per phase",
-          "phase_guard_max_age_s": "Maximum sensor age",
-          "phase_guard_grid_l1_current_entity": "Direct Grid L1 RMS current",
-          "phase_guard_grid_l2_current_entity": "Direct Grid L2 RMS current",
-          "phase_guard_grid_l3_current_entity": "Direct Grid L3 RMS current",
-          "phase_guard_grid_l1_power_entity": "Grid L1 power sensor",
-          "phase_guard_grid_l2_power_entity": "Grid L2 power sensor",
-          "phase_guard_grid_l3_power_entity": "Grid L3 power sensor",
-          "phase_guard_grid_l1_voltage_entity": "Grid L1 voltage sensor",
-          "phase_guard_grid_l2_voltage_entity": "Grid L2 voltage sensor",
-          "phase_guard_grid_l3_voltage_entity": "Grid L3 voltage sensor",
-          "phase_guard_inverter_l1_current_entity": "Inverter Load/EPS L1 RMS current",
-          "phase_guard_inverter_l2_current_entity": "Inverter Load/EPS L2 RMS current",
-          "phase_guard_inverter_l3_current_entity": "Inverter Load/EPS L3 RMS current"
+          "phase_guard_grid_limit_a": "Limite du fusible principal par phase",
+          "phase_guard_inverter_limit_a": "Limite Load/EPS de l'onduleur par phase",
+          "phase_guard_max_age_s": "Âge maximal du capteur",
+          "phase_guard_grid_l1_current_entity": "Courant RMS réseau direct L1",
+          "phase_guard_grid_l2_current_entity": "Courant RMS réseau direct L2",
+          "phase_guard_grid_l3_current_entity": "Courant RMS réseau direct L3",
+          "phase_guard_grid_l1_power_entity": "Capteur de puissance réseau L1",
+          "phase_guard_grid_l2_power_entity": "Capteur de puissance réseau L2",
+          "phase_guard_grid_l3_power_entity": "Capteur de puissance réseau L3",
+          "phase_guard_grid_l1_voltage_entity": "Capteur de tension réseau L1",
+          "phase_guard_grid_l2_voltage_entity": "Capteur de tension réseau L2",
+          "phase_guard_grid_l3_voltage_entity": "Capteur de tension réseau L3",
+          "phase_guard_inverter_l1_current_entity": "Courant RMS Load/EPS onduleur L1",
+          "phase_guard_inverter_l2_current_entity": "Courant RMS Load/EPS onduleur L2",
+          "phase_guard_inverter_l3_current_entity": "Courant RMS Load/EPS onduleur L3"
         },
         "data_description": {
           "phase_guard_enforcement_enabled": "Lorsque cette option est activée, tous les chargeurs de VE gérés sont immédiatement arrêtés si les mesures sont dangereuses ou obsolètes, afin d’éviter le déclenchement du disjoncteur principal. Désactivée par défaut pour permettre de vérifier d’abord la protection de phase en mode Observation.",
           "phase_guard_recovery_margin_a": "La recharge reste bloquée jusqu’à ce que chaque phase requise se situe au moins de cette marge sous sa propre limite.",
           "phase_guard_recovery_cycles": "Nombre de mesures valides et sûres consécutives nécessaires avant d’autoriser à nouveau la recharge du VE.",
-          "phase_guard_grid_limit_a": "Maximum permitted grid current on each phase. Normally the main-fuse rating.",
-          "phase_guard_inverter_limit_a": "Maximum permitted RMS current on each phase of the inverter Load/EPS/Backup output.",
-          "phase_guard_max_age_s": "A reading older than this is treated as unsafe.",
+          "phase_guard_grid_limit_a": "Courant réseau maximal autorisé sur chaque phase. Normalement le calibre du fusible principal.",
+          "phase_guard_inverter_limit_a": "Courant RMS maximal autorisé sur chaque phase de la sortie Load/EPS/Backup de l'onduleur.",
+          "phase_guard_max_age_s": "Une mesure plus ancienne que cela est considérée comme non sûre.",
           "phase_guard_grid_l1_current_entity": "Courant réseau RMS direct et non négatif optionnel en A. Si une source directe est utilisée, toutes les phases configurées doivent être fournies.",
           "phase_guard_grid_l2_current_entity": "Courant réseau RMS direct et non négatif optionnel en A. Si une source directe est utilisée, toutes les phases configurées doivent être fournies.",
           "phase_guard_grid_l3_current_entity": "Courant réseau RMS direct et non négatif optionnel en A. Si une source directe est utilisée, toutes les phases configurées doivent être fournies.",
-          "phase_guard_grid_l1_power_entity": "Signed grid power for phase L1 in W. Import or export is accepted.",
-          "phase_guard_grid_l2_power_entity": "Signed grid power for phase L2 in W. Import or export is accepted.",
-          "phase_guard_grid_l3_power_entity": "Signed grid power for phase L3 in W. Import or export is accepted.",
-          "phase_guard_grid_l1_voltage_entity": "Grid voltage for phase L1 in V.",
-          "phase_guard_grid_l2_voltage_entity": "Grid voltage for phase L2 in V.",
-          "phase_guard_grid_l3_voltage_entity": "Grid voltage for phase L3 in V.",
-          "phase_guard_inverter_l1_current_entity": "Non-negative RMS current for inverter Load/EPS phase L1.",
-          "phase_guard_inverter_l2_current_entity": "Non-negative RMS current for inverter Load/EPS phase L2.",
-          "phase_guard_inverter_l3_current_entity": "Non-negative RMS current for inverter Load/EPS phase L3."
+          "phase_guard_grid_l1_power_entity": "Puissance réseau signée pour la phase L1 en W. Import ou export acceptés.",
+          "phase_guard_grid_l2_power_entity": "Puissance réseau signée pour la phase L2 en W. Import ou export acceptés.",
+          "phase_guard_grid_l3_power_entity": "Puissance réseau signée pour la phase L3 en W. Import ou export acceptés.",
+          "phase_guard_grid_l1_voltage_entity": "Tension réseau pour la phase L1 en V.",
+          "phase_guard_grid_l2_voltage_entity": "Tension réseau pour la phase L2 en V.",
+          "phase_guard_grid_l3_voltage_entity": "Tension réseau pour la phase L3 en V.",
+          "phase_guard_inverter_l1_current_entity": "Courant RMS non négatif pour la phase L1 Load/EPS de l'onduleur.",
+          "phase_guard_inverter_l2_current_entity": "Courant RMS non négatif pour la phase L2 Load/EPS de l'onduleur.",
+          "phase_guard_inverter_l3_current_entity": "Courant RMS non négatif pour la phase L3 Load/EPS de l'onduleur."
         }
       },
       "deye": {
@@ -643,11 +643,11 @@
           "deye_program_6_time": "Programme 6 — entité du créneau (time.*)",
           "deye_program_6_soc": "Programme 6 — entité number SOC cible",
           "deye_program_6_charge": "Programme 6 — entité select charge réseau",
-          "deye_system_work_mode_control": "Control Deye System Work Mode (export policy)",
-          "deye_system_work_mode_entity": "Deye System Work Mode entity",
-          "deye_system_work_mode_selling_option": "Label of the 'Selling First' option",
-          "deye_system_work_mode_zero_load_option": "Label of the 'Zero Export To Load' option",
-          "deye_system_work_mode_zero_ct_option": "Label of the 'Zero Export To CT' option"
+          "deye_system_work_mode_control": "Contrôler le System Work Mode Deye (politique d'export)",
+          "deye_system_work_mode_entity": "Entité System Work Mode Deye",
+          "deye_system_work_mode_selling_option": "Libellé de l'option 'Selling First'",
+          "deye_system_work_mode_zero_load_option": "Libellé de l'option 'Zero Export To Load'",
+          "deye_system_work_mode_zero_ct_option": "Libellé de l'option 'Zero Export To CT'"
         },
         "data_description": {
           "deye_bms_max_charge_current_a": "Plafond optionnel imposé par le BMS. 0 = aucune limite BMS ; le maximum de l'onduleur s'applique.",
@@ -657,36 +657,36 @@
         }
       },
       "heat_pump_menu": {
-        "title": "Heat pumps",
-        "description": "Your primary heat pump is configured. Add more units, each driven independently by priority.",
+        "title": "Pompes à chaleur",
+        "description": "Votre pompe à chaleur principale est configurée. Ajoutez d'autres unités, chacune pilotée indépendamment par priorité.",
         "data": {
           "action": "Action"
         }
       },
       "heat_pump_unit": {
-        "title": "Additional heat pump",
-        "description": "Configure this unit the same way as the primary: SG-Ready relays, a climate entity, or a service call (for command-driven pumps like Buderus over EMS-ESP).",
+        "title": "Pompe à chaleur supplémentaire",
+        "description": "Configurez cette unité de la même façon que la principale : relais SG-Ready, une entité climate, ou un appel de service (pour les pompes pilotées par commande comme Buderus via EMS-ESP).",
         "data": {
-          "name": "Name",
-          "heat_pump_relay1_entity": "SG-Ready relay 1",
-          "heat_pump_relay2_entity": "SG-Ready relay 2",
-          "heat_pump_invert_sg_ready": "Invert SG-Ready relays (NC wiring)",
-          "heat_pump_climate_entity": "Climate entity",
-          "heat_pump_power_sensor": "Power sensor",
-          "heat_pump_energy_sensor": "Energy sensor",
-          "heat_pump_temperature_sensor": "Temperature sensor",
-          "heat_pump_rated_power": "Rated power",
-          "heat_pump_boost_offset": "Boost offset",
-          "heat_pump_max_setpoint": "Maximum setpoint",
-          "heat_pump_force_on_threshold": "Force-on threshold",
-          "heat_pump_priority": "Priority",
-          "heat_pump_sg_ready_service": "SG-Ready service (domain.service)",
-          "heat_pump_sg_ready_service_data": "SG-Ready service data (JSON; placeholders state, relay1, relay2)",
-          "heat_pump_sg_ready_state_entity": "SG-Ready state read-back entity",
-          "heat_pump_relay1_on_value": "SG-Ready contact 1 — ON value",
-          "heat_pump_relay1_off_value": "SG-Ready contact 1 — OFF value",
-          "heat_pump_relay2_on_value": "SG-Ready contact 2 — ON value",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value"
+          "name": "Nom",
+          "heat_pump_relay1_entity": "Relais 1 SG-Ready",
+          "heat_pump_relay2_entity": "Relais 2 SG-Ready",
+          "heat_pump_invert_sg_ready": "Inverser les contacts SG-Ready (câblage NF)",
+          "heat_pump_climate_entity": "Entité climate",
+          "heat_pump_power_sensor": "Capteur de puissance",
+          "heat_pump_energy_sensor": "Capteur d'énergie",
+          "heat_pump_temperature_sensor": "Capteur de température",
+          "heat_pump_rated_power": "Puissance nominale",
+          "heat_pump_boost_offset": "Décalage de boost",
+          "heat_pump_max_setpoint": "Consigne maximale",
+          "heat_pump_force_on_threshold": "Seuil de forçage ON",
+          "heat_pump_priority": "Priorité",
+          "heat_pump_sg_ready_service": "Service SG-Ready (domain.service)",
+          "heat_pump_sg_ready_service_data": "Données du service SG-Ready (JSON ; paramètres state, relay1, relay2)",
+          "heat_pump_sg_ready_state_entity": "Entité de lecture de l'état SG-Ready",
+          "heat_pump_relay1_on_value": "Contact 1 SG-Ready — valeur ON",
+          "heat_pump_relay1_off_value": "Contact 1 SG-Ready — valeur OFF",
+          "heat_pump_relay2_on_value": "Contact 2 SG-Ready — valeur ON",
+          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valeur OFF"
         }
       }
     },
@@ -695,14 +695,14 @@
       "peak_warning_not_below_target": "Le niveau d'alerte doit être inférieur à la limite de pointe cible — c'est l'alerte précoce indiquant que la cible est approchée.",
       "peak_emergency_not_above_target": "Le niveau d'urgence doit être supérieur à la limite de pointe cible — sinon SEM délesterait avant même d'atteindre la limite qu'il protège.",
       "heat_pump_partial_relays": "SG-Ready nécessite les DEUX entités relais. Renseignez les deux relais — ou laissez-les vides et configurez uniquement l'entité climate pour un boost de consigne climate seul.",
-      "deye_program_groups_incomplete": "All six Deye program groups must define time, SOC, and grid-charge entities.",
+      "deye_program_groups_incomplete": "Les six groupes de programme Deye doivent tous définir les entités heure, SOC et charge réseau.",
       "deye_work_mode_mapping_not_distinct": "Le contrôle du Work Mode nécessite deux options différentes — une pour Load First et une pour Battery First. Choisissez les deux, et pas deux fois la même.",
       "deye_force_charge_work_mode_invalid": "Choisissez le Work Mode que SEM doit utiliser pour forcer la charge de la batterie : Load First ou Battery First.",
-      "deye_system_work_mode_mapping_not_distinct": "The three System Work Mode labels must be filled in and distinct.",
-      "heat_pump_no_control": "Configure at least one control path: both relays, a climate entity, or a service.",
-      "heat_pump_service_invalid": "The SG-Ready service must be domain.service (e.g. ems_esp.send_command).",
-      "heat_pump_service_data_invalid": "The SG-Ready service data must be a JSON object.",
-      "heat_pump_contact_values_missing": "This SG-Ready contact is a text/number/select entity, so SEM needs both the ON and the OFF value to write. Fill both, or pick a switch entity.",
+      "deye_system_work_mode_mapping_not_distinct": "Les trois libellés System Work Mode doivent être renseignés et distincts.",
+      "heat_pump_no_control": "Configurez au moins un chemin de contrôle : les deux relais, une entité climate, ou un service.",
+      "heat_pump_service_invalid": "Le service SG-Ready doit être au format domain.service (par exemple ems_esp.send_command).",
+      "heat_pump_service_data_invalid": "Les données du service SG-Ready doivent être un objet JSON.",
+      "heat_pump_contact_values_missing": "Ce contact SG-Ready est une entité texte/nombre/sélecteur, donc SEM a besoin à la fois de la valeur ON et de la valeur OFF à écrire. Renseignez les deux, ou choisissez une entité interrupteur.",
       "calendar_needs_schedule": "Le mode Calendrier a besoin d'un horaire des heures pleines. Choisissez un assistant Planification ou un autre mode tarifaire."
     }
   },
@@ -721,7 +721,7 @@
         "name": "Dérive de capacité"
       },
       "battery_charge_pacing": {
-        "name": "Battery charge pacing"
+        "name": "Lissage de charge batterie"
       },
       "battery_charge_power": {
         "name": "Puissance charge batterie"
@@ -898,22 +898,22 @@
         "name": "Configuration du tableau de bord énergie"
       },
       "diag_grid_l1_current_a": {
-        "name": "Grid L1 Current"
+        "name": "Courant réseau L1"
       },
       "diag_grid_l1_margin_a": {
-        "name": "Grid L1 Current Margin"
+        "name": "Marge de courant réseau L1"
       },
       "diag_grid_l2_current_a": {
-        "name": "Grid L2 Current"
+        "name": "Courant réseau L2"
       },
       "diag_grid_l2_margin_a": {
-        "name": "Grid L2 Current Margin"
+        "name": "Marge de courant réseau L2"
       },
       "diag_grid_l3_current_a": {
-        "name": "Grid L3 Current"
+        "name": "Courant réseau L3"
       },
       "diag_grid_l3_margin_a": {
-        "name": "Grid L3 Current Margin"
+        "name": "Marge de courant réseau L3"
       },
       "diag_grid_mode": {
         "name": "Mode capteur réseau"
@@ -925,37 +925,37 @@
         "name": "Entrées dégradées"
       },
       "diag_inverter_l1_current_a": {
-        "name": "Inverter Load/EPS L1 Current"
+        "name": "Courant Load/EPS onduleur L1"
       },
       "diag_inverter_l1_margin_a": {
-        "name": "Inverter Load/EPS L1 Current Margin"
+        "name": "Marge de courant Load/EPS onduleur L1"
       },
       "diag_inverter_l2_current_a": {
-        "name": "Inverter Load/EPS L2 Current"
+        "name": "Courant Load/EPS onduleur L2"
       },
       "diag_inverter_l2_margin_a": {
-        "name": "Inverter Load/EPS L2 Current Margin"
+        "name": "Marge de courant Load/EPS onduleur L2"
       },
       "diag_inverter_l3_current_a": {
-        "name": "Inverter Load/EPS L3 Current"
+        "name": "Courant Load/EPS onduleur L3"
       },
       "diag_inverter_l3_margin_a": {
-        "name": "Inverter Load/EPS L3 Current Margin"
+        "name": "Marge de courant Load/EPS onduleur L3"
       },
       "diag_observer_mode": {
         "name": "Mode observation"
       },
       "diag_phase_guard_data_fresh": {
-        "name": "Phase Guard Data Fresh"
+        "name": "Garde de phase — données fraîches"
       },
       "diag_phase_guard_mode": {
-        "name": "Phase Guard Mode"
+        "name": "Mode garde de phase"
       },
       "diag_phase_guard_safe": {
-        "name": "Phase Guard Safe"
+        "name": "Garde de phase sûre"
       },
       "diag_phase_guard_stop_reason": {
-        "name": "Phase Guard Stop Reason"
+        "name": "Motif d'arrêt garde de phase"
       },
       "diag_sensors_unavailable": {
         "name": "Capteurs indisponibles"
@@ -1306,7 +1306,7 @@
         "name": "Surplus Appareils Total"
       },
       "surplus_total_w": {
-        "name": "Surplus Total"
+        "name": "Surplus total"
       },
       "surplus_unallocated_w": {
         "name": "Surplus Non Alloué"
@@ -1505,7 +1505,7 @@
         "name": "Dépense guidée par les prévisions"
       },
       "battery_charge_pacing_enabled": {
-        "name": "Battery charge pacing"
+        "name": "Lissage de charge batterie"
       },
       "export_guard_enabled": {
         "name": "Garde d'export"
@@ -1691,7 +1691,7 @@
     },
     "button": {
       "backfill_battery_nights": {
-        "name": "Rebuild battery-night history"
+        "name": "Reconstruire l'historique des nuits de batterie"
       },
       "pause_charging": {
         "name": "{charger} Mettre la charge en pause"
@@ -1770,7 +1770,7 @@
       "fix_flow": {
         "step": {
           "confirm": {
-            "title": "Report this to SEM",
+            "title": "Signaler ceci à SEM",
             "description": "Les 3 dernières commandes de courant (ou plus) envoyées par SEM à **{name}** ont été rejetées : `{error}`. Le chargeur n'est PAS sous le contrôle de SEM actuellement — il continuera à faire ce qui lui a été demandé en dernier (y compris charger à pleine puissance en mode arrêt). Causes les plus fréquentes : l'entité de commande du chargeur a été renommée par une mise à jour de l'intégration en amont, ou `ev_charger_service` pointe vers un service dont le schéma de paramètres est différent. Vérifiez l'entité de commande / le service du chargeur dans la configuration SEM. Ce problème disparaît automatiquement à la prochaine commande réussie.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
           }
         }
@@ -1781,7 +1781,7 @@
       "fix_flow": {
         "step": {
           "confirm": {
-            "title": "Report this to SEM",
+            "title": "Signaler ceci à SEM",
             "description": "SEM a demandé à **{name}** de s'arrêter, mais aucun mécanisme configuré ne peut réellement ouvrir le contacteur — la voiture consomme toujours {power} W. Le seul contrôle dont SEM dispose pour cette borne est `{entity}`, et son minimum est supérieur à 0 A : écrire 0 A n'a donc aucun effet (SEM n'écrit jamais une valeur que l'entité refuserait). Si vous avez une batterie domestique, cette puissance en sort — à n'importe quelle heure du jour ou de la nuit. Solution : configurez pour cette borne, dans les options SEM, une entité marche/arrêt (`ev_start_stop_entity`), une entité de mode de charge ou un service d'arrêt. Cet avertissement disparaît dès que la borne ne consomme plus.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
           }
         }
@@ -1820,7 +1820,7 @@
       "fix_flow": {
         "step": {
           "confirm": {
-            "title": "Report this to SEM",
+            "title": "Signaler ceci à SEM",
             "description": "**{name}** est réglé sur un objectif de charge en pourcentage, mais votre véhicule ne communique pas son état de charge actuellement — SEM ne peut donc pas s'arrêter *exactement* à **{target}%**.\n\nIl ne charge pas à l'aveugle pour autant : depuis la dernière mesure réelle de cette session, il comptabilise l'énergie réellement livrée et s'arrête dès que ce total mesuré atteint votre objectif — le dépassement se limite à ce que la voiture a pris depuis cette mesure. Si aucune mesure réelle n'est arrivée durant cette session (ou si SEM a redémarré en cours de charge), il n'y a aucun point de référence et la charge se poursuit jusqu'à ce que la voiture elle-même réduise, proche du plein.\n\nPour une limite qui tombe juste, associez un **véritable capteur de SOC véhicule** à cette borne (Configuration → VE → Entité SOC véhicule). Le pourcentage de batterie du tableau de bord est le SOC *estimé* par SEM, qu'il ignore délibérément pour la limite stricte (il peut dériver). Cette réparation disparaît automatiquement dès qu'une mesure de SOC réelle est de nouveau disponible.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
           }
         }
@@ -1855,12 +1855,12 @@
       "description": "SEM convertit les ampères en watts avec **Phases × Volts**. Pour **{name}** cela donne **{believed}**, donc un ampère devrait valoir **{nominal} W** — mais sur **{cycles}** cycles stables la borne a tiré **{watts_per_amp} W par ampère**, ce qui correspond à **{measured}**. Ce nombre fixe le courant que SEM propose et ce que le plan de nuit suppose pour la voiture. **Solution :** ouvrez le nombre *Phases* de la borne et réglez-le sur **{measured}**. Disparaît dès que cela correspond."
     },
     "deye_system_work_mode_invalid": {
-      "title": "Deye export control cannot be used: {entity_id}",
-      "description": "SEM cannot use {entity_id} for export control: {reason}. Check the select entity and the three option labels under Configuration → Battery intelligence."
+      "title": "Le contrôle d'export Deye ne peut pas être utilisé : {entity_id}",
+      "description": "SEM ne peut pas utiliser {entity_id} pour le contrôle d'export : {reason}. Vérifiez l'entité sélecteur et les trois libellés d'option sous Configuration → Intelligence batterie."
     },
     "battery_operating_mode_unexpected": {
-      "title": "Battery is in “{mode}” — SEM plans as if it were “{expected}”",
-      "description": "The operating-mode selector {entity_id} reads “{mode}”. SEM's overnight model and the spendable budget assume “{expected}”; in other modes the inverter follows its own schedule underneath SEM and the plans may not hold. If this mode is deliberate, dismiss this — SEM will not fight your choice. Otherwise set the inverter back to “{expected}”."
+      "title": "Batterie en « {mode} », SEM planifie pour « {expected} »",
+      "description": "Le sélecteur de mode de fonctionnement {entity_id} indique « {mode} ». Le modèle nocturne de SEM et le budget dépensable supposent « {expected} » ; dans les autres modes, l'onduleur suit son propre programme sous SEM et les plans peuvent ne pas tenir. Si ce mode est voulu, ignorez cet avis — SEM ne s'opposera pas à votre choix. Sinon, remettez l'onduleur sur « {expected} »."
     },
     "battery_force_discharge_entity_unstable": {
       "title": "Le point de consigne de puissance de la batterie devient régulièrement indisponible : {entity_id}",
@@ -1883,32 +1883,32 @@
       "description": "Le compteur lit **{grid_import_kw} kW** pour une cible de **{target_kw} kW**. Même avec tout ce que SEM peut couper déjà coupé, il resterait **{uncontrolled_kw} kW** — dont **{managed_charger_kw} kW** pour une borne que SEM gère déjà ; sa pointe est fixée par sa limite de charge, pas par le délestage. SEM ne coupe donc rien tant que cela dure. **Solution :** baissez la limite de cette borne, confiez l’autre charge à SEM, ou relevez la cible. Disparaît dès que la pointe redevient atteignable."
     },
     "battery_platform_pinned_generic": {
-      "title": "Battery platform pinned to Generic on a {brand} install",
-      "description": "SEM's battery platform is set to **Generic / other**, but the {brand} integration is loaded. Earlier versions of the options wizard offered only Generic and Deye and defaulted to Generic, so walking through that page once demoted a {brand} install to the generic adapter — no forcible charge, no idempotent register writes. Open **Settings → Integrations → SEM → Configure → Battery scheduler** and set **Battery charge platform** to **Auto-detect**. If Generic is a deliberate choice (a battery with its own control entities), set that entity and this notice goes away."
+      "title": "Plateforme batterie figée sur Générique sur une installation {brand}",
+      "description": "La plateforme batterie de SEM est réglée sur **Générique / autre**, mais l'intégration {brand} est chargée. Les versions précédentes de l'assistant d'options ne proposaient que Générique et Deye, avec Générique par défaut, si bien que parcourir cette page a rétrogradé une installation {brand} vers l'adaptateur générique — pas de charge forcée, pas d'écritures de registre idempotentes. Ouvrez **Paramètres → Intégrations → SEM → Configurer → Planificateur de batterie** et réglez **Plateforme de charge batterie** sur **Détection automatique**. Si Générique est un choix délibéré (une batterie avec ses propres entités de contrôle), définissez cette entité et cet avis disparaît."
     },
     "split_grid_guessed": {
-      "title": "SEM is checking two guessed grid meters",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Configuration**, and switch on **Avancé** at the top. Then set **Puissance réseau** in section **Sources des capteurs**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
+      "title": "SEM vérifie deux compteurs réseau devinés",
+      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Configuration**, and switch on **Avancé** at the top. Then set **Puissance réseau** in section **Sources des capteurs**. If your meter has one sensor for import and one for export, set **Capteur d'import réseau** and **Capteur d'export réseau** in section **Tarif & prix** instead."
     },
     "battery_control_write_not_taken": {
       "title": "Une écriture de contrôle batterie n’est pas prise en compte : {entity_id}",
       "description": "SEM a mis **`{entity_id}`** à **{wanted}** ; aux cycles suivants elle lisait encore **{seen}**, {strikes} fois de suite. L’appel n’a pas échoué — le registre n’a pas gardé la valeur. **Solution :** réglez l’entité à la main dans Outils de développement → États. Si elle ne tient pas, c’est la mauvaise entité pour ce rôle : choisissez-en une autre dans la carte Configuration. Si elle tient à la main mais pas pour SEM, indiquez-nous la marque et l’entité. Disparaît dès qu’une écriture est reflétée."
     },
     "soc_zones_out_of_order": {
-      "title": "Battery SOC zones are out of order",
-      "description": "Your battery zones read **Priority {priority}% · Buffer {buffer}% · Auto-start {auto_start}%**, but SEM expects them to rise in that order: Priority is the reserve you never spend, Buffer is where battery assist stops, and Auto-start is where the pack is full enough to give freely.\n\nSEM is using **{used}** as the boundaries — the same three numbers, sorted — so no zone is skipped and nothing behaves unpredictably. It is telling you because the layout you typed is almost certainly not the one you meant.\n\nFix it in **Settings → Devices & Services → SEM → Configure → Battery** or on the dashboard's Configuration tab. Any values are allowed as long as they ascend; wide zones are fine — 20 / 30 / 50 is a perfectly good layout on a large pack."
+      "title": "Les zones SOC de la batterie sont dans le désordre",
+      "description": "Vos zones de batterie indiquent **Priorité {priority}% · Tampon {buffer}% · Démarrage auto {auto_start}%**, mais SEM s'attend à ce qu'elles montent dans cet ordre : Priorité est la réserve que vous ne dépensez jamais, Tampon est le niveau où l'assistance batterie s'arrête, et Démarrage auto est le niveau où la batterie est assez pleine pour donner librement.\n\nSEM utilise **{used}** comme limites — les trois mêmes nombres, triés — afin qu'aucune zone ne soit sautée et que rien ne se comporte de façon imprévisible.\n\nCorrigez-la dans **Paramètres → Appareils et services → SEM → Configurer → Batterie** ou dans l'onglet Configuration du tableau de bord. Toutes les valeurs sont autorisées tant qu'elles montent ; des zones larges conviennent très bien — 20 / 30 / 50 est une disposition tout à fait correcte sur un gros pack."
     },
     "previous_install_leftovers": {
-      "title": "Files from a previous SEM install were found",
-      "description": "SEM removed {removed} leftover file(s) of its own from an earlier install — those were SEM's and are gone.\n\nWhat is left is yours, and SEM will not take it without being asked: the long-term statistics of the old install's sensors, and the dashboard it generated. If you want those cleared too, run the **Remove leftovers** action (Developer tools → Actions → *SEM: Remove leftovers*). If you would rather keep your history, ignore this — nothing else will be deleted."
+      "title": "Des fichiers d'une précédente installation de SEM ont été trouvés",
+      "description": "SEM a supprimé {removed} fichier(s) résiduel(s) lui appartenant d'une installation précédente — c'étaient les siens, ils ont disparu.\n\nCe qui reste est à vous, et SEM ne le prendra pas sans qu'on le lui demande : les statistiques long terme des capteurs de l'ancienne installation, et le tableau de bord qu'elle a généré. Si vous voulez aussi les effacer, exécutez l'action **Supprimer les résidus** (Outils de développement → Actions → *SEM : Supprimer les résidus*). Si vous préférez garder votre historique, ignorez ceci — rien d'autre ne sera supprimé."
     },
     "heat_pump_contact_values_missing": {
-      "title": "SG-Ready contact {contact} cannot be driven",
-      "description": "**{entity_id}** is set as SG-Ready {contact}, but it is a text/number/select entity and its **{missing}** value is not configured — so SEM has nothing to write and every SG-Ready command for this heat pump fails. Open **Settings → Integrations → SEM → Configure → Heat Pump** (or the dashboard's Configuration tab) and fill both the ON and the OFF value for this contact, or point it at a switch entity instead."
+      "title": "Le contact SG-Ready {contact} ne peut pas être piloté",
+      "description": "**{entity_id}** est défini comme SG-Ready {contact}, mais c'est une entité texte/nombre/sélecteur et sa valeur **{missing}** n'est pas configurée — SEM n'a donc rien à écrire et chaque commande SG-Ready pour cette pompe à chaleur échoue. Ouvrez **Paramètres → Intégrations → SEM → Configurer → Pompe à chaleur** (ou l'onglet Configuration du tableau de bord) et renseignez à la fois la valeur ON et la valeur OFF pour ce contact, ou pointez-le vers une entité interrupteur à la place."
     },
     "split_grid_rejected": {
-      "title": "SEM could not find your grid power meters",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Configuration**, and switch on **Avancé** at the top. Then set **Puissance réseau** in section **Sources des capteurs**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
+      "title": "SEM n'a pas pu trouver vos compteurs de puissance réseau",
+      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Configuration**, and switch on **Avancé** at the top. Then set **Puissance réseau** in section **Sources des capteurs**. If your meter has one sensor for import and one for export, set **Capteur d'import réseau** and **Capteur d'export réseau** in section **Tarif & prix** instead."
     }
   },
   "selector": {
