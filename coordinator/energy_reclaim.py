@@ -123,34 +123,39 @@ def car_may_be_charging(
     ev_draw_w: float,
     hold_s: float = CAR_START_HOLD_S,
 ) -> bool:
-    """(#1102) May a car be drawing now, before its power sensor says so?
+    """(#1102) May a car's draw be in the meter but not in its power sensor?
 
     This opens the two-minute window in ``sustained_import``, so it must be
     true BEFORE the charger's power reading catches up — and only around a
-    START. A plugged car that is full, or a 6 A offer a car does not take,
+    CHANGE. A plugged car that is full, or a 6 A offer a car does not take,
     lasts all afternoon; read as "may charge" it held the window open, and
     a house import that paused once every two minutes was never counted
     (found in review: the reporter's own square wave, boiler never stopped).
 
-    So the window opens for ``hold_s`` after a start EVENT — a car plugged
-    in, or SEM's offer rising this cycle — and stays open while the car
-    really draws more than ``EV_ACTIVE_CHARGE_FLOOR_W`` (#739's 500 W: a
-    charger's standby, KEBA 110-140 W, is not a car charging). Not the
-    reader's ``ev_charging``: #739 holds it False until the power reads
-    500 W, so it lags with the sensor. A plugged car seen at start-up counts
-    as a plug-in. ``state`` is the caller's dict, kept here.
+    So the window opens for ``hold_s`` after a change EVENT — a car plugged
+    in or out, SEM's offer moving up or down, or the car's draw falling
+    below ``EV_ACTIVE_CHARGE_FLOOR_W`` — and stays open while the car really
+    draws more than that floor (#739's 500 W: a charger's standby, KEBA
+    110-140 W, is not a car charging). A stop or a ramp-down lags the same
+    way a start does: the charger reads 0 W while the meter still shows the
+    car's import (found in review: a 30 s meter stopped the boiler at every
+    car stop). Not the reader's ``ev_charging``: #739 holds it False until
+    the power reads 500 W, so it lags with the sensor. A plugged car seen at
+    start-up counts as a plug-in. ``state`` is the caller's dict, kept here.
     """
     from .sensor_reader import EV_ACTIVE_CHARGE_FLOOR_W
     now = float(now_s)
     amps = float(commanded_amps or 0)
-    if ((plugged and not state.get("plugged", False))
-            or amps > float(state.get("amps", 0.0))):
+    drawing = float(ev_draw_w or 0.0) > EV_ACTIVE_CHARGE_FLOOR_W
+    if (bool(plugged) != state.get("plugged", False)
+            or amps != float(state.get("amps", 0.0))
+            or (state.get("drawing", False) and not drawing)):
         state["start"] = now
     state["plugged"] = bool(plugged)
     state["amps"] = amps
+    state["drawing"] = drawing
     start = state.get("start")
-    return (float(ev_draw_w or 0.0) > EV_ACTIVE_CHARGE_FLOOR_W
-            or (start is not None and now - start <= hold_s))
+    return drawing or (start is not None and now - start <= hold_s)
 
 
 def sustained_import(
@@ -164,16 +169,18 @@ def sustained_import(
 ) -> Optional[float]:
     """(#1102) The import the loads' pool carries this cycle.
 
-    With no car charging it is the live reading — the controller's own
-    median-of-3 and smoothing already absorb a blink, and a house load that
-    cycles every two minutes must still count. While a car may charge
-    (``car_active``, see ``car_may_be_charging``) it is the LOWEST reading
-    of the last ``hold_s`` seconds: the charger's power sensor can trail the
-    meter by a minute at a start or a ramp, and that import is the car's.
-    The history is kept every cycle, so a car that starts now is judged
-    against the minutes before it. When there is no reading inside the
-    window (start-up, or a dark gap longer than ``hold_s``), a charging
-    car's import counts as none until ``hold_s`` of readings have passed.
+    With no car charging it is the MEAN of the last ``hold_s`` seconds: a
+    house load that cycles every two minutes still counts at its average,
+    and a kettle's 20 s does not stop a 3 kW boiler (found in review: the
+    live reading did, and the load then cycled at its minimum on/off
+    times). While a car may charge (``car_active``, see
+    ``car_may_be_charging``) it is the LOWEST reading of the last ``hold_s``
+    seconds: the charger's power sensor can trail the meter by a minute at
+    a start, a ramp or a stop, and that import is the car's. The history is
+    kept every cycle, so a car that starts now is judged against the
+    minutes before it. When there is no reading inside the window
+    (start-up, or a dark gap longer than ``hold_s``), a charging car's
+    import counts as none until ``hold_s`` of readings have passed.
 
     A dark meter is ``None`` — no evidence, and unlike the reclaim's
     ``held_grid_import`` this figure STOPS loads, so a held value would act
@@ -193,10 +200,39 @@ def sustained_import(
         state["since"] = now
     samples.append((now, live))
     if not car_active:
-        return live
+        return sum(w for _, w in samples) / len(samples)
     if now - state["since"] < hold_s:
         return 0.0
     return min(w for _, w in samples)
+
+
+def sustained_car_draw(
+    state: dict,
+    now_s: float,
+    *,
+    ev_draw_w: float,
+    car_active: bool,
+    hold_s: float = LOADS_IMPORT_SUSTAIN_S,
+) -> float:
+    """(#1102) The chargers' draw paired with ``sustained_import``.
+
+    While a car may charge, the import is the lowest of two minutes, so the
+    car's share must be the HIGHEST of the same two minutes. Paired with the
+    live draw, a ramp from 11 kW to 4 kW put the meter's lagging 11 kW
+    against a 4 kW car and booked 7 kW to the house (found in review: the
+    boiler stopped at every ramp-down). With no car it is the live draw.
+    Every cycle adds a reading, so the window holds the minutes before a
+    change. ``state`` is the caller's dict, kept here.
+    """
+    live = max(0.0, float(ev_draw_w or 0.0))
+    now = float(now_s)
+    samples = state.setdefault("samples", [])
+    while samples and now - samples[0][0] > hold_s:
+        samples.pop(0)
+    samples.append((now, live))
+    if not car_active:
+        return live
+    return max(w for _, w in samples)
 
 
 def held_grid_import(

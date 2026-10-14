@@ -395,9 +395,11 @@ def solar_bounded_surplus(
     the grid does not yield to it — and the two addends together are the whole
     balance, ``draw + export + charge − import``, whether a load runs or not.
     The coordinator hands in a SUSTAINED import (``sustained_import``: the
-    lowest reading of the last two minutes, ``None`` on a dark meter): a
-    charger's power sensor can trail the meter by a minute at a start or a
-    ramp, and that import is the car's. ``grid_import_w=None`` takes nothing
+    mean of the last two minutes, or while a car may charge the lowest
+    reading of them, ``None`` on a dark meter) and, as ``ev_draw_w``, the
+    car's highest draw of the same two minutes (``sustained_car_draw``): a
+    charger's power sensor can trail the meter by a minute at a start, a
+    ramp or a stop, and that import is the car's. ``grid_import_w=None`` takes nothing
     off: the running loads hold, and nothing new can start on a dark meter.
 
     The result is then clamped to ``[0, solar]``: **you cannot have more SOLAR
@@ -1711,9 +1713,11 @@ class SurplusController:
         # surplus the higher-priority loads left unconsumed (see #576 tests).
         remaining_surplus = distributable + max(0.0, reclaim_w)
         _reclaim_handed_back = False
-        # (#1102) Loads the sun still covered at their turn in the walk. The
-        # deficit pass below stops only loads past this point.
-        _funded: set = set()
+        # (#1102) What the walk took from the pool for each load. The
+        # deficit pass gives back exactly this when it stops one: a switch
+        # is debited its rating, and its power sensor can read 0 W while a
+        # thermostat holds it off.
+        _walk_spend: dict = {}
         active_count = 0
         # (#620) Tier-1 running budget — the battery can only supply its assist
         # budget ONCE, not once per device. Decremented as each battery-assist
@@ -1967,6 +1971,7 @@ class SurplusController:
                             # a paid run takes the sun that is left, no more
                             _held = min(_held, max(0.0, remaining_surplus))
                         remaining_surplus -= _held
+                        _walk_spend[device.device_id] = _held
                     allocations.append(SurplusAllocation(
                         device_id=device.device_id,
                         device_name=device.name,
@@ -2012,10 +2017,9 @@ class SurplusController:
                             self._tier1_budget_left = max(
                                 0.0, self._tier1_budget_left - assist)
                     remaining_surplus -= max(0.0, consumed - assist)
+                    _walk_spend[device.device_id] = max(0.0, consumed - assist)
                     if consumed > 0:
                         active_count += 1
-                        if remaining_surplus >= -DEFAULT_MIN_SURPLUS_CHANGE:
-                            _funded.add(device.device_id)
 
             elif not device.is_active and remaining_surplus < device.min_power_threshold:
                 device.reset_surplus_timer()
@@ -2078,9 +2082,8 @@ class SurplusController:
                 if _paid:
                     spend = min(spend, max(0.0, remaining_surplus))
                 remaining_surplus -= spend
+                _walk_spend[device.device_id] = spend
                 active_count += 1
-                if remaining_surplus >= -DEFAULT_MIN_SURPLUS_CHANGE:
-                    _funded.add(device.device_id)
 
             allocations.append(SurplusAllocation(
                 device_id=device.device_id,
@@ -2096,13 +2099,6 @@ class SurplusController:
         if remaining_surplus < -DEFAULT_MIN_SURPLUS_CHANGE:
             for device in reversed(devices):
                 if remaining_surplus >= 0:
-                    break
-                # (#1102) The walk only takes away, so every load above a
-                # load the sun covered at its turn was covered too. The
-                # deficit is made below it; stopping a covered load would
-                # hand its sun to a lower one that cannot be stopped yet
-                # (anti-flicker, a started appliance run, a paid run).
-                if device.device_id in _funded:
                     break
                 # (#688) Only SURPLUS-mode loads are the LIFO's to stop —
                 # peak_only and Off are user-managed (SEM never proactively
@@ -2128,7 +2124,11 @@ class SurplusController:
                     # not given back; a load the battery covers in full
                     # costs the sun nothing, and stopping it recovers
                     # nothing — the pass moves on to the load that does.
-                    charged = _walk_charge_w(device, consumption)
+                    # A switch was taken its rating, so an idle one (0 W
+                    # read, thermostat off) gives that back and is stopped,
+                    # as before: skipping it left every load below it off.
+                    charged = _walk_spend.get(
+                        device.device_id, _walk_charge_w(device, consumption))
                     if charged <= 0.0:
                         continue
                     if await _deactivate_owned(device):
@@ -2143,8 +2143,9 @@ class SurplusController:
                             if dep.is_active and dep.can_deactivate():
                                 dep_consumption = dep.get_current_consumption()
                                 if await _deactivate_owned(dep):
-                                    remaining_surplus += _walk_charge_w(
-                                        dep, dep_consumption)
+                                    remaining_surplus += _walk_spend.get(
+                                        dep.device_id,
+                                        _walk_charge_w(dep, dep_consumption))
                                     active_count -= 1
                                     _LOGGER.info(
                                         "Cascade deactivated %s (depends on %s)",
