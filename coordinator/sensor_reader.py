@@ -29,6 +29,7 @@ from .units import (
 )
 
 from ..utils.log_gate import log_on_change
+from ..utils.own_entity import is_sem_entity
 from ..consts.core import (
     EV_POWER_BLINK_HOLD_CYCLES,
     EV_POWER_BLINK_MIN_W,
@@ -404,6 +405,10 @@ class SensorReader:
         #: (#971) Which branch produced this cycle's grid_power — the key a
         #: one-tap user flip is bound to. ``None`` until the first read.
         self._grid_source_key = None
+        #: (#1103) The source a restored grid lock was learned on; checked
+        #: once, on the first read. ``_UNSET``: nothing to check (no lock,
+        #: or a store from before the lock carried its source).
+        self._restored_grid_source = _UNSET
         self._flip_ignored_logged = False
         # #461: accumulated sign-of-correlation evidence. The old ±1 vote
         # locked after three *consecutive* instantaneous matches — and a
@@ -887,6 +892,7 @@ class SensorReader:
             readings = self._read_from_energy_dashboard()
         else:
             readings = self._read_from_legacy_config()
+        self._check_restored_grid_lock()
         # (#902) A value no battery can produce is a dark read, not a number.
         self._gate_battery_power(readings)
         # (#758) An unreadable battery power sensor reads as 0.0 W, which is
@@ -1403,6 +1409,12 @@ class SensorReader:
         return {
             "grid_detected": self._grid_sign_detected,
             "grid_inverted": self._grid_sign_inverted,
+            # (#1103) which source the lock is about — see restore. Before
+            # this run's first source is known, keep the one restored.
+            "grid_source": (self._grid_source_key
+                            if self._grid_source_key is not None
+                            or self._restored_grid_source is _UNSET
+                            else self._restored_grid_source),
             "battery_detected": dict(self._battery_sign_detected),
             "battery_inverted": dict(self._battery_sign_inverted),
         }
@@ -1422,6 +1434,8 @@ class SensorReader:
         ):
             self._grid_sign_detected = True
             self._grid_sign_inverted = state["grid_inverted"]
+            if "grid_source" in state:
+                self._restored_grid_source = state["grid_source"]
             _LOGGER.info(
                 "Restored grid sign from storage: %s",
                 "negating (HA convention)" if self._grid_sign_inverted
@@ -1439,6 +1453,74 @@ class SensorReader:
                         bid,
                         "negating" if bi[bid] else "no correction",
                     )
+
+    def _manual_grid_pair(self):
+        """(#1103) The manual import/export pair, minus SEM's own sensors.
+        If either half is SEM's own, the pair is no pair: the other half
+        alone would read as a meter that only exports (review M1 — the old
+        guess Repair's own pair turned Envoy solar into grid export)."""
+        raw_i = self._raw_config.get("grid_import_power_entity")
+        raw_e = self._raw_config.get("grid_export_power_entity")
+        imp, exp = self._not_own_pick(raw_i), self._not_own_pick(raw_e)
+        if (raw_i and not imp) or (raw_e and not exp):
+            return None, None
+        return imp, exp
+
+    def _not_own_pick(self, entity_id):
+        """(#1103) A grid pick that is one of SEM's own sensors is no pick.
+        ``sensor.sem_grid_power`` is worked out from the grid meter; read as
+        the meter, it would read SEM's last answer back for ever. The
+        pickers list SEM's sensors too, so this is said once and ignored."""
+        if not entity_id or not is_sem_entity(self.hass, entity_id):
+            return entity_id
+        said = getattr(self, "_own_pick_said", None)
+        if said is None:
+            said = self._own_pick_said = set()
+        if entity_id not in said:
+            said.add(entity_id)
+            _LOGGER.warning(
+                "%s is one of SEM's own sensors, so it cannot be the grid "
+                "meter — ignored. Pick the meter's own sensor. (#1103)",
+                entity_id)
+        return None
+
+    def _check_restored_grid_lock(self) -> None:
+        """(#1103) A restored grid sign lock is about ONE source. If the grid
+        is now read from another — the Grid power pick that the reload just
+        applied, a pair removed, a new dashboard sensor — the lock says
+        nothing about it, and kept, it skipped every detector: a pick in HA
+        convention read import as export. Drop it then, once, so the new
+        source is judged. Same binding as the one-tap flip (#971)."""
+        recorded = self._restored_grid_source
+        if recorded is _UNSET or self._grid_source_key is None:
+            return          # nothing to check, or nothing read yet
+        self._restored_grid_source = _UNSET
+        if recorded == self._grid_source_key:
+            return
+        kind = self._grid_source_key.split(":", 1)[0]
+        if kind not in ("combined", "sum"):
+            # A pair (manual, dashboard pair, discovered) has its sign BY
+            # DECLARATION: export minus import, and its read path sets the
+            # lock itself. Unlocking it would let the brand seed negate a
+            # pair (review N1). Only an inversion carried over from another
+            # source is wrong here — a pair is never negated.
+            if self._grid_sign_inverted:
+                _LOGGER.info(
+                    "grid sign: the saved lock (%s) negated the grid; %s is "
+                    "a pair and is not negated (#1103)",
+                    recorded, self._grid_source_key)
+            self._grid_sign_inverted = False
+            self._brand_seed_done = True
+            return
+        _LOGGER.info(
+            "grid sign: the saved lock was learned on %s, the grid is now "
+            "read from %s — learning the sign again (#1103)",
+            recorded, self._grid_source_key)
+        self._grid_sign_detected = False
+        self._grid_sign_inverted = False
+        self._grid_sign_evidence = 0.0
+        self._grid_sign_total_mag = 0.0
+        self._brand_seed_done = False
 
     def reset_sign_state(self) -> None:
         """Forget all sign-detection locks and re-learn from scratch.
@@ -2247,10 +2329,28 @@ class SensorReader:
         #    read_power() auto-detects and corrects the sign after calculate_derived()
         # 2. Split sensors (Growatt, DSMR/P1): separate import + export power sensors
         #    Both always positive — SEM calculates: grid_power = export - import
-        manual_import = self._raw_config.get("grid_import_power_entity")
-        manual_export = self._raw_config.get("grid_export_power_entity")
+        manual_import, manual_export = self._manual_grid_pair()
+        # (#1103) The Config card's "Grid power" pick: one signed sensor,
+        # its sign found the same way as a dashboard one. It was read on the
+        # legacy path only, so on a home WITH an Energy Dashboard the pick
+        # changed nothing and the name guess ran on. It stands above all the
+        # dashboard gives, as the card says; a whole manual pair stands
+        # above it.
+        grid_override = self._not_own_pick(self.config.grid_power_sensor)
+        combined = grid_override or ed.grid_import_power
+        if grid_override and not getattr(self, "_grid_override_said", False):
+            self._grid_override_said = True
+            replaced = ed.grid_import_power or (
+                f"{ed.grid_power_from} / {ed.grid_power_to}"
+                if ed.grid_power_from and ed.grid_power_to else None)
+            if replaced and replaced != grid_override:
+                _LOGGER.warning(
+                    "Grid power is read from %s (Configuration → Sensor "
+                    "sources), not from the Energy Dashboard's %s. Clear the "
+                    "pick to use the dashboard again. (#1103)",
+                    grid_override, replaced)
         guessing = False                # (#933) set by the discovery branch only
-        if (manual_import and not manual_export) and ed.grid_import_power:
+        if bool(manual_import) != bool(manual_export) and combined:
             # (07.09 re-audit) HALF a manual pair, and a combined sensor
             # exists: prefer the combined one. Reading the import half alone
             # says "export − import" with export pinned at 0.0 — a house
@@ -2262,12 +2362,13 @@ class SensorReader:
             if not getattr(self, "_half_pair_ed_warned", False):
                 self._half_pair_ed_warned = True
                 _LOGGER.warning(
-                    "Only grid_import_power_entity is set (%s) with no export "
-                    "half — using the Energy Dashboard's combined grid sensor "
-                    "%s instead, so export is measured rather than assumed 0",
-                    manual_import, ed.grid_import_power)
-            readings.grid_power = self._read_sensor(ed.grid_import_power, "grid")
-            self._grid_source_key = f"combined:{ed.grid_import_power}"
+                    "Only one of grid_import_power_entity / "
+                    "grid_export_power_entity is set (%s / %s) — using the "
+                    "combined grid sensor %s instead, so both directions are "
+                    "measured rather than one assumed 0",
+                    manual_import, manual_export, combined)
+            readings.grid_power = self._read_sensor(combined, "grid")
+            self._grid_source_key = f"combined:{combined}"
         elif manual_import or manual_export:
             # Manual override — user explicitly set grid power sensors.
             # NO auto-detection runs on this path, so misconfiguration
@@ -2286,6 +2387,9 @@ class SensorReader:
                     "grid", "Grid (manual import/export override)",
                     import_w, manual_import, export_w, manual_export,
                 )
+        elif grid_override:
+            readings.grid_power = self._read_sensor(grid_override, "grid")
+            self._grid_source_key = f"combined:{grid_override}"
         elif ed.grid_power_from and ed.grid_power_to:
             # #553 — declared two-sensor pair from HA's grid dialog
             # (power_config.stat_rate_from/to). Same semantics as the manual
@@ -3562,6 +3666,10 @@ class SensorReader:
         try:
             # Get device_id of grid energy sensor for same-device preference
             grid_device_id = self._get_device_for_entity(ed.grid_import_energy)
+            try:
+                registry = er.async_get(self.hass)
+            except Exception:  # noqa: BLE001 — the predicate asks again
+                registry = None
 
             # Two-pass: same-device matches are preferred over any-device matches
             same_device = {"import": None, "export": None}
@@ -3591,6 +3699,10 @@ class SensorReader:
                 if attrs.get("state_class") != "measurement":
                     continue
                 if self._looks_like_a_forecast(state.entity_id):
+                    continue
+                # (#1103) SEM's own grid sensors match these names too —
+                # ``sem_grid_import_power`` is SEM's result, not a meter.
+                if is_sem_entity(self.hass, state.entity_id, registry):
                     continue
 
                 is_import = any(p in eid for p in import_patterns)
@@ -3947,9 +4059,20 @@ class SensorReader:
         the log and as a persistent Repair with the next step; a same-device
         pair retires it."""
         pair = (disc.get("import"), disc.get("export"))
-        if disc.get("confidence") == "any-device" and any(pair):
+        # (#1103) An export pick with no import half is never read (export
+        # minus zero would hide every import), so nothing is being checked.
+        # Saying "SEM is checking" showed a Repair that waited for ever.
+        half = bool(pair[1]) and not pair[0]
+        if half or (disc.get("confidence") == "any-device" and any(pair)):
             if disc.get("guess_reported") != pair:
                 disc["guess_reported"] = pair
+                if half:
+                    # The read path's "Only a grid EXPORT power sensor was
+                    # found" warning says it in the log; this is the Repair.
+                    _ri.raise_split_grid_rejected(
+                        self.hass, import_entity=None, export_entity=pair[1],
+                    )
+                    return
                 _LOGGER.warning(
                     "Split-grid meters GUESSED by name (any-device, no device "
                     "evidence): import=%s, export=%s. If these are not your grid "
@@ -4102,8 +4225,8 @@ class SensorReader:
         # both sides positive, and the convention is fixed BY DECLARATION so
         # no sign detection is needed (the solar voter computes the same
         # sign and therefore never flips it).
-        manual_import = self._raw_config.get("grid_import_power_entity")
-        manual_export = self._raw_config.get("grid_export_power_entity")
+        manual_import, manual_export = self._manual_grid_pair()
+        grid_override = self._not_own_pick(self.config.grid_power_sensor)
         if manual_import and manual_export:
             import_w = self._read_sensor(manual_import, "grid_import")
             export_w = self._read_sensor(manual_export, "grid_export")
@@ -4124,13 +4247,10 @@ class SensorReader:
                     "grid_export_power_entity is set (%s / %s) — a split pair "
                     "needs both; ignoring it and using the combined grid sensor",
                     manual_import, manual_export)
-            if self.config.grid_power_sensor:
-                readings.grid_power = self._read_sensor(
-                    self.config.grid_power_sensor, "grid")
-        elif self.config.grid_power_sensor:
-            readings.grid_power = self._read_sensor(
-                self.config.grid_power_sensor, "grid"
-            )
+            if grid_override:
+                readings.grid_power = self._read_sensor(grid_override, "grid")
+        elif grid_override:
+            readings.grid_power = self._read_sensor(grid_override, "grid")
 
         # Battery power
         if self.config.battery_power_sensor:
@@ -5510,6 +5630,10 @@ class SensorReader:
                         "phone", "iphone", "laptop",
                         "tablet", "watch", "device_tracker")
             candidates: list[str] = []
+            try:
+                registry = er.async_get(self.hass)
+            except Exception:  # noqa: BLE001 — the predicate asks again
+                registry = None
             for state in self.hass.states.async_all("sensor"):
                 eid = state.entity_id
                 eid_lower = eid.lower()
@@ -5517,6 +5641,11 @@ class SensorReader:
                     continue
                 unit = (state.attributes.get("unit_of_measurement") or "").strip()
                 if unit != "%":
+                    continue
+                # (#1103) ``sensor.sem_battery_soc`` is SEM's copy of the SOC
+                # this scan is looking for. Counted, it made every house with
+                # a real SOC sensor two candidates, and so none.
+                if is_sem_entity(self.hass, eid, registry):
                     continue
                 # Accept by SOC-keyword name OR by the canonical battery SOC
                 # signature (device_class=battery + %). The signature path is
@@ -5676,12 +5805,20 @@ class SensorReader:
             "akkukapazit", "rated_capacity", "battery_capacity",
             "rated_energy", "nennkapazit", "usable_capacity",
         ]
+        try:
+            registry = er.async_get(self.hass)
+        except Exception:  # noqa: BLE001 — the predicate asks again
+            registry = None
         for state in self.hass.states.async_all("sensor"):
             eid = state.entity_id
             name = (state.attributes.get("friendly_name") or "").lower()
             if not any(kw in eid.lower() or kw in name for kw in capacity_keywords):
                 continue
             if state.state in ("unknown", "unavailable", None):
+                continue
+            # (#1103) ``sensor.sem_diag_battery_capacity`` shows the SAVED
+            # size. Read here, a saved size came back as a found battery.
+            if is_sem_entity(self.hass, eid, registry):
                 continue
             unit = normalize_unit(state)
             dc = state.attributes.get("device_class")

@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **SEM runs chargers it finds with only a charge-mode or start/stop control** (#1095). myenergi, Ohme and Zaptec without current rights were found, then dropped.
 - 🐛 **SEM finds a charging current named plainly "charging_current"** (#1096). Only on a charger; on an inverter that name is the battery limit.
 - 🐛 **A charger whose service needs the device id now gets it** (#1097). Before, SEM called the service without saying which charger.
+- 🐛 **SEM no longer guesses its own sensor as your grid meter** (#1103) — thanks @LightBridge16. The Grid power pick now works with an Energy Dashboard.
+- 🐛 **A "Solar only" load now stops when your house buys from the grid** (#1102) — thanks @lostcontrol. Before, SEM did not count the grid import.
+
+# [2.2.0-beta.17] — 13.10.2026
+
 - 🐛 **A smart plug is no longer taken for your EV charger** (#1051) — thanks @rdehuyss. Only a charger integration makes an Energy Dashboard device the EV.
 - 🐛 **A tip no longer writes an Activity row every cycle** (#1051). Its words hold until it rotates; more export than solar gives no tip.
 - 🐛 **Belgian price sensors are read at the all-in price** (#1051). Their slots also list energy, network and taxes parts.

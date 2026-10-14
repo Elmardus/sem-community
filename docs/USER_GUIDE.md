@@ -98,7 +98,7 @@ supported: open an issue with the list shown. Devices on shared transports
 (MQTT, Modbus) only appear here when they actually look like energy hardware —
 your Zigbee bridge is not a near-miss. The same report is in the
 diagnostics download (Settings → Devices & Services → SEM → ⋮ → Download
-diagnostics). Wrong detections are corrected in place with the pickers in the
+diagnostics). It also lists the units, short states and services SEM read from each charger. Your charger's own name shows as box_1, box_2 and so on, so you can attach the file to an issue. Wrong detections are corrected in place with the pickers in the
 charger and sensor-source sections — no reinstall. The full support matrix with
 an honest per-brand status is [docs/SUPPORTED_HARDWARE.md](SUPPORTED_HARDWARE.md).
 
@@ -238,7 +238,7 @@ Each charger gets its own sensor entities:
 - `sensor.sem_charger_{id}_taper_trend` — BMS taper detection
 - `sensor.sem_charger_{id}_taper_ratio` — taper ratio
 
-To **edit** an existing charger, select it from the charger menu. To **remove**, select "Remove a charger" (primary charger cannot be removed).
+To **edit** an existing charger, select it from the charger menu. To **remove**, select "Remove a charger". A working primary charger cannot be removed; a half-filled one can. If an earlier setup left a charger half-filled, SEM offers it again: add it and the new charger replaces the old card.
 
 ### Appliance Dependencies
 
@@ -627,6 +627,8 @@ When you have multiple batteries (e.g. Huawei + Growatt, or split Huawei units),
 With one battery, SEM makes one `select.sem_battery_mode` and one `number.sem_battery_reserve_soc` instead. The same happens when the Energy Dashboard lists each battery as two sensors (charge and discharge); then these two controls set every battery. The controls you see are the ones SEM uses. A reserve you never set is 20 %.
 
 The discharge *rate* is not per-battery: **`number.sem_battery_max_discharge_power`** (default 5000 W) caps it for the whole fleet.
+
+Each battery can have its own discharge limit entity. With two or more batteries, Config tab → Battery shows one field per battery. Leave a field empty and SEM uses the shared entity above it.
 
 **Zero-config Huawei:** If you have a Huawei inverter, SEM auto-detects the discharge limit entity and uses it to enforce force-discharge at no extra config.
 

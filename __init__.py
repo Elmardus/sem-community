@@ -44,6 +44,7 @@ from .const import (
 from .consts.core import DEFAULT_LOAD_MANAGEMENT_ENABLED
 from .coordinator.sensor_reader import GRID_TRIGGER_HINTS
 from .utils.select_option import listed_option
+from .utils.own_entity import is_sem_entity  # (#1103)
 from .coordinator import SEMCoordinator
 
 if TYPE_CHECKING:
@@ -2617,9 +2618,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
     # upgrading install loses the stale warning.
     ir.async_delete_issue(hass, DOMAIN, "ev_charger_not_configured")
     try:
+        # (#1103) SEM's own per-charger numbers carry "charger" in their ids.
         _cands = charger_shaped_devices(
-            [st.entity_id for st in hass.states.async_all("switch")]
-            + [st.entity_id for st in hass.states.async_all("number")]
+            [st.entity_id for st in hass.states.async_all("switch")
+             if not is_sem_entity(hass, st.entity_id)]
+            + [st.entity_id for st in hass.states.async_all("number")
+               if not is_sem_entity(hass, st.entity_id)]
         )
         _repair = unmanaged_charger_repair(full_config, _cands)
     except Exception:  # noqa: BLE001 — a repair never costs a setup

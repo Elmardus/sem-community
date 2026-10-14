@@ -1888,7 +1888,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM is checking two guessed grid meters",
-      "description": "No grid power entity is configured and the Energy Dashboard gives none, so SEM matched entity names and found **{import_entity}** as a possible grid import meter and **{export_entity}** as a possible export meter — a name match, with no device evidence behind it. SEM will NOT steer on them until they agree with your grid energy counters, so grid power reads 0 for now. To skip the wait, open **Settings → Integrations → SEM → Configure → Sensors** and set **Grid import power** and **Grid export power** explicitly."
+      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguration**, and switch on **Avancerat** at the top. Then set **Näteffekt** in section **Sensorkällor**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
     },
     "battery_control_write_not_taken": {
       "title": "En batteristyrningsskrivning tas inte emot: {entity_id}",
@@ -1908,7 +1908,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM could not find your grid power meters",
-      "description": "No grid power entity is configured and the Energy Dashboard gives none. SEM matched **{import_entity}** and **{export_entity}** by entity name, then checked them against your grid energy counters — and they do not track them, so they are not your meters. SEM reports **no grid power** rather than a wrong one. Open **Settings → Integrations → SEM → Configure → Sensors** and set **Grid import power** and **Grid export power** explicitly; this notice clears once real meters are named or the guesses start agreeing."
+      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguration**, and switch on **Avancerat** at the top. Then set **Näteffekt** in section **Sensorkällor**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
     }
   },
   "selector": {
