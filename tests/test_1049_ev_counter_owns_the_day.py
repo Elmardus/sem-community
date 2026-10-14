@@ -210,13 +210,15 @@ class TestTheCountersOwnTheRow:
 
     def test_upward_recovery_still_runs_at_once(self):
         """#658 is untouched: energy charged while SEM was not integrating is
-        recovered on the next read, charging or not."""
+        recovered on the next read, charging or not. (#1101) Not integrating
+        takes time: an hour passes with no cycle — 7 kWh in one 10 s cycle
+        is no box's draw."""
         values = {LINKS: 0.0, RECHTS: 0.0}
         with freeze_time(START) as clock:
             calc = _calc(values)
             _cycle(calc)
             values[RECHTS] = 7.0
-            clock.tick(timedelta(seconds=10))
+            clock.tick(timedelta(hours=1))
             _cycle(calc, READ_W)
             assert _rows(calc) == (7.0, 7.0)
 
