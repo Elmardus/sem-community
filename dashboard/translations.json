@@ -1608,7 +1608,6 @@
     "sessions_col_solar": "Slunce",
     "sessions_col_min": "Min",
     "sessions_solar_word": "slunce",
-    "sessions_xlsx": "Stáhnout .xlsx",
     "sessions_none": "Tento měsíc žádné relace",
     "sessions_loading": "Načítání…",
     "grid_manual": "Oddělené senzory (nastaveno vámi)",
@@ -1676,7 +1675,10 @@
     "cfg_help_behind_operator_relay": "Provozovatel toto zařízení vypíná. SEM ho neplánuje, dokud je relé zapnuté.",
     "operator_limit_banner": "Provozovatel sítě: limit {kw} kW od {time} — solár navíc je povolen",
     "locked_by_grid_operator": "Zablokováno provozovatelem sítě",
-    "sessions_download_failed": "Stažení selhalo — zkuste to znovu"
+    "sessions_xlsx": "Stáhnout .xlsx",
+    "sessions_download_failed": "Stažení selhalo — zkuste to znovu",
+    "simulation_tab": "Karta simulace",
+    "config_help_simulation_tab": "Zobrazí kartu simulace. Také označí každý den a jednou načte posledních 90 dní. Ve výchozím stavu vypnuto."
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3287,7 +3289,6 @@
     "sessions_col_solar": "Sol",
     "sessions_col_min": "Min",
     "sessions_solar_word": "sol",
-    "sessions_xlsx": "Hent .xlsx",
     "sessions_none": "Ingen sessioner denne måned",
     "sessions_loading": "Indlæser…",
     "grid_manual": "Opdelte sensorer (valgt af dig)",
@@ -3355,7 +3356,10 @@
     "cfg_help_behind_operator_relay": "Netselskabet slukker denne enhed. SEM planlægger den ikke, mens relæet er til.",
     "operator_limit_banner": "Netselskab: grænse {kw} kW siden {time} — sol oveni er tilladt",
     "locked_by_grid_operator": "Låst af netselskabet",
-    "sessions_download_failed": "Download mislykkedes — prøv igen"
+    "sessions_xlsx": "Hent .xlsx",
+    "sessions_download_failed": "Download mislykkedes — prøv igen",
+    "simulation_tab": "Simuleringsfane",
+    "config_help_simulation_tab": "Viser simuleringsfanen. Mærker også hver dag og læser de sidste 90 dage én gang. Slået fra som standard."
   },
   "de": {
     "% of limit": "% des Limits",
@@ -4966,7 +4970,6 @@
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
     "sessions_solar_word": "Solar",
-    "sessions_xlsx": "Download .xlsx",
     "sessions_none": "Keine Ladevorgänge diesen Monat",
     "sessions_loading": "Lädt…",
     "grid_manual": "Getrennte Sensoren (von dir gewählt)",
@@ -5034,7 +5037,10 @@
     "cfg_help_behind_operator_relay": "Der Netzbetreiber schaltet dieses Gerät ab. SEM plant es nicht, solange das Relais an ist.",
     "operator_limit_banner": "Netzbetreiber: Limit {kw} kW seit {time} — Solarstrom zusätzlich ist erlaubt",
     "locked_by_grid_operator": "Vom Netzbetreiber gesperrt",
-    "sessions_download_failed": "Download fehlgeschlagen — bitte erneut versuchen"
+    "sessions_xlsx": "Download .xlsx",
+    "sessions_download_failed": "Download fehlgeschlagen — bitte erneut versuchen",
+    "simulation_tab": "Simulations-Tab",
+    "config_help_simulation_tab": "Zeigt den Simulations-Tab. Markiert dazu jeden Tag und liest einmal die letzten 90 Tage. Standardmäßig aus."
   },
   "en": {
     "% of limit": "% of limit",
@@ -6645,7 +6651,6 @@
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solar",
-    "sessions_xlsx": "Download .xlsx",
     "sessions_none": "No sessions this month",
     "sessions_loading": "Loading…",
     "grid_manual": "Split sensors (set by you)",
@@ -6713,7 +6718,10 @@
     "cfg_help_behind_operator_relay": "The operator switches this device off. SEM will not plan it while the relay is on.",
     "operator_limit_banner": "Grid operator: limit {kw} kW since {time} — solar on top is fine",
     "locked_by_grid_operator": "Locked by the grid operator",
-    "sessions_download_failed": "Download failed — try again"
+    "sessions_xlsx": "Download .xlsx",
+    "sessions_download_failed": "Download failed — try again",
+    "simulation_tab": "Simulation tab",
+    "config_help_simulation_tab": "Shows the Simulation tab. It also tags each day and reads the last 90 days once. Off by default."
   },
   "es": {
     "% of limit": "% del límite",
@@ -8324,7 +8332,6 @@
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solar",
-    "sessions_xlsx": "Descargar .xlsx",
     "sessions_none": "Sin sesiones este mes",
     "sessions_loading": "Cargando…",
     "grid_manual": "Sensores separados (elegidos por ti)",
@@ -8392,7 +8399,10 @@
     "cfg_help_behind_operator_relay": "La distribuidora apaga este aparato. SEM no lo planifica mientras el relé está activo.",
     "operator_limit_banner": "Distribuidora: límite {kw} kW desde las {time} — la solar adicional está permitida",
     "locked_by_grid_operator": "Bloqueado por la distribuidora",
-    "sessions_download_failed": "Error al descargar — inténtelo de nuevo"
+    "sessions_xlsx": "Descargar .xlsx",
+    "sessions_download_failed": "Error al descargar — inténtelo de nuevo",
+    "simulation_tab": "Pestaña de simulación",
+    "config_help_simulation_tab": "Muestra la pestaña de simulación. También etiqueta cada día y lee una vez los últimos 90 días. Desactivado por defecto."
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -10003,7 +10013,6 @@
     "sessions_col_solar": "Aurinko",
     "sessions_col_min": "Min",
     "sessions_solar_word": "aurinkoa",
-    "sessions_xlsx": "Lataa .xlsx",
     "sessions_none": "Ei latauksia tässä kuussa",
     "sessions_loading": "Ladataan…",
     "grid_manual": "Erilliset sensorit (itse valittu)",
@@ -10071,7 +10080,10 @@
     "cfg_help_behind_operator_relay": "Verkkoyhtiö katkaisee tämän laitteen. SEM ei suunnittele sitä, kun rele on päällä.",
     "operator_limit_banner": "Verkkoyhtiö: raja {kw} kW klo {time} alkaen — aurinkosähkö päälle on sallittu",
     "locked_by_grid_operator": "Verkkoyhtiön lukitsema",
-    "sessions_download_failed": "Lataus epäonnistui — yritä uudelleen"
+    "sessions_xlsx": "Lataa .xlsx",
+    "sessions_download_failed": "Lataus epäonnistui — yritä uudelleen",
+    "simulation_tab": "Simulointivälilehti",
+    "config_help_simulation_tab": "Näyttää simulointivälilehden. Merkitsee myös jokaisen päivän ja lukee kerran viimeiset 90 päivää. Oletuksena pois."
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -11682,7 +11694,6 @@
     "sessions_col_solar": "Solaire",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solaire",
-    "sessions_xlsx": "Télécharger .xlsx",
     "sessions_none": "Aucune session ce mois",
     "sessions_loading": "Chargement…",
     "grid_manual": "Capteurs séparés (choisis par vous)",
@@ -11750,7 +11761,10 @@
     "cfg_help_behind_operator_relay": "Le gestionnaire coupe cet appareil. SEM ne le planifie pas tant que le relais est actif.",
     "operator_limit_banner": "Gestionnaire de réseau : limite {kw} kW depuis {time} — le solaire en plus reste permis",
     "locked_by_grid_operator": "Bloqué par le gestionnaire de réseau",
-    "sessions_download_failed": "Échec du téléchargement — réessayez"
+    "sessions_xlsx": "Télécharger .xlsx",
+    "sessions_download_failed": "Échec du téléchargement — réessayez",
+    "simulation_tab": "Onglet simulation",
+    "config_help_simulation_tab": "Affiche l'onglet simulation. Il étiquette aussi chaque jour et lit une fois les 90 derniers jours. Désactivé par défaut."
   },
   "hu": {
     "% of limit": "% a határból",
@@ -13361,7 +13375,6 @@
     "sessions_col_solar": "Nap",
     "sessions_col_min": "Perc",
     "sessions_solar_word": "nap",
-    "sessions_xlsx": "Letöltés .xlsx",
     "sessions_none": "Nincs töltés ebben a hónapban",
     "sessions_loading": "Betöltés…",
     "grid_manual": "Különálló szenzorok (saját választás)",
@@ -13429,7 +13442,10 @@
     "cfg_help_behind_operator_relay": "A szolgáltató kikapcsolja ezt az eszközt. A SEM nem tervezi be, amíg a relé be van kapcsolva.",
     "operator_limit_banner": "Hálózati szolgáltató: korlát {kw} kW {time} óta — a napenergia ezen felül megengedett",
     "locked_by_grid_operator": "A hálózati szolgáltató letiltotta",
-    "sessions_download_failed": "A letöltés nem sikerült — próbáld újra"
+    "sessions_xlsx": "Letöltés .xlsx",
+    "sessions_download_failed": "A letöltés nem sikerült — próbáld újra",
+    "simulation_tab": "Szimuláció lap",
+    "config_help_simulation_tab": "Megjeleníti a Szimuláció lapot. Minden napot megjelöl, és egyszer beolvassa az utolsó 90 napot. Alapból ki."
   },
   "it": {
     "% of limit": "% del limite",
@@ -15040,7 +15056,6 @@
     "sessions_col_solar": "Solare",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solare",
-    "sessions_xlsx": "Scarica .xlsx",
     "sessions_none": "Nessuna sessione questo mese",
     "sessions_loading": "Caricamento…",
     "grid_manual": "Sensori separati (scelti da te)",
@@ -15108,7 +15123,10 @@
     "cfg_help_behind_operator_relay": "Il gestore spegne questo dispositivo. SEM non lo pianifica finché il relè è attivo.",
     "operator_limit_banner": "Gestore di rete: limite {kw} kW dalle {time} — il solare in più è consentito",
     "locked_by_grid_operator": "Bloccato dal gestore di rete",
-    "sessions_download_failed": "Download non riuscito — riprovare"
+    "sessions_xlsx": "Scarica .xlsx",
+    "sessions_download_failed": "Download non riuscito — riprovare",
+    "simulation_tab": "Scheda simulazione",
+    "config_help_simulation_tab": "Mostra la scheda simulazione. Etichetta anche ogni giorno e legge una volta gli ultimi 90 giorni. Disattivato per impostazione predefinita."
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -16719,7 +16737,6 @@
     "sessions_col_solar": "Zon",
     "sessions_col_min": "Min",
     "sessions_solar_word": "zon",
-    "sessions_xlsx": "Download .xlsx",
     "sessions_none": "Geen sessies deze maand",
     "sessions_loading": "Laden…",
     "grid_manual": "Gescheiden sensoren (door jou gekozen)",
@@ -16787,7 +16804,10 @@
     "cfg_help_behind_operator_relay": "De netbeheerder schakelt dit apparaat uit. SEM plant het niet zolang het relais aan is.",
     "operator_limit_banner": "Netbeheerder: limiet {kw} kW sinds {time} — zon erbovenop mag",
     "locked_by_grid_operator": "Geblokkeerd door de netbeheerder",
-    "sessions_download_failed": "Downloaden mislukt — probeer opnieuw"
+    "sessions_xlsx": "Download .xlsx",
+    "sessions_download_failed": "Downloaden mislukt — probeer opnieuw",
+    "simulation_tab": "Simulatietabblad",
+    "config_help_simulation_tab": "Toont het simulatietabblad. Labelt ook elke dag en leest één keer de laatste 90 dagen. Standaard uit."
   },
   "no": {
     "% of limit": "% av grense",
@@ -18398,7 +18418,6 @@
     "sessions_col_solar": "Sol",
     "sessions_col_min": "Min",
     "sessions_solar_word": "sol",
-    "sessions_xlsx": "Last ned .xlsx",
     "sessions_none": "Ingen økter denne måneden",
     "sessions_loading": "Laster…",
     "grid_manual": "Delte sensorer (valgt av deg)",
@@ -18466,7 +18485,10 @@
     "cfg_help_behind_operator_relay": "Nettselskapet slår av denne enheten. SEM planlegger den ikke mens reléet er på.",
     "operator_limit_banner": "Nettselskap: grense {kw} kW siden {time} — sol i tillegg er tillatt",
     "locked_by_grid_operator": "Låst av nettselskapet",
-    "sessions_download_failed": "Nedlasting mislyktes — prøv igjen"
+    "sessions_xlsx": "Last ned .xlsx",
+    "sessions_download_failed": "Nedlasting mislyktes — prøv igjen",
+    "simulation_tab": "Simuleringsfane",
+    "config_help_simulation_tab": "Viser simuleringsfanen. Merker også hver dag og leser de siste 90 dagene én gang. Av som standard."
   },
   "pl": {
     "% of limit": "% limitu",
@@ -20077,7 +20099,6 @@
     "sessions_col_solar": "Słońce",
     "sessions_col_min": "Min",
     "sessions_solar_word": "słońca",
-    "sessions_xlsx": "Pobierz .xlsx",
     "sessions_none": "Brak sesji w tym miesiącu",
     "sessions_loading": "Ładowanie…",
     "grid_manual": "Rozdzielone czujniki (wybrane przez Ciebie)",
@@ -20145,7 +20166,10 @@
     "cfg_help_behind_operator_relay": "Operator wyłącza to urządzenie. SEM nie planuje go, gdy przekaźnik jest włączony.",
     "operator_limit_banner": "Operator sieci: limit {kw} kW od {time} — słońce ponad to jest dozwolone",
     "locked_by_grid_operator": "Zablokowane przez operatora sieci",
-    "sessions_download_failed": "Pobieranie nie powiodło się — spróbuj ponownie"
+    "sessions_xlsx": "Pobierz .xlsx",
+    "sessions_download_failed": "Pobieranie nie powiodło się — spróbuj ponownie",
+    "simulation_tab": "Karta symulacji",
+    "config_help_simulation_tab": "Pokazuje kartę symulacji. Oznacza też każdy dzień i raz wczytuje ostatnie 90 dni. Domyślnie wyłączone."
   },
   "pt": {
     "% of limit": "% do limite",
@@ -21756,7 +21780,6 @@
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solar",
-    "sessions_xlsx": "Transferir .xlsx",
     "sessions_none": "Sem sessões este mês",
     "sessions_loading": "A carregar…",
     "grid_manual": "Sensores separados (escolhidos por si)",
@@ -21824,7 +21847,10 @@
     "cfg_help_behind_operator_relay": "O operador desliga este aparelho. O SEM não o planeia enquanto o relé estiver ativo.",
     "operator_limit_banner": "Operador da rede: limite {kw} kW desde {time} — solar adicional é permitido",
     "locked_by_grid_operator": "Bloqueado pelo operador da rede",
-    "sessions_download_failed": "Falha ao transferir — tente novamente"
+    "sessions_xlsx": "Transferir .xlsx",
+    "sessions_download_failed": "Falha ao transferir — tente novamente",
+    "simulation_tab": "Separador de simulação",
+    "config_help_simulation_tab": "Mostra o separador de simulação. Também marca cada dia e lê uma vez os últimos 90 dias. Desligado por padrão."
   },
   "ro": {
     "% of limit": "% din limită",
@@ -23435,7 +23461,6 @@
     "sessions_col_solar": "Solar",
     "sessions_col_min": "Min",
     "sessions_solar_word": "solar",
-    "sessions_xlsx": "Descarcă .xlsx",
     "sessions_none": "Nicio sesiune luna aceasta",
     "sessions_loading": "Se încarcă…",
     "grid_manual": "Senzori separați (aleși de tine)",
@@ -23503,7 +23528,10 @@
     "cfg_help_behind_operator_relay": "Operatorul oprește acest aparat. SEM nu îl planifică cât timp releul este pornit.",
     "operator_limit_banner": "Operator de rețea: limită {kw} kW din {time} — solarul în plus este permis",
     "locked_by_grid_operator": "Blocat de operatorul de rețea",
-    "sessions_download_failed": "Descărcarea a eșuat — încercați din nou"
+    "sessions_xlsx": "Descarcă .xlsx",
+    "sessions_download_failed": "Descărcarea a eșuat — încercați din nou",
+    "simulation_tab": "Fila simulare",
+    "config_help_simulation_tab": "Afișează fila de simulare. Marchează și fiecare zi și citește o dată ultimele 90 de zile. Oprit implicit."
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -25114,7 +25142,6 @@
     "sessions_col_solar": "Sol",
     "sessions_col_min": "Min",
     "sessions_solar_word": "sol",
-    "sessions_xlsx": "Ladda ner .xlsx",
     "sessions_none": "Inga sessioner denna månad",
     "sessions_loading": "Laddar…",
     "grid_manual": "Delade sensorer (valda av dig)",
@@ -25182,7 +25209,10 @@
     "cfg_help_behind_operator_relay": "Nätbolaget stänger av denna enhet. SEM planerar den inte medan reläet är på.",
     "operator_limit_banner": "Nätbolag: gräns {kw} kW sedan {time} — sol utöver är tillåten",
     "locked_by_grid_operator": "Låst av nätbolaget",
-    "sessions_download_failed": "Nedladdningen misslyckades — försök igen"
+    "sessions_xlsx": "Ladda ner .xlsx",
+    "sessions_download_failed": "Nedladdningen misslyckades — försök igen",
+    "simulation_tab": "Simuleringsflik",
+    "config_help_simulation_tab": "Visar simuleringsfliken. Märker också varje dag och läser de senaste 90 dagarna en gång. Av som standard."
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -26793,7 +26823,6 @@
     "sessions_col_solar": "光伏",
     "sessions_col_min": "分钟",
     "sessions_solar_word": "光伏",
-    "sessions_xlsx": "下载 .xlsx",
     "sessions_none": "本月无充电记录",
     "sessions_loading": "加载中…",
     "grid_manual": "分离传感器（手动选择）",
@@ -26861,6 +26890,9 @@
     "cfg_help_behind_operator_relay": "运营商会关闭此设备。继电器开启时 SEM 不会安排它。",
     "operator_limit_banner": "电网运营商：自 {time} 起限值 {kw} kW — 额外的太阳能不受限制",
     "locked_by_grid_operator": "被电网运营商锁定",
-    "sessions_download_failed": "下载失败 — 请重试"
+    "sessions_xlsx": "下载 .xlsx",
+    "sessions_download_failed": "下载失败 — 请重试",
+    "simulation_tab": "模拟标签页",
+    "config_help_simulation_tab": "显示模拟标签页。同时为每天打标签，并一次性读取最近 90 天。默认关闭。"
   }
 }

@@ -107,11 +107,16 @@ def midday_variability(solar: Sequence[Tuple[float, Optional[float]]]) -> Option
 
 def tag_sky(actual_kwh: Optional[float], forecast_kwh: Optional[float],
             clear_sky_kwh: Optional[float],
-            variability: Optional[float]) -> Optional[str]:
-    """sunny / mixed / grey — or ``None`` when the day cannot be judged."""
+            variability: Optional[float],
+            hourly: bool = False) -> Optional[str]:
+    """sunny / mixed / grey — or ``None`` when the day cannot be judged.
+
+    ``hourly``: the day comes from hourly statistics (the backfill). An hour
+    hides a passing cloud, so steadiness cannot be shown and the day is
+    never "sunny" — at best "mixed"."""
     if actual_kwh is None:
         return None
-    if (clear_sky_kwh and clear_sky_kwh > 0
+    if (not hourly and clear_sky_kwh and clear_sky_kwh > 0
             and actual_kwh >= FULL_YIELD_RATIO * clear_sky_kwh
             and variability is not None
             and variability < SUNNY_MAX_VARIABILITY):
@@ -161,16 +166,18 @@ def tag_day(*, date: str,
             cheap_threshold: Optional[float] = None,
             dark_daylight_min: float = 0.0,
             restarted: bool = False,
-            counter_flat: bool = False) -> DayTags:
+            counter_flat: bool = False,
+            hourly: bool = False) -> DayTags:
     """All tags for one day. Every input is optional: a missing input
-    leaves its tag out rather than inventing one."""
-    var = midday_variability(solar)
+    leaves its tag out rather than inventing one. ``hourly``: see
+    ``tag_sky`` — hourly data never makes a sunny day."""
+    var = None if hourly else midday_variability(solar)
     sessions = [float(k) for k in session_kwh if k and float(k) > 0]
     why = tag_gap(dark_daylight_min=dark_daylight_min, restarted=restarted,
                   counter_flat=counter_flat, forecast_kwh=forecast_kwh)
     return DayTags(
         date=str(date),
-        sky=tag_sky(actual_kwh, forecast_kwh, clear_sky_kwh, var),
+        sky=tag_sky(actual_kwh, forecast_kwh, clear_sky_kwh, var, hourly=hourly),
         snow=bool(snow),
         car=bool(sessions),
         car_kwh=sum(sessions),

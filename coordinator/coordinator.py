@@ -37,7 +37,6 @@ from homeassistant.util import dt as dt_util
 
 from ..consts.core import CAPABILITY_MISS_CONFIRM_READS, CAPABILITY_MISS_HOLD_S
 from ..consts.core import CONF_INTRADAY_FORECAST, DEFAULT_INTRADAY_FORECAST
-from ..consts.core import CONF_DAY_TAGS, DEFAULT_DAY_TAGS
 from ..consts.core import (CONF_SHED_SIGNAL_ENTITY, CONF_SHED_SIGNAL_LIMIT,
                            DEFAULT_SHED_SIGNAL_LIMIT)
 from ..const import (
@@ -638,6 +637,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         self._wpa_replay_report: Dict[str, Any] = {}
         self._wpa_replay_scheduled = False
         self._wpa_replay_unsub = None
+        # (#1083) stops the Simulation tab's day-tag backfill (day_tag_store)
+        self._day_tag_backfill_cancel = None
         # (#967) True once Home Assistant has started. Every read of the
         # recorder waits for it: setup waits for the first update cycle, and
         # HA cancels a setup that overruns its start-up budget — the whole
@@ -3272,7 +3273,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             await self._storage.async_load()
             # (#1083) a restart makes that day's data less trustworthy for
             # a replay; the day tagger reads this mark
-            if (self.config or {}).get(CONF_DAY_TAGS, DEFAULT_DAY_TAGS):
+            from .day_tag_store import day_tags_on
+            if day_tags_on(self):
                 try:
                     # (#645) the coordinator's one day clock
                     self._storage.note_start(self._tracker_date.isoformat())
@@ -7926,6 +7928,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 unsub()
             except Exception:  # noqa: BLE001 — teardown must finish
                 _LOGGER.debug("could not cancel the pending replay")
+        # (#1083) the Simulation tab's day-tag backfill, pending or running
+        from .day_tag_store import cancel_backfill
+        cancel_backfill(self)
 
     async def _replay_wpa_from_history(self) -> None:
         from .wpa_replay import DEFAULT_LOOKBACK_DAYS, run_replay
