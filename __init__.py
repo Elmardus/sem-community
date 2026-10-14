@@ -3788,6 +3788,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
                 coordinator.cancel_pending_recorder_work()
             except Exception:  # noqa: BLE001 — teardown must finish
                 _LOGGER.debug("could not cancel pending recorder work")
+            # (#1083) a stopped Simulation run is only in the store's memory;
+            # the daily store is otherwise saved only when HA stops
+            sim_job = getattr(coordinator, "_simulation_job", None)
+            if sim_job is not None:
+                try:
+                    await sim_job.async_flush()
+                except Exception:  # noqa: BLE001 — teardown must finish
+                    _LOGGER.debug("could not save the stopped simulation run")
 
             sc = getattr(coordinator, "_surplus_controller", None)
             if sc is not None:

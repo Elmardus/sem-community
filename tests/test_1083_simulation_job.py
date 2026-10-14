@@ -7,6 +7,7 @@ it over seven websocket commands; every result says it is modelled.
 """
 import asyncio
 import base64
+import copy
 import gc
 import io
 import weakref
@@ -54,8 +55,11 @@ def _storage():
     st._energy_data = {}
     st.saves = 0
 
+    st.disk = None
+
     async def _save():
         st.saves += 1
+        st.disk = copy.deepcopy(st._daily_data)
     st.async_save_daily = _save
     return st
 
@@ -297,22 +301,32 @@ async def test_cancel_mid_run_keeps_what_ran_flagged():
 
 
 @pytest.mark.asyncio
-async def test_unload_stops_the_run():
+async def test_unload_stops_the_run_and_saves_what_ran():
     from custom_components.solar_energy_management.coordinator.coordinator import (
         SEMCoordinator,
     )
-    gate = asyncio.Event()
-    job, storage, coordinator = _job(stats=FakeStats(gate=gate))
+    hold = asyncio.Event()
+    stats = FakeStats(hold={DATES[1]: hold})
+    job, storage, coordinator = _job(stats=stats)
     coordinator._wpa_replay_unsub = None
     coordinator._day_tag_backfill_cancel = None
     job.start(DATES, _params())
-    await asyncio.sleep(0)
+    while len(stats.calls) < 2:
+        await asyncio.sleep(0)
     task = job._task
     SEMCoordinator.cancel_pending_recorder_work(coordinator)
+    await job.async_flush()              # what async_unload_entry awaits
     with pytest.raises(asyncio.CancelledError):
         await task
-    assert storage.get_simulation_runs()[0]["status"] == "cancelled"
-    assert storage.saves == 0            # no save scheduled on unload
+    assert storage.saves == 1
+    # a reload reads the store from disk: the partial run is there
+    reloaded = _storage()
+    reloaded._daily_data = copy.deepcopy(storage.disk)
+    run = reloaded.get_simulation_runs()[0]
+    assert run["status"] == "cancelled"
+    assert [d["date"] for d in run["result"]["days"]] == [DATES[0]]
+    await job.async_flush()              # nothing new: no second save
+    assert storage.saves == 1
 
 
 def test_setup_registers_the_unload_stop_and_the_coordinator_owns_a_job():
@@ -320,6 +334,10 @@ def test_setup_registers_the_unload_stop_and_the_coordinator_owns_a_job():
     init = open(f"{src}/__init__.py", encoding="utf-8").read()
     assert "simulation_ws import async_register_websocket" in init
     assert "entry.async_on_unload(lambda: sim_job.cancel(persist=False))" in init
+    unload = init[init.index("async def async_unload_entry"):]
+    assert "await sim_job.async_flush()" in unload[:unload.index("\nasync def ")
+                                                     if "\nasync def " in unload
+                                                     else len(unload)]
     coord = open(f"{src}/coordinator/coordinator.py", encoding="utf-8").read()
     assert "self._simulation_job = SimulationJob(hass, self)" in coord
 
@@ -357,6 +375,49 @@ async def test_default_reader_is_read_hourly_statistics():
     job.start([DATES[0]], _params())
     await _finish(job)
     assert [c[0] for c in stats.calls] == [DATES[0]]
+
+
+@pytest.mark.asyncio
+async def test_a_day_without_a_core_flow_is_skipped():
+    class NoHome(FakeStats):
+        async def __call__(self, *a):
+            out = await super().__call__(*a)
+            out.pop("sensor.sem_home", None)
+            return out
+    job, storage, _ = _job(stats=NoHome())
+    job.start(DATES[:1], _params())
+    await _finish(job)
+    res = storage.get_simulation_runs()[0]["result"]
+    assert res["days"] == [] and res["total"]["days"] == 0
+    assert "home" in res["skipped"][0]["reason"]
+    # and a core sensor missing from the registry
+    job, storage, _ = _job()
+    job._entity_id = lambda key: (None if key == "daily_grid_export_energy"
+                                  else _entity_id(key))
+    job.start(DATES[:1], _params())
+    await _finish(job)
+    res = storage.get_simulation_runs()[0]["result"]
+    assert res["days"] == []
+    assert "grid_export" in res["skipped"][0]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_a_zero_import_rate_shows_zero():
+    job, _, _ = _job(cfg={**CFG, "electricity_import_rate": 0.0})
+    assert job.defaults()["import_rate"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_finish_clears_running_even_when_the_store_fails():
+    job, storage, _ = _job()
+    def _boom(_run):
+        raise RuntimeError("store broken")
+    storage.put_simulation_run = _boom
+    job.start(DATES[:1], _params())
+    with pytest.raises(RuntimeError):
+        await _finish(job)
+    assert job.progress["running"] is False
+    assert job.running is False
 
 
 @pytest.mark.asyncio
@@ -505,7 +566,7 @@ async def test_bad_params_are_invalid_and_cancel_answers():
     hass = _ws_hass(job)
     bad = {**START, "params": {**START["params"], "capacity_kwh": 0}}
     assert _error(_call(ws.ws_start, hass, **bad)) == "invalid"
-    bad = {**START, "params": {**START["params"], "reserve_pct": 100}}
+    bad = {**START, "params": {**START["params"], "reserve_pct": 101}}
     assert _error(_call(ws.ws_start, hass, **bad)) == "invalid"
     assert _error(_call(ws.ws_start, hass, **{**START, "days": ["1999-01-01"]})) == "invalid"
     assert _result(_call(ws.ws_cancel, hass)) == {"cancelled": False}
@@ -513,6 +574,47 @@ async def test_bad_params_are_invalid_and_cancel_answers():
     assert _result(_call(ws.ws_cancel, hass)) == {"cancelled": True}
     with pytest.raises(asyncio.CancelledError):
         await job._task
+
+
+@pytest.mark.asyncio
+async def test_bounds_and_booleans():
+    job, _, _ = _job()
+    hass = _ws_hass(job)
+    for key, val in (("capacity_kwh", 0.5), ("capacity_kwh", 101),
+                     ("reserve_pct", -1), ("reserve_pct", 101),
+                     ("peak_limit_kw", -1)):
+        bad = {**START, "params": {**START["params"], key: val}}
+        assert _error(_call(ws.ws_start, hass, **bad)) == "invalid", (key, val)
+    schema = ws.ws_start._ws_schema
+    import voluptuous as vol
+    with pytest.raises(vol.Invalid):
+        schema({"type": ws.WS_START, "id": 1, "days": DATES,
+                "params": {"capacity_kwh": True, "reserve_pct": 5}})
+    with pytest.raises(vol.Invalid):
+        schema({"type": ws.WS_START, "id": 1, "days": DATES,
+                "params": {"capacity_kwh": 5, "reserve_pct": 5,
+                           "import_rate": False}})
+    # the edges are allowed
+    edge = {**START, "params": {**START["params"], "capacity_kwh": 100,
+                                "reserve_pct": 100, "peak_limit_kw": 0}}
+    _result(_call(ws.ws_start, hass, **edge))
+    await _finish(job)
+    assert job.run()["params"]["peak_limit_kw"] is None
+
+
+@pytest.mark.asyncio
+async def test_unknown_run_id_while_runs_exist_and_an_all_skipped_xlsx():
+    job, _, _ = _job(stats=FakeStats(none=set(DATES)))
+    hass = _ws_hass(job)
+    _result(_call(ws.ws_start, hass, **START))
+    await _finish(job)
+    assert _error(_call(ws.ws_result, hass, run_id="nope")) == "not_found"
+    assert _error(_call(ws.ws_xlsx, hass, run_id="nope")) == "not_found"
+    res = _result(_call(ws.ws_result, hass))
+    assert res["days"] == [] and len(res["skipped"]) == 3
+    sheets = _read_xlsx(base64.b64decode(_result(_call(ws.ws_xlsx, hass))["base64"]))
+    assert len(sheets["Days"]) == 1                  # the header only
+    assert sheets["Totals"][-1][:2] == [("s", "total"), ("n", 0)]
 
 
 def test_start_schema_takes_the_documented_shape():
