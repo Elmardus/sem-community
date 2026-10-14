@@ -31,6 +31,7 @@ from .consts.devices import (
     REBOOT_DEVICE_CLASS, names_a_charge_pause, names_a_reboot)
 from .utils.select_option import pick_listed
 from .utils.switch_sense import charge_pause_twin, integration_name
+from .utils.own_entity import is_sem_entity  # (#1103)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1482,13 +1483,18 @@ def power_sensor_ids(hass) -> List[str]:
         registry = entity_registry.async_get(hass)
         for e in registry.entities.values():
             eid = str(e.entity_id)
+            # (#1103) SEM's own power sensors are SEM's results: picked as a
+            # source, SEM would read back what it worked out from it.
             if eid.startswith("sensor.") and not e.disabled_by \
-                    and _roles_dc(e) == "power":
+                    and _roles_dc(e) == "power" \
+                    and str(e.platform or "") != "solar_energy_management":
                 out.add(eid)
     except Exception:  # noqa: BLE001 — the registry half stands alone
         pass
     try:
         for st in hass.states.async_all("sensor"):
+            if is_sem_entity(hass, st.entity_id):
+                continue
             attrs = getattr(st, "attributes", None) or {}
             dc = attrs.get("device_class")
             unit = attrs.get("unit_of_measurement")
@@ -2237,7 +2243,11 @@ def _charging_now(entries) -> Optional[str]:
     return hits[0] if hits else None
 
 
-def _current_number_role(entries) -> Optional[str]:
+def _current_number_role(entries, *, charger: bool = False) -> Optional[str]:
+    """The number that sets a charger's current. ``charger`` says the device
+    is one: only then do the charger-only names (``amp``, ``charge_rate``,
+    ``charging_current``) count — on an inverter the same words are the
+    battery's charge limit (#809, #1096)."""
     from .consts import role_lexicon as lex
     rule = lex.ROLE_RULES["ev_current_control"]
     hits = []
@@ -2252,7 +2262,8 @@ def _current_number_role(entries) -> Optional[str]:
                 hits.append(eid)
                 break
             # ``amp``, ``charge_rate`` — a current only on a charger
-            if (any(re.search(p, key, re.I) for p in rule.get("charger_only_any", ()))
+            if (charger
+                    and any(re.search(p, key, re.I) for p in rule.get("charger_only_any", ()))
                     and not any(re.search(p, key, re.I) for p in rule.get("not", ()))):
                 hits.append(eid)
                 break
@@ -2332,7 +2343,14 @@ def read_charger_roles(dev_entities, domain: str, *, services_of=None,
             if hit:
                 roles[role] = hit
     else:
-        cur = _current_number_role(dev_entities)
+        # (#1096) a charger by its registry kind or by a plug — never by a
+        # "charging" reading alone: a home battery carries
+        # ``battery_charging`` too, and its ``charging_current`` is the
+        # pack's limit (#809).
+        _kind = str((describe_domain(domain) or {}).get("kind") or "")
+        cur = _current_number_role(
+            dev_entities,
+            charger=(_kind == "charger" or bool(_plugged(dev_entities))))
         if cur:
             roles["current_number"] = cur
             if _is_stored_setting(dev_entities, cur):
@@ -2381,6 +2399,13 @@ def read_charger_roles(dev_entities, domain: str, *, services_of=None,
             svc = _service_current_role(domain, live,
                                         device_ident=device_ident)
             if svc:
+                # (#1097) a service keyed by ``device_id`` needs THIS box's
+                # registry id — the one value SEM knows for certain. Left
+                # out, the created charger called the service for no box.
+                _did = next((getattr(e, "device_id", None) for e in dev_entities
+                             if getattr(e, "device_id", None)), None)
+                if "device_id" in (svc.get("fields") or ()) and _did:
+                    svc["device_id"] = str(_did)
                 roles["current_service"] = svc
             roles.update(_service_field_roles(domain, live))
     power = _charging_power(dev_entities, vehicle=vehicle)
@@ -2498,6 +2523,10 @@ def _roles_offer(roles: Dict[str, Any]) -> Dict[str, Any]:
         if roles["current_service"].get("data"):
             o["ev_charger_service_data"] = json.dumps(
                 roles["current_service"]["data"], sort_keys=True)
+        if roles["current_service"].get("device_id"):
+            # the existing per-charger key the device sends as ``device_id``
+            # (devices/base.py ``service_device_id``), as Easee's has
+            o["ev_service_device_id"] = roles["current_service"]["device_id"]
     if roles.get("phase_select"):
         o["_suggested_phase_switch"] = dict(roles["phase_select"])
     return o
@@ -2570,6 +2599,11 @@ def charger_from_near_miss(dev_entities, platform: str,
         if control.get("data"):
             out["ev_charger_service_data"] = json.dumps(control["data"],
                                                         sort_keys=True)
+        # (#1097) a service keyed by device_id gets this box's registry id
+        _did = next((getattr(e, "device_id", None) for e in dev_entities
+                     if getattr(e, "device_id", None)), None)
+        if "device_id" in (control.get("fields") or ()) and _did:
+            out["ev_service_device_id"] = str(_did)
     own = _own_names(dev_entities)
     # (#1032) the charging power is the whole box's reading, not one phase
     # leg or a clamp on something else (the rig: NRGkick's first power
@@ -3053,7 +3087,7 @@ def _roles_pass(report, registry, brand_units, configured_entities,
                 {"device_id": did, "entities": len(ents),
                  "evidence": [entity_evidence(e) for e in ents]})
             companions.add(did)
-            live = _current_number_role(ents)
+            live = _current_number_role(ents, charger=True)  # a charger's companion
             sc = n.get("suggested_charger") or {}
             if (live and not _is_stored_setting(ents, live) and sc
                     and "ev_current_control_entity" not in sc):
