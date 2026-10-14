@@ -38,6 +38,8 @@ migrating old automations):
 | **Always (max)** | Whatever it takes | — | Charge at maximum immediately. Explicit override — ignores solar, tariff and night logic. |
 | **Off** | Never | — | No charging; SEM keeps the charger idle. |
 
+Each mode promise is tested: `tests/test_docs_contracts_ev.py`.
+
 > Earlier versions of this table said Solar only's battery "may assist" — it
 > never did. `solar_only` only *redirects* power that would have charged the
 > pack; the discharge assist lived in Min + Solar alone, which is exactly the

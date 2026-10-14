@@ -620,6 +620,8 @@ When you have multiple batteries (e.g. Huawei + Growatt, or split Huawei units),
 | **Force Discharge** | Discharge at maximum rate | Emergency backup or battery arbitrage |
 | **Off** | SEM ignores this battery | Manual control or testing |
 
+Each mode promise is tested: `tests/test_docs_contracts_battery.py`.
+
 **Per-battery control entities:**
 - `select.sem_battery_<id>_mode` — set the mode (auto / self_consumption / force_charge / force_discharge / off)
 - `number.sem_battery_<id>_reserve_soc` — the SOC this battery will not discharge below
@@ -730,6 +732,8 @@ Two switches, and they are deliberately separate rather than one setting:
 
 - **Battery may sell to the grid** — export the budget when the price is high.
 - **Battery may charge the car** — use the budget on the EV in the evening.
+
+Both switches are tested: `tests/test_docs_contracts_battery.py`.
 
 A single mode could not express *"may sell, may not touch the car"*. Both
 default to your current behaviour, so turning forecast spending on does not

@@ -218,6 +218,8 @@ Each load's row has a **Mode** selector:
 | **Solar only** | Runs on PV surplus; never force-imports and never touches the battery. |
 | **Solar + battery** | Runs on PV surplus **and** lets the home battery assist above the buffer during the day (the load-side "solar + min"). |
 
+Each mode promise is tested: `tests/test_docs_contracts_loads.py`.
+
 The Mode is **axis 1 — the daytime source**. What happens *overnight* (no sun) is a
 separate choice, the **"Finish overnight from"** picker below.
 
@@ -302,6 +304,8 @@ the runtime:
 | **Off** | The load just waits for sun — may miss its target on a dark day. | `solar_only`, no battery |
 | **Battery** | Runs off the **home battery**, down to the hard reserve floor — never past it. | `battery_eligible_overnight` |
 | **Grid** | Runs off the **grid** during your cheap-tariff window (needs a tariff/cheap window). | `top_up_policy = cheap_hours` |
+
+Each choice is tested: `tests/test_docs_contracts_loads.py`.
 
 The two axes are independent: the **Mode** picks the daytime source (solar, or
 solar + battery assist above the buffer), and **Finish overnight from** picks the
