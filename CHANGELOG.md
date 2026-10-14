@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- ✨ **Simulation tab: replay your recorded days with another battery, reserve, peak limit or price** (#1083). Estimated cost per day type. Off by default.
+- 🔧 **You now download Simulation results and EV sessions as Excel files (.xlsx)** (#1083). A CSV did not open right in every country.
 - 🔧 **SEM can tag each finished day: sunny, grey, car, cheap prices or a data gap** (#1083). Off by default; diagnostics show the last seven.
 - 🐛 **SEM no longer guesses its own sensor as your grid meter** (#1103) — thanks @LightBridge16. The Grid power pick now works with an Energy Dashboard.
 - 🐛 **A "Solar only" load now stops when your house buys from the grid** (#1102) — thanks @lostcontrol. Before, SEM did not count the grid import.

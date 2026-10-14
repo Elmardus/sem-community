@@ -63,10 +63,23 @@ Production code from the tree under test, inputs and clock from the day
 | `home_spike` | relative | the branch shows a one-cycle home spike develop did not show |
 | `no_writes` | exact | the replayed code made a service call |
 
+| `cost_identity` | modelled | the day re-priced hourly by the Simulation tab's model is more than 0.01 off its 10-s cost |
+
 Only `exact` and `relative` checks block, and only on a non-gap day. An
 exact check that fails on develop too is **inherited** — reported, never
 blamed on the branch. A check that cannot fail is a bug: each one has a
 test that makes it fail on a real recorded fault.
+
+## The Simulation tab's model
+
+The user-facing Simulation tab and this tool share one model,
+`analytics/simulation/` (it ships; `tools/` imports it, never the other
+way). The tab reads 24 hourly rows per day from Home Assistant's
+statistics; `tools/replay/hourly.py` adds a 10-s corpus day up into the
+same `HourlyDay`. `cost_identity` re-prices that day through the model's
+`balance.cost_hour`: on prices flat inside each hour it matches; a 15-min
+price curve pulls it apart, so it is reported and never blocks. A tree
+without the model (develop before #1083) skips it.
 
 ## Limits — said plainly
 

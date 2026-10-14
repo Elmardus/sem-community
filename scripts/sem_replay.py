@@ -114,7 +114,8 @@ def main() -> int:
     def _run(d):
         return DayRun(date=d["date"], tags=d["tags"], writes=d["writes"], notes=d["notes"],
                       home=[(t, s, None, False) for t, s in d["home"]],
-                      forecast=[tuple(x) for x in d["forecast"]])
+                      forecast=[tuple(x) for x in d["forecast"]],
+                      cost=tuple(d["cost"]) if d.get("cost") else None)
 
     report = {"branch": str(a.branch), "base": str(a.base), "days": [], "refused": False}
     lines = []
