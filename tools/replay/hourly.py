@@ -130,5 +130,5 @@ def day_costs(day: RecordedDay, *, export_rate: float = 0.0
         if rate is None:
             continue
         coarse += cost_hour(hourly.grid_import[h], hourly.grid_export[h],
-                            rate, export_rate).net_cost
+                            rate, export_rate=export_rate).net_cost
     return fine, coarse

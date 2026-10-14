@@ -261,6 +261,10 @@ def synth_view(hour: SimHour, state: SimState, params: SimParams,
         peak_slot_allowed_w=_allowed_w(params),
         # The car is offered first; a forced charge takes what is left.
         peak_committed_w=ev_w,
+        # A replay reads recorded hours: no input is dark, no residual clamped.
+        inputs_degraded=False,
+        dark_inputs=(),
+        home_residual_clamped_w=0.0,
     )
     runtime = BatteryRuntime(
         battery_id="sim", last_known_soc=soc_pct, last_known_w=state.last_w,
@@ -531,8 +535,8 @@ def simulate_day(day: HourlyDay, params: SimParams,
             battery_discharge=flow.battery_discharge, ev=hour.ev,
             roundtrip=params.roundtrip)
         cost = cost_hour(flow.grid_import, flow.grid_export, hour.import_rate,
-                         hour.export_rate, home_kwh=hour.home, ev_kwh=hour.ev,
-                         solar_kwh=hour.solar)
+                         export_rate=hour.export_rate, home_kwh=hour.home,
+                         ev_kwh=hour.ev, solar_kwh=hour.solar)
         sim_rows.append({
             "hour": h, "intent": decision.intent.value,
             "reason": decision.reason,
@@ -551,7 +555,8 @@ def simulate_day(day: HourlyDay, params: SimParams,
         })
         rec = day.flows(h)
         rec_cost = cost_hour(rec["grid_import"], rec["grid_export"],
-                             hour.import_rate, hour.export_rate,
+                             hour.import_rate,
+                             export_rate=hour.export_rate,
                              home_kwh=rec["home"], ev_kwh=rec["ev"],
                              solar_kwh=rec["solar"])
         actual_rows.append({**rec, "over_limit_kwh": _over(rec["grid_import"], params),

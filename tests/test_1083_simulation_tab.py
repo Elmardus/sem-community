@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -112,9 +113,8 @@ def test_switch_on_changes_nothing():
 
 
 def test_generate_dashboard_calls_the_prune():
-    src = (ROOT / "features" / "dashboard_generator.py").read_text(encoding="utf-8")
-    body = src.split("async def generate_dashboard", 1)[1].split("\n    def ", 1)[0]
-    assert "self._prune_sleeping_tabs(template)" in body
+    from .ast_contracts import calls
+    assert calls(DashboardGenerator.generate_dashboard, "_prune_sleeping_tabs")
 
 
 def test_translation_keys_in_every_language():
@@ -126,8 +126,24 @@ def test_translation_keys_in_every_language():
     assert data["en"]["simulation"] == "Simulation"
 
 
-def test_the_tab_header_knows_the_tab():
-    src = TAB_HEADER.read_text(encoding="utf-8")
-    assert "titleKey: 'simulation', subtitleKey: 'simulation_sub'" in src
-    assert "tab === 'simulation'" in src
-    assert "#8353d1" in src
+_HEADER_ROW = re.compile(
+    r"^\s{4}(\w+): \{\s*titleKey: '(\w+)', subtitleKey: '(\w+)', "
+    r"color: '(#[0-9A-Fa-f]{6})'", re.M)
+
+
+def _header_table():
+    """The header's tab table as data: {tab: (titleKey, subtitleKey, colour)}."""
+    text = TAB_HEADER.read_text(encoding="utf-8")
+    return {m[0]: m[1:] for m in _HEADER_ROW.findall(text)}
+
+
+def test_every_template_view_has_a_header_row():
+    """Every view the template ships, the 9th included, has a header row
+    whose title and subtitle keys exist in English."""
+    table = _header_table()
+    en = json.loads(TRANSLATIONS.read_text(encoding="utf-8"))["en"]
+    for path in _paths(_template()):
+        assert path in table, path
+        title, sub, _colour = table[path]
+        assert en.get(title) and en.get(sub), (path, title, sub)
+    assert table[SIM_PATH] == ("simulation", "simulation_sub", "#8353d1")

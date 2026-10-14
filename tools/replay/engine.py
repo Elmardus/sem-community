@@ -152,6 +152,7 @@ def replay_cost(day: RecordedDay, run: DayRun) -> None:
     except ImportError:
         run.notes.append("cost: no simulation model in this tree — skipped")
         return
+    # UNPRICED: the corpus records no feed-in price (ROLES has none).
     run.cost = day_costs(day)
     if run.cost is None:
         run.notes.append("cost: no import price recorded — skipped")

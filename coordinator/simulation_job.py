@@ -214,6 +214,8 @@ class SimulationJob:
                     raise
                 except Exception as err:  # noqa: BLE001 — one day, not the run
                     _LOGGER.debug("simulation day %s failed", d, exc_info=True)
+                    # CAUSE: `err` is the exception _one_day raised for this
+                    # day, caught right here; its own text says what failed.
                     reason = f"could not simulate: {err}"
                 if reason:
                     run["skipped"].append({"date": d, "reason": reason})
