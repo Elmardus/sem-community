@@ -429,6 +429,36 @@ def battery_unseen(coordinator) -> bool:
     return not detected > 0
 
 
+def _control_device_says_not_now(hass, entity_id: str) -> bool:
+    """(#1032) Read the device beside a control entity for
+    ``control_entity.device_says_not_now``: the entity's own attributes and
+    the ``(state, attributes)`` of every other enabled entity on its device.
+    SEM's own entities never speak for a charger. No registry entry or no
+    device answers no, and so does any failure: the entity is then judged on
+    its own state, as before.
+    """
+    from homeassistant.helpers import entity_registry as er
+    from .control_entity import device_says_not_now
+    try:
+        reg = er.async_get(hass)
+        entry = reg.async_get(entity_id)
+        if entry is None or not entry.device_id:
+            return False
+        siblings = []
+        for sib in er.async_entries_for_device(reg, entry.device_id):
+            if sib.entity_id == entity_id or sib.platform == DOMAIN:
+                continue
+            st = hass.states.get(sib.entity_id)
+            if st is not None:
+                siblings.append((st.state, st.attributes))
+        own = hass.states.get(entity_id)
+        return device_says_not_now(getattr(own, "attributes", None), siblings)
+    except Exception:  # noqa: BLE001 — a failed look is not an answer
+        _LOGGER.debug("#1032 device look for %s failed", entity_id,
+                      exc_info=True)
+        return False
+
+
 class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
     """Coordinator for Solar Energy Management.
 
@@ -5983,10 +6013,25 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         becoming a Repair — a restart's warm-up window must not cry wolf
         (#611) — but the per-charger verdict publishes immediately so the
         Configuration card can mark the row straight away.
+
+        (#1032) ``unavailable`` is not always broken. Zaptec's "Charging"
+        switch and Wallbox's pause switch go ``unavailable`` when their
+        command does not apply — @OddmarDam got this ERROR Repair every
+        time the car was unplugged. While the charger is not drawing, an
+        entity its live device made unavailable is valid
+        (``control_entity.device_says_not_now``). While it draws, every
+        control must be there to stop or set the charge, so it is judged
+        on its state alone.
         """
         from .control_entity import validate_control_entity
+        from .sensor_reader import EV_ACTIVE_CHARGE_FLOOR_W
         from . import repair_issues as _ri
 
+        try:
+            drawing = (float(result.get(f"charger_{cid}_power") or 0.0)
+                       >= EV_ACTIVE_CHARGE_FLOOR_W)
+        except (TypeError, ValueError):
+            drawing = False
         broken_now = None
         any_configured = False
         for key, capability in self._CONTROL_CAPABILITIES:
@@ -5996,6 +6041,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     self.hass.states.get(eid).state
                     if self.hass.states.get(eid) is not None else None
                 ),
+                not_now=(None if drawing
+                         else lambda eid: _control_device_says_not_now(
+                             self.hass, eid)),
             )
             result[f"charger_{cid}_{key}_valid"] = verdict.valid
             result[f"charger_{cid}_{key}_reason"] = verdict.reason
