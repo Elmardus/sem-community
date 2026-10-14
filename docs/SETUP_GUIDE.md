@@ -359,6 +359,8 @@ dashboard's ⚙ Configuration tab lets you pin an explicit entity per source:
 
 Notes:
 
+- **Pick your meter's sensor, not one of SEM's own** (`sensor.sem_…`).
+  SEM ignores its own sensors here.
 - **Sign conventions are detected on the override.** A Shelly EM does not
   share the inverter's sign convention — SEM's import/export (and battery
   charge/discharge) sign detection runs against whatever entity you pick,
