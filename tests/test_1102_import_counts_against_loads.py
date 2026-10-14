@@ -963,7 +963,8 @@ def _stuck(device_id, draw, priority, *, refuses_stop):
 class TestTheDeficitPassKeepsTheOrder:
     """A 1 kW Solar pump at priority 2 and a 2 kW load at priority 7 that
     cannot be stopped now. The pass tries the lowest load first and, when
-    it cannot stop, the next one up — the order develop has. A first cut
+    it cannot stop, the next one up — develop's order (develop reached it
+    only through the sun cap; see class 137, residual 8). A first cut
     of this fix kept the pump on (it was "covered" at its turn), and the
     house bought the lower load's share for its whole run (found in
     review: develop stopped the pump through the sun cap)."""
