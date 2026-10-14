@@ -80,6 +80,7 @@ def _params(job, raw: dict) -> SimParams:
                                  peak_limit_kw=peak or None, **rates)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): WS_DAYS,
     vol.Optional("entry_id"): str,
@@ -94,6 +95,7 @@ def ws_days(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
     connection.send_result(msg["id"], job.days())
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): WS_DEFAULTS,
     vol.Optional("entry_id"): str,
@@ -108,6 +110,7 @@ def ws_defaults(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
     connection.send_result(msg["id"], job.defaults())
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): WS_START,
     vol.Optional("entry_id"): str,
@@ -138,6 +141,7 @@ def ws_start(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
     connection.send_result(msg["id"], {"run_id": run_id})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): WS_STATUS,
     vol.Optional("entry_id"): str,
@@ -152,6 +156,7 @@ def ws_status(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
     connection.send_result(msg["id"], dict(job.progress))
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): WS_CANCEL,
     vol.Optional("entry_id"): str,
@@ -174,6 +179,7 @@ def result_payload(run: dict) -> dict:
     return out
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): WS_RESULT,
     vol.Optional("entry_id"): str,
@@ -226,6 +232,7 @@ def run_xlsx(run: dict) -> bytes:
     return write_workbook([("Days", days), ("Totals", totals)])
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): WS_XLSX,
     vol.Optional("entry_id"): str,

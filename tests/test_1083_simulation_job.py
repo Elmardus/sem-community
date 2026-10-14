@@ -39,7 +39,8 @@ from custom_components.solar_energy_management.coordinator.simulation_job import
 from custom_components.solar_energy_management.coordinator.storage import SEMStorage
 
 DATES = ["2026-10-10", "2026-10-11", "2026-10-12"]
-CFG = {"battery_capacity_kwh": 10.0, "battery_reserve_soc": 10.0,
+CFG = {"simulation_tab": True,     # the one gate (review): off = no run
+       "battery_capacity_kwh": 10.0, "battery_reserve_soc": 10.0,
        "electricity_import_rate": 0.30, "electricity_export_rate": 0.08,
        "target_peak_limit": 6.0}
 SOLAR = {8: 0.3, 9: 1.0, 10: 2.0, 11: 3.0, 12: 3.5, 13: 3.5, 14: 3.0,
@@ -650,3 +651,13 @@ def _read_xlsx(data):
         rows[0] = [c[1] for c in rows[0]]
         out[name] = rows
     return out
+
+
+async def test_start_is_refused_while_the_tab_switch_is_off():
+    """(review) The day-tag test flag alone makes tagged days exist; a
+    direct websocket start must still be refused while the switch is off."""
+    job, _storage, _coord = _job(cfg={**CFG, "simulation_tab": False})
+    with pytest.raises(SimulationError) as err:
+        job.start(DATES[:1], SimParams.from_config(CFG))
+    assert err.value.code == "off"
+    assert job.progress["status"] == "idle"

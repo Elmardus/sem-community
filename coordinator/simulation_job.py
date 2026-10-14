@@ -28,7 +28,7 @@ from ..analytics.simulation.battery_sim import (
 )
 from ..analytics.simulation.hourly_day import CORE_ROLES, HourlyDay
 from ..analytics.simulation.summary import summarise
-from .day_tag_store import BACKFILL_DAYS, BACKFILL_ROLES
+from .day_tag_store import BACKFILL_DAYS, BACKFILL_ROLES, simulation_tab_on
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -151,6 +151,10 @@ class SimulationJob:
         """Start a run; returns its id. Raises ``SimulationError``."""
         if self.running:
             raise SimulationError("busy", "a simulation is already running")
+        # (review) the switch is the one gate: a websocket call must not
+        # start a recorder read and a decision replay while the tab is off
+        if not simulation_tab_on(self.coordinator):
+            raise SimulationError("off", "switch the Simulation tab on first")
         if self.storage is None:
             raise SimulationError("invalid", "SEM's store is not ready yet")
         if not isinstance(params, SimParams):
