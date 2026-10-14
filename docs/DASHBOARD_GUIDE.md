@@ -585,6 +585,14 @@ view for people who do not have it.
 A 24-hour timeline of tariff level, night window, surplus window, and EV
 charging periods on one axis.
 
+#### sem-simulation-card
+
+**SEM Simulation Card** · *Simulation tab*
+
+Replays your recorded days through SEM, with the settings you change.
+Numbers after a changed decision are estimated, not measured.
+The tab appears when the Simulation tab switch is on and you reload the page.
+
 #### sem-solar-card
 
 **SEM Solar** · *Home tab*

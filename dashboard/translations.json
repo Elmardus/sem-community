@@ -1678,7 +1678,12 @@
     "sessions_xlsx": "Stáhnout .xlsx",
     "sessions_download_failed": "Stažení selhalo — zkuste to znovu",
     "simulation_tab": "Karta simulace",
-    "config_help_simulation_tab": "Zobrazí kartu simulace. Také označí každý den a jednou načte posledních 90 dní. Ve výchozím stavu vypnuto."
+    "config_help_simulation_tab": "Zobrazí kartu simulace. Také označí každý den a jednou načte posledních 90 dní. Ve výchozím stavu vypnuto.",
+    "simulation": "Simulace",
+    "simulation_sub": "Přehraje vaše zaznamenané dny přes SEM. Výsledky po změněném rozhodnutí jsou odhad, ne měření.",
+    "simulation_days_stored": "uložené dny",
+    "simulation_selected": "vybráno",
+    "simulation_gaps": "mezery v datech"
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3359,7 +3364,12 @@
     "sessions_xlsx": "Hent .xlsx",
     "sessions_download_failed": "Download mislykkedes — prøv igen",
     "simulation_tab": "Simuleringsfane",
-    "config_help_simulation_tab": "Viser simuleringsfanen. Mærker også hver dag og læser de sidste 90 dage én gang. Slået fra som standard."
+    "config_help_simulation_tab": "Viser simuleringsfanen. Mærker også hver dag og læser de sidste 90 dage én gang. Slået fra som standard.",
+    "simulation": "Simulering",
+    "simulation_sub": "Afspiller dine registrerede dage gennem SEM. Resultater efter en ændret beslutning er anslået, ikke målt.",
+    "simulation_days_stored": "dage gemt",
+    "simulation_selected": "valgt",
+    "simulation_gaps": "datahuller"
   },
   "de": {
     "% of limit": "% des Limits",
@@ -5040,7 +5050,12 @@
     "sessions_xlsx": "Download .xlsx",
     "sessions_download_failed": "Download fehlgeschlagen — bitte erneut versuchen",
     "simulation_tab": "Simulations-Tab",
-    "config_help_simulation_tab": "Zeigt den Simulations-Tab. Markiert dazu jeden Tag und liest einmal die letzten 90 Tage. Standardmäßig aus."
+    "config_help_simulation_tab": "Zeigt den Simulations-Tab. Markiert dazu jeden Tag und liest einmal die letzten 90 Tage. Standardmäßig aus.",
+    "simulation": "Simulation",
+    "simulation_sub": "Spielt Ihre gespeicherten Tage mit SEM nach. Ergebnisse nach einer geänderten Entscheidung sind geschätzt, nicht gemessen.",
+    "simulation_days_stored": "Tage gespeichert",
+    "simulation_selected": "ausgewählt",
+    "simulation_gaps": "Datenlücken"
   },
   "en": {
     "% of limit": "% of limit",
@@ -6721,7 +6736,12 @@
     "sessions_xlsx": "Download .xlsx",
     "sessions_download_failed": "Download failed — try again",
     "simulation_tab": "Simulation tab",
-    "config_help_simulation_tab": "Shows the Simulation tab. It also tags each day and reads the last 90 days once. Off by default."
+    "config_help_simulation_tab": "Shows the Simulation tab. It also tags each day and reads the last 90 days once. Off by default.",
+    "simulation": "Simulation",
+    "simulation_sub": "Replays your recorded days through SEM. Results after a changed decision are estimated, not measured.",
+    "simulation_days_stored": "days stored",
+    "simulation_selected": "selected",
+    "simulation_gaps": "data gaps"
   },
   "es": {
     "% of limit": "% del límite",
@@ -8402,7 +8422,12 @@
     "sessions_xlsx": "Descargar .xlsx",
     "sessions_download_failed": "Error al descargar — inténtelo de nuevo",
     "simulation_tab": "Pestaña de simulación",
-    "config_help_simulation_tab": "Muestra la pestaña de simulación. También etiqueta cada día y lee una vez los últimos 90 días. Desactivado por defecto."
+    "config_help_simulation_tab": "Muestra la pestaña de simulación. También etiqueta cada día y lee una vez los últimos 90 días. Desactivado por defecto.",
+    "simulation": "Simulación",
+    "simulation_sub": "Reproduce sus días registrados con SEM. Los resultados tras una decisión cambiada son estimados, no medidos.",
+    "simulation_days_stored": "días guardados",
+    "simulation_selected": "seleccionados",
+    "simulation_gaps": "huecos de datos"
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -10083,7 +10108,12 @@
     "sessions_xlsx": "Lataa .xlsx",
     "sessions_download_failed": "Lataus epäonnistui — yritä uudelleen",
     "simulation_tab": "Simulointivälilehti",
-    "config_help_simulation_tab": "Näyttää simulointivälilehden. Merkitsee myös jokaisen päivän ja lukee kerran viimeiset 90 päivää. Oletuksena pois."
+    "config_help_simulation_tab": "Näyttää simulointivälilehden. Merkitsee myös jokaisen päivän ja lukee kerran viimeiset 90 päivää. Oletuksena pois.",
+    "simulation": "Simulointi",
+    "simulation_sub": "Toistaa tallennetut päiväsi SEM:n läpi. Muutetun päätöksen jälkeiset tulokset ovat arvioita, eivät mittauksia.",
+    "simulation_days_stored": "päivää tallessa",
+    "simulation_selected": "valittu",
+    "simulation_gaps": "tietoaukot"
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -11764,7 +11794,12 @@
     "sessions_xlsx": "Télécharger .xlsx",
     "sessions_download_failed": "Échec du téléchargement — réessayez",
     "simulation_tab": "Onglet simulation",
-    "config_help_simulation_tab": "Affiche l'onglet simulation. Il étiquette aussi chaque jour et lit une fois les 90 derniers jours. Désactivé par défaut."
+    "config_help_simulation_tab": "Affiche l'onglet simulation. Il étiquette aussi chaque jour et lit une fois les 90 derniers jours. Désactivé par défaut.",
+    "simulation": "Simulation",
+    "simulation_sub": "Rejoue vos jours enregistrés dans SEM. Les résultats après une décision modifiée sont estimés, non mesurés.",
+    "simulation_days_stored": "jours enregistrés",
+    "simulation_selected": "sélectionnés",
+    "simulation_gaps": "données manquantes"
   },
   "hu": {
     "% of limit": "% a határból",
@@ -13445,7 +13480,12 @@
     "sessions_xlsx": "Letöltés .xlsx",
     "sessions_download_failed": "A letöltés nem sikerült — próbáld újra",
     "simulation_tab": "Szimuláció lap",
-    "config_help_simulation_tab": "Megjeleníti a Szimuláció lapot. Minden napot megjelöl, és egyszer beolvassa az utolsó 90 napot. Alapból ki."
+    "config_help_simulation_tab": "Megjeleníti a Szimuláció lapot. Minden napot megjelöl, és egyszer beolvassa az utolsó 90 napot. Alapból ki.",
+    "simulation": "Szimuláció",
+    "simulation_sub": "Lejátssza a rögzített napjait a SEM-en. A megváltozott döntés utáni eredmények becsültek, nem mértek.",
+    "simulation_days_stored": "tárolt nap",
+    "simulation_selected": "kiválasztva",
+    "simulation_gaps": "adathiány"
   },
   "it": {
     "% of limit": "% del limite",
@@ -15126,7 +15166,12 @@
     "sessions_xlsx": "Scarica .xlsx",
     "sessions_download_failed": "Download non riuscito — riprovare",
     "simulation_tab": "Scheda simulazione",
-    "config_help_simulation_tab": "Mostra la scheda simulazione. Etichetta anche ogni giorno e legge una volta gli ultimi 90 giorni. Disattivato per impostazione predefinita."
+    "config_help_simulation_tab": "Mostra la scheda simulazione. Etichetta anche ogni giorno e legge una volta gli ultimi 90 giorni. Disattivato per impostazione predefinita.",
+    "simulation": "Simulazione",
+    "simulation_sub": "Riproduce i giorni registrati con SEM. I risultati dopo una decisione cambiata sono stimati, non misurati.",
+    "simulation_days_stored": "giorni salvati",
+    "simulation_selected": "selezionati",
+    "simulation_gaps": "dati mancanti"
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -16807,7 +16852,12 @@
     "sessions_xlsx": "Download .xlsx",
     "sessions_download_failed": "Downloaden mislukt — probeer opnieuw",
     "simulation_tab": "Simulatietabblad",
-    "config_help_simulation_tab": "Toont het simulatietabblad. Labelt ook elke dag en leest één keer de laatste 90 dagen. Standaard uit."
+    "config_help_simulation_tab": "Toont het simulatietabblad. Labelt ook elke dag en leest één keer de laatste 90 dagen. Standaard uit.",
+    "simulation": "Simulatie",
+    "simulation_sub": "Speelt uw opgeslagen dagen opnieuw af in SEM. Resultaten na een gewijzigde beslissing zijn geschat, niet gemeten.",
+    "simulation_days_stored": "dagen opgeslagen",
+    "simulation_selected": "geselecteerd",
+    "simulation_gaps": "datagaten"
   },
   "no": {
     "% of limit": "% av grense",
@@ -18488,7 +18538,12 @@
     "sessions_xlsx": "Last ned .xlsx",
     "sessions_download_failed": "Nedlasting mislyktes — prøv igjen",
     "simulation_tab": "Simuleringsfane",
-    "config_help_simulation_tab": "Viser simuleringsfanen. Merker også hver dag og leser de siste 90 dagene én gang. Av som standard."
+    "config_help_simulation_tab": "Viser simuleringsfanen. Merker også hver dag og leser de siste 90 dagene én gang. Av som standard.",
+    "simulation": "Simulering",
+    "simulation_sub": "Spiller av de lagrede dagene dine gjennom SEM. Resultater etter en endret beslutning er anslått, ikke målt.",
+    "simulation_days_stored": "dager lagret",
+    "simulation_selected": "valgt",
+    "simulation_gaps": "datahull"
   },
   "pl": {
     "% of limit": "% limitu",
@@ -20169,7 +20224,12 @@
     "sessions_xlsx": "Pobierz .xlsx",
     "sessions_download_failed": "Pobieranie nie powiodło się — spróbuj ponownie",
     "simulation_tab": "Karta symulacji",
-    "config_help_simulation_tab": "Pokazuje kartę symulacji. Oznacza też każdy dzień i raz wczytuje ostatnie 90 dni. Domyślnie wyłączone."
+    "config_help_simulation_tab": "Pokazuje kartę symulacji. Oznacza też każdy dzień i raz wczytuje ostatnie 90 dni. Domyślnie wyłączone.",
+    "simulation": "Symulacja",
+    "simulation_sub": "Odtwarza zapisane dni w SEM. Wyniki po zmienionej decyzji są szacowane, nie mierzone.",
+    "simulation_days_stored": "zapisane dni",
+    "simulation_selected": "wybrane",
+    "simulation_gaps": "luki w danych"
   },
   "pt": {
     "% of limit": "% do limite",
@@ -21850,7 +21910,12 @@
     "sessions_xlsx": "Transferir .xlsx",
     "sessions_download_failed": "Falha ao transferir — tente novamente",
     "simulation_tab": "Separador de simulação",
-    "config_help_simulation_tab": "Mostra o separador de simulação. Também marca cada dia e lê uma vez os últimos 90 dias. Desligado por padrão."
+    "config_help_simulation_tab": "Mostra o separador de simulação. Também marca cada dia e lê uma vez os últimos 90 dias. Desligado por padrão.",
+    "simulation": "Simulação",
+    "simulation_sub": "Reproduz os seus dias registados no SEM. Os resultados após uma decisão alterada são estimados, não medidos.",
+    "simulation_days_stored": "dias guardados",
+    "simulation_selected": "selecionados",
+    "simulation_gaps": "falhas de dados"
   },
   "ro": {
     "% of limit": "% din limită",
@@ -23531,7 +23596,12 @@
     "sessions_xlsx": "Descarcă .xlsx",
     "sessions_download_failed": "Descărcarea a eșuat — încercați din nou",
     "simulation_tab": "Fila simulare",
-    "config_help_simulation_tab": "Afișează fila de simulare. Marchează și fiecare zi și citește o dată ultimele 90 de zile. Oprit implicit."
+    "config_help_simulation_tab": "Afișează fila de simulare. Marchează și fiecare zi și citește o dată ultimele 90 de zile. Oprit implicit.",
+    "simulation": "Simulare",
+    "simulation_sub": "Redă zilele înregistrate prin SEM. Rezultatele după o decizie schimbată sunt estimate, nu măsurate.",
+    "simulation_days_stored": "zile salvate",
+    "simulation_selected": "selectate",
+    "simulation_gaps": "lipsă date"
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -25212,7 +25282,12 @@
     "sessions_xlsx": "Ladda ner .xlsx",
     "sessions_download_failed": "Nedladdningen misslyckades — försök igen",
     "simulation_tab": "Simuleringsflik",
-    "config_help_simulation_tab": "Visar simuleringsfliken. Märker också varje dag och läser de senaste 90 dagarna en gång. Av som standard."
+    "config_help_simulation_tab": "Visar simuleringsfliken. Märker också varje dag och läser de senaste 90 dagarna en gång. Av som standard.",
+    "simulation": "Simulering",
+    "simulation_sub": "Spelar upp dina sparade dagar genom SEM. Resultat efter ett ändrat beslut är uppskattade, inte uppmätta.",
+    "simulation_days_stored": "dagar sparade",
+    "simulation_selected": "valda",
+    "simulation_gaps": "dataluckor"
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -26893,6 +26968,11 @@
     "sessions_xlsx": "下载 .xlsx",
     "sessions_download_failed": "下载失败 — 请重试",
     "simulation_tab": "模拟标签页",
-    "config_help_simulation_tab": "显示模拟标签页。同时为每天打标签，并一次性读取最近 90 天。默认关闭。"
+    "config_help_simulation_tab": "显示模拟标签页。同时为每天打标签，并一次性读取最近 90 天。默认关闭。",
+    "simulation": "模拟",
+    "simulation_sub": "用 SEM 重放您记录的日子。更改决策后的结果为估算值，并非实测。",
+    "simulation_days_stored": "已存天数",
+    "simulation_selected": "已选",
+    "simulation_gaps": "数据缺口"
   }
 }
