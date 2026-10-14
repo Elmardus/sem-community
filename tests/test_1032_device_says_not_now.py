@@ -18,14 +18,21 @@ the same: ``unavailable`` while DISCONNECTED / READY / LOCKED.
 #824's pre-flight read every ``unavailable`` as "renamed, removed or never
 loaded" and filed the Repair after five minutes. The fix asks the device
 beside the entity: a live device that made one control unavailable is saying
-"not now". Everything #824 exists for still files:
+"not now". Only the start/stop entity is asked about, and only entities of
+its own integration may answer. Everything #824 exists for still files:
 
 * ``restored`` — HA restored a name the platform never produced (#824's own
   template number, and every entity during a restart's warm-up);
 * missing / wrong domain;
-* a device that is offline — no live sibling, or a connectivity sensor off;
-* any control that is unavailable while the charger DRAWS — the stop and the
-  current must be there while a charge runs, on every brand.
+* a device that is offline — no live sibling of the same integration (a
+  router's tracker on the device does not count), or a connectivity sensor off;
+* a start/stop that is unavailable while the charger DRAWS;
+* an unavailable CURRENT entity, always: HA skips a write to it without an
+  error, and nothing else would see it.
+
+The same Repair also filed for a healthy button start (Wattpilot's "Laden
+erzwingen", #804): the setup form offers ``button`` and SEM presses it, but
+the check refused the domain (bug class 49).
 """
 from __future__ import annotations
 
@@ -41,7 +48,9 @@ from custom_components.solar_energy_management.coordinator import (
     repair_issues as ri,
 )
 from custom_components.solar_energy_management.coordinator.control_entity import (
+    CONTROL_ENTITY_DOMAINS,
     NOT_OFFERED_NOW,
+    START_STOP_DOMAINS,
     device_says_not_now,
     validate_control_entity,
 )
@@ -122,6 +131,23 @@ class TestTheVerdict:
             SWITCH, lambda e: None, not_now=self._yes).reason == "missing"
         assert validate_control_entity(
             "sensor.x", lambda e: "1", not_now=self._yes).reason == "wrong_domain"
+
+    def test_a_button_start_is_accepted_and_never_pressed_is_fine(self):
+        """(class 49) Wattpilot's "Laden erzwingen": a button that was never
+        pressed reads ``unknown``; one that was reads the press time."""
+        eid = "button.carport_wattpilot_91114903_laden_erzwingen"
+        for state in ("unknown", "2026-10-14T05:00:00+00:00"):
+            v = validate_control_entity(eid, lambda e, s=state: s,
+                                        domains=START_STOP_DOMAINS)
+            assert v.valid is True and v.reason is None, state
+        v = validate_control_entity(eid, lambda e: "unavailable",
+                                    domains=START_STOP_DOMAINS)
+        assert v.valid is False and v.reason == "unavailable"
+
+    def test_a_button_is_no_current_control(self):
+        v = validate_control_entity("button.x", lambda e: "unknown")
+        assert v.valid is False and v.reason == "wrong_domain"
+        assert "button" not in CONTROL_ENTITY_DOMAINS
 
     def test_the_question_is_not_asked_of_a_live_entity(self):
         asked = []
@@ -245,16 +271,18 @@ class TestTheReportersCharger:
         assert _repair(hass, "zap", SWITCH) is None
 
     @pytest.mark.parametrize("mode, final_stop, is_on, drawing", [
+        ("Unknown", False, False, False),
         ("Disconnected", False, False, False),
         ("Connected_Requesting", False, False, False),
         ("Connected_Finished", False, False, False),   # car full
         ("Connected_Finished", True, False, False),    # paused by a stop
         ("Connected_Charging", False, True, True),
     ])
-    async def test_every_zaptec_mode_is_quiet(self, hass, mode, final_stop,
-                                              is_on, drawing):
+    async def test_each_zaptec_mode_is_quiet(self, hass, mode, final_stop,
+                                             is_on, drawing):
         """The integration's own table, mode by mode: no state of a healthy
-        Zaptec files the Repair."""
+        Zaptec files the Repair. Unknown, Disconnected, Requesting and a full
+        car read ``unavailable`` — those four are what the fix changes."""
         _zepto(hass, mode=mode)
         avail = _zaptec_available(mode, final_stop, is_on)
         hass.states.async_set(SWITCH, ("on" if is_on else "off")
@@ -278,13 +306,21 @@ class TestWhatStillFiles:
         _run(_coord(hass), "zap", ZAPTEC_CFG, power_w=7000.0)
         assert _repair(hass, "zap", SWITCH) is not None
 
-    async def test_just_below_and_at_the_floor(self, hass):
+    async def test_at_and_above_the_floor(self, hass):
+        """The 500 W floor of #739, read as everywhere else: above it."""
         _zepto(hass)
         hass.states.async_set(SWITCH, "unavailable")
-        _run(_coord(hass), "zap", ZAPTEC_CFG,
-             power_w=EV_ACTIVE_CHARGE_FLOOR_W - 1)
-        assert _repair(hass, "zap", SWITCH) is None
         _run(_coord(hass), "zap", ZAPTEC_CFG, power_w=EV_ACTIVE_CHARGE_FLOOR_W)
+        assert _repair(hass, "zap", SWITCH) is None
+        _run(_coord(hass), "zap", ZAPTEC_CFG,
+             power_w=EV_ACTIVE_CHARGE_FLOOR_W + 1)
+        assert _repair(hass, "zap", SWITCH) is not None
+
+    async def test_a_box_feeding_back_is_a_running_session(self, hass):
+        """A two-way box sending power to the house reads negative."""
+        _zepto(hass)
+        hass.states.async_set(SWITCH, "unavailable")
+        _run(_coord(hass), "zap", ZAPTEC_CFG, power_w=-3000.0)
         assert _repair(hass, "zap", SWITCH) is not None
 
     async def test_a_restored_switch(self, hass):
@@ -329,6 +365,40 @@ class TestWhatStillFiles:
         _run(_coord(hass), "wb", cfg)
         assert _repair(hass, "wb", "number.wb_ladestrom") is not None
 
+    async def test_another_integration_on_the_device_does_not_speak(self, hass):
+        """A Shelly relay as start/stop drops off WiFi: everything Shelly is
+        unavailable. A router's tracker, merged onto the device by its MAC,
+        still reads ``not_home`` — it must not answer for the relay."""
+        from homeassistant.helpers import entity_registry as er
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+        eid = "switch.shelly_wallbox_relay"
+        dev = _box(hass, domain="shelly", name="relay",
+                   entities=[("switch", "shelly_wallbox_relay"),
+                             ("sensor", "shelly_wallbox_power")])
+        router = MockConfigEntry(domain="fritz")
+        router.add_to_hass(hass)
+        er.async_get(hass).async_get_or_create(
+            "device_tracker", "fritz", "aa:bb", suggested_object_id="shelly_mac",
+            config_entry=router, device_id=dev.id)
+        hass.states.async_set("device_tracker.shelly_mac", "not_home")
+        hass.states.async_set("sensor.shelly_wallbox_power", "unavailable")
+        hass.states.async_set(eid, "unavailable")
+        _run(_coord(hass), "sh", {"name": "Box", "ev_start_stop_entity": eid})
+        assert _repair(hass, "sh", eid) is not None
+
+    async def test_an_unavailable_current_entity_still_files(self, hass):
+        """HA skips a write to an unavailable number without an error, so
+        this check is the current entity's only witness: no device answer."""
+        num = "number.zepto_go_available_current"
+        _box(hass, domain="zaptec", name="zepto",
+             entities=[("number", "zepto_go_available_current"),
+                       ("sensor", "zepto_go_charger_mode")])
+        hass.states.async_set("sensor.zepto_go_charger_mode", "Disconnected")
+        hass.states.async_set(num, "unavailable")
+        _run(_coord(hass), "zap", {"name": "Zepto Go",
+                                   "ev_current_control_entity": num})
+        assert _repair(hass, "zap", num) is not None
+
     async def test_sem_own_entities_do_not_speak_for_the_box(self, hass):
         """Only the charger's own integration can say "not now"."""
         from homeassistant.helpers import entity_registry as er
@@ -362,16 +432,30 @@ async def test_wallbox_pause_switch_with_no_car(hass):
     assert result["charger_wb_control_valid"] is True
 
 
+@pytest.mark.asyncio
+async def test_a_wattpilot_button_start_files_nothing(hass):
+    """(class 49) The setup form offers ``button`` for start/stop and SEM
+    presses it; before this the check filed "wrong_domain" on it."""
+    eid = "button.carport_wattpilot_91114903_laden_erzwingen"
+    hass.states.async_set(eid, "unknown")
+    cfg = {"name": "Wattpilot", "ev_start_stop_entity": eid}
+    result = _run(_coord(hass), "wp", cfg)
+    assert _repair(hass, "wp", eid) is None
+    assert result["charger_wp_control_valid"] is True
+
+
 # ── the whole path: SEM set up, the reporter's switch, real cycles ────────
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("power_w", [0, 7000])
 async def test_the_reporters_home_through_a_real_setup(
-    sem_real_hass, sem_config_entry,
+    sem_real_hass, sem_config_entry, power_w,
 ):
-    """The check reads ``charger_<id>_power`` from the cycle's own result:
-    driven through SEM's real refresh, the key is there and the unplugged
-    Zaptec files nothing past the hold."""
+    """The check reads ``charger_<id>_power`` from the cycle's own result.
+    Driven through SEM's real refresh: unplugged, the Zaptec files nothing
+    past the hold; drawing 7 kW with the switch unavailable, it files — so
+    the power really reaches the check."""
     from homeassistant.helpers import issue_registry as ir
 
     from .test_services_real import _seed_sem_input_sensors, _setup_sem
@@ -380,6 +464,11 @@ async def test_the_reporters_home_through_a_real_setup(
     _seed_sem_input_sensors(h)
     _zepto(h)
     h.states.async_set(SWITCH, "unavailable")
+    if power_w:
+        h.states.async_set("sensor.test_ev_charging_power", str(power_w),
+                           {"unit_of_measurement": "W"})
+        h.states.async_set("binary_sensor.test_ev_connected", "on")
+        h.states.async_set("binary_sensor.test_ev_charging", "on")
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     base = sem_config_entry
@@ -392,16 +481,22 @@ async def test_the_reporters_home_through_a_real_setup(
     assert isinstance(coord, SEMCoordinator)
     cid = charger["id"]
 
-    for _ in range(2):
+    for _ in range(3):
         for key in list(coord._control_broken_since):
             coord._control_broken_since[key] -= HOLD + 1
         await coord.async_refresh()
         await h.async_block_till_done()
 
-    assert f"charger_{cid}_power" in coord.data, (
-        "the key the check reads is not in the cycle's result")
-    assert coord.data[f"charger_{cid}_ev_start_stop_entity_reason"] == NOT_OFFERED_NOW
-    assert ir.async_get(h).async_get_issue(DOMAIN, _issue_id(cid, SWITCH)) is None
+    issue = ir.async_get(h).async_get_issue(DOMAIN, _issue_id(cid, SWITCH))
+    if not power_w:
+        assert coord.data[f"charger_{cid}_power"] == 0
+        assert coord.data[
+            f"charger_{cid}_ev_start_stop_entity_reason"] == NOT_OFFERED_NOW
+        assert issue is None
+    else:
+        assert coord.data[f"charger_{cid}_power"] > EV_ACTIVE_CHARGE_FLOOR_W
+        assert coord.data[f"charger_{cid}_ev_start_stop_entity_valid"] is False
+        assert issue is not None
 
 
 # ── structure ─────────────────────────────────────────────────────────────
@@ -423,9 +518,58 @@ def test_every_control_check_asks_the_device():
                 calls.append((path.name, node))
     assert calls, "the validator is called nowhere — the guard is vacuous"
     for name, node in calls:
-        assert any(k.arg == "not_now" for k in node.keywords), (
+        kw = {k.arg: k.value for k in node.keywords}
+        assert "not_now" in kw and not (
+            isinstance(kw["not_now"], ast.Constant)
+            and kw["not_now"].value is None), (
             f"{name}:{node.lineno} validates a control entity without "
             "asking its device (#1032)")
+        assert "domains" in kw, (
+            f"{name}:{node.lineno} validates without saying which domains "
+            "the field may hold (class 49)")
+
+
+def _card_picker_domains(field):
+    import re
+    src = (ROOT / "dashboard/card/src/cards/sem-config-card.js").read_text(
+        encoding="utf-8")
+    m = re.search(r"_renderPickerNested\(idx, cid, '" + field
+                  + r"', '[a-z_]+',\s*(\[[^\]]*\]|'[a-z_]+')", src)
+    assert m, field
+    return set(re.findall(r"'([a-z_]+)'", m.group(1)))
+
+
+def _flow_picker_domains(field):
+    tree = ast.parse((ROOT / "config_flow.py").read_text(encoding="utf-8"))
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        for k, v in zip(node.keys, node.values, strict=True):
+            if not (isinstance(k, ast.Call) and k.args
+                    and isinstance(k.args[0], ast.Constant)
+                    and k.args[0].value == field):
+                continue
+            for sub in ast.walk(v):
+                if (isinstance(sub, ast.keyword) and sub.arg == "domain"):
+                    val = ast.literal_eval(sub.value)
+                    found.append({val} if isinstance(val, str) else set(val))
+    assert found, field
+    return found
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("field, accepted", [
+    ("ev_start_stop_entity", START_STOP_DOMAINS),
+    ("ev_current_control_entity", CONTROL_ENTITY_DOMAINS),
+])
+def test_what_the_setup_offers_the_check_accepts(field, accepted):
+    """(class 49) Every domain the config flow and the card offer for a
+    control field is one the check accepts — or a healthy pick files the
+    Repair as "wrong_domain"."""
+    offered = [_card_picker_domains(field)] + _flow_picker_domains(field)
+    for domains in offered:
+        assert domains <= set(accepted), (field, domains - set(accepted))
 
 
 @pytest.mark.unit

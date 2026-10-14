@@ -432,21 +432,26 @@ def battery_unseen(coordinator) -> bool:
 def _control_device_says_not_now(hass, entity_id: str) -> bool:
     """(#1032) Read the device beside a control entity for
     ``control_entity.device_says_not_now``: the entity's own attributes and
-    the ``(state, attributes)`` of every other enabled entity on its device.
-    SEM's own entities never speak for a charger. No registry entry or no
-    device answers no, and so does any failure: the entity is then judged on
-    its own state, as before.
+    the ``(state, attributes)`` of every other enabled entity on its device
+    from the same config entry, so neither SEM's own entities nor another
+    integration's can speak for a charger.
+    No registry entry, device or config entry answers no, and so does any
+    failure: the entity is then judged on its own state, as before.
     """
     from homeassistant.helpers import entity_registry as er
     from .control_entity import device_says_not_now
     try:
         reg = er.async_get(hass)
         entry = reg.async_get(entity_id)
-        if entry is None or not entry.device_id:
+        if entry is None or not entry.device_id or not entry.config_entry_id:
             return False
         siblings = []
         for sib in er.async_entries_for_device(reg, entry.device_id):
-            if sib.entity_id == entity_id or sib.platform == DOMAIN:
+            # Only the control's own integration may answer for it: a router
+            # tracker or a helper linked to the same device stays live while
+            # the charger is offline.
+            if (sib.entity_id == entity_id
+                    or sib.config_entry_id != entry.config_entry_id):
                 continue
             st = hass.states.get(sib.entity_id)
             if st is not None:
@@ -6017,33 +6022,39 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         (#1032) ``unavailable`` is not always broken. Zaptec's "Charging"
         switch and Wallbox's pause switch go ``unavailable`` when their
         command does not apply — @OddmarDam got this ERROR Repair every
-        time the car was unplugged. While the charger is not drawing, an
-        entity its live device made unavailable is valid
-        (``control_entity.device_says_not_now``). While it draws, every
-        control must be there to stop or set the charge, so it is judged
-        on its state alone.
+        time the car was unplugged. While the charger is not drawing, a
+        start/stop entity its live device made unavailable is valid
+        (``control_entity.device_says_not_now``). While it draws, the stop
+        must be there, so it is judged on its state alone. The current
+        entity is always judged alone: HA skips a write to an unavailable
+        entity without an error, so this check is its only witness, while
+        the switch has the enable path (#945) behind it.
         """
-        from .control_entity import validate_control_entity
+        from .control_entity import (
+            CONTROL_ENTITY_DOMAINS, START_STOP_DOMAINS, validate_control_entity)
         from .sensor_reader import EV_ACTIVE_CHARGE_FLOOR_W
         from . import repair_issues as _ri
 
         try:
-            drawing = (float(result.get(f"charger_{cid}_power") or 0.0)
-                       >= EV_ACTIVE_CHARGE_FLOOR_W)
+            drawing = (abs(float(result.get(f"charger_{cid}_power") or 0.0))
+                       > EV_ACTIVE_CHARGE_FLOOR_W)
         except (TypeError, ValueError):
             drawing = False
         broken_now = None
         any_configured = False
         for key, capability in self._CONTROL_CAPABILITIES:
+            start_stop = key == "ev_start_stop_entity"
             verdict = validate_control_entity(
                 charger_cfg.get(key),
                 lambda eid: (
                     self.hass.states.get(eid).state
                     if self.hass.states.get(eid) is not None else None
                 ),
-                not_now=(None if drawing
-                         else lambda eid: _control_device_says_not_now(
-                             self.hass, eid)),
+                not_now=(
+                    (lambda eid: _control_device_says_not_now(self.hass, eid))
+                    if start_stop and not drawing else None),
+                domains=(START_STOP_DOMAINS if start_stop
+                         else CONTROL_ENTITY_DOMAINS),
             )
             result[f"charger_{cid}_{key}_valid"] = verdict.valid
             result[f"charger_{cid}_{key}_reason"] = verdict.reason

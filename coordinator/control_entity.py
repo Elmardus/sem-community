@@ -35,6 +35,11 @@ CONTROL_ENTITY_DOMAINS = (
     "select", "input_select",
 )
 
+#: (#1032, bug class 49) The start/stop field offers ``button`` in the
+#: config flow and the card, and SEM presses it (#804: Wattpilot's "Laden
+#: erzwingen"). Rejecting it filed this Repair on a healthy charger.
+START_STOP_DOMAINS = CONTROL_ENTITY_DOMAINS + ("button",)
+
 # States that mean "this entity is not currently commandable". ``restored``
 # entities — HA loaded a name from the registry but the platform never
 # produced the entity — report exactly this.
@@ -76,7 +81,8 @@ def device_says_not_now(
     connected. The entity is fine; the device is telling us "not now".
 
     ``siblings`` are ``(state, attributes)`` of the OTHER entities on the
-    same device. The answer is yes only when:
+    same device from the same config entry — only the control's own
+    integration may answer for it. The answer is yes only when:
 
     * the entity itself is not ``restored`` — HA restored a name its platform
       never produced (#824's template number, or an integration still
@@ -107,6 +113,7 @@ def validate_control_entity(
     state_of: Callable[[str], Optional[str]],
     *,
     not_now: Optional[Callable[[str], bool]] = None,
+    domains: Tuple[str, ...] = CONTROL_ENTITY_DOMAINS,
 ) -> ControlEntityVerdict:
     """Judge one configured control entity.
 
@@ -118,18 +125,24 @@ def validate_control_entity(
     is its live device saying the command does not apply right now. When it
     says yes the entity is valid with reason ``NOT_OFFERED_NOW``. Without it,
     ``unavailable`` is broken, as before.
+
+    ``domains`` are the domains this field may hold (``START_STOP_DOMAINS``
+    for start/stop). A button that was never pressed reads ``unknown``; that
+    is its normal state, not a fault.
     """
     if not entity_id:
         return ControlEntityVerdict(None, None, None)
 
     domain = str(entity_id).split(".", 1)[0]
-    if domain not in CONTROL_ENTITY_DOMAINS:
+    if domain not in domains:
         return ControlEntityVerdict(entity_id, False, "wrong_domain")
 
     state = state_of(entity_id)
     if state is None:
         return ControlEntityVerdict(entity_id, False, "missing")
     value = str(state).strip().lower()
+    if domain == "button" and value == "unknown":
+        return ControlEntityVerdict(entity_id, True, None)
     if value in _DEAD_STATES:
         if value == "unavailable" and not_now is not None and not_now(entity_id):
             return ControlEntityVerdict(entity_id, True, NOT_OFFERED_NOW)
