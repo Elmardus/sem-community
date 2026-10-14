@@ -16,7 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **A sunny morning no longer makes the day plan expect too much sun** (#1104). The live correction never raises it above what history learned.
 - 🐛 **Home power no longer jumps when the battery stops before its sensor says so** (#1105). The shown value holds until the battery reports again.
 - 🐛 **The monthly peak no longer reads 0 kW right after a restart** (#1106). Load management starts before the first update.
+- 🐛 **Unplugging your car no longer raises a false "charger control not working" Repair** (#1032) — thanks @OddmarDam. A Wattpilot start button no longer raises it either.
+- 🐛 **SEM runs chargers it finds with only a charge-mode or start/stop control** (#1095). myenergi, Ohme and Zaptec without current rights were found, then dropped.
+- 🐛 **SEM finds a charging current named plainly "charging_current"** (#1096). Only on a charger; on an inverter that name is the battery limit.
+- 🐛 **A charger whose service needs the device id now gets it** (#1097). Before, SEM called the service without saying which charger.
 - 🐛 **SEM no longer guesses its own sensor as your grid meter** (#1103) — thanks @LightBridge16. The Grid power pick now works with an Energy Dashboard.
+- 🐛 **A "Solar only" load now stops when your house buys from the grid** (#1102) — thanks @lostcontrol. Before, SEM did not count the grid import.
 
 # [2.2.0-beta.17] — 13.10.2026
 

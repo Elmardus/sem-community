@@ -98,6 +98,7 @@ from .notifications import NotificationManager
 from .surplus_controller import (
     SurplusController, solar_bounded_surplus, solar_bounded_reclaim,
     build_battery_tier_context, effective_peak_state,
+    import_absorbed_by_loads_w, loads_import_deficit_w,
 )
 from .cycle_trace import (
     TraceCollector, LayerRecord, LayerStatus, CrossCheck,
@@ -105,7 +106,10 @@ from .cycle_trace import (
     heat_pump_layer_match,
     commanded_per_charger, ev_match_per_charger,   # (#961)
 )
-from .energy_reclaim import reclaimable_battery_w, held_grid_import
+from .energy_reclaim import (
+    reclaimable_battery_w, held_grid_import, sustained_import,
+    car_may_be_charging, sustained_car_draw,
+)
 from .forecast_reader import ForecastReader
 from .forecast_tracker import ForecastTracker
 from .ev_control import EVControlMixin
@@ -423,6 +427,41 @@ def battery_unseen(coordinator) -> bool:
     except AttributeError:  # pragma: no cover — a frozen double
         pass
     return not detected > 0
+
+
+def _control_device_says_not_now(hass, entity_id: str) -> bool:
+    """(#1032) Read the device beside a control entity for
+    ``control_entity.device_says_not_now``: the entity's own attributes and
+    the ``(state, attributes)`` of every other enabled entity on its device
+    from the same config entry, so neither SEM's own entities nor another
+    integration's can speak for a charger.
+    No registry entry, device or config entry answers no, and so does any
+    failure: the entity is then judged on its own state, as before.
+    """
+    from homeassistant.helpers import entity_registry as er
+    from .control_entity import device_says_not_now
+    try:
+        reg = er.async_get(hass)
+        entry = reg.async_get(entity_id)
+        if entry is None or not entry.device_id or not entry.config_entry_id:
+            return False
+        siblings = []
+        for sib in er.async_entries_for_device(reg, entry.device_id):
+            # Only the control's own integration may answer for it: a router
+            # tracker or a helper linked to the same device stays live while
+            # the charger is offline.
+            if (sib.entity_id == entity_id
+                    or sib.config_entry_id != entry.config_entry_id):
+                continue
+            st = hass.states.get(sib.entity_id)
+            if st is not None:
+                siblings.append((st.state, st.attributes))
+        own = hass.states.get(entity_id)
+        return device_says_not_now(getattr(own, "attributes", None), siblings)
+    except Exception:  # noqa: BLE001 — a failed look is not an answer
+        _LOGGER.debug("#1032 device look for %s failed", entity_id,
+                      exc_info=True)
+        return False
 
 
 class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
@@ -3000,7 +3039,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
              # (#938) what the pack was charging at before the sun/import
              # ceilings, and how long the import ceiling has been held.
              "reclaim_raw_w": int(_cr.get("reclaim_raw_w", 0) or 0),
-             "import_held_s": int(_cr.get("import_held_s", 0) or 0)},
+             "import_held_s": int(_cr.get("import_held_s", 0) or 0),
+             # (#1102) the import the loads carried this cycle.
+             "loads_deficit_w": int(_cr.get("loads_deficit_w", 0) or 0)},
         )
         obs_mode = getattr(self, "_observer_mode", False)
         obs = "observer mode — not commanding" if obs_mode else f"{active} device(s) on"
@@ -6039,19 +6080,43 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         becoming a Repair — a restart's warm-up window must not cry wolf
         (#611) — but the per-charger verdict publishes immediately so the
         Configuration card can mark the row straight away.
+
+        (#1032) ``unavailable`` is not always broken. Zaptec's "Charging"
+        switch and Wallbox's pause switch go ``unavailable`` when their
+        command does not apply — @OddmarDam got this ERROR Repair every
+        time the car was unplugged. While the charger is not drawing, a
+        start/stop entity its live device made unavailable is valid
+        (``control_entity.device_says_not_now``). While it draws, the stop
+        must be there, so it is judged on its state alone. The current
+        entity is always judged alone: HA skips a write to an unavailable
+        entity without an error, so this check is its only witness, while
+        the switch has the enable path (#945) behind it.
         """
-        from .control_entity import validate_control_entity
+        from .control_entity import (
+            CONTROL_ENTITY_DOMAINS, START_STOP_DOMAINS, validate_control_entity)
+        from .sensor_reader import EV_ACTIVE_CHARGE_FLOOR_W
         from . import repair_issues as _ri
 
+        try:
+            drawing = (abs(float(result.get(f"charger_{cid}_power") or 0.0))
+                       > EV_ACTIVE_CHARGE_FLOOR_W)
+        except (TypeError, ValueError):
+            drawing = False
         broken_now = None
         any_configured = False
         for key, capability in self._CONTROL_CAPABILITIES:
+            start_stop = key == "ev_start_stop_entity"
             verdict = validate_control_entity(
                 charger_cfg.get(key),
                 lambda eid: (
                     self.hass.states.get(eid).state
                     if self.hass.states.get(eid) is not None else None
                 ),
+                not_now=(
+                    (lambda eid: _control_device_says_not_now(self.hass, eid))
+                    if start_stop and not drawing else None),
+                domains=(START_STOP_DOMAINS if start_stop
+                         else CONTROL_ENTITY_DOMAINS),
             )
             result[f"charger_{cid}_{key}_valid"] = verdict.valid
             result[f"charger_{cid}_{key}_reason"] = verdict.reason
@@ -6309,7 +6374,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         try:
             # #508 W7 — feed the TRUE house surplus, not the EV budget.
             # ``grid_export_power`` is what the house is exporting after the
-            # EV and battery take their share; add back this controller's
+            # EV and battery take their share (less the import, #1102 below);
+            # add back this controller's
             # own active device draw so the signal is feedback-free (a
             # device it turned on doesn't shrink the surplus it reads next
             # cycle and oscillate). Heat pump / hot water now boost on real
@@ -6325,15 +6391,6 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # arbitrage) is honored — no reclaim.
             # Same definition the EV reclaim gate uses — one source of truth.
             battery_commanded = self._battery_commanded()
-            # (#620) Feedback-free SOLAR surplus, physically bounded by the live
-            # solar production — one invariant ("surplus ≤ sun") that pins the
-            # figure to 0 overnight and kills phantom surplus from the add-back,
-            # a noisy sensor, or battery→grid flow (@onkelfu's night report).
-            true_surplus_w = solar_bounded_surplus(
-                grid_export_w=float(getattr(power, "grid_export_power", 0.0) or 0.0),
-                active_draw_w=self._surplus_controller.active_surplus_draw_w(),
-                solar_w=getattr(power, "solar_power", None),
-            )
             # #576 — pass the export surplus and the reclaimable battery-charge
             # power SEPARATELY (plus the battery's slot in the priority walk).
             # The controller offers the reclaim only to loads ABOVE the battery
@@ -6360,6 +6417,63 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             )
             self._reclaim_import_w = reclaim_import_w
             _now_mono = time.monotonic()
+            # (#1102) The import the loads' pool carries: export alone read
+            # 2 kW of import as 0 W and a 3 kW boiler rode its own add-back.
+            # The mean of two minutes (a kettle's 20 s is not a deficit);
+            # while a car may charge, only an import that LASTED (lowest
+            # reading of two minutes — a charger's power sensor can trail
+            # the meter at a start, a ramp or a stop) less the car's highest
+            # draw of the same two minutes; none on a dark meter. A charger
+            # leaves a running load above it its sun (#885).
+            if not hasattr(self, "_loads_import_window"):
+                self._loads_import_window = {}
+                self._loads_car_start = {}
+                self._loads_car_window = {}
+            # FLEET-READ: every charger's grid draw is its own, not the loads'
+            ev_live_w = float(getattr(power, "ev_power", 0.0) or 0.0)
+            # a car plugged in or out, SEM's offer moving, or the car's draw
+            # falling — each comes before a lagging power sensor reads it.
+            # Not ``ev_charging``: #739 holds it False until that sensor
+            # reads 500 W, so it lags with it.
+            car_active = car_may_be_charging(
+                self._loads_car_start, _now_mono,
+                # FLEET-READ: any plugged car may start and lag
+                plugged=bool(getattr(power, "ev_connected", False)),
+                commanded_amps=getattr(
+                    self, "_last_commanded_amps_fleet", 0),
+                ev_draw_w=ev_live_w,
+            )
+            loads_import_w = sustained_import(
+                self._loads_import_window, _now_mono,
+                grid_import_w=float(getattr(power, "grid_import_power", 0.0) or 0.0),
+                grid_import_known=_grid_known,
+                car_active=car_active,
+            )
+            ev_draw_w = sustained_car_draw(
+                self._loads_car_window, _now_mono,
+                ev_draw_w=ev_live_w, car_active=car_active,
+            )
+            loads_export_w = float(getattr(power, "grid_export_power", 0.0) or 0.0)
+            loads_draw_w = self._surplus_controller.active_surplus_draw_w()
+            # (#620) Feedback-free SOLAR surplus, physically bounded by the live
+            # solar production — one invariant ("surplus ≤ sun") that pins the
+            # figure to 0 overnight and kills phantom surplus from the add-back,
+            # a noisy sensor, or battery→grid flow (@onkelfu's night report).
+            true_surplus_w = solar_bounded_surplus(
+                grid_export_w=loads_export_w,
+                active_draw_w=loads_draw_w,
+                solar_w=getattr(power, "solar_power", None),
+                grid_import_w=loads_import_w,
+                ev_draw_w=ev_draw_w,
+            )
+            # (#1102) …and the reclaim takes off only the import this side
+            # could not, so a running load does not pay it twice.
+            absorbed_w = import_absorbed_by_loads_w(
+                grid_export_w=loads_export_w,
+                active_draw_w=loads_draw_w,
+                grid_import_w=loads_import_w,
+                ev_draw_w=ev_draw_w,
+            )
             if _grid_known:
                 self._reclaim_import_seen_mono = _now_mono
             _seen = getattr(self, "_reclaim_import_seen_mono", None)
@@ -6370,6 +6484,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 priority_soc=float(self.config.get("battery_priority_soc", 30)),
                 battery_commanded=battery_commanded,
                 grid_import_w=reclaim_import_w,
+                absorbed_w=absorbed_w,
             )
             reclaim_w = solar_bounded_reclaim(
                 reclaim_raw_w,
@@ -6405,6 +6520,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 "import_held_s": round(float(import_held_s)),
                 "battery_priority": battery_priority,
                 "battery_commanded": battery_commanded,
+                # (#1102) the import the loads carried this cycle (sustained,
+                # less the chargers' share and the deadband) — "the boiler
+                # stopped when the car started" reads from a dump.
+                "loads_deficit_w": round(loads_import_deficit_w(
+                    loads_import_w, ev_draw_w=ev_draw_w)),
             }
             # ONE pipeline, observer or not. Layers 1+2 (management + decision)
             # always run against the live sensors; the ``observer`` flag cuts the

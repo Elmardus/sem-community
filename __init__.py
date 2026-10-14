@@ -2346,6 +2346,12 @@ async def _async_listen_energy_prefs(hass: HomeAssistant) -> None:
 
 
 
+#: (#1095) Control keys a second charger reads from its OWN card only — never
+#: from the flat keys, which belong to the primary charger.
+_OWN_CARD_CONTROL_KEYS = ("ev_start_stop_entity", "ev_start_service",
+                          "ev_charge_mode_entity")
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
     """Set up Solar Energy Management from a config entry.
 
@@ -2799,7 +2805,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
                     if not full_config.get(key) and charger_cfg.get(key):
                         full_config[key] = charger_cfg[key]
 
-            if not ev_power_entity or not (ev_charger_service or ev_current_entity):
+            # (#1095) ONE rule for "a charger SEM can run": the crawler's
+            # own (``charger_is_complete``) — a power reading and ANY way to
+            # act. Setup used to want a current service or a current entity,
+            # so a charger the crawler offered with only a charge-mode select
+            # or only start/stop (myenergi, Ohme, a Zaptec without current
+            # rights) was dropped here and SEM ran nothing.
+            # The start/stop, charge-mode and start/stop-service keys come only
+            # from THIS card on a second charger: ``_cfg`` falls back to the
+            # flat keys, which are the primary's, and a second charger must
+            # never pass the gate on — or be wired to — the primary's switch
+            # (SEM would toggle the primary's box). ONE helper for the gate
+            # and the wiring below.
+            def _own(key, default=None, _this=charger_cfg, _idx=idx):
+                if _idx == 0:
+                    return _cfg(key, default)
+                v = _this.get(key)
+                return v if v is not None else default
+
+            from .hardware_detection import charger_is_complete
+            _resolved = {k: _cfg(k) for k in (
+                "ev_charging_power_sensor", "ev_charger_service",
+                "ev_current_control_entity")}
+            _resolved.update({k: _own(k) for k in _OWN_CARD_CONTROL_KEYS})
+            if not charger_is_complete(_resolved):
                 _LOGGER.debug("Charger %s missing power sensor or control method, skipping", charger_id)
                 continue
 
@@ -2863,23 +2892,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
                 _cfg("ev_charger_service_data", ""))
             if _cfg("ev_service_device_id"):
                 ev_device.service_device_id = _cfg("ev_service_device_id")
-            if _cfg("ev_start_stop_entity"):
-                ev_device.start_stop_entity = _cfg("ev_start_stop_entity")
+            if _own("ev_start_stop_entity"):
+                ev_device.start_stop_entity = _own("ev_start_stop_entity")
             # (#976) what the current entity's platform implies for control —
             # ONE producer with the coordinator's late retry (the 0 A refusal
             # flag, the OCPP charge-control switch adoption).
             from .hardware_detection import wire_current_entity
             wire_current_entity(hass, ev_device, charger_id, ev_current_entity)
-            if _cfg("ev_charge_mode_entity"):
-                ev_device.charge_mode_entity = _cfg("ev_charge_mode_entity")
-                ev_device.charge_mode_start = _cfg("ev_charge_mode_start")
-                ev_device.charge_mode_stop = _cfg("ev_charge_mode_stop")
-            if _cfg("ev_start_service"):
-                ev_device.start_service = _cfg("ev_start_service")
-                ev_device.start_service_data = json.loads(_cfg("ev_start_service_data", "{}"))
-            if _cfg("ev_stop_service"):
-                ev_device.stop_service = _cfg("ev_stop_service")
-                ev_device.stop_service_data = json.loads(_cfg("ev_stop_service_data", "{}"))
+            if _own("ev_charge_mode_entity"):
+                ev_device.charge_mode_entity = _own("ev_charge_mode_entity")
+                ev_device.charge_mode_start = _own("ev_charge_mode_start")
+                ev_device.charge_mode_stop = _own("ev_charge_mode_stop")
+            if _own("ev_start_service"):
+                ev_device.start_service = _own("ev_start_service")
+                ev_device.start_service_data = json.loads(_own("ev_start_service_data", "{}"))
+            if _own("ev_stop_service"):
+                ev_device.stop_service = _own("ev_stop_service")
+                ev_device.stop_service_data = json.loads(_own("ev_stop_service_data", "{}"))
 
             coordinator._surplus_controller.register_device(ev_device)
             coordinator._ev_devices[charger_id] = ev_device
@@ -2910,8 +2939,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
                 ("ev_charging_power_sensor", ev_power_entity),
                 ("ev_current_control_entity", ev_current_entity),
                 ("ev_charger_service_entity_id", ev_service_entity),
-                ("ev_start_stop_entity", _cfg("ev_start_stop_entity")),
-                ("ev_charge_mode_entity", _cfg("ev_charge_mode_entity")),
+                ("ev_start_stop_entity", _own("ev_start_stop_entity")),
+                ("ev_charge_mode_entity", _own("ev_charge_mode_entity")),
             ]
             # (#763 beta.7) Deferred past warm-up: at setup time the
             # upstream integration may simply not have loaded yet, and a
