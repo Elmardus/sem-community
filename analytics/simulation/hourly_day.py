@@ -12,7 +12,7 @@ Measurements (SOC, prices, forecast) come from the hourly ``mean``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date as _date, datetime, timezone, tzinfo
+from datetime import date as _date, datetime, tzinfo
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 HOURS = 24
@@ -113,7 +113,8 @@ class HourlyDay:
         ``rows_by_role`` maps a role name (``ROLES``) to that entity's rows:
         ``{"start": datetime | ISO text | epoch seconds, "change": kWh}`` for
         a flow, ``{"start": …, "mean": value}`` for a measurement. ``tz`` is
-        the house's time zone; a row's hour is its local hour. A row of
+        the house's time zone; a row's hour is its local hour. Epoch
+        seconds need ``tz`` (ValueError without it — never read as UTC). A row of
         another day is ignored. Two rows on one hour (the autumn clock
         change) add up for a flow; the later mean wins for a measurement.
         """
@@ -179,7 +180,9 @@ def _hour_of(start: Any, day: _date, tz: Optional[tzinfo]) -> Optional[int]:
     if start is None:
         return None
     if isinstance(start, (int, float)):
-        dt = datetime.fromtimestamp(float(start), tz or timezone.utc)
+        if tz is None:
+            raise ValueError("an epoch start needs the house's time zone")
+        dt = datetime.fromtimestamp(float(start), tz)
     elif isinstance(start, datetime):
         dt = start
     else:

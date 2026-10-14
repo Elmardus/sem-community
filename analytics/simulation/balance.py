@@ -9,8 +9,13 @@ Pure: no Home Assistant.
 * The price is ``energy_calculator.py``'s: import × rate, export × rate
   (a negative export rate makes the revenue negative), and the kWh sent
   out at a negative rate counted again on their own, as ``cost_export_
-  negative`` is — shown, not charged twice. Solar savings are the house
-  and car energy not bought and not taken from the pack, × import rate.
+  negative`` is — shown, not charged twice. Solar savings follow the
+  production path: solar to the house + solar to the car (solar serves
+  the house first, then the car), × import rate.
+
+Prices are hourly means. On prices that are flat inside each hour the
+re-priced recorded day matches SEM's own cost; 15-minute prices inside
+an hour are averaged away, so it is then close, not exact.
 """
 from __future__ import annotations
 
@@ -74,8 +79,8 @@ class HourCost:
 
 
 def cost_hour(import_kwh: float, export_kwh: float, import_rate: float,
-              export_rate: float, *, home_kwh: float = 0.0,
-              ev_kwh: float = 0.0, discharge_kwh: float = 0.0) -> HourCost:
+              export_rate: float, *, solar_kwh: float = 0.0,
+              home_kwh: float = 0.0, ev_kwh: float = 0.0) -> HourCost:
     """Price one hour as ``energy_calculator.py`` does."""
     imp = max(0.0, float(import_kwh))
     exp = max(0.0, float(export_kwh))
@@ -84,9 +89,10 @@ def cost_hour(import_kwh: float, export_kwh: float, import_rate: float,
     import_cost = imp * rate_in
     export_revenue = exp * rate_out
     neg_kwh = exp if rate_out < 0 else 0.0
-    # Solar self-consumed: what the house and car used that neither the
-    # grid nor the pack gave (energy_calculator.py, legacy path).
-    self_used = max(0.0, (home_kwh + ev_kwh) - imp - discharge_kwh)
+    # Solar self-consumed = solar_to_home + solar_to_ev, the path
+    # energy_calculator.py takes with power flows: the sun serves the
+    # house first, then the car, so together that is min(solar, both).
+    self_used = max(0.0, min(float(solar_kwh), home_kwh + ev_kwh))
     return HourCost(
         import_cost=import_cost,
         export_revenue=export_revenue,

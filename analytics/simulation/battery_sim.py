@@ -16,10 +16,23 @@ recorded, or the day carries the ``gap`` tag.
 
 The night plan: SEM's scheduler is evaluated once per day, standing for
 its evening run before the day — with the day's own forecast (that run's
-"tomorrow"), the day's house kWh, the day's first SOC, and min/max hourly
-price as off-peak/peak. The night ledger covers 00:00 to sunrise of the
-day; ``pack_night`` places the scheduler's deficit as SEM's ``battery``
-demand, and the real ``plan_gate`` answers each night hour from it.
+"tomorrow"), the day's house kWh and the day's first SOC. Prices as the
+coordinator reads them (``scheduler_rates``): off-peak = mean of the
+cheapest 4 hours in the 12 after the trigger hour, peak = mean of the
+07:00–20:00 hours, current = the trigger hour's price — this day's hours
+stand in for the evening before. The night ledger covers 00:00 to sunrise
+of the day; ``pack_night`` places the scheduler's deficit as SEM's
+``battery`` demand, and the real ``plan_gate`` answers each night hour.
+
+Where the pack ends the day counts. ``stored_energy_value`` = (simulated
+end kWh − recorded end SOC × the new capacity) × √round-trip (what those
+cell kWh give back at the plug) × the day's mean import rate. It is taken
+off the simulated cost in ``delta``, so emptying a pack the recorded day
+kept full is not a saving.
+
+Hourly means: prices flat inside each hour are reproduced exactly;
+15-minute prices and 15-minute peaks inside an hour are not seen, and
+``kwh_over_limit`` is per hour.
 """
 from __future__ import annotations
 
@@ -73,7 +86,16 @@ DEFAULTS_TAKEN = (
     "night plan made once per day from that day's own forecast, house use "
     "and first SOC",
     "solar, house and car as recorded",
+    "the car's mode does not offer the pack (ev_wants_pack off)",
+    "forecast taken as recorded: no correction factor, not stale",
+    "stored energy at the day's end valued at the day's mean import rate",
 )
+
+#: the coordinator's charge window and daytime hours (coordinator.py,
+#: tariff_provider.get_charge_window_rate / get_next_daytime_rate)
+CHARGE_WINDOW_H = 4
+WINDOW_WITHIN_H = 12
+DAYTIME = (7, 20)
 
 Rate = Union[float, str]
 
@@ -156,6 +178,7 @@ class DayResult:
     end_soc_pct: Optional[float]
     indicative: bool
     indicative_reasons: List[str]
+    stored_energy_value: float = 0.0
     hours: List[dict] = field(default_factory=list)
     modelled: bool = True
 
@@ -170,6 +193,7 @@ class DayResult:
             "actual_kwh_over_limit": self.actual_kwh_over_limit,
             "start_soc_pct": self.start_soc_pct,
             "end_soc_pct": self.end_soc_pct,
+            "stored_energy_value": self.stored_energy_value,
             "indicative": self.indicative,
             "indicative_reasons": list(self.indicative_reasons),
             "hours": [dict(h) for h in self.hours],
@@ -252,6 +276,7 @@ def synth_view(hour: SimHour, state: SimState, params: SimParams,
         charging_state="charging_active" if ev_charging else "idle",
         ev_charging=ev_charging,
         ev_connected=ev_charging,
+        ev_wants_pack=False,
         home_consumption_w=home_w,
         scheduler_decision=state.scheduler_decision,
         plan_gate=gate,
@@ -270,6 +295,21 @@ def _sunrise(day: HourlyDay) -> int:
                 DEFAULT_SUNRISE)
 
 
+def scheduler_rates(hours: List[SimHour], trigger_hour: int = 21):
+    """``(off_peak, peak, current)`` as the coordinator feeds the scheduler.
+
+    off_peak: mean of the cheapest ``CHARGE_WINDOW_H`` hours in the
+    ``WINDOW_WITHIN_H`` hours from the trigger hour (wrapping past midnight
+    into this day's early hours). peak: mean of the ``DAYTIME`` hours.
+    current: the trigger hour's price."""
+    t = int(trigger_hour) % HOURS
+    window = [hours[(t + i) % HOURS].import_rate for i in range(WINDOW_WITHIN_H)]
+    cheapest = sorted(window)[:CHARGE_WINDOW_H]
+    day = [h.import_rate for h in hours if DAYTIME[0] <= h.index < DAYTIME[1]]
+    return (sum(cheapest) / len(cheapest), sum(day) / len(day),
+            hours[t].import_rate)
+
+
 def plan_night(day: HourlyDay, hours: List[SimHour], soc_kwh: float,
                params: SimParams, cfg: Mapping[str, Any]):
     """SEM's scheduler and night packer for the night the day starts with.
@@ -278,17 +318,20 @@ def plan_night(day: HourlyDay, hours: List[SimHour], soc_kwh: float,
     has night charging off."""
     if not cfg.get("battery_charge_scheduler_enabled", False):
         return None, None
-    sched = BatteryChargeScheduler(None, SchedulerConfig.from_config(dict(cfg)))
-    prices = [h.import_rate for h in hours]
+    sched_cfg = SchedulerConfig.from_config(dict(cfg))
+    sched = BatteryChargeScheduler(None, sched_cfg)
+    off_peak, peak, current = scheduler_rates(hours, sched_cfg.trigger_hour)
     cap = float(params.capacity_kwh)
     decision = sched.evaluate(
         current_soc=100.0 * soc_kwh / cap if cap > 0 else 0.0,
         forecast_tomorrow_kwh=float(day.forecast_kwh or 0.0),
         expected_consumption_kwh=day.total("home"),
-        off_peak_rate=min(prices),
-        peak_rate=max(prices),
+        off_peak_rate=off_peak,
+        peak_rate=peak,
+        correction_factor=1.0,
         forecast_available=day.forecast_kwh is not None,
-        current_price=hours[0].import_rate,
+        forecast_age_hours=0.0,
+        current_price=current,
     )
     sunrise = _sunrise(day)
     peak_w = float(params.peak_limit_kw or 0.0) * 1000.0
@@ -459,7 +502,8 @@ def simulate_day(day: HourlyDay, params: SimParams,
         soc = cap * float(first) / 100.0
         if soc < reserve_kwh or soc > cap:
             soc = min(cap, max(reserve_kwh, soc))
-            reasons.append("start SOC moved into [reserve, capacity]")
+            marks.append("the recorded start SOC is outside the new "
+                         "[reserve, capacity] — the pack starts at the edge")
     start_soc = soc
     state = SimState(soc_kwh=soc)
     sunrise = _sunrise(day)
@@ -488,7 +532,7 @@ def simulate_day(day: HourlyDay, params: SimParams,
             roundtrip=params.roundtrip)
         cost = cost_hour(flow.grid_import, flow.grid_export, hour.import_rate,
                          hour.export_rate, home_kwh=hour.home, ev_kwh=hour.ev,
-                         discharge_kwh=flow.battery_discharge)
+                         solar_kwh=hour.solar)
         sim_rows.append({
             "hour": h, "intent": decision.intent.value,
             "reason": decision.reason,
@@ -509,7 +553,7 @@ def simulate_day(day: HourlyDay, params: SimParams,
         rec_cost = cost_hour(rec["grid_import"], rec["grid_export"],
                              hour.import_rate, hour.export_rate,
                              home_kwh=rec["home"], ev_kwh=rec["ev"],
-                             discharge_kwh=rec["battery_discharge"])
+                             solar_kwh=rec["solar"])
         actual_rows.append({**rec, "over_limit_kwh": _over(rec["grid_import"], params),
                             **rec_cost.as_dict()})
         # Carry the hour into the next one.
@@ -533,11 +577,19 @@ def simulate_day(day: HourlyDay, params: SimParams,
     simulated = summarise_day(sim_rows)
     actual_cost = round(actual["net_cost"], 4)
     simulated_cost = round(simulated["net_cost"], 4)
+    # The pack's end of day against the recorded end, at the new size.
+    last = next((x for x in reversed(day.soc_pct) if x is not None), None)
+    stored_value = 0.0
+    if last is not None:
+        mean_rate = sum(h.import_rate for h in hours) / len(hours)
+        diff_kwh = state.soc_kwh - cap * float(last) / 100.0
+        stored_value = diff_kwh * eff * mean_rate
     return DayResult(
         date=day.date, tags=list(day.tags),
         actual=actual, simulated=simulated,
         actual_cost=actual_cost, simulated_cost=simulated_cost,
-        delta=round(simulated_cost - actual_cost, 4),
+        delta=round(simulated_cost - stored_value - actual_cost, 4),
+        stored_energy_value=round(stored_value, 4),
         kwh_over_limit=round(simulated["over_limit_kwh"], 6),
         actual_kwh_over_limit=round(actual["over_limit_kwh"], 6),
         start_soc_pct=round(100.0 * start_soc / cap, 3) if cap else None,

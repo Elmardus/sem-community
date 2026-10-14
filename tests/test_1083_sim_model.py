@@ -21,6 +21,7 @@ from custom_components.solar_energy_management.analytics.simulation.battery_sim 
     SimHour,
     SimParams,
     SimState,
+    scheduler_rates,
     simulate_day,
     sim_config,
     synth_view,
@@ -91,9 +92,13 @@ def test_negative_export_priced_on_its_own():
 
 
 def test_solar_savings_follow_the_cost_rule():
-    c = cost_hour(0.5, 0.0, 0.30, 0.08, home_kwh=2.0, ev_kwh=1.0,
-                  discharge_kwh=0.5)
-    assert c.solar_savings == pytest.approx((3.0 - 0.5 - 0.5) * 0.30)
+    # Production's path: solar_to_home + solar_to_ev, solar served first.
+    c = cost_hour(0.5, 0.0, 0.30, 0.08, solar_kwh=1.0, home_kwh=2.0,
+                  ev_kwh=1.0)
+    assert c.solar_savings == pytest.approx(1.0 * 0.30)
+    c = cost_hour(0.0, 2.0, 0.30, 0.08, solar_kwh=5.0, home_kwh=2.0,
+                  ev_kwh=1.0)
+    assert c.solar_savings == pytest.approx(3.0 * 0.30)
 
 
 # ── the simulated day ───────────────────────────────────────────────
@@ -252,6 +257,62 @@ def test_synth_view_fills_the_real_view():
     assert view.ev_charging is True and view.ev_connected is True
     assert view.home_consumption_w == pytest.approx(800.0)
     assert view.sem_forced_charge is False
+
+
+def test_same_choices_cost_the_same():
+    # The recorded pack sat at 90 % all day and the house bought 0.5 kWh an
+    # hour. Draining the same pack is not a saving: the energy left the pack.
+    day = _day(solar=[0.0] * 24, home=[0.5] * 24, grid_import=[0.5] * 24,
+               soc_pct=[90.0] * 24)
+    res = simulate_day(day, _params(), {})
+    assert res.simulated["grid_import"] < 12.0          # the sim did drain it
+    assert res.stored_energy_value < 0
+    assert res.delta == pytest.approx(0.0, abs=0.01)
+
+
+def test_a_bigger_pack_gets_no_free_start_energy():
+    day = _day(solar=[0.0] * 24, home=[0.5] * 24, grid_import=[0.5] * 24,
+               soc_pct=[90.0] * 24)
+    res = simulate_day(day, _params(capacity_kwh=20.0), {})
+    assert res.delta == pytest.approx(0.0, abs=0.01)
+
+
+def test_scheduler_reads_production_price_inputs():
+    # Flat 0.20 with one dear hour at 19:00. Production takes the cheapest
+    # 4 h of the next 12 and the mean daytime rate, not the day's max.
+    rin = [0.20] * 24
+    rin[19] = 0.90
+    hours = [SimHour(index=h, start=datetime(2026, 10, 12, h), solar=0.0,
+                     home=0.4, ev=0.0, import_rate=rin[h], export_rate=0.08)
+             for h in range(24)]
+    off_peak, peak, current = scheduler_rates(hours, trigger_hour=21)
+    assert off_peak == pytest.approx(0.20)
+    assert peak == pytest.approx((12 * 0.20 + 0.90) / 13)
+    assert current == pytest.approx(0.20)
+
+
+def test_one_dear_evening_hour_does_not_force_a_night_charge():
+    rin = [0.20] * 24
+    rin[19] = 0.90
+    res = simulate_day(
+        _day(soc_pct=[20.0] * 24, import_rate=rin, forecast_kwh=3.0,
+             home=[1.0] * 24),
+        _params(), {"battery_charge_scheduler_enabled": True,
+                    "battery_cycle_cost": 0.02})
+    assert not any(r["intent"] == "force_charge" for r in res.hours[:5])
+
+
+def test_start_soc_lifted_to_reserve_marks_the_day():
+    res = simulate_day(_day(soc_pct=[5.0] * 24), _params(reserve_pct=30.0), {})
+    assert res.start_soc_pct == pytest.approx(30.0)
+    assert res.indicative is True
+
+
+def test_epoch_start_needs_a_time_zone():
+    with pytest.raises(ValueError):
+        HourlyDay.from_statistics(
+            {"home": [{"start": 1760220000.0, "change": 0.4}]},
+            date="2026-10-12")
 
 
 # ── recorder rows ────────────────────────────────────────────────────
