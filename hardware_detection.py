@@ -3249,8 +3249,6 @@ NOT_OUTDOOR_DEVICE: Tuple[str, ...] = (
     "freezer", "kühl", "kuehl", "heizung", "heating", "verwarming",
     "thermostat", "climate", "printer", "router", "server", "nas",
 )
-#: units a temperature arrives in -> to °C
-_TEMP_UNITS = {"°c": "c", "c": "c", "°f": "f", "f": "f", "k": "k"}
 #: an outdoor reading outside this band is a sensor fault, not weather
 OUTDOOR_TEMP_MIN_C, OUTDOOR_TEMP_MAX_C = -60.0, 60.0
 
@@ -3271,9 +3269,11 @@ def _says(words: List[str], joined: str, vocab: Tuple[str, ...]) -> bool:
 def temperature_c(state: Any, assume_celsius: bool = False) -> Optional[float]:
     """(#1082) A temperature state in °C, or None: unavailable, not a
     number, not a temperature unit, or outside the plausible band. A weather
-    entity's own ``temperature`` attribute counts, in its unit.
+    entity's own ``temperature`` attribute counts, in its unit. The unit
+    conversion is ``coordinator/units.py``'s (#641: one place).
     ``assume_celsius``: a sensor the USER picked that states no unit at all
     is read as °C (a stated other unit, like kWh, still is not)."""
+    from .coordinator.units import is_temperature_unit, temperature_state_to_celsius
     if state is None:
         return None
     attrs = getattr(state, "attributes", {})
@@ -3281,26 +3281,14 @@ def temperature_c(state: Any, assume_celsius: bool = False) -> Optional[float]:
         attrs = {}
     eid = str(getattr(state, "entity_id", ""))
     if eid.startswith("weather."):
-        raw = attrs.get("temperature")
-        unit = attrs.get("temperature_unit") or "°C"
-    else:
-        raw = getattr(state, "state", None)
-        unit = attrs.get("unit_of_measurement")
-    unit_s = str(unit or "").strip().lower()
-    kind = _TEMP_UNITS.get(unit_s)
-    if kind is None and assume_celsius and not unit_s:
-        kind = "c"
-    if kind is None:
-        return None
-    try:
-        v = float(raw)
-    except (TypeError, ValueError):
-        return None
-    if kind == "f":
-        v = (v - 32.0) * 5.0 / 9.0
-    elif kind == "k":
-        v = v - 273.15
-    if not (OUTDOOR_TEMP_MIN_C <= v <= OUTDOOR_TEMP_MAX_C):
+        from types import SimpleNamespace as _NS
+        state = _NS(state=attrs.get("temperature"),
+                    attributes={"unit_of_measurement": attrs.get("temperature_unit") or "°C"})
+    elif not is_temperature_unit(state):
+        if not (assume_celsius and not attrs.get("unit_of_measurement")):
+            return None
+    v = temperature_state_to_celsius(state)
+    if v is None or not (OUTDOOR_TEMP_MIN_C <= v <= OUTDOOR_TEMP_MAX_C):
         return None
     return v
 
@@ -3319,11 +3307,11 @@ def find_outdoor_temperature_sensors(hass: Optional[HomeAssistant]) -> List[Dict
         dev_reg = _dr.async_get(hass)
     except Exception:  # noqa: BLE001 — no registry: names alone decide
         ent_reg = dev_reg = None
+    from .coordinator.units import is_temperature_unit
     out: List[Dict[str, Any]] = []
     for st in hass.states.async_all("sensor"):
         attrs = getattr(st, "attributes", {}) or {}
-        unit = str(attrs.get("unit_of_measurement") or "").strip().lower()
-        if attrs.get("device_class") != "temperature" and unit not in ("°c", "°f"):
+        if attrs.get("device_class") != "temperature" and not is_temperature_unit(st):
             continue
         eid = str(st.entity_id)
         if is_sem_entity(hass, eid):
