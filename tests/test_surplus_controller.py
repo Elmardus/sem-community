@@ -206,14 +206,12 @@ class TestUpdateDeactivation:
         sc.register_device(d1)
         sc.register_device(d2)
 
-        # 200W available - 50W offset = 150W distributable
-        # d1: delta = 600 - 500 = 100 -> remaining = 150 - 100 = 50
-        # d2: delta = 400 - 300 = 100 -> remaining = 50 - 100 = -50
-        # -50 < -100? No. Need more aggressive numbers.
-        # Let's use 100W total so distributable = 50
-        # d1: adjust_power(50 + 500) returns 600, delta = 100 -> remaining = 50 - 100 = -50
-        # d2: adjust_power(-50 + 300) returns 400, delta = 100 -> remaining = -50 - 100 = -150
-        # -150 < -100 -> deactivation triggers on d2 (reverse order, LIFO)
+        # 100W total, so distributable = 50. The pool already holds each
+        # load's draw (the add-back), so each is offered the remaining pool
+        # alone (#1102) and its FULL draw is debited (#688):
+        # d1: adjust_power(50) returns 600 -> remaining = 50 - 600 = -550
+        # d2: adjust_power(-550) returns 400 -> remaining = -950
+        # -950 < -100 -> deactivation triggers on d2 first (reverse order, LIFO)
         await sc.update(100.0)
 
         d2.deactivate.assert_called_once()
@@ -432,8 +430,9 @@ class TestDeltaTracking:
 
         # 1300W available (the pool includes d1's add-back). First call seeds
         # the EMA, so smoothed = 1300; distributable = 1300 - 50 = 1250.
-        # d1: old=500, adjust_power(1250+500=1750) returns 800 — its FULL new
-        #     draw is debited (#688), remaining = 1250 - 800 = 450
+        # d1: adjust_power(1250) — the pool already holds its 500 W (#1102)
+        #     — returns 800; its FULL new draw is debited (#688),
+        #     remaining = 1250 - 800 = 450
         # d2: 450 >= 400 → activate
         result = await sc.update(1300.0)
 
