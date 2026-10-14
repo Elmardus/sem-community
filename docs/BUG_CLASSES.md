@@ -5828,7 +5828,8 @@ Refs #1076 #586 #704 #645.
 **Guard:** `tests/test_1068_intraday_forecast.py` — PROD's day at noon corrects below half; dawn keeps the floor; the published factor stays 0.5; both day readers go through the one helper (AST); the #775 restore is unchanged without the flag.
 **Sweep question:** for every clamp, ask at which moment it was right, and whether a later moment reads it too.
 **Left for Guido:** the flag flips on after the PROD soak; a grey morning followed by a sunny afternoon must recover (watch that day shape).
-Refs #1068 #775 #598 #416.
+**Second catch (#1104, 13.10.2026):** the CEILING had the same shape. PROD 13.10 10:00: a clear morning against a sine curve that expects ~11 % by then read as a 1.64× day; the plan saw 28.5 kWh to come, the day made 14.2 in total (09.10: 22.4 → 29.1, real 20.9). The plan's correction (`corrected_factor`) is capped at `max(1.0, learned historical correction)`: a sunny morning never raises it above what the history proved, and a provider that always forecasts low keeps its learned boost (review). Guard: `tests/test_1104_sunny_morning_no_overshoot.py` (both PROD mornings, grey day still lowers, published factor unchanged).
+Refs #1068 #1104 #775 #598 #416.
 
 ### 135. A word inside a word — a name read for meaning — GUARDED
 **Symptom:** rdehuyss's first install (2.2.0-beta.15, 11.10.2026): no car, yet setup showed an EV with `sensor.bedverwarming_device_power` — a bed-heating smart plug (#1051).
@@ -5873,3 +5874,22 @@ Refs #1032 #824 #945 #548 #804 #807 #912 #1036.
 **Guard:** `tests/test_integrations_lifecycle.py` has no known gaps left (the strict xfails flipped); `tests/test_1095_mode_or_switch_only_charger.py` (such a charger starts and stops through its one control, no current write invented); `tests/test_1096_plain_charging_current.py` (the plain names on a charger yes, on an inverter no — `amp`/`charge_rate` failed the second half before).
 **Sweep question:** for every "is this a charger / which box" answer, is there exactly one function that gives it?
 Refs #1095 #1096 #1097 #1092 #809.
+
+
+### 140. A reading older than its neighbours counts twice — GUARDED
+**Symptom:** PROD 13.10.2026 19:29 UTC: the battery stopped at its reserve; the meter showed the 1.6 kW import at once, the Huawei battery register still said −1450 W and polls slower. The next cycle read both: home 3064 W instead of ~1550 for one cycle (#1105).
+**Root shape:** home is the remainder of a balance whose inputs are read at different ages. Every input was live, so the dark-input hold (#1047) could not see it, and the step (1527 W) sat under the 2 kW spike guard. Home Assistant cannot tell a stale register from a steady one: Huawei reports only changed values (`last_reported == last_changed`).
+**Where it lives:** `coordinator/coordinator.py::_hold_shown_home` → `_battery_stop_not_reported`.
+**Closure:** a grid-import step that matches the battery's still-reported discharge (±30 %), while that discharge did not fall, holds the SHOWN home until the battery reports again, at most 90 s. The steering figure is untouched; a real load of that size is shown when the window ends.
+**Guard:** `tests/test_1105_battery_stop_before_its_register.py` — PROD's exact readings, a real same-size load released after the window, a different step shown at once, no battery no hold.
+**Sweep question:** which other inputs poll slower than the meter (EV session power, a Modbus battery, a cloud inverter), and does a stop of theirs show up twice?
+Refs #1105 #1047 #237 #444.
+
+### 141. The first data set is published before its producer exists — GUARDED
+**Symptom:** PROD 12.10 18:32, 13.10 10:10 and 14:15: right after each restart the monthly peak read 0.0 kW for one cycle (~10 s), then its real 2.629 kW (#1106).
+**Root shape:** `async_setup_entry` ran the coordinator's first refresh before load management was set up. The first data set is what every entity shows until the next cycle; without a load manager the peak took its dataclass default, 0.0 — a billed peak nobody measured.
+**Where it lives:** `__init__.py::async_setup_entry` (order of the first refresh and `async_initialize_load_management`).
+**Closure:** load management (it only loads its saved state and schedules discovery) starts before the first refresh; the later call is a no-op.
+**Guard:** `tests/test_1106_monthly_peak_after_restart.py` — real HA setup with a saved peak: the load manager holds it when the first refresh runs, and the first data carries it.
+**Sweep question:** which other producers start after the first refresh (setup steps between `async_config_entry_first_refresh` and the platform forward), and what does their key read as in that first data set?
+Refs #1106 #1069.

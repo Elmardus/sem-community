@@ -54,10 +54,10 @@ def test_dawn_keeps_the_noise_floor():
         assert t.corrected_remaining_kwh(18.0) >= 18.0 * 0.5
 
 
-def test_sunny_beat_still_capped_high():
+def test_sunny_beat_never_raises_the_plan():
     t = _tracker(10.0, 9.0, TZ_NOON)
     with patch(_NOW, return_value=TZ_NOON):
-        assert t.corrected_remaining_kwh(4.0) <= 4.0 * 1.5
+        assert t.corrected_remaining_kwh(4.0) <= 4.0   # #1104: lower only
 
 
 def test_zero_and_garbage_stay_safe():

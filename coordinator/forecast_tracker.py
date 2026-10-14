@@ -49,6 +49,13 @@ DAMPENING_FLOOR_DAWN = 0.5
 DAMPENING_FLOOR_EVIDENCED = 0.1
 EVIDENCE_MIN_EXPECTED_KWH = 2.0
 DAMPENING_CEILING = 1.5
+# (#1104) The PLAN's correction only lowers. PROD 13.10 10:00: a clear
+# morning against a sine curve that expects ~11 % by then read as a 1.6×
+# day; the plan saw 28.5 kWh to come and the day made 14.2 in total. A
+# sunny morning does not promise a sunny afternoon, and over-planning sun is
+# the harm #1068 exists to stop — under-planning costs little, because the
+# live surplus control takes any extra sun anyway.
+CORRECTED_CEILING = 1.0
 
 # Outlier detection: cap actual at this multiple of forecast
 MAX_ACTUAL_RATIO = 2.0  # Cap outlier days at 2× forecast (was 3.0)
@@ -640,7 +647,9 @@ class ForecastTracker:
 
     def corrected_factor(self) -> float:
         """(#1068) The live correction with the evidenced floor: the dawn
-        floor (0.5) until today has given real evidence, then down to 0.1."""
+        floor (0.5) until today has given real evidence, then down to 0.1.
+        (#1104) A sunny morning never raises it above what the history
+        learned (1.0 when the provider is right on average)."""
         factor = self._calculate_dampening_factor()
         floor = DAMPENING_FLOOR_DAWN
         if self._last_evidenced:
@@ -648,7 +657,11 @@ class ForecastTracker:
             factor = max(floor, min(DAMPENING_CEILING,
                                     self._last_blended_pre_clamp))
         self._last_corrected_floor = floor
-        return factor
+        # (#1104 review) The cap is on the LIVE misread, not on what the
+        # history proved: a provider that always forecasts low has a learned
+        # correction above 1.0, and the plan keeps that.
+        return min(max(CORRECTED_CEILING, float(self._correction_factor or 0.0)),
+                   factor)
 
     def corrected_remaining_kwh(self, raw_remaining_kwh: float) -> float:
         """(#1068) The rest of today's solar, scaled by what today has

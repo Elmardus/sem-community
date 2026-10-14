@@ -1947,13 +1947,75 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 seen[name] = now
             elif name in seen and now - seen[name] <= SENSOR_DARK_READ_GRACE_S:
                 holding = True          # its entity still shows a value
+        if not holding and self._battery_stop_not_reported(power, now):
+            holding = True
         if not holding:
-            self._shown_home_last = (
-                float(power.home_consumption_power or 0.0), now)
+            val = float(power.home_consumption_power or 0.0)
+            prev = getattr(self, "_shown_home_last", None)
+            # (#1105, .175 14.10) The value to hold is one that STOOD: seen
+            # on two cycles in a row. A one-cycle jump right before a reading
+            # goes dark can carry an input older than the rest (solar 30 s
+            # stale while the battery's charge fell for a cloud: 2437 W for a
+            # ~550 W house) — the hold froze it for 70 s.
+            if prev is not None and abs(val - prev[0]) <= max(
+                    self.SHOWN_HOME_STABLE_W, 0.15 * abs(prev[0])):
+                self._shown_home_stable = (val, now)
+            self._shown_home_last = (val, now)
+            if (getattr(power, "grid_power_unavailable", False)
+                    or getattr(power, "battery_power_all_unavailable", False)):
+                # (#1105 review) a 0 W fallback is no baseline for the
+                # battery-stop check: forget it instead.
+                self._shown_home_inputs = None
+                return
+            self._shown_home_inputs = (
+                float(getattr(power, "grid_import_power", 0.0) or 0.0),
+                float(getattr(power, "battery_discharge_power", 0.0) or 0.0))
             return
         last = getattr(self, "_shown_home_last", None)
+        stable = getattr(self, "_shown_home_stable", None)
+        if (stable is not None and last is not None and stable[0] != last[0]
+                and last[1] - stable[1] <= 30.0):
+            last = (stable[0], last[1])   # the jump stood one cycle only
         if last is not None and now - last[1] <= 2 * SENSOR_DARK_READ_GRACE_S:
             power.home_shown_w = last[0]
+
+    #: (#1105) Two cycles closer than this (or 15 %) count as one standing
+    #: value — the one a hold may keep.
+    SHOWN_HOME_STABLE_W = 150.0
+    #: (#1105) A grid step this big that matches the battery's still-
+    #: reported discharge reads as a battery that stopped before its
+    #: register said so.
+    BATTERY_STOP_STEP_MIN_W = 500.0
+    BATTERY_STOP_MATCH = 0.3          # |step − discharge| ≤ 30 % of the step
+    BATTERY_STOP_HOLD_S = 90.0        # a slow register reports well within this
+
+    def _battery_stop_not_reported(self, power, now: float) -> bool:
+        """(#1105) Every input is live, but the battery's reading is older
+        than the meter's. PROD 13.10 19:29: the pack stopped at its reserve;
+        the meter showed the 1.6 kW import at once, the Huawei register still
+        said −1450 W and polls slower, so the stop counted twice and home
+        read 3064 W for a cycle. The signature: grid import rose by about
+        the discharge the battery still reports, and that discharge did not
+        fall. Hold the SHOWN home until the battery reports again, at most
+        ``BATTERY_STOP_HOLD_S`` — a real load the size of the discharge is
+        shown once the window ends. The steering figure is never touched."""
+        prev = getattr(self, "_shown_home_inputs", None)
+        if prev is None:
+            return False
+        imp = float(getattr(power, "grid_import_power", 0.0) or 0.0)
+        dis = float(getattr(power, "battery_discharge_power", 0.0) or 0.0)
+        step = imp - prev[0]
+        suspect = (step >= self.BATTERY_STOP_STEP_MIN_W
+                   and dis > 0
+                   and abs(step - dis) <= self.BATTERY_STOP_MATCH * step
+                   and (prev[1] - dis) < 0.5 * step)
+        since = getattr(self, "_battery_stop_since", None)
+        if not suspect:
+            self._battery_stop_since = None
+            return False
+        if since is None:
+            self._battery_stop_since = since = now
+        return now - since <= self.BATTERY_STOP_HOLD_S
 
     # (#699) The published set must satisfy the equation within this
     # tolerance to be cached as "coherent". In a clean cycle the residual is

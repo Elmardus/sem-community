@@ -2570,6 +2570,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
     _LOGGER.debug("Battery controls: %s",
                   ", ".join(coordinator.battery_control_slugs) or "one global")
 
+    # (#1106) Load management BEFORE the first refresh: the first data set
+    # is what every entity shows until the next cycle, and without the load
+    # manager the billed monthly peak defaulted to 0.0 kW for ~10 s after
+    # each restart (PROD 12.–13.10). It only loads its saved state and
+    # schedules discovery here; the call further down is then a no-op.
+    try:
+        await coordinator.async_initialize_load_management(entry)
+    except Exception as err:  # noqa: BLE001 — optional feature, as below
+        _LOGGER.warning("Load management init before first refresh failed: %s", err)
+
     # Fetch initial data - this is critical for setup
     _LOGGER.debug("Fetching initial data from coordinator")
     try:
