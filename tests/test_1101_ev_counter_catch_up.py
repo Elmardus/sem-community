@@ -24,8 +24,11 @@ from unittest.mock import Mock
 import pytest
 from freezegun import freeze_time
 
+from homeassistant.util import dt as dt_util
+
 from custom_components.solar_energy_management.coordinator.energy_calculator import (
     EV_CATEGORY,
+    EV_COUNTER_LATE_REPORT_H,
     MIDNIGHT_EV_CATEGORY,
     EnergyCalculator,
 )
@@ -68,7 +71,8 @@ def _hass(values: dict) -> Mock:
     return hass
 
 
-def _calc(values: dict, *, power_sensors: bool = True) -> EnergyCalculator:
+def _calc(values: dict, *, power_sensors: bool = True,
+          interval: int = 60) -> EnergyCalculator:
     hass = _hass(values)
     chargers = [{"id": "links"}, {"id": "rechts"}]
     if power_sensors:
@@ -76,7 +80,7 @@ def _calc(values: dict, *, power_sensors: bool = True) -> EnergyCalculator:
             charger["ev_charging_power_sensor"] = POWER[charger["id"]]
     calc = EnergyCalculator(
         {
-            "update_interval": 60,
+            "update_interval": interval,
             "ev_target_time": "11:00",
             "ev_chargers": chargers,
             "ev_max_current": 32, "ev_phases": 3, "ev_voltage": 230,
@@ -116,6 +120,11 @@ def _idle(calc, clock, values, cycles: int):
         _cycle(calc, clock, values)
 
 
+def _idle_s(calc, clock, values, cycles: int, seconds: int):
+    for _ in range(cycles):
+        _cycle(calc, clock, values, tick=timedelta(seconds=seconds))
+
+
 def _charge(calc, clock, values, cycles: int, meter: float = CHARGE_KWH,
             watts: float = CHARGE_W):
     for _ in range(cycles):
@@ -133,8 +142,22 @@ def _rows(calc, day: str = TODAY) -> tuple:
 
 
 def _night(values=None, **kw):
+    """A calculator that has watched both counters before tonight. A watch
+    starts at a counter's first move SEM sees (on the reporter's box, the
+    evening session's last report); a first sight alone starts none. So:
+    one read, then each counter moves 2 Wh — too little to show in a row."""
     values = values or {LINKS: 5170.12, RECHTS: 1094.83}
-    return values, _calc(values, **kw)
+    calc = _calc(values, **kw)
+    for bump in (0.0, 0.002):
+        for counter in (LINKS, RECHTS):
+            values[counter] += bump
+        calc._last_update = None
+        readings = PowerReadings(ev_power=0.0)
+        readings.ev_power_per_charger = {"links": 0.0, "rechts": 0.0}
+        readings.calculate_derived()
+        calc.calculate_energy(readings)
+    assert set(calc._ev_counter_room) == {LINKS, RECHTS}
+    return values, calc
 
 
 def _store(calc):
@@ -161,7 +184,7 @@ class TestTheReportersNight:
         """Not vacuous: the same night with the step judge switched off
         books the catch-up, as 2.2.0-beta.16 did."""
         monkeypatch.setattr(EnergyCalculator, "_judge_ev_step",
-                            lambda *a, **k: None)
+                            lambda *a, **k: 0.0)
         with freeze_time(NIGHT) as clock:
             values, calc = _night()
             _idle(calc, clock, values, 180)
@@ -183,7 +206,12 @@ class TestTheReportersNight:
             day = str(calc._ev_reset_day(None))
             row = calc.follow_charger_counter(
                 "links", day, calc.charger_rows["links"], LINKS)
-            assert row == pytest.approx(0.2, abs=0.01)
+            # Not judged yet: the rise waits for the next cycle.
+            assert row == pytest.approx(0.0, abs=0.01)
+            calc.charger_rows["links"] = row
+            _cycle(calc, clock, values)
+            assert calc.charger_rows["links"] == pytest.approx(0.2, abs=0.01)
+            assert _rows(calc) == pytest.approx((0.2, 0.2), abs=0.01)
 
     def test_the_session_after_it_is_booked_in_full(self):
         """The session that follows moves the counter in small steps, and
@@ -231,6 +259,145 @@ class TestTheReportersNight:
             values[LINKS] += 1.8 + CATCH_UP
             _cycle(calc, clock, values)
             assert _rows(calc)[1] == 0.0
+
+
+@pytest.mark.unit
+class TestTheReviewFindings:
+    def test_ten_second_cycles_too(self):
+        """SEM's default cycle is 10 s: one cycle's reach is smaller, the
+        catch-up is still not booked."""
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night(interval=10)
+            _idle_s(calc, clock, values, 600, 10)
+            values[LINKS] += CATCH_UP
+            _cycle(calc, clock, values, tick=timedelta(seconds=10))
+            assert _rows(calc) == (0.0, 0.0)
+
+    def test_a_skipped_energy_cycle_does_not_let_a_row_take_it(self):
+        """The step lands in a cycle ``calculate_energy`` skips (a stall
+        over 120 s; the first cycle after most restarts). The charger row
+        still reads the counter in that cycle. It waits for the judge."""
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night()
+            _idle(calc, clock, values, 30)
+            values[LINKS] += CATCH_UP
+            calc._last_update = dt_util.now()
+            clock.tick(timedelta(minutes=3))
+            readings = PowerReadings(ev_power=0.0)
+            readings.ev_power_per_charger = {"links": 0.0, "rechts": 0.0}
+            readings.calculate_derived()
+            calc.calculate_energy(readings)  # skipped: the gap is 180 s
+            assert calc._ev_counter_seen[LINKS] == pytest.approx(5170.122), (
+                "vacuous: the energy cycle ran")
+            day = str(calc._ev_reset_day(None))
+            calc.charger_rows["links"] = calc.follow_charger_counter(
+                "links", day, calc.charger_rows["links"], LINKS)
+            assert calc.charger_rows["links"] == pytest.approx(0.0, abs=0.01)
+            _idle(calc, clock, values, 2)
+            assert _rows(calc) == (0.0, 0.0)
+            assert calc.charger_rows["links"] == pytest.approx(0.0, abs=0.01)
+
+    def test_a_late_report_in_two_steps_after_the_stop(self):
+        """The box drew 3.06 kWh with the counter silent, then stopped.
+        The counter reports it in two steps. Both are the car's."""
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night()
+            _charge(calc, clock, values, 17, meter=0.0)
+            _idle(calc, clock, values, 5)
+            values[LINKS] += 1.5
+            _cycle(calc, clock, values)
+            _idle(calc, clock, values, 5)
+            values[LINKS] += 1.5
+            _cycle(calc, clock, values)
+            _idle(calc, clock, values, 2)
+            assert _rows(calc) == pytest.approx((3.0, 3.0), abs=0.01)
+            assert calc.charger_rows["links"] == pytest.approx(3.0, abs=0.01)
+
+    def test_a_late_step_a_little_above_the_power_read(self):
+        """The power read 1.0 kWh, the meter later says 1.5: a read can be
+        low. The second late step (1.0) is more than the 0.5 seen and not
+        shown, but within it plus one cycle's reach: booked."""
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night()
+            _charge(calc, clock, values, 10, meter=0.0, watts=6_000.0)
+            _idle(calc, clock, values, 5)
+            values[LINKS] += 0.5
+            _cycle(calc, clock, values)
+            _idle(calc, clock, values, 5)
+            values[LINKS] += 1.0
+            _cycle(calc, clock, values)
+            _idle(calc, clock, values, 2)
+            assert _rows(calc) == pytest.approx((1.5, 1.5), abs=0.01)
+
+    def test_a_counter_ten_minutes_late_every_five(self):
+        """A cloud counter that publishes every 5 min what it read 10 min
+        before: an hour at 11 kW is 11 kWh, all of it booked."""
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night()
+            base = values[LINKS]
+            drawn = []
+            for minute in range(90):
+                charging = minute < 60
+                drawn.append(0.0 if not drawn else drawn[-1])
+                if charging:
+                    drawn[-1] += 11.0 / 60
+                if minute % 5 == 0 and minute >= 10:
+                    values[LINKS] = base + drawn[minute - 10]
+                _cycle(calc, clock, values, 11_000.0 if charging else 0.0)
+            assert values[LINKS] == pytest.approx(base + 11.0), "vacuous"
+            assert _rows(calc) == pytest.approx((11.0, 11.0), abs=0.05)
+
+    def test_what_a_high_power_read_leaves_does_not_wait_for_ever(self):
+        """The power read 18 kW, the meter 10.8 (#1049's bridge): 2.4 kWh
+        seen but never shown. Two hours seen idle clear it; a catch-up
+        after that is not booked."""
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night()
+            _charge(calc, clock, values, 20, watts=18_000.0)
+            assert calc._ev_counter_unreported[LINKS] == pytest.approx(2.4, abs=0.05)
+            _idle(calc, clock, values, int(EV_COUNTER_LATE_REPORT_H * 60) + 5)
+            assert LINKS not in calc._ev_counter_unreported
+            before = _rows(calc)
+            values[LINKS] += 2.0
+            _cycle(calc, clock, values)
+            assert _rows(calc) == before
+
+    def test_within_the_wait_it_is_booked(self):
+        """The same rest, reported an hour after the stop: booked."""
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night()
+            _charge(calc, clock, values, 20, watts=18_000.0)
+            _idle(calc, clock, values, 60)
+            before = _rows(calc)
+            values[LINKS] += 2.0
+            _cycle(calc, clock, values)
+            assert _rows(calc)[1] == pytest.approx(before[1] + 2.0, abs=0.01)
+
+    def test_unreported_round_trips(self):
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night()
+            _charge(calc, clock, values, 5, meter=0.0)
+            fresh = _calc(values)
+            fresh.restore_state(_store(calc))
+            assert fresh._ev_counter_unreported == pytest.approx(
+                calc._ev_counter_unreported)
+            assert fresh._ev_counter_unreported[LINKS] == pytest.approx(0.9)
+
+    def test_a_store_from_before_1049_books_the_first_move(self):
+        """No ``seen`` at all: the first read after a restart may still be
+        stale. The move after it is booked as it stands."""
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night()
+            stored = _store(calc)
+            del stored["ev_counter_pending"]
+            clock.tick(timedelta(hours=2))
+            fresh = _calc(values)
+            fresh.restore_state(stored)
+            fresh.charger_rows = dict(calc.charger_rows)
+            _idle(fresh, clock, values, 1)
+            values[LINKS] += 7.0
+            _cycle(fresh, clock, values)
+            assert _rows(fresh)[1] == pytest.approx(7.0, abs=0.01)
 
 
 @pytest.mark.unit
@@ -414,6 +581,16 @@ class TestTheSessionTotalLeavesItOutToo:
                    lifetime_skip=(5170.22, CATCH_UP), **self.KW)
         assert res.energy_kwh == pytest.approx(0.3, abs=0.01)
 
+    def test_a_rise_not_judged_yet_is_held(self):
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night()
+            _idle(calc, clock, values, 2)
+            seen = calc._ev_counter_seen[LINKS]
+            assert calc.ev_counter_judged_kwh(LINKS, seen + 11.0) == seen
+            assert calc.ev_counter_judged_kwh(LINKS, seen - 1.0) == seen - 1.0
+            assert calc.ev_counter_judged_kwh("sensor.other", 9.0) == 9.0
+            assert calc.ev_counter_judged_kwh(LINKS, None) is None
+
     def test_the_calculator_hands_over_the_judged_step(self):
         with freeze_time(NIGHT) as clock:
             values, calc = _night()
@@ -437,10 +614,11 @@ class TestTheSessionTotalLeavesItOutToo:
         from .ast_contracts import call_kwargs
         tree = ast.parse(textwrap.dedent(
             inspect.getsource(EVControlMixin._update_session_tracking)))
-        assert any(
-            isinstance(n, ast.Call) and getattr(n.func, "id", None) == "getattr"
-            and any(isinstance(a, ast.Constant)
-                    and a.value == "ev_counter_step_not_drawn" for a in n.args)
-            for n in ast.walk(tree))
+        for name in ("ev_counter_step_not_drawn", "ev_counter_judged_kwh"):
+            assert any(
+                isinstance(n, ast.Call) and getattr(n.func, "id", None) == "getattr"
+                and any(isinstance(a, ast.Constant) and a.value == name
+                        for a in n.args)
+                for n in ast.walk(tree)), name
         sites = call_kwargs(EVControlMixin._update_session_tracking, "_session_step")
         assert sites and all("lifetime_skip" in kw for kw in sites)

@@ -1356,11 +1356,16 @@ class EVControlMixin:
             seed_from_legacy(sd.meter, sd.energy_kwh, sd.solar_energy_kwh,
                              sd.grid_energy_kwh, sd.battery_energy_kwh, sd.cost_chf)
         session_kwh, lifetime_kwh = _charger_meter_readings(self)
-        # (#1101) …less a lifetime step this cycle that no box drew.
+        # (#1101) …less a lifetime step this cycle that no box drew, and
+        # without a rise the step check has not seen yet.
+        lifetime_entity = _charger_meter_entity(self, "ev_total_energy_sensor")
         not_drawn = getattr(self._energy_calculator,
                             "ev_counter_step_not_drawn", None)
-        lifetime_skip = (not_drawn(_charger_meter_entity(
-            self, "ev_total_energy_sensor")) if not_drawn else None)
+        lifetime_skip = not_drawn(lifetime_entity) if not_drawn else None
+        judged = getattr(self._energy_calculator, "ev_counter_judged_kwh", None)
+        held = judged(lifetime_entity, lifetime_kwh) if judged else None
+        if isinstance(held, (int, float)) and not isinstance(held, bool):
+            lifetime_kwh = held
         totals = _session_step(
             sd.meter,
             solar_kwh=solar_increment, grid_kwh=grid_increment,
