@@ -3146,6 +3146,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
         # (#1024) The EV card reads the session list over this command.
         from .session_history import async_register_websocket
         async_register_websocket(hass)
+        # (#1083) the Simulation tab's commands; its job stops on unload
+        from .simulation_ws import async_register_websocket as _sim_ws
+        _sim_ws(hass)
+        sim_job = getattr(coordinator, "_simulation_job", None)
+        if sim_job is not None:
+            entry.async_on_unload(lambda: sim_job.cancel(persist=False))
         _LOGGER.debug("Services registered successfully")
     except Exception as err:
         _LOGGER.warning(
