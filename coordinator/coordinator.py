@@ -16,6 +16,7 @@ from ..utils.device_names import charger_display_name, charger_own_name  # (#105
 
 import logging
 import time
+from types import SimpleNamespace
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -79,7 +80,7 @@ from .health_check import (
     chargers_outside_home, home_member_evidence, home_member_totals,
     home_members, HealthCheck, sem_ev_chargers,
 )
-from .units import energy_state_to_kwh, power_state_to_watts
+from .units import energy_state_to_kwh, power_state_to_watts, temperature_state_to_celsius
 from .distance_units import distance_to_km
 from .ev_availability import operational_ev_connected, operational_night_target
 from .departure import (
@@ -14741,8 +14742,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     continue
                 if start is None:
                     continue
-                if str(unit).strip().lower() in ("°f", "f"):
-                    t = (t - 32.0) * 5.0 / 9.0
+                # (#641) one converter for every temperature unit (°F, K, …)
+                t = temperature_state_to_celsius(
+                    SimpleNamespace(state=t, attributes={"unit_of_measurement": unit}))
+                if t is None:
+                    continue
                 out.append((start, t, kind))
             if out:
                 self._temp_forecast = sorted(out, key=lambda x: x[0])

@@ -277,7 +277,7 @@
           "tariff_classification_mode": "“百分位”相对当天价格区间分类（推荐）。“固定”使用固定的便宜/昂贵阈值。",
           "solar_forecast_source": "SEM 读取哪个预测集成。自动检测优先使用 Solcast，其次 Forecast.Solar，再次 Open-Meteo — 如果同时运行多个，请手动指定一个。",
           "grid_co2_entity": "SEM 会自行找到单位为 g 或 kg CO₂/kWh 的传感器。仅在它找错时才手动选择。",
-          "outdoor_temperature_entity": "室外温度（可选）"
+          "outdoor_temperature_entity": "SEM 会按名称找到室外温度计，或使用您的天气实体。只有在它选错时才需要手动选择。"
         }
       },
       "load_management": {
