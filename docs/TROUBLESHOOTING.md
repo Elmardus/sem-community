@@ -994,6 +994,9 @@ integration was reinstalled and entity ids changed. **Fix:** open the
 charger's settings in SEM's Configuration tab and re-select the current
 control entity. The repair names the exact entity it means.
 
+A control the charger turns off on purpose, for example while no car is
+plugged in, is not broken. SEM raises no Repair for it.
+
 ## KEBA failsafe is fighting SEM
 
 Your KEBA's failsafe (`Curr FS` / `Tmo FS`) re-applies a fallback current
