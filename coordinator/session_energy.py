@@ -19,7 +19,8 @@ Order of trust, per session:
 
 A meter that reads unavailable keeps its last good value. A counter that
 drops mid-session (a reset) starts a new segment; what the old segment had
-counted is kept.
+counted is kept. A lifetime step the energy calculator judged as kWh no box
+drew (#1101) is left out.
 
 Pure: no Home Assistant. ``meter`` is a plain dict the caller persists with
 the session, so a restart mid-charge loses nothing.
@@ -27,7 +28,7 @@ the session, so a restart mid-charge loses nothing.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 #: a drop larger than this is a counter reset, not jitter
 RESET_DROP_KWH = 0.01
@@ -85,7 +86,8 @@ def _session_meter(meter: dict, value: Optional[float]) -> Optional[float]:
     return meter.get("sm_offset", 0.0) + meter["sm_last"]
 
 
-def _lifetime_meter(meter: dict, value: Optional[float]) -> Optional[float]:
+def _lifetime_meter(meter: dict, value: Optional[float],
+                    skip: Optional[Tuple[float, float]] = None) -> Optional[float]:
     if value is not None:
         last = meter.get("lt_last")
         if last is None:
@@ -97,6 +99,11 @@ def _lifetime_meter(meter: dict, value: Optional[float]) -> Optional[float]:
             meter["lt_offset"] = meter.get("lt_offset", 0.0) + last - meter["lt_first"]
             meter["lt_first"] = meter["lt_last"] = value
         else:
+            if (isinstance(skip, tuple) and len(skip) == 2
+                    and last <= skip[0] + 0.001):
+                # (#1101) A step that stood for kWh no box drew: the session
+                # did not get them either.
+                meter["lt_first"] += min(skip[1], max(0.0, value - last))
             meter["lt_last"] = value
     if meter.get("lt_last") is None:
         return None
@@ -115,10 +122,12 @@ def step(
     session_meter_kwh: Optional[float],
     lifetime_meter_kwh: Optional[float],
     import_rate: float,
+    lifetime_skip: Optional[Tuple[float, float]] = None,
 ) -> SessionTotals:
     """One cycle. ``*_kwh``/``cost``: this cycle's flow increments and their
     price. ``power_w``: THIS charger's measured draw. Meter readings in kWh,
-    None when unreadable this cycle."""
+    None when unreadable this cycle. ``lifetime_skip``: this cycle's step of
+    the lifetime counter that no box drew — (reading before it, kWh)."""
     meter["flow_solar"] = meter.get("flow_solar", 0.0) + max(0.0, solar_kwh)
     meter["flow_grid"] = meter.get("flow_grid", 0.0) + max(0.0, grid_kwh)
     meter["flow_battery"] = meter.get("flow_battery", 0.0) + max(0.0, battery_kwh)
@@ -126,7 +135,7 @@ def step(
     meter["measured"] = meter.get("measured", 0.0) + max(0.0, power_w) * hours / 1000.0
 
     sm = _session_meter(meter, session_meter_kwh)
-    lt = _lifetime_meter(meter, lifetime_meter_kwh)
+    lt = _lifetime_meter(meter, lifetime_meter_kwh, lifetime_skip)
     if sm is not None:
         total, source = sm, SOURCE_CHARGER_METER
     elif lt is not None:

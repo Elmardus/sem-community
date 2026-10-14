@@ -50,6 +50,14 @@ RECONCILIATION_THRESHOLD = 0.5
 EV_COUNTER_DIP_KWH = 0.1
 EV_COUNTER_DIP_SHARE = 0.01
 
+# (#1101) The most one box can draw: 3 × 63 A × 230 V, the largest AC supply a
+# home box is wired for. A trap for a counter step no box could have drawn,
+# not a rating (bug classes 40, 43) — a box set up larger keeps its own.
+EV_COUNTER_BOX_MAX_KW = 44.0
+# (#1101) A live power read under the floor can still be one phase of three
+# (#1035): the time it covers may have held up to this many times that draw.
+EV_COUNTER_TRICKLE_FACTOR = 3.0
+
 # Adoption threshold for a metered category (#628). Much finer than the solar/EV
 # 0.5 kWh: those correct a large one-way shortfall, while a grid row is often
 # only ~1 kWh all day (#628's reporter: 1.05 kWh import), where a 0.5 kWh dead
@@ -391,6 +399,16 @@ class EnergyCalculator:
         # Persisted — a cloud counter can still owe a session at a restart.
         self._ev_counter_pending: Dict[str, float] = {}
         self._ev_counter_seen: Dict[str, float] = {}
+        # (#1101) Per counter: the most kWh its box could have drawn since the
+        # counter last moved, in time SEM did not see that box idle — while it
+        # charged, while its power read was dark, while SEM was down. A
+        # counter missing here has no known history: its next move is booked
+        # as it stands. ``watched_at``: the last cycle that kept this up.
+        # Persisted with ``pending``. ``foreign``: this cycle's steps that
+        # stand for kWh no box drew — counter → (reading before, kWh).
+        self._ev_counter_room: Dict[str, float] = {}
+        self._ev_watched_at: Optional[datetime] = None
+        self._ev_counter_foreign: Dict[str, Tuple[float, float]] = {}
         # (#556) Daily-solar reconciliation against hardware production
         # counters — closes the cloud-poll undercount (integrating a power
         # sensor that reports 0/unavailable between polls). Baselines are
@@ -717,7 +735,7 @@ class EnergyCalculator:
         # running to integrate; must run before the reads below, exactly like
         # its solar sibling.
         # (#1049) …after noting what each box drew since its counter moved.
-        self._track_ev_pending(power, interval_hours)
+        self._track_ev_pending(power, interval_hours, now)
         self._reconcile_ev_energy(ev_day, month_key, year_key)
         self._reconcile_midnight_ev_energy(today)  # (#628)
 
@@ -2341,7 +2359,17 @@ class EnergyCalculator:
             bl["base"] = {}
             bl.pop("anchor", None)
         for entity_id, value in readings.items():
+            prior = (bl["last"].get(entity_id)
+                     if entity_id in bl["base"] else None)
             bl["base"].setdefault(entity_id, value)
+            foreign = self._ev_counter_foreign.get(entity_id)
+            if (foreign is not None and prior is not None
+                    and prior <= foreign[0] + 0.001):
+                # (#1101) This cycle's step stood for kWh no box drew in this
+                # window (``_judge_ev_step``): the base moves with it, so the
+                # row books none of it. ``prior`` past the step's start: this
+                # row has taken the step already.
+                bl["base"][entity_id] += min(foreign[1], max(0.0, value - prior))
             bl["last"][entity_id] = value
         # The counters track charging SINCE their baselines; charging before
         # that (SEM down over the EV-day boundary, charger added late) is only
@@ -2418,7 +2446,10 @@ class EnergyCalculator:
         )
         return adopted
 
-    def _track_ev_pending(self, power: PowerReadings, interval_hours: float) -> None:
+    def _track_ev_pending(
+        self, power: PowerReadings, interval_hours: float,
+        now: Optional[datetime] = None,
+    ) -> None:
         """(#1049) Per counter: the kWh its box charged since the counter moved.
 
         That energy is real but not in the counter yet — a cloud counter can
@@ -2426,10 +2457,26 @@ class EnergyCalculator:
         charging, the counters may not pull a row down (``_ev_settled``).
         Each counter is charged with ITS box's power (bug class 3); standby
         draw is not charging (``EV_ACTIVE_CHARGE_FLOOR_W``, bug class 36).
+
+        (#1101) …and the most its box could have drawn in time SEM did not
+        see it idle (``_ev_counter_room``). A counter that moves by more than
+        that stands for kWh no box drew since it last moved — a Wallbox
+        register caught up 11.18 kWh in one report, on a box SEM had seen
+        idle for six hours. From such a step only what SEM saw the box draw
+        is booked (``_ev_counter_foreign``, read by ``_ev_counter_target``).
         """
         self._ev_owners_drawing = set()
+        self._ev_counter_foreign = {}
         if not self._ev_counter_enabled or not self._hass:
             return
+        now = now or dt_util.now()
+        unseen_h = self._ev_unwatched_hours(now, interval_hours)
+        self._ev_watched_at = now
+        if unseen_h is None:
+            # No record of the last cycle: nothing is known about the time
+            # since, so every counter's next move is booked as it stands.
+            self._ev_counter_room.clear()
+        box_kw = self._ev_box_max_kw()
         per_charger = getattr(power, "ev_power_per_charger", None) or {}
         fleet_w = float(power.ev_power or 0.0)  # FLEET-READ: the fallback when a box's own draw is not known.
         for entity_id, owner in self._ev_counter_owner.items():
@@ -2446,19 +2493,123 @@ class EnergyCalculator:
                     "unknown", "unavailable", None):
                 value = self._energy_state_kwh(state)
             seen = self._ev_counter_seen.get(entity_id)
+            room = self._ev_counter_room.get(entity_id)
+            if room is not None and unseen_h:
+                room += box_kw * unseen_h
+            this_cycle = max(box_kw, watts / 1000.0) * interval_hours
             if value is not None and value >= 0 and (
                 seen is None
                 or value > seen + 0.001
                 or _ev_counter_drop(value, seen) == "reset"
             ):
+                if room is not None and seen is not None and value > seen + 0.001:
+                    self._judge_ev_step(
+                        entity_id, owner, seen, value, room + this_cycle,
+                        max(0.0, watts) * interval_hours / 1000.0)
                 # Moved, reset, or first seen: it holds everything so far.
                 self._ev_counter_seen[entity_id] = value
                 self._ev_counter_pending[entity_id] = 0.0
-            elif watts > EV_ACTIVE_CHARGE_FLOOR_W:
-                self._ev_counter_pending[entity_id] = (
-                    self._ev_counter_pending.get(entity_id, 0.0)
-                    + watts * interval_hours / 1000.0
-                )
+                room = 0.0
+            else:
+                if watts > EV_ACTIVE_CHARGE_FLOOR_W:
+                    self._ev_counter_pending[entity_id] = (
+                        self._ev_counter_pending.get(entity_id, 0.0)
+                        + watts * interval_hours / 1000.0
+                    )
+                # Charging, or a power read that cannot say "idle": the box
+                # may have drawn its most. Seen idle: at most a trickle.
+                if room is not None and (
+                        watts > EV_ACTIVE_CHARGE_FLOOR_W
+                        or not self._ev_box_power_live(owner, power, per_charger)):
+                    room += this_cycle
+                elif room is not None:
+                    room += (EV_COUNTER_TRICKLE_FACTOR * max(0.0, watts)
+                             * interval_hours / 1000.0)
+            if room is not None:
+                self._ev_counter_room[entity_id] = room
+
+    def _judge_ev_step(
+        self, entity_id: str, owner: str, before: float, value: float,
+        room: float, this_cycle_kwh: float,
+    ) -> None:
+        """(#1101) Book from a counter step no more than its box could draw.
+
+        ``room``: the most the box could have drawn since the counter last
+        moved, unseen by SEM. A step above it (and the dip window) is the
+        counter reporting kWh from outside this window; only what SEM saw
+        the box draw since (``pending``, and this cycle) is booked from it.
+        """
+        step = value - before
+        if step <= room + EV_COUNTER_DIP_KWH:
+            return
+        seen_kwh = self._ev_counter_pending.get(entity_id, 0.0) + this_cycle_kwh
+        foreign = step - seen_kwh
+        if foreign <= 0.001:
+            return
+        self._ev_counter_foreign[entity_id] = (before, foreign)
+        _LOGGER.warning(
+            "EV counter %s rose %.2f kWh at once, but charger %s could have "
+            "drawn at most %.2f kWh since it last moved — %.2f kWh not booked "
+            "(the counter caught up on energy from outside this window)",
+            entity_id, step, owner, room, foreign,
+        )
+
+    def ev_counter_step_not_drawn(
+        self, entity_id: Optional[str],
+    ) -> Optional[Tuple[float, float]]:
+        """(#1101) This cycle's judged step of ``entity_id``, for readers of
+        the same counter outside this class (a session's total): the reading
+        before the step and the kWh of it no box drew. None: nothing judged."""
+        return self._ev_counter_foreign.get(entity_id) if entity_id else None
+
+    def _ev_unwatched_hours(
+        self, now: datetime, interval_hours: float,
+    ) -> Optional[float]:
+        """(#1101) Hours since the last tracked cycle that this cycle's
+        interval does not cover — SEM down, or a skipped cycle. None when
+        there is no last cycle to measure from."""
+        if self._ev_watched_at is None:
+            return None
+        try:
+            elapsed_h = (now - self._ev_watched_at).total_seconds() / 3600.0
+        except TypeError:  # a naive stored time against an aware clock
+            return None
+        return max(0.0, elapsed_h - interval_hours)
+
+    def _ev_box_max_kw(self) -> float:
+        """(#1101) The most one box can draw, in kW — see
+        ``EV_COUNTER_BOX_MAX_KW``. One box's share of ``_max_daily_ev_kwh``
+        when the boxes are set up larger."""
+        chargers = self.config.get("ev_chargers") or []
+        configured = self._max_daily_ev_kwh() / max(1, len(chargers)) / 24.0
+        return max(EV_COUNTER_BOX_MAX_KW, configured)
+
+    def _ev_box_power_live(
+        self, owner: str, power: PowerReadings, per_charger: Dict[str, float],
+    ) -> bool:
+        """(#1101) Did this cycle read the owner's OWN power sensor as a
+        number? Only then does a read under the floor say the box is idle: a
+        dark sensor reads 0 W, and so does the fleet's sum for a box that is
+        not in it. A lone box read through the one fleet sensor counts."""
+        entity = None
+        if owner in per_charger:
+            entity = next(
+                (c.get("ev_charging_power_sensor")
+                 for c in self.config.get("ev_chargers") or []
+                 if isinstance(c, dict) and c.get("id") == owner),
+                None,
+            )
+        elif not per_charger and len(self._ev_counter_owner) == 1:
+            entity = getattr(power, "ev_power_fleet_entity", None)
+        if not entity:
+            return False
+        state = self._hass.states.get(entity)
+        if state is None or state.state in ("unknown", "unavailable", None, ""):
+            return False
+        try:
+            return math.isfinite(float(state.state))
+        except (TypeError, ValueError):
+            return False
 
     def _ev_settled(self, entities: List[str]) -> bool:
         """(#1049) Every box behind these counters has stopped charging, and
@@ -3930,6 +4081,11 @@ class EnergyCalculator:
             "ev_counter_pending": {
                 "pending": dict(self._ev_counter_pending),
                 "seen": dict(self._ev_counter_seen),
+                # (#1101) and the most each box could have drawn unseen, with
+                # the last cycle that kept it: the time SEM is down counts too.
+                "room": dict(self._ev_counter_room),
+                "watched_at": (self._ev_watched_at.isoformat()
+                               if self._ev_watched_at else None),
             },
             # (#628) same again for the grid/battery meters — a restart in the
             # middle of the day must not forget where today's registers
@@ -4061,7 +4217,8 @@ class EnergyCalculator:
             pending = state.get("ev_counter_pending")
             if isinstance(pending, dict):
                 for attr, key in (("_ev_counter_pending", "pending"),
-                                  ("_ev_counter_seen", "seen")):
+                                  ("_ev_counter_seen", "seen"),
+                                  ("_ev_counter_room", "room")):
                     raw = pending.get(key)
                     if isinstance(raw, dict):
                         setattr(self, attr, {
@@ -4069,6 +4226,17 @@ class EnergyCalculator:
                             if isinstance(v, (int, float))
                             and not isinstance(v, bool) and math.isfinite(v)
                         })
+                # (#1101) A time that does not parse, or has no zone, is no
+                # record: every counter's next move is booked as it stands.
+                watched_at = pending.get("watched_at")
+                self._ev_watched_at = None
+                if isinstance(watched_at, str):
+                    try:
+                        parsed = datetime.fromisoformat(watched_at)
+                    except ValueError:
+                        parsed = None
+                    if parsed is not None and parsed.tzinfo is not None:
+                        self._ev_watched_at = parsed
             charger_baselines = state.get("charger_counter_baselines")
             if isinstance(charger_baselines, dict):
                 # A damaged entry is dropped; that charger re-anchors.

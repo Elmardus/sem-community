@@ -135,21 +135,26 @@ def _session_charger_id(host: Any) -> Optional[str]:
             return cid
     return getattr(dev, "device_id", None)
 
-def _charger_meter_readings(host: Any):
-    """(#1024) THIS charger's own meters, in kWh, or None when unknown or
-    unreadable this cycle: (session counter, lifetime counter).
+def _charger_meter_entity(host: Any, key: str) -> Optional[str]:
+    """(#1024) THIS charger's own meter entity for ``key``.
 
     Per-charger config first; the top-level keys belong to the primary
     charger only (the #639 convention), never to its siblings."""
-    from .units import energy_state_to_kwh
     cfg = getattr(host, "config", None) or {}
     chargers = cfg.get("ev_chargers") or []
     cid = _session_charger_id(host)
     per = next((c for c in chargers if c.get("id") == cid), {}) or {}
     is_primary = not chargers or (chargers[0].get("id") == cid)
+    return per.get(key) or (cfg.get(key) if is_primary else None)
+
+
+def _charger_meter_readings(host: Any):
+    """(#1024) THIS charger's own meters, in kWh, or None when unknown or
+    unreadable this cycle: (session counter, lifetime counter)."""
+    from .units import energy_state_to_kwh
 
     def _read(key):
-        entity = per.get(key) or (cfg.get(key) if is_primary else None)
+        entity = _charger_meter_entity(host, key)
         if not entity:
             return None
         hass = getattr(host, "hass", None)
@@ -1351,13 +1356,18 @@ class EVControlMixin:
             seed_from_legacy(sd.meter, sd.energy_kwh, sd.solar_energy_kwh,
                              sd.grid_energy_kwh, sd.battery_energy_kwh, sd.cost_chf)
         session_kwh, lifetime_kwh = _charger_meter_readings(self)
+        # (#1101) …less a lifetime step this cycle that no box drew.
+        not_drawn = getattr(self._energy_calculator,
+                            "ev_counter_step_not_drawn", None)
+        lifetime_skip = (not_drawn(_charger_meter_entity(
+            self, "ev_total_energy_sensor")) if not_drawn else None)
         totals = _session_step(
             sd.meter,
             solar_kwh=solar_increment, grid_kwh=grid_increment,
             battery_kwh=battery_increment, cost=cost_increment,
             power_w=this_power_w, hours=hours,
             session_meter_kwh=session_kwh, lifetime_meter_kwh=lifetime_kwh,
-            import_rate=import_rate,
+            import_rate=import_rate, lifetime_skip=lifetime_skip,
         )
         sd.energy_kwh = totals.energy_kwh
         sd.solar_energy_kwh = totals.solar_kwh
