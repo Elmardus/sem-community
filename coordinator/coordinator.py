@@ -639,6 +639,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         self._wpa_replay_unsub = None
         # (#1083) stops the Simulation tab's day-tag backfill (day_tag_store)
         self._day_tag_backfill_cancel = None
+        # (#1083) the Simulation tab's job: one run at a time, stopped on unload
+        from .simulation_job import SimulationJob
+        self._simulation_job = SimulationJob(hass, self)
         # (#967) True once Home Assistant has started. Every read of the
         # recorder waits for it: setup waits for the first update cycle, and
         # HA cancels a setup that overruns its start-up budget — the whole
@@ -7931,6 +7934,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # (#1083) the Simulation tab's day-tag backfill, pending or running
         from .day_tag_store import cancel_backfill
         cancel_backfill(self)
+        # (#1083) a running Simulation stops; what ran stays, flagged
+        job = getattr(self, "_simulation_job", None)
+        if job is not None:
+            try:
+                job.cancel(persist=False)
+            except Exception:  # noqa: BLE001 — teardown must finish
+                _LOGGER.debug("could not stop the simulation run")
 
     async def _replay_wpa_from_history(self) -> None:
         from .wpa_replay import DEFAULT_LOOKBACK_DAYS, run_replay

@@ -45,6 +45,11 @@ SESSION_HISTORY_MAX = 400
 # tool. ~200 bytes each; 400 days stay far under the daily store's size.
 DAY_TAGS_MAX = 400
 
+# (#1083) The Simulation tab keeps its last runs in the daily store: at most
+# this many, each at most ``SIMULATION_RUN_DAYS_MAX`` day rows (~150 bytes).
+SIMULATION_RUNS_MAX = 3
+SIMULATION_RUN_DAYS_MAX = 90
+
 # (#668) The keys of ``EnergyCalculator.get_state()`` that this layer carries.
 #
 # ONE list, deliberately. Before #668 the export and the import each had their
@@ -749,6 +754,28 @@ class SEMStorage:
         tags.append(dict(record))
         tags.sort(key=lambda t: str(t.get("date")))
         self._daily_data["day_tags"] = tags[-DAY_TAGS_MAX:]
+
+    def get_simulation_runs(self) -> list:
+        """(#1083) The stored Simulation runs, oldest first."""
+        runs = self._daily_data.get("simulation_runs")
+        return [r for r in runs if isinstance(r, dict)] if isinstance(runs, list) else []
+
+    def put_simulation_run(self, run: Dict[str, Any]) -> None:
+        """(#1083) Store one Simulation run; the same ``run_id`` replaces the
+        old record. Last ``SIMULATION_RUNS_MAX`` kept, each with at most
+        ``SIMULATION_RUN_DAYS_MAX`` day rows."""
+        run_id = str(run.get("run_id") or "")
+        if not run_id:
+            return
+        record = dict(run)
+        result = record.get("result")
+        if isinstance(result, dict) and isinstance(result.get("days"), list):
+            result = dict(result)
+            result["days"] = result["days"][-SIMULATION_RUN_DAYS_MAX:]
+            record["result"] = result
+        runs = [r for r in self.get_simulation_runs() if r.get("run_id") != run_id]
+        runs.append(record)
+        self._daily_data["simulation_runs"] = runs[-SIMULATION_RUNS_MAX:]
 
     def note_start(self, iso_date: str) -> None:
         """(#1083) Remember the days SEM started on — a restart makes that
