@@ -309,7 +309,7 @@ went to zero. Installs that already have those cards are unaffected.
 
 ## Bundled SEM Cards
 
-All 31 cards ship inside the integration — no HACS installation needed. Each
+All 32 cards ship inside the integration — no HACS installation needed. Each
 one registers itself with Home Assistant's card picker carrying a name, a
 description, and a **help link that lands on its section below**. If you are
 looking at a card in the dashboard editor and want to know what it does, the
@@ -589,8 +589,9 @@ charging periods on one axis.
 
 **SEM Simulation Card** · *Simulation tab*
 
-Replays your recorded days through SEM, with the settings you change.
-Numbers after a changed decision are estimated, not measured.
+Pick recorded days, change battery size, reserve, peak limit or price, and
+replay them on your own Home Assistant. Simulated costs are marked *est.*:
+numbers after a changed decision are estimated, not measured.
 The tab appears when the Simulation tab switch is on and you reload the page.
 
 #### sem-solar-card

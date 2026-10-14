@@ -455,3 +455,4 @@ views:
 
           - type: custom:sem-simulation-card
             entity_prefix: sensor.sem_
+            header: false   # the tab header above already shows it
