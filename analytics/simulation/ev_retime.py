@@ -38,7 +38,7 @@ EV_MODES = ("solar_only", "solar_plus_battery", "solar_plus_cheap",
 EV_MODE_CHOICES = (RECORDED,) + EV_MODES
 
 VOLTS = 230.0
-#: Guido's floor: 6 A on three phases
+#: the floor: 6 A on three phases
 DEFAULT_MIN_A = 6.0
 DEFAULT_MAX_A = 16.0
 DEFAULT_PHASES = 3.0
@@ -57,7 +57,7 @@ class ChargerLimits:
 
     @classmethod
     def from_config(cls, cfg: Mapping[str, Any]) -> "ChargerLimits":
-        """The install's first charger; Guido's 6 A × 3 floor when unset."""
+        """The install's first charger; 6 A × 3 phases when unset."""
         ch: Mapping[str, Any] = {}
         for c in cfg.get("ev_chargers") or []:
             if isinstance(c, Mapping):
