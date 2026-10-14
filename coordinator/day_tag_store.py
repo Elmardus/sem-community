@@ -209,11 +209,15 @@ class DayTagger:
     def schedule(self) -> Callable[[], None]:
         """00:15 local, every night: tag yesterday. Returns the unsubscribe."""
         from homeassistant.helpers.event import async_track_time_change
-        from homeassistant.util import dt as dt_util
 
         async def _run(_now) -> None:
+            # (#645) one calendar-day authority: the coordinator's own day
+            # clock, never a second dt_util.now().date() here
+            today = getattr(self.coordinator, "_tracker_date", None)
+            if today is None:
+                return
             try:
-                await self.async_tag_day(dt_util.now().date() - timedelta(days=1))
+                await self.async_tag_day(today - timedelta(days=1))
             except Exception:  # noqa: BLE001 — a tag is never worth an error
                 _LOGGER.debug("day tagging failed", exc_info=True)
 

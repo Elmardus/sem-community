@@ -3274,7 +3274,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # a replay; the day tagger reads this mark
             if (self.config or {}).get(CONF_DAY_TAGS, DEFAULT_DAY_TAGS):
                 try:
-                    self._storage.note_start(dt_util.now().date().isoformat())
+                    # (#645) the coordinator's one day clock
+                    self._storage.note_start(self._tracker_date.isoformat())
                 except Exception:  # noqa: BLE001 — a tag mark never costs a refresh
                     _LOGGER.debug("could not note the start for day tags")
             # Restore energy calculator state
