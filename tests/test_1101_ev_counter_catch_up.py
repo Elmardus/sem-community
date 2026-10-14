@@ -362,6 +362,31 @@ class TestTheReviewFindings:
             _cycle(calc, clock, values)
             assert _rows(calc) == before
 
+    def test_a_dark_read_now_and_then_pauses_the_wait(self):
+        """An MQTT bridge that drops for a cycle every 90 min: the idle count
+        pauses, it does not start over, so the rest is still dropped."""
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night()
+            _charge(calc, clock, values, 20, watts=18_000.0)
+            for minute in range(int(EV_COUNTER_LATE_REPORT_H * 60) + 30):
+                values[LINKS_W] = "unavailable" if minute % 90 == 45 else 0.0
+                _cycle(calc, clock, values)
+            assert LINKS not in calc._ev_counter_unreported
+            before = _rows(calc)
+            # Each dark minute is a minute unseen: room for 0.73 kWh. The
+            # catch-up is far above it.
+            values[LINKS] += CATCH_UP
+            _cycle(calc, clock, values)
+            assert _rows(calc) == before
+
+    def test_counters_switched_off_are_not_held(self):
+        with freeze_time(NIGHT) as clock:
+            values, calc = _night()
+            _idle(calc, clock, values, 2)
+            seen = calc._ev_counter_seen[LINKS]
+            calc._ev_counter_enabled = False
+            assert calc.ev_counter_judged_kwh(LINKS, seen + 5.0) == seen + 5.0
+
     def test_within_the_wait_it_is_booked(self):
         """The same rest, reported an hour after the stop: booked."""
         with freeze_time(NIGHT) as clock:
@@ -382,6 +407,10 @@ class TestTheReviewFindings:
             assert fresh._ev_counter_unreported == pytest.approx(
                 calc._ev_counter_unreported)
             assert fresh._ev_counter_unreported[LINKS] == pytest.approx(0.9)
+            _idle(calc, clock, values, 3)
+            fresh = _calc(values)
+            fresh.restore_state(_store(calc))
+            assert fresh._ev_counter_idle_h[LINKS] == pytest.approx(3 / 60)
 
     def test_a_store_from_before_1049_books_the_first_move(self):
         """No ``seen`` at all: the first read after a restart may still be

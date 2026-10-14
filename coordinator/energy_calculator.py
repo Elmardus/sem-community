@@ -416,8 +416,8 @@ class EnergyCalculator:
         self._ev_counter_foreign: Dict[str, Tuple[float, float]] = {}
         # (#1101) Per counter: kWh SEM saw its box draw that the counter has
         # not shown yet. Unlike ``pending`` it outlives a move — a late
-        # counter can report a session in several steps. Persisted.
-        # ``idle_h``: hours the box has been seen idle in a row (runtime).
+        # counter can report a session in several steps. ``idle_h``: hours
+        # the box has been seen idle since it last charged. Both persisted.
         self._ev_counter_unreported: Dict[str, float] = {}
         self._ev_counter_idle_h: Dict[str, float] = {}
         # (#556) Daily-solar reconciliation against hardware production
@@ -2562,9 +2562,13 @@ class EnergyCalculator:
                 self._ev_counter_room[entity_id] = room
             # Seen idle long enough: a counter that has not shown the rest by
             # now never will — what is left was a power read above the meter.
-            idle_h = (self._ev_counter_idle_h.get(entity_id, 0.0) + interval_hours
-                      if live and not gap and watts <= EV_ACTIVE_CHARGE_FLOOR_W
-                      else 0.0)
+            # A dark read or a skipped cycle pauses the count; only charging
+            # starts it again.
+            idle_h = self._ev_counter_idle_h.get(entity_id, 0.0)
+            if watts > EV_ACTIVE_CHARGE_FLOOR_W:
+                idle_h = 0.0
+            elif live and not gap:
+                idle_h += interval_hours
             self._ev_counter_idle_h[entity_id] = idle_h
             if idle_h >= EV_COUNTER_LATE_REPORT_H:
                 unreported = 0.0
@@ -2611,7 +2615,8 @@ class EnergyCalculator:
         seen it. A rise it has not judged yet (``calculate_energy`` skipped
         this cycle) waits for the next cycle: booked now, a row could not
         take a judged step back out of it."""
-        if value is None or entity_id not in self._ev_counter_owner:
+        if (value is None or not self._ev_counter_enabled
+                or entity_id not in self._ev_counter_owner):
             return value
         seen = self._ev_counter_seen.get(entity_id)
         return seen if seen is not None and value > seen + 0.001 else value
@@ -4147,6 +4152,7 @@ class EnergyCalculator:
                 # the last cycle that kept it: the time SEM is down counts too.
                 "room": dict(self._ev_counter_room),
                 "unreported": dict(self._ev_counter_unreported),
+                "idle_h": dict(self._ev_counter_idle_h),
                 "watched_at": (self._ev_watched_at.isoformat()
                                if self._ev_watched_at else None),
             },
@@ -4282,7 +4288,8 @@ class EnergyCalculator:
                 for attr, key in (("_ev_counter_pending", "pending"),
                                   ("_ev_counter_seen", "seen"),
                                   ("_ev_counter_room", "room"),
-                                  ("_ev_counter_unreported", "unreported")):
+                                  ("_ev_counter_unreported", "unreported"),
+                                  ("_ev_counter_idle_h", "idle_h")):
                     raw = pending.get(key)
                     if isinstance(raw, dict):
                         setattr(self, attr, {
