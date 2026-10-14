@@ -75,6 +75,8 @@ def _cell(ref: str, value) -> str:
     if isinstance(value, (int, float)):
         if value != value or value in (float("inf"), float("-inf")):
             return ""   # NaN / inf have no cell form
+        # plain int/float: an IntEnum's repr is not a number
+        value = int(value) if isinstance(value, int) else float(value)
         return f'<c r="{ref}" t="n"><v>{value!r}</v></c>'
     if isinstance(value, dt.datetime):
         return f'<c r="{ref}" s="{_STYLE_DATETIME}"><v>{_serial(value)!r}</v></c>'
@@ -198,5 +200,6 @@ def write_workbook(sheets: list[tuple[str, list[list]]]) -> bytes:
             info = zipfile.ZipInfo(name, date_time=_ZIP_TIME)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
-            zf.writestr(info, xml.encode("utf-8"))
+            # a lone surrogate in a name cannot be UTF-8: replace, never raise
+            zf.writestr(info, xml.encode("utf-8", "replace"))
     return buf.getvalue()

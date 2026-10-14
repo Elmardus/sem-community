@@ -181,7 +181,10 @@ def ws_session_history_xlsx(hass: HomeAssistant, connection, msg: dict[str, Any]
                            month=msg.get("month"), since=msg.get("since"))
     data = sessions_xlsx(rows)
     connection.send_result(msg["id"], {
-        "filename": f"sem-sessions-{dt_util.now().date().isoformat()}.xlsx",
+        # (review) two chargers must not download the same file name
+        "filename": "sem-sessions-"
+                    + (f"{msg.get('charger_id')}-" if msg.get("charger_id") else "")
+                    + f"{dt_util.now().date().isoformat()}.xlsx",
         "base64": base64.b64encode(data).decode("ascii"),
     })
 

@@ -117,9 +117,12 @@ class SEMEVStatusCard extends SEMLitBase {
             });
             if (res?.base64) {
                 downloadBase64(res.filename || 'sem-sessions.xlsx', res.base64, XLSX_MIME);
+                this._setSessionState(id, { error: null });
             }
-        } catch (_err) {
-            /* nothing to save */
+        } catch (err) {
+            // tell the person, not only the console
+            console.warn('SEM: session download failed', err);
+            this._setSessionState(id, { error: 'download' });
         }
     }
 
@@ -196,7 +199,8 @@ class SEMEVStatusCard extends SEMLitBase {
                         ${rows.length ? html`
                             <span class="metric-value sessions-dl" @click=${() => this._downloadSessionsXlsx(id)}>
                                 <ha-icon icon="mdi:download" style="--mdc-icon-size:14px"></ha-icon>${this._t('sessions_xlsx')}
-                            </span>` : nothing}
+                            </span>
+                            ${st.error === 'download' ? html`<span class="metric-label">${this._t('sessions_download_failed')}</span>` : nothing}` : nothing}
                     </div>`}
             </div>
         `;
