@@ -7,8 +7,8 @@ Every check says what kind it is, because only some may block a merge:
 * ``relative`` — compares the branch with a base tree (develop) over the
   same day: a branch may not ADD a fault the base did not have. Blocks a
   merge when the branch is worse.
-* ``modelled`` — would need the house's answer to a different decision
-  (the counterfactual). Never blocks; none is built yet.
+* ``modelled`` — rests on a model, not on what the house measured
+  (``cost_identity``: the hourly simulation model). Reported, never blocks.
 
 A check that cannot fail is a bug (class: the vacuous pass): every check
 here has a test that makes it fail on a real recorded fault.
@@ -96,12 +96,38 @@ def home_spike_regression(run: DayRun, base: Optional[DayRun]) -> Result:
                   new or mine)
 
 
+#: re-priced hourly vs priced every 10 s: the day may differ by this much
+#: (currency units) before the check says so
+COST_TOLERANCE = 0.01
+
+
+def cost_identity(run: DayRun) -> Result:
+    """(#1083) The Simulation tab's model re-prices the recorded day to its
+    recorded cost: the day's flows added up per hour and priced through
+    ``analytics.simulation.balance`` stay within ``COST_TOLERANCE`` of the
+    same flows priced every 10 s.
+
+    ``modelled``, never blocking: the corpus prices every 10 s, the model
+    prices each hour at its mean. On prices flat inside each hour the two
+    agree; a 15-min price curve under a load that moves inside the hour
+    pulls them apart, and that is the model's known limit
+    (``docs/KNOWN_LIMITATIONS.md``), not a branch's fault."""
+    if run.cost is None:
+        return Result("cost_identity", "modelled", True, "no cost to compare")
+    fine, coarse = run.cost
+    diff = coarse - fine
+    ok = abs(diff) <= COST_TOLERANCE
+    return Result("cost_identity", "modelled", ok,
+                  f"10 s {fine:.3f}, hourly {coarse:.3f}, off by {diff:+.3f}",
+                  [] if ok else [{"fine": round(fine, 4), "hourly": round(coarse, 4)}])
+
+
 def no_writes(run: DayRun) -> Result:
     """Replay never writes: the replayed code made no service call."""
     return Result("no_writes", "exact", run.writes == 0, f"{run.writes} service calls")
 
 
-DEFAULT = ("forecast_overshoot", "home_spike", "no_writes")
+DEFAULT = ("forecast_overshoot", "home_spike", "no_writes", "cost_identity")
 
 
 def check(run: DayRun, base: Optional[DayRun] = None,
@@ -114,6 +140,8 @@ def check(run: DayRun, base: Optional[DayRun] = None,
             out[n] = home_spike_regression(run, base)
         elif n == "no_writes":
             out[n] = no_writes(run)
+        elif n == "cost_identity":
+            out[n] = cost_identity(run)
         else:
             raise ValueError(f"unknown check {n!r}")
     return out

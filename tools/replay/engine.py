@@ -53,6 +53,9 @@ class DayRun:
     #: service calls the replayed code tried to make (must stay 0)
     writes: int = 0
     notes: List[str] = field(default_factory=list)
+    #: (net cost priced every 10 s, the same day re-priced hourly by the
+    #: simulation model); None = no price recorded or no model in the tree
+    cost: Optional[Tuple[float, float]] = None
 
 
 def _daylight(day: RecordedDay) -> Optional[Tuple[float, float]]:
@@ -140,9 +143,24 @@ def replay_forecast(day: RecordedDay, run: DayRun) -> None:
         run.forecast.append((c.t, h, float(raw), float(corrected)))
 
 
+def replay_cost(day: RecordedDay, run: DayRun) -> None:
+    """The day's cost at 10 s and re-priced hourly by the Simulation tab's
+    model (``analytics/simulation``). A tree without that model (older
+    than #1083's tab) is skipped, never failed."""
+    try:
+        from .hourly import day_costs
+    except ImportError:
+        run.notes.append("cost: no simulation model in this tree — skipped")
+        return
+    run.cost = day_costs(day)
+    if run.cost is None:
+        run.notes.append("cost: no import price recorded — skipped")
+
+
 def replay_day(day: RecordedDay, *, home_window: Optional[Tuple[float, float]] = None) -> DayRun:
     """Every replayed path over one day."""
     run = DayRun(date=day.date, tags=list((day.tags or {}).get("tags") or []))
     replay_home(day, run, home_window)
     replay_forecast(day, run)
+    replay_cost(day, run)
     return run

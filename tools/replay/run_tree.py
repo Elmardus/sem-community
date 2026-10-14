@@ -28,6 +28,7 @@ def main(argv) -> int:
             "notes": run.notes,
             "home": [[round(t), round(s, 1)] for t, s, _r, _d in run.home],
             "forecast": [[round(t), round(h, 3), raw, cor] for t, h, raw, cor in run.forecast],
+            "cost": None if run.cost is None else [round(v, 6) for v in run.cost],
         }), flush=True)
         del day, run
         gc.collect()
