@@ -1675,7 +1675,9 @@
     "cfg_behind_operator_relay": "Za relé provozovatele sítě",
     "cfg_help_behind_operator_relay": "Provozovatel toto zařízení vypíná. SEM ho neplánuje, dokud je relé zapnuté.",
     "operator_limit_banner": "Provozovatel sítě: limit {kw} kW od {time} — solár navíc je povolen",
-    "locked_by_grid_operator": "Zablokováno provozovatelem sítě"
+    "locked_by_grid_operator": "Zablokováno provozovatelem sítě",
+    "simulation_tab": "Karta simulace",
+    "config_help_simulation_tab": "Zobrazí kartu simulace. Také označí každý den a jednou načte posledních 90 dní. Ve výchozím stavu vypnuto."
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3353,7 +3355,9 @@
     "cfg_behind_operator_relay": "Bag netselskabets relæ",
     "cfg_help_behind_operator_relay": "Netselskabet slukker denne enhed. SEM planlægger den ikke, mens relæet er til.",
     "operator_limit_banner": "Netselskab: grænse {kw} kW siden {time} — sol oveni er tilladt",
-    "locked_by_grid_operator": "Låst af netselskabet"
+    "locked_by_grid_operator": "Låst af netselskabet",
+    "simulation_tab": "Simuleringsfane",
+    "config_help_simulation_tab": "Viser simuleringsfanen. Mærker også hver dag og læser de sidste 90 dage én gang. Slået fra som standard."
   },
   "de": {
     "% of limit": "% des Limits",
@@ -5031,7 +5035,9 @@
     "cfg_behind_operator_relay": "Hinter dem Relais des Netzbetreibers",
     "cfg_help_behind_operator_relay": "Der Netzbetreiber schaltet dieses Gerät ab. SEM plant es nicht, solange das Relais an ist.",
     "operator_limit_banner": "Netzbetreiber: Limit {kw} kW seit {time} — Solarstrom zusätzlich ist erlaubt",
-    "locked_by_grid_operator": "Vom Netzbetreiber gesperrt"
+    "locked_by_grid_operator": "Vom Netzbetreiber gesperrt",
+    "simulation_tab": "Simulations-Tab",
+    "config_help_simulation_tab": "Zeigt den Simulations-Tab. Markiert dazu jeden Tag und liest einmal die letzten 90 Tage. Standardmäßig aus."
   },
   "en": {
     "% of limit": "% of limit",
@@ -6709,7 +6715,9 @@
     "cfg_behind_operator_relay": "Behind the grid operator's relay",
     "cfg_help_behind_operator_relay": "The operator switches this device off. SEM will not plan it while the relay is on.",
     "operator_limit_banner": "Grid operator: limit {kw} kW since {time} — solar on top is fine",
-    "locked_by_grid_operator": "Locked by the grid operator"
+    "locked_by_grid_operator": "Locked by the grid operator",
+    "simulation_tab": "Simulation tab",
+    "config_help_simulation_tab": "Shows the Simulation tab. It also tags each day and reads the last 90 days once. Off by default."
   },
   "es": {
     "% of limit": "% del límite",
@@ -8387,7 +8395,9 @@
     "cfg_behind_operator_relay": "Detrás del relé de la distribuidora",
     "cfg_help_behind_operator_relay": "La distribuidora apaga este aparato. SEM no lo planifica mientras el relé está activo.",
     "operator_limit_banner": "Distribuidora: límite {kw} kW desde las {time} — la solar adicional está permitida",
-    "locked_by_grid_operator": "Bloqueado por la distribuidora"
+    "locked_by_grid_operator": "Bloqueado por la distribuidora",
+    "simulation_tab": "Pestaña de simulación",
+    "config_help_simulation_tab": "Muestra la pestaña de simulación. También etiqueta cada día y lee una vez los últimos 90 días. Desactivado por defecto."
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -10065,7 +10075,9 @@
     "cfg_behind_operator_relay": "Verkkoyhtiön releen takana",
     "cfg_help_behind_operator_relay": "Verkkoyhtiö katkaisee tämän laitteen. SEM ei suunnittele sitä, kun rele on päällä.",
     "operator_limit_banner": "Verkkoyhtiö: raja {kw} kW klo {time} alkaen — aurinkosähkö päälle on sallittu",
-    "locked_by_grid_operator": "Verkkoyhtiön lukitsema"
+    "locked_by_grid_operator": "Verkkoyhtiön lukitsema",
+    "simulation_tab": "Simulointivälilehti",
+    "config_help_simulation_tab": "Näyttää simulointivälilehden. Merkitsee myös jokaisen päivän ja lukee kerran viimeiset 90 päivää. Oletuksena pois."
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -11743,7 +11755,9 @@
     "cfg_behind_operator_relay": "Derrière le relais du gestionnaire de réseau",
     "cfg_help_behind_operator_relay": "Le gestionnaire coupe cet appareil. SEM ne le planifie pas tant que le relais est actif.",
     "operator_limit_banner": "Gestionnaire de réseau : limite {kw} kW depuis {time} — le solaire en plus reste permis",
-    "locked_by_grid_operator": "Bloqué par le gestionnaire de réseau"
+    "locked_by_grid_operator": "Bloqué par le gestionnaire de réseau",
+    "simulation_tab": "Onglet simulation",
+    "config_help_simulation_tab": "Affiche l'onglet simulation. Il étiquette aussi chaque jour et lit une fois les 90 derniers jours. Désactivé par défaut."
   },
   "hu": {
     "% of limit": "% a határból",
@@ -13421,7 +13435,9 @@
     "cfg_behind_operator_relay": "A hálózati szolgáltató reléje mögött",
     "cfg_help_behind_operator_relay": "A szolgáltató kikapcsolja ezt az eszközt. A SEM nem tervezi be, amíg a relé be van kapcsolva.",
     "operator_limit_banner": "Hálózati szolgáltató: korlát {kw} kW {time} óta — a napenergia ezen felül megengedett",
-    "locked_by_grid_operator": "A hálózati szolgáltató letiltotta"
+    "locked_by_grid_operator": "A hálózati szolgáltató letiltotta",
+    "simulation_tab": "Szimuláció lap",
+    "config_help_simulation_tab": "Megjeleníti a Szimuláció lapot. Minden napot megjelöl, és egyszer beolvassa az utolsó 90 napot. Alapból ki."
   },
   "it": {
     "% of limit": "% del limite",
@@ -15099,7 +15115,9 @@
     "cfg_behind_operator_relay": "Dietro il relè del gestore di rete",
     "cfg_help_behind_operator_relay": "Il gestore spegne questo dispositivo. SEM non lo pianifica finché il relè è attivo.",
     "operator_limit_banner": "Gestore di rete: limite {kw} kW dalle {time} — il solare in più è consentito",
-    "locked_by_grid_operator": "Bloccato dal gestore di rete"
+    "locked_by_grid_operator": "Bloccato dal gestore di rete",
+    "simulation_tab": "Scheda simulazione",
+    "config_help_simulation_tab": "Mostra la scheda simulazione. Etichetta anche ogni giorno e legge una volta gli ultimi 90 giorni. Disattivato per impostazione predefinita."
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -16777,7 +16795,9 @@
     "cfg_behind_operator_relay": "Achter het relais van de netbeheerder",
     "cfg_help_behind_operator_relay": "De netbeheerder schakelt dit apparaat uit. SEM plant het niet zolang het relais aan is.",
     "operator_limit_banner": "Netbeheerder: limiet {kw} kW sinds {time} — zon erbovenop mag",
-    "locked_by_grid_operator": "Geblokkeerd door de netbeheerder"
+    "locked_by_grid_operator": "Geblokkeerd door de netbeheerder",
+    "simulation_tab": "Simulatietabblad",
+    "config_help_simulation_tab": "Toont het simulatietabblad. Labelt ook elke dag en leest één keer de laatste 90 dagen. Standaard uit."
   },
   "no": {
     "% of limit": "% av grense",
@@ -18455,7 +18475,9 @@
     "cfg_behind_operator_relay": "Bak nettselskapets relé",
     "cfg_help_behind_operator_relay": "Nettselskapet slår av denne enheten. SEM planlegger den ikke mens reléet er på.",
     "operator_limit_banner": "Nettselskap: grense {kw} kW siden {time} — sol i tillegg er tillatt",
-    "locked_by_grid_operator": "Låst av nettselskapet"
+    "locked_by_grid_operator": "Låst av nettselskapet",
+    "simulation_tab": "Simuleringsfane",
+    "config_help_simulation_tab": "Viser simuleringsfanen. Merker også hver dag og leser de siste 90 dagene én gang. Av som standard."
   },
   "pl": {
     "% of limit": "% limitu",
@@ -20133,7 +20155,9 @@
     "cfg_behind_operator_relay": "Za przekaźnikiem operatora sieci",
     "cfg_help_behind_operator_relay": "Operator wyłącza to urządzenie. SEM nie planuje go, gdy przekaźnik jest włączony.",
     "operator_limit_banner": "Operator sieci: limit {kw} kW od {time} — słońce ponad to jest dozwolone",
-    "locked_by_grid_operator": "Zablokowane przez operatora sieci"
+    "locked_by_grid_operator": "Zablokowane przez operatora sieci",
+    "simulation_tab": "Karta symulacji",
+    "config_help_simulation_tab": "Pokazuje kartę symulacji. Oznacza też każdy dzień i raz wczytuje ostatnie 90 dni. Domyślnie wyłączone."
   },
   "pt": {
     "% of limit": "% do limite",
@@ -21811,7 +21835,9 @@
     "cfg_behind_operator_relay": "Atrás do relé do operador da rede",
     "cfg_help_behind_operator_relay": "O operador desliga este aparelho. O SEM não o planeia enquanto o relé estiver ativo.",
     "operator_limit_banner": "Operador da rede: limite {kw} kW desde {time} — solar adicional é permitido",
-    "locked_by_grid_operator": "Bloqueado pelo operador da rede"
+    "locked_by_grid_operator": "Bloqueado pelo operador da rede",
+    "simulation_tab": "Separador de simulação",
+    "config_help_simulation_tab": "Mostra o separador de simulação. Também marca cada dia e lê uma vez os últimos 90 dias. Desligado por padrão."
   },
   "ro": {
     "% of limit": "% din limită",
@@ -23489,7 +23515,9 @@
     "cfg_behind_operator_relay": "În spatele releului operatorului de rețea",
     "cfg_help_behind_operator_relay": "Operatorul oprește acest aparat. SEM nu îl planifică cât timp releul este pornit.",
     "operator_limit_banner": "Operator de rețea: limită {kw} kW din {time} — solarul în plus este permis",
-    "locked_by_grid_operator": "Blocat de operatorul de rețea"
+    "locked_by_grid_operator": "Blocat de operatorul de rețea",
+    "simulation_tab": "Fila simulare",
+    "config_help_simulation_tab": "Afișează fila de simulare. Marchează și fiecare zi și citește o dată ultimele 90 de zile. Oprit implicit."
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -25167,7 +25195,9 @@
     "cfg_behind_operator_relay": "Bakom nätbolagets relä",
     "cfg_help_behind_operator_relay": "Nätbolaget stänger av denna enhet. SEM planerar den inte medan reläet är på.",
     "operator_limit_banner": "Nätbolag: gräns {kw} kW sedan {time} — sol utöver är tillåten",
-    "locked_by_grid_operator": "Låst av nätbolaget"
+    "locked_by_grid_operator": "Låst av nätbolaget",
+    "simulation_tab": "Simuleringsflik",
+    "config_help_simulation_tab": "Visar simuleringsfliken. Märker också varje dag och läser de senaste 90 dagarna en gång. Av som standard."
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -26845,6 +26875,8 @@
     "cfg_behind_operator_relay": "在电网运营商继电器之后",
     "cfg_help_behind_operator_relay": "运营商会关闭此设备。继电器开启时 SEM 不会安排它。",
     "operator_limit_banner": "电网运营商：自 {time} 起限值 {kw} kW — 额外的太阳能不受限制",
-    "locked_by_grid_operator": "被电网运营商锁定"
+    "locked_by_grid_operator": "被电网运营商锁定",
+    "simulation_tab": "模拟标签页",
+    "config_help_simulation_tab": "显示模拟标签页。同时为每天打标签，并一次性读取最近 90 天。默认关闭。"
   }
 }
