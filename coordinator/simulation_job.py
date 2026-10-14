@@ -26,7 +26,7 @@ from ..analytics.simulation.battery_sim import (
     SimParams,
     simulate_day,
 )
-from ..analytics.simulation.hourly_day import HourlyDay
+from ..analytics.simulation.hourly_day import CORE_ROLES, HourlyDay
 from ..analytics.simulation.summary import summarise
 from .day_tag_store import BACKFILL_DAYS, BACKFILL_ROLES
 
@@ -83,6 +83,8 @@ class SimulationJob:
         self._task: Optional[asyncio.Task] = None
         self._run: Optional[Dict[str, Any]] = None
         self.progress: Dict[str, Any] = _blank_progress()
+        #: a run record is in the store's memory but not on disk yet
+        self._unsaved = False
 
     # ── what the form shows ───────────────────────────────────────────
 
@@ -108,8 +110,8 @@ class SimulationJob:
             "capacity_kwh": p.capacity_kwh,
             "reserve_pct": p.reserve_pct,
             "peak_limit_kw": p.peak_limit_kw,
-            "import_rate": float(cfg.get("electricity_import_rate")
-                                 or DEFAULT_IMPORT_RATE),
+            "import_rate": float(cfg.get("electricity_import_rate",
+                                         DEFAULT_IMPORT_RATE)),
             "export_rate": float(export if export is not None
                                  else DEFAULT_EXPORT_RATE),
             "currency": self._currency(),
@@ -247,8 +249,9 @@ class SimulationJob:
                        cfg, ids: Dict[str, str], tz) -> Optional[str]:
         """Simulate one day into ``run``; a reason when it was skipped."""
         from homeassistant.util import dt as dt_util
-        if "solar" not in ids:
-            return "SEM's solar sensor is not in the entity registry"
+        absent = [r for r in CORE_ROLES if r not in ids]
+        if absent:
+            return ("not in the entity registry: " + ", ".join(absent))
         day = _date.fromisoformat(d)
         start = dt_util.start_of_local_day(day)
         end = dt_util.start_of_local_day(day + timedelta(days=1))
@@ -257,8 +260,9 @@ class SimulationJob:
         if stats is None:
             return "the recorder could not answer"
         rows = {role: stats.get(eid) or [] for role, eid in ids.items()}
-        if not rows.get("solar"):
-            return "no hourly statistics for this day"
+        empty = [r for r in CORE_ROLES if not rows.get(r)]
+        if empty:
+            return "no hourly statistics for this day: " + ", ".join(empty)
         hourly = HourlyDay.from_statistics(rows, date=d, tags=tags, tz=tz)
         del rows, stats
         result = simulate_day(hourly, params, cfg)
@@ -272,8 +276,15 @@ class SimulationJob:
         A second call for the same run does nothing."""
         if run is None or run.get("status") != "running":
             return
-        from homeassistant.util import dt as dt_util
         run["status"] = status
+        try:
+            self._store(run, status)
+        finally:
+            run["results"] = []
+            progress.update({"running": False, "status": status})
+
+    def _store(self, run, status: str) -> None:
+        from homeassistant.util import dt as dt_util
         run["finished_at"] = dt_util.now().isoformat()
         record = {
             "run_id": run["run_id"], "started_at": run["started_at"],
@@ -282,11 +293,10 @@ class SimulationJob:
             "params": run["params"],
             "result": self._result(run),
         }
-        run["results"] = []
-        progress.update({"running": False, "status": status})
         storage = self.storage
         if storage is not None:
             storage.put_simulation_run(record)
+            self._unsaved = True
 
     def _result(self, run) -> Dict[str, Any]:
         results = run["results"]
@@ -329,10 +339,18 @@ class SimulationJob:
         storage = self.storage
         if storage is None:
             return
+        self._unsaved = False
         try:
             await storage.async_save_daily()
         except Exception:  # noqa: BLE001 — the next save carries it
+            self._unsaved = True
             _LOGGER.debug("simulation run saved later")
+
+    async def async_flush(self) -> None:
+        """Write a stored run that is not on disk yet (unload awaits this:
+        the daily store is otherwise saved only when HA stops)."""
+        if self._unsaved:
+            await self._save()
 
     def cancel(self, persist: bool = True) -> bool:
         """Stop a running run now. What ran is kept, flagged ``cancelled``.
@@ -340,9 +358,9 @@ class SimulationJob:
         task = self._task
         if not self.running:
             return False
-        self._finish(self._run, self.progress, "cancelled")
         if task is not None and not task.done():
             task.cancel()
+        self._finish(self._run, self.progress, "cancelled")
         if persist and self.storage is not None:
             try:
                 self.hass.async_create_task(self._save())

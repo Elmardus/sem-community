@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant, callback
 from .analytics.simulation.battery_sim import SimParams
 from .analytics.simulation.summary import SUMMARY_TAGS
 from .const import DOMAIN
+from .consts.bounds import BOUNDS
 from .coordinator.simulation_job import SimulationError
 from .utils.xlsx import write_workbook
 
@@ -31,8 +32,16 @@ WS_XLSX = f"{WS_PREFIX}/xlsx"
 ERR_BUSY = "busy"
 ERR_INVALID = "invalid"
 
-_NUMBER = vol.Any(int, float)
-_RATE = vol.Any("recorded", int, float)
+def _number(value):
+    """A JSON number; a boolean is not one (True would be 1 kWh)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise vol.Invalid("expected a number")
+    return value
+
+
+_NUMBER = _number
+_RATE = vol.Any("recorded", _number)
+_CAP = BOUNDS["battery_capacity_kwh"]
 EST = " (est.)"
 
 
@@ -54,19 +63,21 @@ def _params(job, raw: dict) -> SimParams:
     cap = float(raw["capacity_kwh"])
     reserve = float(raw["reserve_pct"])
     peak = raw.get("peak_limit_kw")
-    peak = float(peak) if peak not in (None, 0) else None
-    if not 0 < cap <= 1000:
-        raise SimulationError(ERR_INVALID, "capacity must be above 0 kWh")
-    if not 0 <= reserve < 100:
-        raise SimulationError(ERR_INVALID, "reserve must be 0–99 %")
-    if peak is not None and peak <= 0:
-        raise SimulationError(ERR_INVALID, "peak limit must be above 0 kW")
+    peak = float(peak) if peak is not None else None
+    if not _CAP.min <= cap <= _CAP.max:
+        raise SimulationError(
+            ERR_INVALID, f"capacity must be {_CAP.min:g}–{_CAP.max:g} kWh")
+    if not 0 <= reserve <= 100:
+        raise SimulationError(ERR_INVALID, "reserve must be 0–100 %")
+    if peak is not None and peak < 0:
+        raise SimulationError(ERR_INVALID, "peak limit must be 0 kW or more")
     rates = {}
     for key in ("import_rate", "export_rate"):
         val = raw.get(key, "recorded")
         rates[key] = val if val == "recorded" else float(val)
-    return SimParams.from_config(job.install_config, capacity_kwh=cap, reserve_pct=reserve,
-                                 peak_limit_kw=peak, **rates)
+    return SimParams.from_config(job.install_config, capacity_kwh=cap,
+                                 reserve_pct=reserve,
+                                 peak_limit_kw=peak or None, **rates)
 
 
 @websocket_api.websocket_command({
