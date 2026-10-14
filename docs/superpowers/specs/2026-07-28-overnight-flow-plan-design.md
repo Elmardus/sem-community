@@ -1,6 +1,6 @@
 # The Night Ledger — overnight flow plan, the simple version (#638)
 
-**Principle (Guido, 2026-07-28): we have all the info — make it simple to work.**
+**Principle (2026-07-28): we have all the info — make it simple to work.**
 Every input already exists in SEM. The only gap: the four night planners
 (EV tariff, battery scheduler, cheap-hours loads, Tier-2 loads) each consult a
 private model. v1 adds ONE shared structure and NOTHING else.
@@ -65,9 +65,9 @@ discipline, generalized).
 Existing assets kept: `overnight_planner.py` (the packer core + 17-scenario
 corpus) — the ledger replaces its flat `cap_w`/side-budget inputs.
 
-## Tariff robustness (Guido's stress test, 2026-07-29)
+## Tariff robustness (stress test, 2026-07-29)
 
-The ledger must survive every tariff shape SEM supports — Guido's static
+The ledger must survive every tariff shape SEM supports — PROD's static
 HT/NT, Rien's day-ahead dynamic (hourly, and 15-min as NL/EU markets
 switch), the #686 fixed-hours tiered ToU, and flat. Three clauses:
 
@@ -92,7 +92,7 @@ switch), the #686 fixed-hours tiered ToU, and flat. Three clauses:
    (EV floors and battery pre-charge pack by PRICE and are unaffected —
    their execution paths are price-driven, not level-driven.)
 
-## The battery discharge limit is a shared per-slot bottleneck (Guido, 2026-07-29)
+## The battery discharge limit is a shared per-slot bottleneck (decision 2026-07-29)
 
 The *Battery total discharge limit* (`battery_max_discharge_power`, the same
 knob as the config card's Discharge-protection slider) enters the ledger

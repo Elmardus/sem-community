@@ -207,7 +207,7 @@ class TestRemainingNeedCeiling:
 
     def test_auto_resume_when_late_reading_lands_below_target(self):
         """Estimate stopped the charge; the sensor then reports 58 → need
-        goes positive again (the auto-resume Guido chose, no dead band)."""
+        goes positive again (the auto-resume chosen, no dead band)."""
         det = _detector()
         det.get_virtual_soc(55.0)
         _feed_energy(det, 4.7)  # estimate reached 60, charge stopped

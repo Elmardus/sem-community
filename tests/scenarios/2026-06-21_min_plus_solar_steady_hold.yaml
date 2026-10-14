@@ -6,7 +6,7 @@ coverage:
     issue: "EV current flicker / charger reverting mid-charge"
 
 description: |
-  Recorded from Guido's PROD on 2026-06-21: a KEBA charging in
+  Recorded from PROD on 2026-06-21: a KEBA charging in
   min_plus_solar with the surplus sitting near the 9 A floor. The user
   saw the car drop to ~120 W about once a minute and the offered current
   bounce 6↔9 A.

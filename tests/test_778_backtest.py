@@ -1,6 +1,6 @@
 """#778 — replay history through the budget and count how often it was wrong.
 
-Guido's point, and the real prize of the backfill: an install with months of
+The point, and the real prize of the backfill: an install with months of
 history does not just have enough evidence to START the budget, it has enough
 to CHECK it. Every past night is a scenario with a known answer — the pack was
 at some SOC at dusk, the house drew some amount overnight, the sun delivered

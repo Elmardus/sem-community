@@ -9,7 +9,7 @@ specifically to execute this assembly. Its fixture never populated
 the suite.
 
 The defect: ``refill_estimate``'s docstring is explicit that the refill must
-be counted AFTER tomorrow's claims, and Guido pinned it before the arc was
+be counted AFTER tomorrow's claims, and it was pinned before the arc was
 built — *"will it refill" is not a scalar forecast question: the morning
 solar is also claimed by tomorrow's packed EV blocks and loads.* The
 coordinator already computes exactly that in ``_compose_tomorrow_preview``,

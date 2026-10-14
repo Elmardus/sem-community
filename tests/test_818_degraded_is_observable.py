@@ -1,6 +1,6 @@
 """#818's resilience must be VISIBLE, not merely effective.
 
-Guido, 30.08, on a PROD feed that logged 28 unavailable episodes in half an
+30.08, on a PROD feed that logged 28 unavailable episodes in half an
 hour: *"it is a known hassle … I want SEM to be able to get along with
 conditions like this."* It does — caught live mid-dropout, the reason string
 read `inputs degraded (sensor unavailable) — holding 12A` and the car

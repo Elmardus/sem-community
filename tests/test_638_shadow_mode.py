@@ -156,7 +156,7 @@ def _fake_self(devices=()):
     # publishes whether arbitrage can act at all, and the double must not
     # answer that differently from production. The fake carries no scheduler
     # config and no per-battery modes, so it reads SHUT — which is the
-    # shipped default (#533) and the state of Guido's PROD.
+    # shipped default (#533) and the state of PROD.
     fake._arbitrage_enabled = (
         lambda n=0: SEMCoordinator._arbitrage_enabled(fake, n))
     return fake
@@ -1255,7 +1255,7 @@ class TestDisconnectedCarIsNotADemand:
 
 
 class TestReplanCauseIsOnThePayload:
-    """Night-3 finding 3: Guido shrinking the ASK to 0.5 kWh at 00:11
+    """Night-3 finding 3: shrinking the ASK to 0.5 kWh at 00:11
     re-stamped the night with no trace of why — a re-planned night must be
     distinguishable from the first answer."""
 
@@ -1347,7 +1347,7 @@ class TestTomorrowPreviewComposer:
         assert SEMCoordinator._compose_tomorrow_preview(fake) is None
 
     def test_past_midnight_previews_the_COMING_day_not_the_day_after(self, monkeypatch):
-        """(Guido, 00:07 on 08-09) At 00:07 the coming energy day stamps
+        """(00:07 on 08-09) At 00:07 the coming energy day stamps
         at 06:07 TODAY — but 'now + 1 day' anchored the preview to
         TOMORROW's daylight: the axis spanned ~36 h (ticks reading
         07:00·15:00·23:00·07:00·15:00) with every window in the second
@@ -1374,7 +1374,7 @@ class TestTomorrowPreviewComposer:
         assert p["prices"] == "final"
 
     def test_tomorrows_known_asks_ride_the_preview(self):
-        """(Guido, 08-08: 'forecast and home consumption is something we
+        """(08-08: 'forecast and home consumption is something we
         already know') — the preview's real content is what tomorrow will
         ASK: each load's daily min-runtime × its calibrated draw, and each
         charger's daily target. Knowable today because the day counters
@@ -1393,7 +1393,7 @@ class TestTomorrowPreviewComposer:
         assert any(a["kind"] == "ev" for a in p["known_asks"])
 
     def test_a_peak_only_meter_channel_asks_nothing(self):
-        """(Guido, 09.08, PROD screenshot: 'Pro4PM consumption for sure is
+        """(09.08, PROD screenshot: 'Pro4PM consumption for sure is
         not correct') — three peak_only distribution-board metering
         channels showed 10 kWh asks in the Tomorrow view. The preview
         must mirror the demand builder's intent gate (finding #1, PROD
@@ -1418,7 +1418,7 @@ class TestTomorrowPreviewComposer:
         assert "Pump" in labels  # the SURPLUS-mode sibling still asks
 
     def test_the_provisional_pack_places_tomorrows_asks(self):
-        """(Guido: 'predict the battery level and when the devices get
+        """('predict the battery level and when the devices get
         surplus — pull it together') — the asks pack into tomorrow's own
         books, seeded with the battery level TODAY'S plan predicts for
         the morning. Provisional and labeled so."""
@@ -1437,7 +1437,7 @@ class TestTomorrowPreviewComposer:
         assert len(curve) <= 6, "compressed for the recorder budget"
 
     def test_an_idle_today_seeds_from_the_live_soc(self):
-        """(Guido on PROD, 08-08: 'where is the home battery?') An idle
+        """(PROD, 08-08: 'where is the home battery?') An idle
         today-plan has NO slots, so the stash offers no morning seed —
         but the live SOC is not an invented number; the provisional
         seeds from it instead of vanishing."""

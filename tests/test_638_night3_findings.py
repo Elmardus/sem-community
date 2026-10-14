@@ -14,7 +14,7 @@
    decided against the stale plan — a 10 s ``active`` blip in observer
    mode; against real hardware, an enable command taken straight back.
 
-3. **A re-plan says why.** Guido shrinking the ASK to 0.5 kWh at 00:11
+3. **A re-plan says why.** Shrinking the ASK to 0.5 kWh at 00:11
    silently became "the" night — the payload now carries ``replan_cause``
    so a re-stamped night is distinguishable from the first answer.
 """
@@ -239,8 +239,8 @@ class TestTheStampPrecedesTheDecisions:
 
 
 class TestThePlanSurvivesTheReboot:
-    """(Guido, 00:20 on 08-09: 'why would a reboot destroy the planning
-    — it has to survive') — his own Aug-5 note made acute: a mid-night
+    """(00:20 on 08-09: 'why would a reboot destroy the planning
+    — it has to survive') — the Aug-5 note made acute: a mid-night
     reboot discarded a stamped plan the actuation was steering by. The
     stash, the period key and the demand signature persist through the
     energy store (the W/A precedent) and restore at boot — same period
@@ -292,8 +292,8 @@ class TestThePlanSurvivesTheReboot:
             "no silent reshuffle")
 
     def test_a_manual_replan_restamps_with_its_own_cause(self, monkeypatch):
-        """(Guido, 00:30: 'for testing purposes... a button — or an
-        action') — the explicit re-plan lever from his Aug-5 note:
+        """(00:30: 'for testing purposes... a button — or an
+        action') — the explicit re-plan lever from the Aug-5 note:
         restart-as-replan was the TEST lever, and now that the plan
         survives reboots, the service is the honest replacement. Same
         period, same ask — the flag alone re-stamps, cause 'manual'."""

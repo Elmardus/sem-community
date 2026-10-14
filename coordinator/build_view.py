@@ -36,7 +36,7 @@ def _battery_may_assist_ev(config, charger_cfg=None) -> bool:
       UNSET resolves to True: the battery already assists the car when the
       #537 surplus gate passes, and defaulting it off would silently remove
       a working feature.
-    * **per charger** (#885) — may it be spent on *this* one? Guido, 31.08:
+    * **per charger** (#885) — may it be spent on *this* one? Rule, 31.08:
       *"on every individual device there is a setting whether it will charge
       with battery or not, and the same on the charger — therefore not every
       charger has to be activated."* Loads have had a per-device opt-in since

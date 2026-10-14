@@ -31,7 +31,7 @@ Cluster 6 of the 30.09.2026 clustering (see
 removes entities on real installs and must be proven against PROD's
 entity list before it ships.
 
-## Decisions for Guido (the plan assumes the first option)
+## Open decisions (the plan assumes the first option)
 
 1. **Remove or disable.** Not create the entity (like #923), or create it
    disabled in the entity registry (a user can re-enable). Not creating
@@ -72,7 +72,7 @@ ALWAYS_USEFUL with a one-line reason, so the table is complete.
       limit entity, no forecast, battery read-only, no peak limit.
 - [ ] Headless Playwright: screenshots of the Configuration and Control
       views before. List every row that will go, per capability.
-- [ ] Send Guido the two PNGs and the list. Build only after his OK.
+- [ ] Send the two PNGs and the list for review. Build only after an OK.
 
 ### Task 2: the table is complete by construction
 
@@ -147,8 +147,8 @@ test `tests/test_996_options_change.py`.
 2. .175 (branch testing, observer ON): `SRC=/home/sem/sem-996 ~/bin/sem-deploy-175.sh`,
    entity count before/after, then `~/bin/sem-sim-compress.sh 10.10.20.175 18.0 30`
    to show nothing breaks across a simulated day.
-3. PROD only on Guido's "go": `scripts/audit_control_needs.py` on the
+3. PROD only on a "go": `scripts/audit_control_needs.py` on the
    PROD options first — the dropped list must be empty or approved line
    by line. Then deploy, compare the entity list.
 4. #996 has an external reporter? No — ours. Close with proof when PROD
-   shows it. Merge with `SEM_FEAT_OK` on Guido's word.
+   shows it. Merge with `SEM_FEAT_OK` on approval.

@@ -1,6 +1,6 @@
 """#679 — the #634 "floor 0 = never grids at night" default must be reachable.
 
-#634 settled the axis with Guido: the mode is the *daytime* axis, the "At least"
+#634 settled the axis: the mode is the *daytime* axis, the "At least"
 floor is the overnight guarantee, and it applies in every mode including
 ``solar_only``. The safety half of that deal is that an unset floor means 0,
 which is how the #346 contract ("solar_only never grids at night") survives as

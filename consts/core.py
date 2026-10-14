@@ -116,7 +116,7 @@ SOLAR_ZERO_REFUTED_W: Final = 200.0
 # Huawei modbus blinks ~137x/day (p50 29 s, p99 114 s; 238 s the longest
 # seen 03.09) — since #818/#875 every blink blanked the dashboard. The
 # coordinator's own honesty (inputs_degraded, *_unavailable) is untouched;
-# this is the SURFACE holding, and saying so. (Guido, 03.09: "it was very
+# this is the SURFACE holding, and saying so. (03.09: "it was very
 # stable before.")
 SENSOR_DARK_READ_GRACE_S: Final = 180
 

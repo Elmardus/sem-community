@@ -211,7 +211,7 @@ class HuaweiChargeAdapter(BatteryChargeAdapter):
         branch is the only branch, and ``start_forced_charge`` above answers
         the same permanent gap with FAILED. That is this very class on the
         paired command, and closing it would switch grid charging ON for
-        every Huawei install at once, so it is Guido's call, not a sweep.
+        every Huawei install at once, so it needs a decision, not a sweep.
         """
         device_id = self.config.get("inverter_device_id", "")
         if not device_id:

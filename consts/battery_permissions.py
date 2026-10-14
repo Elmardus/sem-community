@@ -1,6 +1,6 @@
 """#778 — what a battery is *allowed* to do, separately from its posture.
 
-Guido, 23.08.2026, on adding a second sink for the forecast budget: the
+Decision 23.08.2026, on adding a second sink for the forecast budget: the
 existing mode enum cannot express it. Look at what it mixes:
 
     auto             -> posture

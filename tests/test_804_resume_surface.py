@@ -50,7 +50,7 @@ def _adapter(start_stop="button.zaptec_resume_charging"):
 
 class TestButtonsAreAnEnableSurface:
     def test_ensure_enabled_presses_the_named_button(self):
-        a = _adapter("button.guido_coppes_lader_hervat_laden")
+        a = _adapter("button.jan_jansen_lader_hervat_laden")
         asyncio.run(a.ensure_enabled())
         call = a._device.hass.services.async_call.await_args
         assert call is not None, (
@@ -59,7 +59,7 @@ class TestButtonsAreAnEnableSurface:
         )
         assert call.args[0] == "button" and call.args[1] == "press"
         assert call.args[2] == {
-            "entity_id": "button.guido_coppes_lader_hervat_laden"}
+            "entity_id": "button.jan_jansen_lader_hervat_laden"}
 
     def test_no_string_mangling_ever(self):
         """The old devices/base path rewrote resume→stop in the entity id.
@@ -172,16 +172,16 @@ class TestZaptecThresholdSuggestion:
                                    unique_id=uid, original_device_class=dc,
                                    disabled_by=None)
         return [
-            e("binary_sensor.guido_coppes_lader_kabel_aangesloten", "zaptec",
+            e("binary_sensor.jan_jansen_lader_kabel_aangesloten", "zaptec",
               "charger-1", "chg1_cable_connected", "plug"),
-            e("binary_sensor.guido_coppes_lader_bezig_met_laden", "zaptec",
+            e("binary_sensor.jan_jansen_lader_bezig_met_laden", "zaptec",
               "charger-1", "chg1_charging"),
-            e("sensor.guido_coppes_lader_laadvermogen", "zaptec",
+            e("sensor.jan_jansen_lader_laadvermogen", "zaptec",
               "charger-1", "chg1_charge_power", "power"),
-            e("number.guido_coppes_lader_maximale_laadstroom", "zaptec",
+            e("number.jan_jansen_lader_maximale_laadstroom", "zaptec",
               "charger-1", "chg1_charger_max_current", "current"),
             # the INSTALLATION device
-            e("number.guido_coppes_terugschakelen_van_drie_naar_een_fase",
+            e("number.jan_jansen_terugschakelen_van_drie_naar_een_fase",
               "zaptec", "install-1",
               "inst1_three_to_one_phase_switch_current", "current"),
         ]
@@ -193,7 +193,7 @@ class TestZaptecThresholdSuggestion:
         sug = found[0].get("_suggested_phase_switch")
         assert sug, "the threshold entity was not suggested (#804 B4c)"
         assert sug["entity"] == \
-            "number.guido_coppes_terugschakelen_van_drie_naar_een_fase"
+            "number.jan_jansen_terugschakelen_van_drie_naar_een_fase"
         assert sug["value_1p"] == "32" and sug["value_3p"] == "0"
 
     def test_it_is_never_auto_configured(self):

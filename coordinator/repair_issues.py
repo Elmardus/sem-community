@@ -714,7 +714,7 @@ def raise_battery_night_backfill_blocked(
 
     A person who presses "Rebuild from history" is asking a direct question
     and deserves a direct answer that OUTLIVES the moment. A notification is
-    dismissed and gone; the missing sensor is not. Guido, 31.08: *"if a user
+    dismissed and gone; the missing sensor is not. Rule, 31.08: *"if a user
     presses the button and not all requirements are met it should create a
     repair"* — so the refusal goes where unfinished setup lives, with a docs
     anchor that says which sensor and why.

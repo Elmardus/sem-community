@@ -1,7 +1,7 @@
 """#848 — detection asks Home Assistant what is INSTALLED before it
 matches anything.
 
-Guido, 27.08: "Do we read out all HACS integrations or HA integrations?"
+27.08: "Do we read out all HACS integrations or HA integrations?"
 The honest answer was NEITHER — the glob matrix ran blind against entity
 ids. The census inverts that: every installed integration (core and HACS
 alike — both are just domains) is enumerated, classified against what SEM

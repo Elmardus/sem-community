@@ -979,7 +979,7 @@ class ControllableDevice(ABC):
         ``hass.services.async_call``; ``tests/test_855_one_seam.py`` pins
         that.
 
-        Guido, 29.08.2026, on what the arc is for:
+        Rule, 29.08.2026, on what the arc is for:
 
             "the 2nd layer has one communication string to the 3rd layer
              for ev charger ... and the observation should not be a matter
@@ -3214,7 +3214,7 @@ class CurrentControlDevice(ControllableDevice):
         """Arm a NON-TRIPPING managed failsafe (#546 — managed-neutralize).
 
         Background: SEM's old failsafe (30 s, persist=0) left the box reverting
-        to its built-in 6 A floor mid-charge → the 6↔9 A flap (Guido PROD
+        to its built-in 6 A floor mid-charge → the 6↔9 A flap (PROD
         2026-06-24). evcc avoids this by DISABLING the KEBA failsafe — but live
         testing on a real P30 showed the failsafe can't be disabled over UDP
         (``timeout=0`` is accepted but the box keeps it on; likely a safety
@@ -3563,8 +3563,8 @@ class CurrentControlDevice(ControllableDevice):
         auto-charge this exists to prevent. A gone car gets a plain disable
         (contactor open) plus the dead-man's-off failsafe, held until SEM
         next decides to charge (which re-enables via ``start_session``).
-        Guido's pre-SEM automation did exactly this — ``keba.disable`` after
-        every charge — which is why a plug-in never auto-started for him.
+        The pre-SEM automation on PROD did exactly this — ``keba.disable`` after
+        every charge — which is why a plug-in never auto-started there.
         """
         domain = (self.charger_service or "").split(".", 1)[0]
         _parked_it = False
@@ -3877,7 +3877,7 @@ class CurrentControlDevice(ControllableDevice):
                 # quota is already met/stale. No target sensor → rewrite,
                 # exactly today's behaviour: an unverifiable box gets the
                 # safe default.
-                # (#853/#854, Guido 28.08) A STOP MUST NEVER ENABLE.
+                # (#853/#854, rule 28.08) A STOP MUST NEVER ENABLE.
                 #
                 # The quota-hold did exactly that: set_current(min) +
                 # set_energy(quota) + ENABLE, so the box would charge to a
@@ -3901,7 +3901,7 @@ class CurrentControlDevice(ControllableDevice):
                 # rogue session while SEM is DOWN (#553) — and it writes a
                 # target without ever enabling, which is the whole point.
                 if self.hass.services.has_service(domain, "disable"):
-                    # (#854) THE STOP IS ONE CALL. Guido's automation, which
+                    # (#854) THE STOP IS ONE CALL. PROD's own automation, which
                     # has run this exact box for two years:
                     #
                     #     alias: Keba Disable
@@ -3942,7 +3942,7 @@ class CurrentControlDevice(ControllableDevice):
                     )
 
             # (#854) A KEBA disable IS the stop — send nothing after it.
-            # Guido's automation is one call and has run this hardware for
+            # PROD's own automation is one call and has run this hardware for
             # two years; every extra command SEM sent around it cost energy
             # or started a fight with itself. The 0 A write and the dead-man
             # arm stay for the other brands, where a current write IS the

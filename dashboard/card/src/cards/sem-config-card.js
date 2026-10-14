@@ -28,7 +28,7 @@ import { chargerAddPlan, detectRowLabelKey, isPowerEntity } from '../util/detect
 // Control card's design language.
 // (#830) What a new install is shown before it asks for more.
 //
-// Guido: "if a user is starting with SEM he is overwhelmed with so many
+// Rule: "if a user is starting with SEM he is overwhelmed with so many
 // options and stops using it — it is just too much." The Config tab renders
 // about ninety controls; making SEM work needs about eight.
 //
@@ -2317,7 +2317,7 @@ class SEMConfigCard extends SEMLitBase {
     _helpBlock(helpKey, def, unit, sid, kind) {
         if (!this._helpVisible(helpKey)) return nothing;
         const hasDef = def !== undefined && def !== null && def !== '';
-        // #605 follow-up (Guido): reset-to-default STAGES the factory value
+        // #605 follow-up: reset-to-default STAGES the factory value
         // through the same Apply pipeline — previewable, revertable, and
         // committed only on the section Apply like any other edit.
         const canReset = hasDef && sid && kind;
@@ -3835,8 +3835,8 @@ class SEMConfigCard extends SEMLitBase {
             </style>
             <ha-card>
                 <div class="wrap">
-                    ${/* #606 — the bare (?) icon was not self-explanatory
-                        (Guido): the global help toggle carries a visible
+                    ${/* #606 — the bare (?) icon was not self-explanatory:
+                        the global help toggle carries a visible
                         label now. */ ''}
                     <div class="card-help-bar">
                         <span class="help-toggle-labeled ${this._showHelp ? 'on' : ''}"

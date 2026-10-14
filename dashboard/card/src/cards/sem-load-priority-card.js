@@ -1113,7 +1113,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
     // word in front of the two axes #780 split apart, so a row could read
     // ✓ while SEM was not allowed to touch it (mode Off). Say both plainly:
     // capability (is there a handle at all?) and permission (may SEM act
-    // right now?). Mockup approved by Guido 21.08.
+    // right now?). Mockup approved 21.08.
     _renderControlVerdict(device) {
         const mode = this._mergedMode(device);
         let key, icon, color;

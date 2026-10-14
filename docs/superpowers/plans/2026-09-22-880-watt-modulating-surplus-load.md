@@ -888,7 +888,7 @@ allocator's accounting is now correct when such a load is on, whether
 `adjust_power` can fight the anti-flicker clocks, and whether any other
 control domain falls through `device_class_for_control`.
 
-- [ ] **Step 5: Open the PR and merge on Guido's word**
+- [ ] **Step 5: Open the PR and merge on approval**
 
 This is an enhancement, so the pre-push hook needs the typed override and
 the merge needs an explicit go-ahead:

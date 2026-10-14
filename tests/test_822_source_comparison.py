@@ -1,6 +1,6 @@
 """#822 — score every installed forecast source against reality.
 
-Guido, 21.08: *"maybe we can also integrate these in sem if the integration
+21.08: *"maybe we can also integrate these in sem if the integration
 are installed in ha"*. People install two or three forecast integrations for
 one reason — to find out which is right for their roof — and SEM picked one
 and ignored the rest.

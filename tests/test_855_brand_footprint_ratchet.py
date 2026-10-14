@@ -1,6 +1,6 @@
 """#855 — brand knowledge in the generic device layer is shrink-only.
 
-Guido, 29.08.2026, on what the arc is actually for:
+29.08.2026, on what the arc is actually for:
 
 > *"the 2nd layer has one communication string to the 3rd layer for ev
 > charger, then the rest follows the lead, and the observation should not

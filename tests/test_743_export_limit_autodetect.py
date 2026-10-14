@@ -1,7 +1,7 @@
 """#743 — export-limit autodetection across the supported brands.
 
 The physics signature is brand-agnostic; brands that PUBLISH their
-export limit sharpen it (Guido: "extend the autodetection on the other
+export limit sharpen it (request: "extend the autodetection on the other
 supported inverters as well"). Two pieces, both here:
 
 - the keyword scan (same #593 pattern as battery-cycles/SOC autodetect:

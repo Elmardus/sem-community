@@ -44,7 +44,7 @@ async function setFixture(page, on) {
     const res = await L.api(`config/config_entries/flow/${flow.flow_id}`, {
         method: 'POST',
         body: JSON.stringify({
-            device_prefix: 'Guido Coppes',
+            device_prefix: 'Jan Jansen',
             expose_charger_current: true,
             unmapped_charger: !!on,
         }),

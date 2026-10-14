@@ -1,6 +1,6 @@
 """#778 — what tomorrow can actually put back, after tomorrow's own claims.
 
-Guido pinned this before anyone built it: *"'will it refill' is not a scalar
+This was pinned before anyone built it: *"'will it refill' is not a scalar
 forecast question — the morning solar is also claimed by tomorrow's packed EV
 blocks and loads."* A 40 kWh day that owes the house 12 kWh and the car 10 kWh
 refills the pack with 18 kWh, not 40, and a budget fed the raw number would
@@ -66,7 +66,7 @@ def committed_ev_demand_kwh(config) -> float:
     """How much of tomorrow's sun the CARS have already claimed.
 
     (#778) ``estimate_refill`` must count the refill AFTER tomorrow's claims
-    — Guido pinned that before the arc existed: *"will it refill" is not a
+    — that was pinned before the arc existed: *"will it refill" is not a
     scalar forecast question; the morning solar is also claimed by tomorrow's
     packed EV blocks and loads.*
 

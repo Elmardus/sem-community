@@ -1,6 +1,6 @@
 """A 30-second modbus blink is not a state change — the SEM sensor holds.
 
-Guido, 03.09: *"The card is not good, whatever we changed in the past it made
+03.09: *"The card is not good, whatever we changed in the past it made
 it very unreliable, it was very stable before."* Measured on PROD the same
 afternoon (14:00–18:00): ``sensor.sem_solar_power`` / ``sem_grid_power`` /
 ``sem_battery_power`` / ``sem_battery_soc`` were ``unavailable`` 52–55 times

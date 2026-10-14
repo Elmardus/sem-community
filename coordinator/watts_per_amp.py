@@ -1,6 +1,6 @@
 """(#846) Measured watts-per-amp — SEM checks the result of its own command.
 
-Guido, 26.08, watching PROD: *"the A to the charger is a choice of SEM,
+26.08, watching PROD: *"the A to the charger is a choice of SEM,
 therefore the math is not correcting itself. The idea is from EVCC: fire,
 check, adjust."* SEM commanded 16 A, believed it had bought 11.04 kW
 (16 × 3 × 230), and the car drew 10.02 kW — a 9 % error on SEM's own

@@ -1,6 +1,6 @@
 """#638 day horizon — the day expressed as ledger slots.
 
-One mind, no second engine (Guido: "even with dayplanner"): the DAY is
+One mind, no second engine (rule: "even with dayplanner"): the DAY is
 translated into the ``LedgerSlot`` shape the night packer already
 understands, and ``build_night_ledger`` + ``pack_night`` run unchanged
 over it. Two slot flavours:
@@ -228,7 +228,7 @@ def tariff_cheap_at(prov, ts):
 
 def provisional_soc_curve(ledger, *, capacity_kwh: float,
                           max_charge_w: float) -> list:
-    """(Guido, 08-08: "we can also predict the battery level") — the
+    """(08-08: "we can also predict the battery level") — the
     battery's likely path through a walked day ledger.
 
     The trajectory walk models the DISCHARGE side (home draws battery to

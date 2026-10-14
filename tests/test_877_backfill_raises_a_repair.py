@@ -1,6 +1,6 @@
 """#877 — pressing the button with requirements unmet raises a Repair.
 
-Guido, 31.08: *"if a user presses the button and not all requirements are met
+31.08: *"if a user presses the button and not all requirements are met
 it should create a repair"*.
 
 A person who presses **Rebuild from history** is asking a direct question,

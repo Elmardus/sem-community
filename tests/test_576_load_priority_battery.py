@@ -722,7 +722,7 @@ from custom_components.solar_energy_management.const import (  # noqa: E402
 @pytest.mark.unit
 class TestDefaultSeedOrder:
     """Fresh (never-dragged) seed puts EV chargers above the battery and loads
-    below it: EV → battery → loads. Guido's confirmed default; reverses the
+    below it: EV → battery → loads. The confirmed default; reverses the
     old battery-at-bottom seed so loads yield to the battery until dragged up."""
 
     def test_ev_seed_above_battery_above_load_seed(self):

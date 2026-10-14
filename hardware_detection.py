@@ -2091,7 +2091,7 @@ def _gate_proposal(prop: Dict[str, Any], role: str, state_of,
 # ============================================================
 # (#1032) Charger roles read from ANY integration's own words — the roster
 # learning what a charger, or a car that charges, offers beside a current
-# number. SEM connects to integrations; it does not cover hardware (Guido,
+# number. SEM connects to integrations; it does not cover hardware (rule,
 # 01.10.2026). The rule tables live in consts/role_lexicon.py; nothing below
 # names an integration. Report data only, never a binding.
 # ============================================================

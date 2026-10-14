@@ -1,7 +1,7 @@
 """#878 — the battery→EV assist stops at the STATIC buffer, not the floor
 that keeps the house covered overnight.
 
-Guido, 31.08: *"I thought we did some new modes for the ev charger where it
+31.08: *"I thought we did some new modes for the ev charger where it
 should drain the battery with the ev charger to the expected level so the
 house consumption was still with the battery covered."*
 

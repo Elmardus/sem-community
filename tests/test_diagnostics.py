@@ -37,7 +37,7 @@ def entry():
         "target_peak_limit": 5.0,
         "ev_connected_sensor": "binary_sensor.keba_connected",
         "ev_charging_sensor": "binary_sensor.keba_charging",
-        "mobile_notification_service": "notify.mobile_app_guidos_iphone",
+        "mobile_notification_service": "notify.mobile_app_owners_iphone",
     }
     entry.options = {
         "update_interval": 10,
@@ -281,4 +281,4 @@ async def test_diagnostics_hides_the_notify_service_and_the_title(
     cfg = result["config_entry"]
     assert cfg["data"]["mobile_notification_service"] == "**REDACTED**"
     assert "title" not in cfg
-    assert "guidos_iphone" not in str(result)
+    assert "owners_iphone" not in str(result)

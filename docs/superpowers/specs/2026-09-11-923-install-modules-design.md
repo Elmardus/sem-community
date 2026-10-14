@@ -1,7 +1,7 @@
 # SEM as a core plus modules — the surface follows what the install has
 
 **Arc:** #923 · **Implements:** #857 · **Branch:** `feature/923-house-surface`
-**Status:** design approved in conversation 11.09.2026 (Guido: *"go ahead"*). Delivery milestone decided later.
+**Status:** design approved in conversation 11.09.2026 (*"go ahead"*). Delivery milestone decided later.
 
 ## 1. Problem
 
@@ -201,5 +201,5 @@ release note about custom dashboards.
 
 Enhancement: built whole on `feature/923-house-surface`, ruflo challenge record for the structural
 claim ("the four battery checks agree with the oracle, and no PRESENT/UNKNOWN module loses an
-entity"), proven on .46 and .175, merged on Guido's word with `SEM_FEAT_OK`. Which release it
+entity"), proven on .46 and .175, merged on approval with `SEM_FEAT_OK`. Which release it
 ships in is decided after it is built.

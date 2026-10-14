@@ -533,7 +533,7 @@ class TestNoBrandLosesARoleUnnoticed:
 
 @pytest.mark.unit
 class TestTheMatrixControlClaimsAgreeWithTheRoster:
-    """(#915) The challenge Guido asked for, made permanent: does what the
+    """(#915) The challenge asked for, made permanent: does what the
     roster OFFERS agree with what the matrix CLAIMS about control?
 
     Run by hand on 06.09 it agreed on 3 of 14 inverter discharge-control

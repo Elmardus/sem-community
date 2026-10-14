@@ -1,6 +1,6 @@
 """#778 — trust is a LOW percentile, not an average.
 
-Found by backfilling .175's own five months of history (Guido's idea): 139
+Found by backfilling .175's own five months of history (the idea): 139
 settled forecast/actual pairs, and the distribution says something the mean
 hides completely.
 

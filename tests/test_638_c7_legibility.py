@@ -188,7 +188,7 @@ class TestActuationDefaultsOn:
 
 @pytest.mark.unit
 class TestTheQuietFaceSpeaksInSentences:
-    """(Guido, first live look at the card) The raw diagnostic line
+    """(first live look at the card) The raw diagnostic line
     (`ev_targets={...}, mode_opted_out=[]...`) looked unfinished on the
     rendered face. The idle payload now carries machine CODES the card
     translates; the prose stays for logs/diagnose only."""
@@ -203,7 +203,7 @@ class TestTheQuietFaceSpeaksInSentences:
         # shape this test means. ``_idle_load`` (min_runtime 0) is a
         # non-candidate and no longer prints a row at all; using it here
         # made the test read as "every registered device gets a row",
-        # which is the noise Guido's 23:50 card was made of.
+        # which is the noise the PROD 23:50 card was made of.
         fake = _fake_self(devices=[_load(has_runtime_deficit=False)])
         ok = SEMCoordinator._shadow_energy_plan(
             fake, _scheduler(deficit=0.0), energy=MagicMock(), power=_power())
@@ -348,14 +348,14 @@ class TestEveryLeftOutLoadIsNamed:
 
 @pytest.mark.unit
 class TestOnlyNightCandidatesOweAWhyNot:
-    """(#744, Guido's PROD card 15.08 23:50) A device that was never asked
+    """(#744, the PROD card 15.08 23:50) A device that was never asked
     for guaranteed runtime is not a night candidate, and a non-candidate
     owes no explanation.
 
     ``control_mode`` defaults to PEAK_ONLY (devices/base.py), and the
     collector asked the mode gate FIRST — so every device the user never
     enrolled in surplus control printed a why-not row every single night.
-    Nine of Guido's eleven rows read "device mode excludes surplus
+    Nine of PROD's eleven rows read "device mode excludes surplus
     control" for a coffee machine, three tableau outputs, two Shelly 1PMs,
     a measurement channel and two lights. Not one of them has
     ``daily_min_runtime_sec`` set, so not one could have been planned in
@@ -418,7 +418,7 @@ class TestOnlyNightCandidatesOweAWhyNot:
 @pytest.mark.unit
 class TestALeftOutRowIsNamed:
     """(#744) The card rendered ``r.id.split(':').pop()`` because the row
-    carried no name — so Guido read
+    carried no name — so PROD read
     ``energy_dashboard_shellyplus1pm_441793d5470c`` instead of
     "Bad / Dusche / Gäste", and the slug's width pushed every reason into a
     ragged wrapped column. ``labels`` was only assigned AFTER every gate

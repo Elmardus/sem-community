@@ -1,6 +1,6 @@
 """#830 — the default view is shrink-only, and it has no name.
 
-Guido: *"if a user is starting with SEM he is overwhelmed with so many options
+Rule: *"if a user is starting with SEM he is overwhelmed with so many options
 and stops using it — it is just too much."* And on naming: *"we do not name it
 beginner. It's just nameless and advanced view."* Nobody is labelled a
 beginner; there is the configuration, and an **Advanced** switch for whoever
@@ -118,7 +118,7 @@ def test_the_view_preference_is_per_browser_not_per_install():
 
 
 def test_nothing_is_called_beginner():
-    """Guido, explicitly: the default view has no name. A label that tells
+    """Explicit rule: the default view has no name. A label that tells
     someone they are a beginner is a reason to leave."""
     src = CARD.read_text(encoding="utf-8")
     # Strip comments before looking. A line-prefix check cannot see the middle

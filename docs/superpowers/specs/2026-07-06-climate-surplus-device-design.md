@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-06
 **Issue:** #569 (Edsol) — "unable to control device via climate entity"
-**Status:** approved (two design decisions confirmed by Guido)
+**Status:** approved (two design decisions confirmed)
 
 ## Problem
 

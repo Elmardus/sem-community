@@ -159,7 +159,7 @@ class TestTheGuardBoundsTheOffer:
         assert "peak slot" in d.reason.lower()
 
     def test_a_spent_slot_pauses_through_the_stability_gate(self):
-        """(#1069, Guido 08.10) A slot with no room for the minimum is a
+        """(#1069, 08.10) A slot with no room for the minimum is a
         PAUSE, not a 6 A floor that sits over the limit. It is transient
         (bridgeable): the stability layer holds the car for the user's
         disable delay before it stops, so a passing spike does not stop a
@@ -212,7 +212,7 @@ class TestTheGuardBoundsTheOffer:
 
 
 # ── The security layer covers EVERYTHING SEM commands, not just the EV ──
-# (Guido: "peak-management is a security layer and above all — it does not
+# (rule: "peak-management is a security layer and above all — it does not
 # matter what mode any device has." The limit lives at the POWER METER, so
 # every import SEM creates is bounded by the same slot allowance.)
 
@@ -307,7 +307,7 @@ class TestCheapHoursActivationIsGuarded:
 
 
 class TestTheOffSwitchIsTheSlider:
-    """No second toggle (Guido, 30.08: the Control-tab slider's MAX notch
+    """No second toggle (30.08: the Control-tab slider's MAX notch
     already turns peak management off — #717 sets peak_limit_unlimited
     atomically). The guard reads THAT: an unlimited install computes no
     allowance, every consumer passes through. One mechanism; a dedicated

@@ -2,7 +2,7 @@
  * The peak block reads two different quantities, and the card used to show
  * only one of them under a name that fits neither.
  *
- * Guido, 03.09, looking at the Home diagram and the Load Management card at
+ * 03.09, looking at the Home diagram and the Load Management card at
  * the same moment: *"How is this possible? 4.3 kW charging and 4.36 kW
  * margin."* Both numbers were right. "Current Peak" is the **15-minute
  * rolling average** of grid import — the metric the demand tariff bills —

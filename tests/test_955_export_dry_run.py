@@ -109,7 +109,7 @@ class TestHuaweiDryRun:
         assert yes["service"] == "huawei_solar.set_zero_power_grid_connection"
 
     def test_a_release_on_a_rig_that_never_cut_is_derived_from_the_readback(self):
-        """Guido's standing mode since 17.09: the hand-back the real release
+        """The standing mode since 17.09: the hand-back the real release
         would capture and restore is `percent 100` — the verb proven to land."""
         with _registry():
             row = _huawei().export_dry_run(ExportIntent.RELEASE, 0.0)

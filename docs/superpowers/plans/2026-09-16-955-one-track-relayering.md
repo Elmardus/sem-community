@@ -484,9 +484,9 @@ class TestTheCoordinatorOnlyTicks:
 ```python
 """#955 — the structural pins that keep this on one track.
 
-Guido, 16.09, reading the first build: "is this implemented where all the
+16.09, reading the first build: "is this implemented where all the
 decisions are taking place, or are we on a second track? I remember having 3
-layers in SEM." He was right — the export cut decided in the coordinator and
+layers in SEM." That was right — the export cut decided in the coordinator and
 dispatched itself. These are the guards that make that unrepresentable.
 """
 from pathlib import Path
@@ -610,8 +610,8 @@ then flip the feed-in positive and watch `releasing → idle` with the entry abs
 
 - Full suite green on the merge result; ruff clean; CI green (3.13 + 3.14).
 - The challenge record carries both the ruflo round and both live rounds.
-- **The judgement that matters:** open `coordinator/coordinator.py` and ask of the export axis the question Guido asked — *is the decision here, or in the decide layer?* The answer must be visible without running anything.
-- Merge on Guido's word with `SEM_FEAT_OK`.
+- **The judgement that matters:** open `coordinator/coordinator.py` and ask of the export axis the question asked then — *is the decision here, or in the decide layer?* The answer must be visible without running anything.
+- Merge on approval with `SEM_FEAT_OK`.
 
 ## Cost and risk
 
@@ -619,7 +619,7 @@ then flip the feed-in positive and watch `releasing → idle` with the entry abs
 
 **What does NOT change:** the verdicts, the tracker's hysteresis and "last, not first", the adapters, the persistence and hand-back semantics, the surface, the plan rows, the 16 languages. All of it is already live-proven and carries over.
 
-**If the refactor is not taken:** the arc still works — it is proven on real hardware — but SEM gains a second place where a decision is made, and the next feature that needs the same shape will copy it. That is the cost to weigh, and it is Guido's call, not mine.
+**If the refactor is not taken:** the arc still works — it is proven on real hardware — but SEM gains a second place where a decision is made, and the next feature that needs the same shape will copy it. That is the cost to weigh; it is an open decision.
 
 
 ---

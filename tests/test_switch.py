@@ -310,7 +310,7 @@ def _ghost(state):
 
 @pytest.mark.unit
 class TestExplicitConfigBeatsGhostRestore777:
-    """A fresh installation came up in observer mode (Guido, 15.08).
+    """A fresh installation came up in observer mode (15.08).
 
     ``switch.sem_observer_mode`` has a forced-stable entity id, HA's
     restore-state store outlives the config entry, and the restore path

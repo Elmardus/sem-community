@@ -264,8 +264,8 @@ class ChargerReconciler:
         # (park-on-disconnect) An enabled KEBA auto-starts the NEXT plug-in
         # on its own — "not drawing" is NOT "off". SEM used to issue nothing
         # when a car left (the box stayed enabled), so the next plug-in
-        # auto-charged ~1 kWh before the quota-hold caught it (Guido, PROD
-        # 26.08). His pre-SEM automation disabled the box after every charge
+        # auto-charged ~1 kWh before the quota-hold caught it (PROD
+        # 26.08). The pre-SEM automation disabled the box after every charge
         # for exactly this. So: ONE PARK_OFF on the settled disconnect edge.
         # ``_seen_connected`` gates it to a real "car LEFT" edge: only a
         # charger we have observed WITH a car, now gone, is parked on

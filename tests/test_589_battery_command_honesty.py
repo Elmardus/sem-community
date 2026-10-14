@@ -514,7 +514,7 @@ class TestUnloadTeardown:
         assert result is True
         forcing.command_normal.assert_awaited_once()
         untouched.command_normal.assert_not_called()
-        # "go to observation mode on and then uninstall" (Guido, 08.09.2026)
+        # "go to observation mode on and then uninstall" (08.09.2026)
         assert mock_coord._observer_mode is True
 
     @pytest.mark.asyncio

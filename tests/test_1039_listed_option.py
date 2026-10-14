@@ -10,7 +10,7 @@ Assistant's own Ohme test data (HA 2026.8.2).
 GoodWe's forced charge writes "Eco Charge" and "General" the same way. It is
 NOT mapped here: core's select lists no forced-charge mode at all, and making
 those writes land would switch on a path never run on hardware. It is on the
-ALLOWED list below with that reason, for Guido.
+ALLOWED list below with that reason, as an open item.
 
 The fake hass below does what HA does: a select refuses an option it does
 not list, and takes one it does.
@@ -433,14 +433,14 @@ class TestPhaseSwitchSelect:
 #: charger path, whose one seam (``send``) maps every select write.
 ALLOWED = {
     ("coordinator/battery_adapters/force_charge.py", "start_forced_charge"):
-        "GoodWe — left for Guido (class 116): core lists no forced-charge "
+        "GoodWe — left open (class 116): core lists no forced-charge "
         "mode, and a write that starts to land here runs SEM's charge on "
         "hardware no one has tried it on",
     ("coordinator/battery_adapters/force_charge.py", "stop_forced_charge"):
-        "GoodWe — left for Guido, as above: a 'General' that lands would move "
+        "GoodWe — left open, as above: a 'General' that lands would move "
         "a user's eco or peak shaving on every restart",
     ("coordinator/battery_adapters/deye.py", "_write_and_verify"):
-        "Deye — left for Guido (class 116): the force paths check each option "
+        "Deye — left open (class 116): the force paths check each option "
         "against the select's list first; the export paths do not, and their "
         "'nothing to do' checks compare the raw config value, so a mapped "
         "write would land again on every cycle",

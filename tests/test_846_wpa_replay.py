@@ -1,7 +1,7 @@
 """#846 — the learner survives a restart, and a cold learner replays
 itself from SEM's OWN recorded series.
 
-Guido, 26.08, after the first deploy left PROD's learner empty because the
+26.08, after the first deploy left PROD's learner empty because the
 car had stopped minutes earlier: *"We already learned something from this —
 can you backfill prod."* The recorder already held the evidence: SEM's
 per-charger ``commanded_current`` (sparse, SEM's own hand — no 63 A "no

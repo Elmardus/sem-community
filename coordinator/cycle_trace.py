@@ -1,6 +1,6 @@
 """SEM layered-trace observability (2026-07-11).
 
-Guido's three-layer model — **Management** (what should happen: prios,
+The three-layer model — **Management** (what should happen: prios,
 timeline, sun, tariff, goals), **Process** (what to do & why: decide,
 cross-check), **Integration** (act & confirm: command devices, observe) —
 made explicit as one linked, per-cycle trace.

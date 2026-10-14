@@ -6,7 +6,7 @@ excess sold into the best export window — **but only when tomorrow's sun can
 put it back**.
 
 This module answers only the first question of the budget triangle — HOW MUCH
-is spendable (Guido's framing: HOW MUCH = the learner, WHO = the device list,
+is spendable (the framing: HOW MUCH = the learner, WHO = the device list,
 SAFETY = static floors). It decides nothing about *when* to sell or *who*
 gets it; the sell path (#533) and the evening EV assist are the sinks, and
 they already exist. The missing centre was the number.

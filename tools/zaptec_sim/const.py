@@ -25,8 +25,9 @@ KEY_INSTALL_POWER = "total_charge_power"
 INSTALL_ID = "sim-installation-1"
 CHARGER_ID = "sim-charger-1"
 
-# Dutch, owner-prefixed — @coppe218's registry, which is what broke detection.
-DEFAULT_PREFIX = "Guido Coppes"
+# Dutch, owner-prefixed — the shape of @coppe218's registry (placeholder
+# name), which is what broke detection.
+DEFAULT_PREFIX = "Jan Jansen"
 
 NAMES_NL = {
     KEY_AVAILABLE_CURRENT: "Beschikbare stroom",

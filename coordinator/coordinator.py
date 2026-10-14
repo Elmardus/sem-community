@@ -1330,8 +1330,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         """(#638) Re-seat tonight's stamped plan after a reboot.
 
         The plan is STATE the actuation steers by — 'why would a reboot
-        destroy the planning, it has to survive' (Guido, 00:20 on
-        2026-08-09, his own Aug-5 follow-up note made acute). Restores
+        destroy the planning, it has to survive' (00:20 on
+        2026-08-09, the Aug-5 follow-up note made acute). Restores
         the stash, the period key and the demand signature so the tick
         sees the same night and does not silently reshuffle it; the
         ask-change trigger still works because the signature is
@@ -6630,7 +6630,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         except (ValueError, TypeError) as e:
             _LOGGER.debug("Surplus controller update failed: %s", e)
 
-        # Device runtimes. (#620 + Guido) The load "day" rolls over at
+        # Device runtimes. (#620) The load "day" rolls over at
         # SUNRISE, not calendar midnight: if the counter reset at 00:00, a
         # Tier-2 battery-eligible load would see 0/target in the small hours
         # and drain the battery overnight to refill a brand-new day's target
@@ -7273,7 +7273,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         whether to compute market signals at all; the plan payload carries
         the answer so the card knows the advisor's verdict describes a
         CLOSED feature. Before this the rule was an inline expression in the
-        pipeline and nowhere else — which is why Guido's PROD card (16.08,
+        pipeline and nowhere else — which is why the PROD card (16.08,
         battery in ``auto``, global toggle off) still printed "Battery
         arbitrage — no room to buy into…", explaining a trade nothing was
         ever going to make.
@@ -10106,7 +10106,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # period boundary — whose date is NOT always calendar-
             # tomorrow: at 00:07 the boundary (06:07) is TODAY, and a
             # "now + 1 day" anchor previewed the day AFTER next — a
-            # ~36 h axis with every window in the second day (Guido,
+            # ~36 h axis with every window in the second day (PROD,
             # 00:07 on 2026-08-09). Every anchor derives from the
             # boundary's own date.
             stamps_at = resolve_deadline(now, ne_s)
@@ -10144,7 +10144,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             stamps_at=stamps_at,
             export_rate=self._configured_export_rate(),   # (#924)
         )
-        # (Guido, 08-08: "forecast and home consumption is something we
+        # (08-08: "forecast and home consumption is something we
         # already know") — the preview's real content is what tomorrow
         # will ASK: each load's daily min-runtime × its calibrated draw,
         # each charger's daily target. Knowable today because the day
@@ -10197,7 +10197,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         except Exception:  # noqa: BLE001 — asks are additive, never fatal
             asks = []
         preview["known_asks"] = asks
-        # (Guido, 08-08: "we can also predict the battery level and when
+        # (08-08: "we can also predict the battery level and when
         # the devices get surplus — pull it together") — the PROVISIONAL
         # pack: tomorrow's asks placed into tomorrow's own books by the
         # same packer, the battery seeded with the level TODAY'S plan
@@ -10220,7 +10220,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 soc_seed = float(_sl[-1].get("soc_kwh") or 0.0)
             elif power is not None and getattr(
                     power, "battery_soc", None) is not None:
-                # (Guido on PROD, 08-08) an IDLE today has no trajectory
+                # (PROD, 08-08) an IDLE today has no trajectory
                 # to seed from — but the live SOC is not an invented
                 # number, and a quiet today must not erase tomorrow's
                 # battery row.
@@ -10392,7 +10392,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # runtime deficit, and the night's price curve.
             _demand_sig = self._energy_plan_demand_signature(power, energy)
             cause = "initial"
-            # (Guido, 00:30 on 08-09) the explicit re-plan lever — now
+            # (00:30 on 08-09) the explicit re-plan lever — now
             # that the plan survives reboots, restart-as-replan retires
             # and the service is the honest test/ops lever.
             if getattr(self, "_manual_replan_requested", False):
@@ -10415,7 +10415,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 _prev_plan_775 = getattr(self, "_energy_plan_shadow", None)
                 self._shadow_plan_date = None
                 # (night 3, finding 3) the re-stamp says why it exists —
-                # Guido shrinking the ASK to 0.5 kWh silently became "the"
+                # shrinking the ASK to 0.5 kWh silently became "the"
                 # night, indistinguishable from the first answer.
                 cause = "ask changed"
             if getattr(self, "_shadow_plan_date", None) != _night_of:
@@ -10652,8 +10652,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # (#744) …and it owes it BY NAME. ``labels`` was assigned only
             # after every gate passed, so precisely the rows that need a
             # name never got one and the card fell back to the id slug:
-            # Guido read `energy_dashboard_shellyplus1pm_441793d5470c`
-            # where his roster says "Bad / Dusche / Gäste".
+            # PROD read `energy_dashboard_shellyplus1pm_441793d5470c`
+            # where its roster says "Bad / Dusche / Gäste".
             def _left_out(dev, why):
                 left_out_loads.append({
                     "id": f"load:{dev.device_id}", "why": why,
@@ -10671,7 +10671,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     # gate below used to answer for these, so a roster of
                     # Energy-Dashboard imports (control_mode defaults to
                     # PEAK_ONLY) printed its own default state as a why-not
-                    # list every night — nine of Guido's eleven rows, ~45 of
+                    # list every night — nine of PROD's eleven rows, ~45 of
                     # #744's forty-seven. A non-candidate owes no
                     # explanation; ``loads_seen`` still counts it, so the
                     # quiet night keeps saying "no load needs a night run".
@@ -10920,7 +10920,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                        f"battery_deficit={deficit:.2f} kWh")
                 _LOGGER.info(
                     "ENERGY-PLAN (%s #638): no overnight demands — %s", tag, why)
-                # (#638 C7 follow-up, Guido's first live look) The card
+                # (#638 C7 follow-up, first live look) The card
                 # renders translated SENTENCES from these codes; the raw
                 # prose above stays for logs/diagnose — a rendered surface
                 # showing `ev_targets={...}` read as unfinished.
@@ -11130,7 +11130,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # the books lie anywhere, an absurd advice is the first
             # symptom); demand injection is config-gated OFF and nothing
             # actuates from it (#533 state — live proof post-1.8 on
-            # Guido's call).
+            # a decision).
             arb = None
             try:
                 from .arbitrage import arbitrage_advice
@@ -11165,7 +11165,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 _iso = lambda rows: [  # noqa: E731 — local shape adapter
                     {**b, "start": b["start"].isoformat(),
                      "end": b["end"].isoformat()} for b in rows]
-                # (C7, Guido's PROD card 16.08) The advice is computed on
+                # (C7, the PROD card 16.08) The advice is computed on
                 # every stamp because it audits the ledger — but on an
                 # install where arbitrage cannot act it is an instrument
                 # readout, not an answer. Publish the gate WITH the verdict
@@ -14322,7 +14322,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # own rule 5. `_run_charge_pacing` sixty lines away already asks
         # this question correctly.
         soc_now = (
-            None if getattr(power, "battery_soc_unavailable", False)  # DARK-SOC: action — spendable rule 4, an unknown input spends nothing; a blink costs one cycle's budget (#934, Guido's call)
+            None if getattr(power, "battery_soc_unavailable", False)  # DARK-SOC: action — spendable rule 4, an unknown input spends nothing; a blink costs one cycle's budget (#934, decision)
             else getattr(power, "battery_soc", None))
 
         # (#778, found live on .175 30.08) The room that answers "will

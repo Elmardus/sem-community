@@ -9,7 +9,7 @@ buying what tomorrow's sun fills free.
 
 SHADOW-ONLY: the advisor publishes advice on the plan; the demand
 injection is config-gated off by default and nothing actuates from it
-(#533 state — the command wire's live proof is post-1.8 on Guido's
+(#533 state — the command wire's live proof is post-1.8 on a
 call). Its build-phase job is to be the framework's sharpest test
 instrument on the .175 rig.
 """

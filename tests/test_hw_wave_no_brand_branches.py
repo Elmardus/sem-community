@@ -1,6 +1,6 @@
 """#1032 — SEM connects to integrations; it does not cover hardware.
 
-Guido, 01.10.2026: "this is the whole idea of SEM — we do not cover hardware
+01.10.2026: "this is the whole idea of SEM — we do not cover hardware
 integration, we connect to integrations with the crawler if possible."
 
 A new device is a ROLE the crawler learns (consts/role_lexicon.py,

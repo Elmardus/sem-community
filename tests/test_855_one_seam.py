@@ -1,6 +1,6 @@
 """#855 — the charger path has ONE hardware seam, and observer cuts AT it.
 
-Guido, 29.08.2026:
+29.08.2026:
 
 > *"the 2nd layer has one communication string to the 3rd layer for ev
 > charger, then the rest follows the lead, and the observation should not

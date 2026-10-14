@@ -1,6 +1,6 @@
 """#1023 / #1025 A6 — the EV card's departure and boost rows.
 
-Guido approved the mockup on 06.10: inside Charge Target, a chip per weekday
+The mockup was approved on 06.10: inside Charge Target, a chip per weekday
 under Charge by, "Charge in one block", "Top up before leaving" with what the
 plan booked for it, the plan strip with the top-up hatched, and the battery
 boost with its floor, its progress and how it ended.

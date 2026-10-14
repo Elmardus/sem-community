@@ -1,6 +1,6 @@
 """#829 — SEM manages retention for its OWN fire-and-forget entities.
 
-Guido, 22.08: *"an option to have certain retention on sensors — for most of
+22.08: *"an option to have certain retention on sensors — for most of
 SEM's sensors the history isn't even important, these are fire and forget."*
 
 Measured on the rig, the split that makes this safe:

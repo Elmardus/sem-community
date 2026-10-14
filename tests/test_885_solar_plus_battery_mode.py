@@ -1,6 +1,6 @@
 """#885 matrix — the restored "Solar + battery" charge mode.
 
-Guido, 01.09: *"there should be two: one is cheap and the other one is about
+01.09: *"there should be two: one is cheap and the other one is about
 battery assistant."* The battery one is this mode — the legacy ``pv`` /
 ``self_consumption`` split the #277 consolidation collapsed. Since #277 the
 ONLY way to let the pack help the car was ``min_plus_solar``, which also
@@ -168,7 +168,7 @@ class TestStabilityAndSurfaces:
         assert "charge_mode_solar_plus_battery" in src
         assert "modeDisabled" in src and "tariff_available" in src
         assert "charge_mode_battery_learning_info" in src, (
-            "Guido, 01.09: while the learner is not done, selecting the "
+            "Rule 01.09: while the learner is not done, selecting the "
             "mode must at least inform"
         )
 

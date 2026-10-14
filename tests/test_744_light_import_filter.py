@@ -1,6 +1,6 @@
 """#744 — lights are filtered out at the Energy Dashboard import.
 
-Guido, 14.08: "What is the use case for lights in SEM?" — there is none.
+14.08: "What is the use case for lights in SEM?" — there is none.
 Lighting is not shiftable, not a surplus sink, and shedding a 30 W dimmer
 is hostility for savings that round to zero. Lights only ever arrived as
 a side effect of Energy-Dashboard consumption monitoring, and then showed
@@ -191,7 +191,7 @@ class TestTheAuthoritativePathAppliesTheRule:
     ``get_all_individual_devices`` on every refresh — startup, the 35 s
     re-discovery, every drag — and never learned the rule. So the filter ran
     once, on the legacy pass, and the registry put the lights straight back:
-    Guido's PROD roster still carried ``Garage / Carport Licht`` and
+    PROD's roster still carried ``Garage / Carport Licht`` and
     ``Girlande`` on beta.1, which read as "the filter is import-time only"
     and is really "the filter is on the dead path".
 

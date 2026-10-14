@@ -1,6 +1,6 @@
 """#885 — one battery allowance, consumed in device order.
 
-Guido, 31.08:
+31.08:
 
     "The order tells who is first and gets power from the battery. The next
     will get powered from the grid if there is nothing left."
@@ -45,7 +45,7 @@ class TestTheAllowanceIsShared:
         )
 
     def test_an_exhausted_allowance_leaves_nothing(self):
-        """Guido's sentence: the next device gets powered from the grid."""
+        """The rule: the next device gets powered from the grid."""
         btc = build_battery_tier_context(
             CFG, battery_soc=85.0, true_surplus_w=6000.0,
             assist_committed_w=5000.0,
@@ -123,7 +123,7 @@ class TestTheCoordinatorFeedsIt:
 
 
 class TestIndividualDevicesStopAtTheFloor:
-    """Guido, 31.08: *"we already have everything, we just have to use it
+    """31.08: *"we already have everything, we just have to use it
     until the floor is reached — also for the individual devices."*
 
     The per-device machinery was already there: `_tier1_headroom_w` returns
@@ -191,7 +191,7 @@ def _load(priority, *, tier1=False, tier2=False, active=False,
 
 
 class TestTheOrderDecidesWhoGetsTheBattery:
-    """Guido, 31.08: *"if it is not one order for addressing surplus and also
+    """31.08: *"if it is not one order for addressing surplus and also
     for planning and load management, there is only one priority — it is the
     device list, and if it is not we have a bug."*
 
@@ -249,7 +249,7 @@ class TestTheOrderDecidesWhoGetsTheBattery:
 
 
 class TestOnlyOptedInDevicesReserve:
-    """Guido, 31.08: *"on every individual device there is a setting whether
+    """31.08: *"on every individual device there is a setting whether
     it will charge with battery or not ... for the individual devices it is
     the option 'finish overnight with battery'."*
 
@@ -332,7 +332,7 @@ class TestOnlyOptedInDevicesReserve:
 # ---------------------------------------------------------------------------
 
 class TestTheBatteryPermissionIsPerCharger:
-    """Guido, 31.08: *"and the same on the charger, therefore not every
+    """31.08: *"and the same on the charger, therefore not every
     charger has to be activated."*
 
     Loads have had a per-device opt-in since #620. Chargers had ONE
