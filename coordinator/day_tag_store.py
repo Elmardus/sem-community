@@ -1,4 +1,5 @@
-"""(#1083) Tag each finished day, nightly — asleep until the soak flag is on.
+"""(#1083) Tag each finished day, nightly — asleep until the soak flag or the
+Simulation tab switch is on.
 
 At 00:15 local the job reads YESTERDAY from Home Assistant's recorder
 through the one reader (``recorder_history.read_states`` — attribute-free,
@@ -17,12 +18,13 @@ If the recorder cannot answer, NOTHING is stored — never a guessed tag
 """
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import date as _date, datetime, timedelta
+from datetime import date as _date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ..analytics.day_tags import tag_day
-from ..consts.core import CONF_DAY_TAGS, DEFAULT_DAY_TAGS
+from ..consts.core import CONF_DAY_TAGS, CONF_SIMULATION_TAB, DEFAULT_DAY_TAGS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,10 +38,51 @@ DARK = ("unavailable", "unknown", "")
 STEP_MIN = 5
 
 
+#: the backfill reads at most this many finished days
+BACKFILL_DAYS = 90
+#: backfill role -> (SEM sensor key, hourly statistic)
+BACKFILL_ROLES: Dict[str, Tuple[str, str]] = {
+    "solar": ("daily_solar_energy", "change"),
+    "grid_import": ("daily_grid_import_energy", "change"),
+    "grid_export": ("daily_grid_export_energy", "change"),
+    "battery_charge": ("daily_battery_charge_energy", "change"),
+    "battery_discharge": ("daily_battery_discharge_energy", "change"),
+    "ev": ("daily_ev_energy", "change"),
+    "home": ("daily_home_energy", "change"),
+    "soc": ("battery_soc", "mean"),
+    "import_rate": ("tariff_current_import_rate", "mean"),
+    "export_rate": ("tariff_current_export_rate", "mean"),
+}
+#: a day whose car energy reached this counts as a car day when the
+#: session history no longer reaches back that far
+BACKFILL_CAR_MIN_KWH = 0.5
+_COULD_NOT_ASK = object()
+
+
+def simulation_tab_on(owner) -> bool:
+    """Is the Simulation tab switch on? ``owner`` is a config entry, the
+    coordinator, or a plain config mapping.
+
+    Same three sources, same order as ``switch._flag``: the runtime flip
+    (entry options), the install-time value (entry data), then config."""
+    from collections.abc import Mapping
+    if owner is None:
+        return False
+    entry = getattr(owner, "config_entry", None)
+    if entry is None and not isinstance(owner, Mapping):
+        entry = owner
+    for src in (getattr(entry, "options", None), getattr(entry, "data", None)):
+        if isinstance(src, Mapping) and CONF_SIMULATION_TAB in src:
+            return bool(src[CONF_SIMULATION_TAB])
+    cfg = owner if isinstance(owner, Mapping) else getattr(owner, "config", None)
+    return bool((cfg or {}).get(CONF_SIMULATION_TAB, False))
+
+
 def day_tags_on(owner) -> bool:
-    """The soak flag (#1083): off unless set with set_option."""
+    """Tag days? The soak flag (#1083, set with set_option) OR the
+    Simulation tab switch — the tab needs the tags."""
     return bool((getattr(owner, "config", None) or {}).get(
-        CONF_DAY_TAGS, DEFAULT_DAY_TAGS))
+        CONF_DAY_TAGS, DEFAULT_DAY_TAGS)) or simulation_tab_on(owner)
 
 
 def _float(v) -> Optional[float]:
@@ -97,7 +140,8 @@ class DayTagger:
     """Reads one finished day and stores its tags."""
 
     def __init__(self, hass, coordinator, storage=None,
-                 read_states: Optional[Callable] = None) -> None:
+                 read_states: Optional[Callable] = None,
+                 read_stats: Optional[Callable] = None) -> None:
         self.hass = hass
         self.coordinator = coordinator
         self._fixed_storage = storage
@@ -105,6 +149,12 @@ class DayTagger:
             from .recorder_history import read_states as _rs
             read_states = _rs
         self._read_states = read_states
+        if read_stats is None:
+            from .recorder_history import read_hourly_statistics as _rh
+            read_stats = _rh
+        self._read_stats = read_stats
+        self._cancelled = False
+        self._task: Optional[asyncio.Task] = None
 
     @property
     def storage(self):
@@ -206,6 +256,114 @@ class DayTagger:
             _LOGGER.debug("day tags for %s saved later", iso)
         return tags
 
+    # ── backfill (#1083): older days from hourly statistics ──────────────
+
+    def cancel(self) -> None:
+        """Stop a running backfill now; what it stored stays stored."""
+        self._cancelled = True
+        task = self._task
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def async_backfill(self, days: int = BACKFILL_DAYS) -> int:
+        """Tag up to ``days`` (max 90) finished days from hourly statistics,
+        oldest first, one day per step. A day that already has a tag is
+        skipped. Returns the number of days stored.
+
+        If the recorder cannot answer, nothing more is stored — never a
+        guessed tag (#925)."""
+        self._task = asyncio.current_task()
+        self._cancelled = False
+        if not day_tags_on(self.coordinator) or self.storage is None:
+            return 0
+        today = getattr(self.coordinator, "_tracker_date", None)
+        if today is None:
+            return 0
+        try:
+            days = max(0, min(int(days), BACKFILL_DAYS))
+        except (TypeError, ValueError):
+            days = BACKFILL_DAYS
+        ids = {role: self._entity_id(key)
+               for role, (key, _stat) in BACKFILL_ROLES.items()}
+        ids = {role: eid for role, eid in ids.items() if eid}
+        if "solar" not in ids:
+            return 0
+        have = {str(t.get("date")) for t in self.storage.get_day_tags()
+                if isinstance(t, dict)}
+        _LOGGER.info("day tags: backfill of up to %d days started", days)
+        stored = 0
+        why = "done"
+        for back in range(days, 0, -1):
+            if self._cancelled or not day_tags_on(self.coordinator):
+                why = "stopped"
+                break
+            day = today - timedelta(days=back)
+            if day.isoformat() in have:
+                continue
+            rec = await self._backfill_day(day, ids)
+            if rec is _COULD_NOT_ASK:
+                why = "the recorder could not answer"
+                break
+            if rec is not None:
+                self.storage.put_day_tag(rec)
+                stored += 1
+            await asyncio.sleep(0)
+        if stored:
+            try:
+                await self.storage.async_save_daily()
+            except Exception:  # noqa: BLE001 — the next save carries it
+                _LOGGER.debug("backfilled day tags saved later")
+        _LOGGER.info("day tags: backfill %s — %d days tagged", why, stored)
+        return stored
+
+    async def _backfill_day(self, day: _date, ids: Dict[str, str]):
+        """One day's tag record from its hourly statistics; ``None`` when
+        the recorder has no statistics for the day, ``_COULD_NOT_ASK``
+        when it could not answer."""
+        from homeassistant.util import dt as dt_util
+        day_start = dt_util.start_of_local_day(day)
+        stats = await self._read_stats(
+            self.hass, day_start, day_start + timedelta(days=1),
+            set(ids.values()), {"change", "mean"})
+        if stats is None:
+            return _COULD_NOT_ASK
+        hourly = {role: _hourly(stats.get(eid), BACKFILL_ROLES[role][1], day_start)
+                  for role, eid in ids.items()}
+        solar_h = hourly.get("solar") or {}
+        if not solar_h:
+            return None          # SEM was not recording that day
+        iso = day.isoformat()
+        solar = [(float(h), solar_h[h] * 1000.0 if h in solar_h else None)
+                 for h in range(24)]
+        window = daylight(solar)
+        dark = 0.0
+        for role in ("solar", "grid_import", "battery_charge"):
+            got = hourly.get(role) or {}
+            if not got:
+                continue        # no such source on this install
+            series = [(float(h), got.get(h)) for h in range(24)]
+            dark = max(dark, longest_dark_min(series, window, step_min=60))
+        solar_kwh = sum(solar_h.values())
+        actual, forecast, clear = self._forecast_pair(iso)
+        if actual is None:
+            actual = solar_kwh
+        sessions = self._sessions(iso)
+        ev_kwh = sum((hourly.get("ev") or {}).values())
+        if not sessions and ev_kwh >= BACKFILL_CAR_MIN_KWH:
+            sessions = [ev_kwh]
+        prices = list((hourly.get("import_rate") or {}).values())
+        rec = tag_day(
+            date=iso, solar=solar, actual_kwh=actual, forecast_kwh=forecast,
+            clear_sky_kwh=clear, snow=False, session_kwh=sessions,
+            prices=prices,
+            cheap_threshold=_float((self.coordinator.config or {}).get(
+                "cheap_price_threshold")),
+            dark_daylight_min=dark, restarted=self.storage.started_on(iso),
+            counter_flat=solar_kwh < 0.01, hourly=True,
+        ).as_dict()
+        rec["source"] = "backfill"
+        return rec
+
     def schedule(self) -> Callable[[], None]:
         """00:15 local, every night: tag yesterday. Returns the unsubscribe."""
         from homeassistant.helpers.event import async_track_time_change
@@ -222,3 +380,59 @@ class DayTagger:
                 _LOGGER.debug("day tagging failed", exc_info=True)
 
         return async_track_time_change(self.hass, _run, hour=0, minute=15, second=0)
+
+
+def _hourly(rows, stat: str, day_start: datetime) -> Dict[int, float]:
+    """``{hour of day: value}`` from statistics rows. A row's ``start`` is a
+    UNIX timestamp on current Home Assistant, a datetime on older ones."""
+    out: Dict[int, float] = {}
+    for row in rows or []:
+        start = (row or {}).get("start")
+        if isinstance(start, (int, float)):
+            start = datetime.fromtimestamp(float(start), tz=timezone.utc)
+        if not isinstance(start, datetime):
+            continue
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        h = int((start - day_start).total_seconds() // 3600)
+        val = _float(row.get(stat))
+        if 0 <= h < 24 and val is not None:
+            out[h] = val
+    return out
+
+
+def start_backfill(hass, coordinator, days: int = BACKFILL_DAYS) -> None:
+    """Backfill day tags once Home Assistant has started (#967), and keep
+    the way to stop it on the coordinator — ``cancel_pending_recorder_work``
+    calls ``cancel_backfill`` on unload."""
+    from . import recorder_history
+
+    cancel_backfill(coordinator)
+    tagger = DayTagger(hass, coordinator)
+    unsub = recorder_history.run_after_start(
+        hass, lambda: tagger.async_backfill(days),
+        name="sem day-tag backfill",
+    )
+
+    def _cancel() -> None:
+        try:
+            unsub()
+        except Exception:  # noqa: BLE001 — already fired is fine
+            pass
+        tagger.cancel()
+
+    coordinator._day_tag_backfill_cancel = _cancel
+
+
+def cancel_backfill(coordinator) -> None:
+    """Stop a pending or running backfill; harmless when there is none."""
+    cancel = getattr(coordinator, "_day_tag_backfill_cancel", None)
+    try:
+        coordinator._day_tag_backfill_cancel = None
+    except Exception:  # noqa: BLE001
+        pass
+    if callable(cancel):
+        try:
+            cancel()
+        except Exception:  # noqa: BLE001 — teardown must finish
+            _LOGGER.debug("could not cancel the day-tag backfill")
