@@ -1237,7 +1237,16 @@ An EWMA predictor (alpha=0.3) learns per-weekday hourly patterns separately:
 Consumption predictions adjust for outdoor temperature using Recurrent Auto fleet data (30,000+ vehicles):
 - Winter (-5°C): +72% consumption
 - Summer (30°C): +9% consumption
-- Requires an outdoor temperature sensor (auto-detected from weather entity)
+- Needs an outdoor temperature (see below)
+
+SEM uses one outdoor temperature for everything: how your car's charging slows
+near full, snow on the panels, and the battery's night records. It finds an
+outdoor thermometer by its name, else it uses your weather entity. If it picked
+the wrong one, choose yours under **Configure → Tariff & Advanced → Outdoor
+temperature**.
+
+SEM also learns how much more your house uses on cold days. It learns from the
+first day, but the plans do not use it yet; this is off by default.
 
 ### Battery Health Tracking
 

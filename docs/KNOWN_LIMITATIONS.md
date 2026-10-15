@@ -239,7 +239,7 @@ SEM supports SG-Ready heat pump control via two relay entities (Shelly, ESPHome,
 
 - **Virtual SOC accuracy** — depends on taper detection or car API calibration for the initial anchor. Without either, the SOC estimate drifts over time based solely on energy tracking and predicted consumption. A car that declines a start is recorded as *declined*, not as full — the estimate does not move on a refusal.
 - **Consumption predictor cold start** — needs at least 3 days of data before per-weekday predictions are useful. During the first 3 days, a conservative default is used.
-- **Temperature correction** — requires an outdoor temperature sensor (auto-detected from a `weather.*` entity). Without it, temperature correction is disabled and predictions assume 20°C.
+- **Temperature correction** — needs an outdoor temperature. SEM finds an outdoor thermometer by its name, else it uses your `weather.*` entity. Without it, temperature correction is disabled and predictions assume 20°C.
 - **Battery health tracking** — requires multiple charge sessions over weeks/months to produce meaningful estimates. Short-term values may fluctuate.
 
 ## One vehicle per charger
