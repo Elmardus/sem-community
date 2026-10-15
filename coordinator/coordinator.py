@@ -3830,6 +3830,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             charging_state = self._state_machine.update_state(charging_context)
 
             # Step 7.5a: Unified EV control via CurrentControlDevice
+            # (#1130) The pack's assist offered this cycle — read later by
+            # the battery clamp and the loads. Reset here too, so a cycle
+            # that skips the charger loop never carries the last one's.
+            self._assist_committed_w_per_cycle = 0.0
             # Evaluate the dual-source phase guard once per cycle before any
             # charger decision can reach an adapter.  The resulting state is
             # cached for every charger and for diagnostics publication.
@@ -7612,37 +7616,55 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
 
         self._vpp_publish = self._vpp_dispatcher.publish_state(decision)
 
-    def _ev_wants_pack(self, power) -> bool:
-        """(03.09) Is any CONNECTED charger in a mode that takes the pack?
+    def _ev_pack_modes(self, power) -> list:
+        """(#1130) For each CONNECTED charger: does its mode take the pack?
 
-        That mode is the user's consent for the pack to feed the car — the
-        same consent ``_battery_assist_split`` acts on — so the battery-side
-        discharge clamp (``decide_battery``) reads it here instead of
-        requiring the forecast-spending master switch as well. Connection is
-        per charger (#315 class: never the fleet OR for a per-charger
+        A mode is the user's consent for the pack to feed that car — the
+        same consent ``_battery_assist_split`` acts on. Connection is per
+        charger (#315 class: never the fleet OR for a per-charger
         question); a single-charger install falls back to the fleet flag.
+        (#1115) The forecast switch is consent only for Min + Solar — the
+        one other mode the charger side offers the pack under the gate.
+        Solar only never takes it. A mode that cannot be read takes nothing.
         """
         per = getattr(power, "ev_connected_per_charger", None) or {}
-        # (#1115) The forecast switch is consent only for Min + Solar — the
-        # one other mode the charger side offers the pack under the gate
-        # (``decide._battery_assist_split``). Solar only never takes it.
         takers = {"solar_plus_battery"}
         if self.config.get("forecast_spending_enabled", False):
             takers.add("min_plus_solar")
+        out = []
         for cfg in (self.config.get("ev_chargers") or []):
             cid = str(cfg.get("id") or "")
             if not cid:
                 continue
+            connected = per.get(cid) if cid in per else getattr(power, "ev_connected", False)
+            if not bool(connected):
+                continue
             try:
                 mode = self._effective_charge_mode_for(cfg)
             except Exception:  # noqa: BLE001 — an unresolvable mode is no consent
-                continue
-            if mode not in takers:
-                continue
-            connected = per.get(cid) if cid in per else getattr(power, "ev_connected", False)
-            if bool(connected):
-                return True
-        return False
+                mode = None
+            out.append(mode in takers)
+        return out
+
+    def _ev_wants_pack(self, power) -> bool:
+        """(03.09) Is any CONNECTED charger in a mode that takes the pack?
+        The battery-side discharge clamp (``decide_battery``) reads it."""
+        return any(self._ev_pack_modes(power))
+
+    def _ev_pack_shared_w(self, power):
+        """(#1130) The pack's output a car may have, when a connected car
+        must NOT have it: the assist the chargers that take the pack were
+        offered this cycle (``ChargerDecision.assist_w``, summed in device
+        order). ``None`` while every connected car takes the pack — then
+        the clamp has nothing to keep apart.
+
+        One pack serves the whole house, so "open" was a yes for every car:
+        a Solar-only car beside a Solar + battery one drew the pack too."""
+        modes = self._ev_pack_modes(power)
+        if not modes or all(modes):
+            return None
+        return max(0.0, float(
+            getattr(self, "_assist_committed_w_per_cycle", 0.0) or 0.0))
 
     def _day_home_w_at(self, now, energy=None):
         """(#820) The house draw a DAY ledger prices its surplus against.
@@ -8827,6 +8849,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # (03.09) the charger-side consent: a connected car whose
                 # mode is Solar + battery — the clamp reads it too.
                 ev_wants_pack=self._ev_wants_pack(power),
+                # (#1130) …and how much of the pack those cars may have
+                # while a connected car may not use it.
+                ev_pack_shared_w=self._ev_pack_shared_w(power),
                 # (#778) The permission axis, resolved from the per-battery
                 # config so a multi-battery install can grant export on one
                 # pack and withhold it on another.
