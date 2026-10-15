@@ -600,11 +600,19 @@ every UI control, WHERE does the write land and WHO reads that exact store at ru
 for any step that BOTH reads and writes a dual-stored value, does its read come from the copy
 it writes? **Open guard:** an AST lint that a flow step writing \`ev_chargers[i]\`
 on submit must source its form defaults from that same charger dict, not the flat config.
-**Open sibling (found in #883 review):** \`EVTaperDetector\` is built with the FLAT
-config (\`coordinator.py\` ~10673) and reads \`ev_target_soc\`/\`ev_battery_capacity_kwh\`/
-\`ev_charger_efficiency\` flat for ALL chargers — while the number entities + coordinator SOC
-paths read per-charger-first. #883 keeps the two copies in sync on every options save (so this
-is mitigated, not live), but a per-charger taper detector should read \`ev_chargers[i]\`.
+**Sibling closed (#1127, 15.10.2026) — each car's estimator read the flat copy:** every
+\`EVTaperDetector\` was built with the flat config and read \`ev_battery_capacity_kwh\`/
+\`ev_target_soc\` flat, so car 2's estimated level, the #708 stop cap and the daily drop used
+car 1's pack. Capacity is not even in the primary mirror, so a card edit reached no estimator.
+**Closure:** the detector takes \`charger_id\` and reads car settings through one resolver,
+\`EVTaperDetector.car_setting\` (own \`ev_chargers\` entry, else flat, looked up on every read);
+the decay fallback, the self-heal and the estimate-stop capacity read the detector's own value.
+\`ev_charger_efficiency\` stays home-wide (no per-charger field). **Guard:**
+\`tests/test_1127_each_car_its_own_pack.py\` — two cars, 40/80 kWh, through the real card write
+path; AST: every package \`EVTaperDetector(\` names \`charger_id\` (None only for the primary
+default), and the detector reads \`self._config\` only through \`car_setting\` (efficiency
+excepted). **Left open:** the daily drop's prediction is the
+whole home's EV use, given to every car (#1132, class 3).
 **Fourth instance (#1071, 08.10.2026) — two rules pick the owner:** a battery's mode/reserve
 is stored twice — the scalar \`battery_mode\`/\`battery_reserve_soc\` (the one global
 \`select.sem_battery_mode\`/\`number.sem_battery_reserve_soc\`) and the idx-aligned

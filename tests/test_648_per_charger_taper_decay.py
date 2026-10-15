@@ -25,9 +25,12 @@ import pytest
 from custom_components.solar_energy_management.coordinator import SEMCoordinator
 
 
-def _det(last_full=1000.0):
+def _det(last_full=1000.0, daily_target=10):
     d = MagicMock()
     d.last_full_timestamp = last_full
+    # (#1127) each detector answers with its own car's daily target
+    d.car_setting.side_effect = (
+        lambda key, default: daily_target if key == "daily_ev_target" else default)
     return d
 
 
@@ -84,8 +87,8 @@ class TestEveryChargerDecays648:
         d2.apply_daily_decay.assert_called_once()
 
     def test_every_detector_gets_the_same_inputs(self):
-        """Prediction / fallback / temperature are household-level, so each
-        detector must receive identical arguments — and they are computed once."""
+        """Prediction / temperature are household-level and computed once.
+        The fallback is each car's own daily target (#1127); equal here."""
         d1, d2, d3 = _det(), _det(), _det()
         # One charger IS plugged in — the shared inputs must still be computed
         # exactly once, not once per decaying detector.
