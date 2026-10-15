@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **With two chargers, each car's charge level estimate uses its own battery size** (#1127). The second car used the first car's size and target.
 - 🐛 **The load list keeps minimum run and pause inside the allowed range** (#1128). Clicking a solar string now opens its details.
 - 🐛 **The Configuration tab and setup screens are now in your language** (#1129). About 7,300 texts in 15 languages were still English.
 - 🐛 **A charger counter that jumps when a session starts is no longer counted as charging** (#1101) — thanks @RienduPre. SEM had seen the box idle.
