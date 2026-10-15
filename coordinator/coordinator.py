@@ -880,7 +880,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # _ev_taper_detector property (below) instead of swapped in each cycle.
         # This default backs the property before the per-charger detectors exist
         # (first-update restore) and for a bare single-charger install.
-        self._ev_taper_detector_default = EVTaperDetector(config)  # Primary fallback
+        # (#1127) charger_id=None: the primary's car (ev_chargers[0]).
+        self._ev_taper_detector_default = EVTaperDetector(config, charger_id=None)  # Primary fallback
         self._ev_taper_detectors: Dict[str, EVTaperDetector] = {}  # Per-charger (#112)
         # (P3, 13.08) The energy plan tick holds off until the device
         # runtime restore has run — a cold-world demand signature must not
@@ -11549,10 +11550,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 and type_708 == "soc"
                 and ea_708 is not None and soc_708 is not None):
             return
-        cap_708 = (
-            cfg_708.get("ev_battery_capacity_kwh")
-            or self.config.get("ev_battery_capacity_kwh", 40)
-        )
+        # (#1127) the size the estimate itself was computed with
+        cap_708 = det_708.capacity_kwh
         # (#708) same helper as the decision — see SITE 1.
         bounds_708 = [
             (b, self._resolve_target(cfg_708, "ev_target_soc", b, 80, 100))
@@ -13660,7 +13659,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             own_counters = self._own_ev_counters()  # (#1049)
             for cid, ev_dev in self._ev_devices.items():
                 if cid not in self._ev_taper_detectors:
-                    self._ev_taper_detectors[cid] = EVTaperDetector(self.config)
+                    # (#1127) its own car's size and target, not the flat copy
+                    self._ev_taper_detectors[cid] = EVTaperDetector(
+                        self.config, charger_id=cid)
                     # Restore state if available
                     if self._storage:
                         stored = self._storage.get_ev_intelligence_state()
@@ -13889,7 +13890,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # Self-healing: if SOC is at 0% but car just charged, something is wrong
         # Reset to a reasonable estimate based on recent session energy
         if estimated_soc <= 0 and self._session_data.energy_kwh > 1.0 and power.ev_connected:
-            capacity = self.config.get("ev_battery_capacity_kwh", 40)
+            capacity = self._ev_taper_detector.capacity_kwh  # (#1127) this car's pack
             session_soc = min(95.0, self._session_data.energy_kwh / capacity * 100 * 0.92) if capacity > 0 else 0.0
             self._ev_taper_detector._energy_since_full = (100 - session_soc) / 100 * capacity
             self._ev_taper_detector._estimated_soc = session_soc
@@ -14643,13 +14644,14 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
 
         # Shared across chargers — computed once, only when something decays.
         predicted = self._predictor.predict_ev_consumption_tomorrow(now_time)
-        fallback = self.config.get("daily_ev_target", 10)
         temp_factor = EVTaperDetector.temperature_correction_factor(
             self._read_outdoor_temperature()
         )
         for cid, det in targets:
             if cid is not None:
                 _LOGGER.debug("Day rollover: decaying virtual SOC for %s", cid)
+            # (#1127) each car falls back to its own daily target
+            fallback = det.car_setting("daily_ev_target", 10)
             det.apply_daily_decay(predicted, fallback, temp_factor)
 
     def _read_outdoor_temperature(self) -> float:
@@ -14864,7 +14866,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     continue
                 if not isinstance(per_charger_state, dict):
                     continue
-                det = EVTaperDetector(self.config)
+                det = EVTaperDetector(self.config, charger_id=str(cid))  # (#1127)
                 det.restore_state(per_charger_state)
                 self._ev_taper_detectors[str(cid)] = det
         except Exception as e:  # noqa: BLE001 — a bad payload must not fail setup

@@ -161,8 +161,11 @@ class EVTaperDetector:
         full_detected: True when a full charge was detected this session.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], charger_id: Optional[str] = None):
         self._config = config
+        # (#1127) The charger whose car this detector tracks. None is the
+        # primary (ev_chargers[0]) — the default detector and a bare install.
+        self._charger_id = charger_id
         self._buffer: deque = deque(maxlen=BUFFER_SIZE)
 
         # Session state
@@ -235,6 +238,31 @@ class EVTaperDetector:
         self._hw_total_at_full: Optional[float] = None  # Charger total kWh when SOC was 100%
         self._hw_total_last: Optional[float] = None  # Last known charger total kWh
 
+    def car_setting(self, key: str, default: Any) -> Any:
+        """(#1127) This car's own setting: its charger's entry, else the flat key.
+
+        Battery size and targets are set per charger (one car per charger).
+        The flat key holds the setup value or the primary's copy, so every
+        detector that read it gave each car the first car's pack. Looked up
+        on every call: a card write puts fresh dicts into ``ev_chargers``.
+        A null value counts as unset at both levels.
+        """
+        chargers = self._config.get("ev_chargers") or []
+        if self._charger_id is None:
+            own = chargers[0] if chargers else None
+        else:
+            own = next((c for c in chargers if isinstance(c, dict)
+                        and c.get("id") == self._charger_id), None)
+        if isinstance(own, dict) and own.get(key) is not None:
+            return own[key]
+        value = self._config.get(key)
+        return default if value is None else value
+
+    @property
+    def capacity_kwh(self) -> float:
+        """(#1127) This car's battery size in kWh."""
+        return float(self.car_setting("ev_battery_capacity_kwh", 40))
+
     def _session_energy_floor_kwh(self) -> float:
         """Per-vehicle effective floor for the taper-to-full gate (#438).
 
@@ -251,7 +279,7 @@ class EVTaperDetector:
             Minimum session-delivered energy (kWh) required before
             ``_full_detected`` can be anchored from a taper pattern.
         """
-        capacity = float(self._config.get("ev_battery_capacity_kwh", 40))
+        capacity = self.capacity_kwh
         proportional = capacity * FULL_SESSION_ENERGY_FRAC_OF_CAPACITY
         return min(FULL_SESSION_ENERGY_MIN_KWH, proportional)
 
@@ -435,7 +463,7 @@ class EVTaperDetector:
                     "(capacity=%.0fkWh) — not anchoring full (likely a "
                     "handshake-floor oscillation, not a real end-of-charge)",
                     self._current_session_energy_kwh, floor_kwh,
-                    self._config.get("ev_battery_capacity_kwh", 40),
+                    self.capacity_kwh,
                 )
 
         return self._analyze(ev_power)
@@ -462,7 +490,7 @@ class EVTaperDetector:
         decay *= temp_correction
         self._energy_since_full += decay
 
-        capacity = self._config.get("ev_battery_capacity_kwh", 40)
+        capacity = self.capacity_kwh
         # Cap at capacity
         self._energy_since_full = min(self._energy_since_full, capacity)
         if capacity > 0:
@@ -544,7 +572,7 @@ class EVTaperDetector:
             ev_energy_increment_kwh: Power-integrated increment — the source.
             hw_total_energy_kwh: Current charger lifetime total, tracked only.
         """
-        capacity = self._config.get("ev_battery_capacity_kwh", 40)
+        capacity = self.capacity_kwh
 
         # (#1011) Energy actually flowing ends a declined start: the car
         # accepted current again (preconditioning, its timer, a wake-up).
@@ -630,7 +658,7 @@ class EVTaperDetector:
         When real SOC is available, calibrates internal state so the
         virtual SOC stays accurate when the car API goes offline.
         """
-        capacity = self._config.get("ev_battery_capacity_kwh", 40)
+        capacity = self.capacity_kwh
 
         if vehicle_soc is not None:
             # Calibrate: sync internal state to real SOC so virtual
@@ -705,7 +733,7 @@ class EVTaperDetector:
         """
         if self._soc_anchor_value is None or self._soc_anchor_session_kwh is None:
             return None
-        capacity = float(self._config.get("ev_battery_capacity_kwh", 40) or 0)
+        capacity = self.capacity_kwh
         if capacity <= 0:
             return None
         delivered = max(
@@ -730,7 +758,7 @@ class EVTaperDetector:
             self._session_start_soc = None
             return
 
-        capacity = self._config.get("ev_battery_capacity_kwh", 40)
+        capacity = self.capacity_kwh
         if capacity <= 0:
             self._session_start_soc = None
             return
@@ -789,7 +817,7 @@ class EVTaperDetector:
             efficiency = self._charge_efficiency()
             energy_to_battery = session_energy_kwh * efficiency
             # Assume car arrived at target_soc minus what it accepted
-            target = self._config.get("ev_target_soc", 80)
+            target = self.car_setting("ev_target_soc", 80)
             soc_added = energy_to_battery / capacity * 100.0
             pre_charge_soc = max(0, target - soc_added)
             self._estimated_soc = min(100.0, pre_charge_soc + soc_added)
@@ -1051,7 +1079,7 @@ class EVTaperDetector:
                     s["energy_kwh"] for s in sessions
                     if s["end"] > latest_full["end"]
                 )
-                capacity = self._config.get("ev_battery_capacity_kwh", 40)
+                capacity = self.capacity_kwh
                 # Cold-start seed, NOT the deficit accumulator (#708). At boot
                 # all recorder history offers is "the car took this much back
                 # since it was last full"; how far it was driven in between is
@@ -1279,7 +1307,7 @@ class EVTaperDetector:
         if len(self._battery_health_samples) < 3:
             return
 
-        capacity = self._config.get("ev_battery_capacity_kwh", 40)
+        capacity = self.capacity_kwh
         if capacity <= 0:
             return
 
