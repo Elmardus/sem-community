@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A discharge limit the battery did not keep is sent again once** (#1138). The old limit stayed until the new one differed by 100 W.
 - 🐛 **The "or:" label on the Configuration tab is now translated** (#1129). It was still English in 13 languages.
 # [2.2.0-beta.19] — 15.10.2026
 
