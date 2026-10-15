@@ -382,6 +382,12 @@ class HotWaterController(SwitchDevice):
         return False
 
     @property
+    def runs_without_surplus(self) -> bool:
+        """(#1121) A Legionella run heats to its target sun or not;
+        ``check_legionella_cycle`` ends it."""
+        return self._legionella_cycle_active
+
+    @property
     def stop_condition_met(self) -> bool:
         """(#1062) A running SWITCH boiler stops at the active target.
 
