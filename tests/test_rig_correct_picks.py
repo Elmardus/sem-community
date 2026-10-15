@@ -97,6 +97,9 @@ async def test_peblar(hass):
     assert m["ev_current_control_entity"] == "number.peblar_ev_charger_charge_limit"
     assert m["ev_start_stop_entity"] == "switch.peblar_ev_charger_charge"
     assert m["ev_charging_power_sensor"] == "sensor.peblar_ev_charger_power"
+    # #1126: the state sensor is ``device_class: enum``
+    assert m["ev_connected_sensor"] == "sensor.peblar_ev_charger_state"
+    assert m["ev_charging_sensor"] == "sensor.peblar_ev_charger_state"
 
 
 async def test_v2c(hass):

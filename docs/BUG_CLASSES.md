@@ -2233,9 +2233,9 @@ core really stores — Blue Current `vehicle_detected`/`standby`, NRGkick `stand
 Connector `waiting_car`, the ABL pilot codes — so a Blue Current `vehicle_status` is still refused
 except at `ready` (one that saved at `ready` is refused on a later reconfigure), and the reader
 reads a car at `vehicle_detected` as gone. Each needs its meaning checked at the source before it
-is mapped. Older and separate: `_discover_peblar` and
-`_discover_easee` take a status sensor only with no device class, but core's Peblar `cp_state` is
-`enum`, so registry discovery never binds it (the glob prefill does, on an English install).
+is mapped. Older and separate, closed by #1126 (class 145): `_discover_peblar` and
+`_discover_easee` took a status sensor only with no device class, but core's Peblar `cp_state` is
+`enum`, so registry discovery never bound it.
 **Closure:** import the owner and delete the literal, at **every** site in one pass — and where a
 literal is not a default at all, say so in the code rather than in a comment: `charge_stability`'s
 `or 0` was a sentinel meaning "config is silent, ask the adapter", and became a conditional so the
@@ -5576,8 +5576,8 @@ start/stop, which stops a charge by taking the connector out of service. (2) A u
 names match no rule at all is no longer a charger: if openWB's loadpoint publishes German entity
 names under an English "Chargepoint" device name, it matched only through "charg" before (with a
 guessed status sensor) and is now left to the prober and the near-miss offer. (3) Peblar's state
-sensor is `device_class: enum` and `_discover_peblar` asks for none, so no connected/charging
-sensor is bound (a different shape). (4) The inverter-side `_DISCHARGE_CONTROL_PATTERNS` read whole
+sensor is `device_class: enum` and `_discover_peblar` asked for none, so no connected/charging
+sensor was bound — class 145, closed by #1126. (4) The inverter-side `_DISCHARGE_CONTROL_PATTERNS` read whole
 ids too, some by brand name on purpose. (5) The glob matrix (`EV_INTEGRATION_PATTERNS`) is a
 config-flow prefill and was not changed. (6) An owner who renamed the TOTAL power sensor leaves
 the phase leg bound: the sum is found by name. (7) Ids in other languages: a German or Dutch
@@ -5930,3 +5930,13 @@ Refs #1129 #675 #674.
 **Sweep question:** for every `this.x` a card reads — which line sets it, and is that line in this card or its base?
 **Left open:** reads by bracket (`this[key]`) and members of other objects (`dev.x`, `config.x`) are not checked. The check reads text, not a parse: a ` //` or a regex holding `/*` inside a template can hide a read after it on that line.
 Refs #1128 #914 #1053.
+
+### 145. A status sensor asked for by a missing device class — HA's `enum` class fails the test — GUARDED
+**Symptom:** on Home Assistant's own Peblar test data (HA 2026.8.2) a Peblar found through the device list got no plug and no charging sensor (#1126). SEM read "no car" all the time and never started a charge. Nothing errors: the charger has power, control and start/stop.
+**Root shape:** a brand rule meant "a text sensor, not a reading" and wrote "no device class". Home Assistant gives a sensor with a fixed list of states the class `enum` — what a status sensor is — and integrations move to it. Every one that did fell out of the rule. Close to class 42 (a shape asked where HA says the role), but the other way: the rule refuses what it wants.
+**Where it lives:** `_discover_peblar` and `_discover_easee` in `hardware_detection.py` — the only two brand functions that tested a class for a status sensor. Both **fixed**. A zero-config Peblar save from before the fix had neither sensor — **healed** at startup (`_fill_state_sensors_of_own_save`). Not here: the generic roles path (`read_charger_roles`) reads a status sensor by its options and never asked for a class.
+**Closure:** `_is_state_text(entry)` — no device class or `enum` — is the one test. Peblar also reads its translation key `cp_state`: the id is built in the install's language (de `…_zustand`, nl `…_status`), the key is not. The heal fills only SEM's own save (the id setup gives that box, from a brand path) with neither sensor, and only when its power and controls are what detection finds today: a Peblar saved before #1035 can hold one phase as its power and the single-phase switch as start/stop, and seeing the car would put those to work (the review of this fix). A charger the user set up keeps what they chose; the forms require both sensors.
+**Guard:** `tests/test_1126_enum_status_sensor.py` — core's Peblar in both orders, through the brand rule, registry discovery and the report; a Peblar in four other languages; the bound states read as the coordinator reads them; Easee with and without the class; the heal (fills both, runs once, leaves alone a user's charger, a half-set one, a pre-#1035 save and a charger only the roles found; runs before the charger list is read; the real saved option sets stay as they are); an AST check that no `_discover_*` function asks for a missing class (`is None`, `== None`, `== ""`, `not dc`, `in (None, …)`), with a probe for each shape, and that no `_BRAND_HINTS` row asks for none. The rig's Peblar pin (`test_rig_correct_picks.py`) and golden file now carry both sensors.
+**Sweep question:** for every device-class test in discovery, is "no class" standing in for a kind of sensor that HA has a class for?
+**Left open:** a Peblar the user set up by hand with another sensor keeps it. A zero-config Peblar save from before #1035 with wrong power or start/stop gets no state sensor (warning in the log; set it up again).
+Refs #1126 #1038 #1035.
