@@ -85,7 +85,12 @@ RAISE = {
 #: Raised by a device that is not always a charger: a load driven by current
 #: files ``charger_actuation_failed`` under its own id, and the sweep knows no
 #: load ids. Kept out on purpose (decision record, #1139).
-NOT_SWEPT = {"raise_charger_actuation_failed"}
+NOT_SWEPT = {
+    "raise_charger_actuation_failed": (
+        "shared — devices/base.py raises it for every CurrentControlDevice, "
+        "and features/device_registry.py builds those for loads too, under "
+        "the load's id; the sweep knows no load ids (#1140)"),
+}
 
 
 def _coordinator(*ids):
@@ -198,14 +203,48 @@ async def test_each_swept_repair_of_a_removed_charger_goes(hass):
     _sweep_orphan_charger_repairs(hass, _coordinator("ev_charger"), [ZEPTO_GO])
 
     left = _ids(hass)
-    assert {name for name, iid in filed.items() if iid in left} == NOT_SWEPT
+    assert {name for name, iid in filed.items() if iid in left} == set(NOT_SWEPT)
+
+
+async def test_each_repair_of_a_listed_charger_stays(hass):
+    """The twin: the same seven Repairs for the charger SEM still runs."""
+    for raise_it in RAISE.values():
+        raise_it(hass, "ev_charger")
+    listed = {**ZEPTO_GO, "ev_start_stop_entity": "switch.x"}
+    before = _ids(hass)
+    assert len(before) == len(RAISE)
+
+    _sweep_orphan_charger_repairs(hass, _coordinator("ev_charger"), [listed])
+
+    assert _ids(hass) == before
+
+
+async def test_the_late_found_primary_keeps_its_repairs(hass):
+    """No charger at setup, no saved list: the retry may still build
+    ``ev_charger`` minutes later, so setup passes it in ``keep_ids``."""
+    RAISE["raise_charger_stop_unenforceable"](hass, "ev_charger")
+    _sweep_orphan_charger_repairs(hass, _coordinator(), [],
+                                  keep_ids=("ev_charger",))
+    assert ri._stop_unenforceable_issue_id("ev_charger") in _ids(hass)
 
 
 # ── the call site ───────────────────────────────────────────────────────
 
+def _body_holding(tree, pred):
+    """The statement list that directly holds a statement matching pred."""
+    for node in ast.walk(tree):
+        for field in ("body", "orelse", "finalbody"):
+            block = getattr(node, field, None)
+            if isinstance(block, list) and any(pred(st) for st in block):
+                return block
+    return None
+
+
 def test_setup_sweeps_after_the_chargers_are_registered():
     """Deleting the call leaves every test above green — so pin it: setup
-    calls the sweep with the list it registered, after registering it."""
+    calls the sweep with the list it registered, after registering it, in
+    the same block — not under ``if coordinator._ev_devices``, where
+    removing the last charger would never sweep."""
     tree = ast.parse(inspect.getsource(sem_init.async_setup_entry))
     calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
              and getattr(n.func, "id", None) == "_sweep_orphan_charger_repairs"]
@@ -213,11 +252,28 @@ def test_setup_sweeps_after_the_chargers_are_registered():
     (call,) = calls
     assert [getattr(a, "id", None) for a in call.args] == [
         "hass", "coordinator", "ev_chargers_config"]
-    registered = [n.lineno for n in ast.walk(tree)
-                  if isinstance(n, ast.Assign)
-                  and any(getattr(t, "attr", None) == "_ev_device"
-                          for t in n.targets)]
-    assert registered and call.lineno > max(registered)
+    assert [k.arg for k in call.keywords] == ["keep_ids"]
+
+    def resets_devices(st):
+        return (isinstance(st, ast.Assign)
+                and any(getattr(t, "attr", None) == "_ev_devices"
+                        for t in st.targets)
+                and isinstance(st.value, ast.Dict))
+
+    def direct(st):        # the call is this statement, under no ``if``
+        return (isinstance(st, (ast.Expr, ast.Assign))
+                and any(n is call for n in ast.walk(st)))
+
+    def holds_call(st):     # …or that, wrapped only in a ``try``
+        return direct(st) or (isinstance(st, ast.Try)
+                              and any(direct(x) for x in st.body))
+
+    block = _body_holding(tree, resets_devices)
+    assert block is not None
+    reset = next(i for i, st in enumerate(block) if resets_devices(st))
+    sweep = [i for i, st in enumerate(block) if holds_call(st)]
+    assert sweep and sweep[0] > reset, (
+        "the sweep must run in the registration block, after the loop")
 
 
 # ── setup picks the Go, never its installation (his real layout) ────────
@@ -318,3 +374,27 @@ async def test_setup_offers_the_go_and_never_its_installation(hass, with_limit):
     # suggestion the user confirms (#804 B4c) — never a role
     assert charger["_suggested_phase_switch"]["entity"] == (
         f"number.{OLD}_3_to_1_phase_switch_current")
+
+
+# ── a real setup runs the sweep ─────────────────────────────────────────
+
+async def test_a_real_setup_clears_the_orphans_and_keeps_the_rest(
+        sem_real_hass, sem_multi_wallbox_config_entry):
+    """SEM set up for real with two chargers (``ev_charger``,
+    ``ev_charger_1``). Repairs a removed charger and a replaced entity left
+    behind go; the Repair of an entity a charger still names stays."""
+    from .test_services_real import _seed_sem_input_sensors, _setup_sem
+
+    h = sem_real_hass
+    _seed_sem_input_sensors(h)
+    gone = [_broken(h, "ev_charger_2", f"switch.{OLD}_charging"),
+            _broken(h, "ev_charger", "switch.replaced_long_ago")]
+    RAISE["raise_soc_cap_unenforceable"](h, "ev_charger_2")
+    kept = _broken(h, "ev_charger_1", "number.test_wb_right_max_current",
+                   reason="unavailable")
+
+    await _setup_sem(h, sem_multi_wallbox_config_entry)
+
+    left = _ids(h)
+    assert not ({*gone, ri._soc_cap_issue_id("ev_charger_2")} & left)
+    assert kept in left

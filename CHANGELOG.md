@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
-- 🐛 **A removed charger no longer leaves its Repairs behind** (#1139). They stayed in Settings forever; now they clear when SEM starts.
+- 🐛 **Repairs of a removed charger now clear when SEM starts** (#1139). They stayed forever. "Not accepting commands" still stays (#1140).
 
 # [2.2.0-beta.19] — 15.10.2026
 

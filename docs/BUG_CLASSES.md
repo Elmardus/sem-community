@@ -3680,8 +3680,10 @@ in Settings forever (@OddmarDam; HA had renamed its ids under it). Setup now run
 listed `(charger, entity)` pairs, and every other per-charger Repair of an unlisted charger, goes.
 `charger_actuation_failed` stays out — a load driven by current files it under its own id, and the
 sweep knows no load ids. Guard: `tests/test_1139_orphan_charger_repairs.py` files each Repair of
-`PER_CHARGER_REPAIRS` through its real raiser and needs a sweep or a written reason for every one; a
-call-site test pins the setup call. Still open: the entity-keyed `sensor_unavailable`,
+`PER_CHARGER_REPAIRS` through its real raiser; each one must be swept for a removed charger and kept
+for a listed one, or sit in `NOT_SWEPT` with its reason. A call-site test pins the setup call in the
+registration block, outside any `if`. The late-found primary `ev_charger` is kept while the retry
+can still build it. Still open: the entity-keyed `sensor_unavailable`,
 `sensor_stale` and battery-write Repairs, and `charger_actuation_failed` (#1140). (3) The #845 mode watch
 is built on the first cycle, before any battery adapter exists, so on an auto-detected platform it
 has no expectation and stays publish-only for its whole life: the #845 Repair is dormant everywhere
