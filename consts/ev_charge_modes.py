@@ -135,7 +135,7 @@ def mode_allows_night_charging(
 ) -> bool:
     """Does this charger's mode permit night/grid charging at all? (#679)
 
-    #634 settled the axis with Guido: the mode is the *daytime* axis and the
+    #634 settled the axis: the mode is the *daytime* axis and the
     "At least" floor is the overnight guarantee, in every mode — ``solar_only``
     included. The safety half of that deal is ``floor 0 = never``, which is how
     the #346 "solar_only never grids at night" contract survives as the default.

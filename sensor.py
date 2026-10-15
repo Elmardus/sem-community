@@ -2829,7 +2829,7 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
             # Set values and mark as available (but unavailable if value is None)
             # Exception: timestamp sensors (e.g. ev_last_full_charge) are available
             # even when None — "no event yet" is a valid state, not unavailable.
-            # Dark-read grace (03.09, Guido: "it was very stable before"). A
+            # Dark-read grace (03.09: "it was very stable before"). A
             # numeric measurement whose source is unreadable THIS cycle keeps
             # its last good value for SENSOR_DARK_READ_GRACE_S and reports
             # ``stale_s``; only a sustained outage blanks it. Never invents:
@@ -3540,7 +3540,7 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
             # AVERAGE labelled "Current Peak" and nothing about the budget
             # that actually bounds the next command, which is how 4.9 kW of
             # charging and a 4.36 kW "margin" could appear side by side and
-            # read as a contradiction (Guido, 03.09). None when the install is
+            # read as a contradiction (03.09). None when the install is
             # uncapped or the guard has not published yet — never 0, which
             # would draw a slot nobody measured.
             attrs["peak_slot_allowed_w"] = self.coordinator.data.get(

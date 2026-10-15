@@ -1,7 +1,7 @@
 """(#846) A cold watts-per-amp learner replays itself from SEM's own
 recorded series.
 
-Guido, 26.08, after the first deploy left PROD's learner empty because the
+26.08, after the first deploy left PROD's learner empty because the
 car had stopped charging minutes earlier: *"We already learned something
 from this — can you backfill prod."* The recorder already held the
 evidence. Replaying it is what the learner would have learned had it been

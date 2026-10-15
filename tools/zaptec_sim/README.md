@@ -23,8 +23,8 @@ The domain is `zaptec_sim`, which SEM's detection matches through the same
 tolerant `zaptec*` prefix rule that exists for HACS builds like
 `zaptec_custom` — so discovery sees it exactly as it would see a real one.
 
-**Device names default to Dutch and owner-prefixed** ("Guido Coppes Lader"),
-reproducing the reporter's registry, because that localisation is precisely
+**Device names default to Dutch and owner-prefixed** ("Jan Jansen Lader"),
+reproducing the shape of the reporter's registry (name replaced), because that localisation is precisely
 what broke detection. Override with the `device_prefix` option to test other
 languages.
 

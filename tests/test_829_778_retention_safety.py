@@ -1,6 +1,6 @@
 """#829 × #778 — the retention purge can never eat the planning evidence.
 
-Guido's question, and the right one to ask: the budget needs five nights and
+The question, and the right one to ask: the budget needs five nights and
 seven settled forecast days, and we shipped a service that deletes SEM history.
 If those two ever met, the evidence would be purged before it could ever be
 complete, and the budget would sit at "learning" forever without anyone

@@ -1,7 +1,7 @@
 """A restart must not cost the night — bridge the hole with the pack's own SOC.
 
-Guido, 23.08: *"that is not a good scenario, people are rebooting the system,
-it has to be more reliable."* He is right, and the failure was worse than a
+23.08: *"that is not a good scenario, people are rebooting the system,
+it has to be more reliable."* That is right, and the failure was worse than a
 lost night:
 
 * a restart makes the tracker miss every sample in between, so the energy that

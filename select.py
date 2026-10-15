@@ -473,7 +473,7 @@ class SEMPerChargerSelect(CoordinatorEntity, SelectEntity):
             # (#885 matrix, decision 3) ALL modes are always listed. #277 Q1
             # hid ``solar_plus_cheap`` on tariff-less installs so nobody
             # picked an option that silently degrades — but hiding made it
-            # undiscoverable, and Guido looked for it and could not find
+            # undiscoverable: a user looked for it and could not find
             # it. The protection moves to the CARD: it reads
             # ``tariff_available`` below and renders the option disabled
             # with the reason, which keeps both properties (cannot be

@@ -21,7 +21,7 @@
 - **Never pipe a long run through `tail`** — write it to a file and read the file (`-rf` lists every failure).
 - Commit messages: `feat(#923): …` / `test(#923): …`. **No `Co-Authored-By` or any AI attribution line.**
 - **Do not deploy anywhere until Task 17.** Build the whole thing, then test live once (CLAUDE.md, "Build complete, THEN test").
-- **Do not merge to develop.** The branch merges only on Guido's word, with `SEM_FEAT_OK` (Task 17 ends by asking).
+- **Do not merge to develop.** The branch merges only on approval, with `SEM_FEAT_OK` (Task 17 ends by asking).
 
 ## File map
 
@@ -2960,13 +2960,13 @@ VERDICT:  <CONFIRMED | REFUTED | OVERSTATED> — <what it found, what changed as
 - [ ] **Step 3: Preflight**
 
 Run: `~/bin/sem-ready.sh`
-Expected: every gate passes except the ones that wait on live proof / Guido's word; gate 2b finds the challenge record.
+Expected: every gate passes except the ones that wait on live proof / approval; gate 2b finds the challenge record.
 
 ---
 
 ### Task 17: Live proof — .175 full install, .46 minimal install — then stop
 
-Build is complete; this is the one deploy-and-verify pass. **Observer mode stays ON on both rigs** (they share Guido's real KEBA and Huawei). PROD is not touched.
+Build is complete; this is the one deploy-and-verify pass. **Observer mode stays ON on both rigs** (they share PROD's real KEBA and Huawei). PROD is not touched.
 
 - [ ] **Step 1: .175 — nothing disappears where the hardware exists**
 
@@ -3006,7 +3006,7 @@ Restore the full saved preferences (EV consumer included) with the same tool, th
 
 - [ ] **Step 5: Record and stop**
 
-Write the evidence (verdicts, entity diffs, the reload log line, error-card scan result, screenshots) into `~/claude-jobs/challenge-feature-923-house-surface.md` under a `LIVE:` heading. Push the branch (`git push -u origin feature/923-house-surface`). **Do not merge.** Report to Guido in a few lines — what was proven where, what the release note says about custom dashboards — and ask whether and when it ships (merge needs his word and `SEM_FEAT_OK="#923 …" git push origin develop`).
+Write the evidence (verdicts, entity diffs, the reload log line, error-card scan result, screenshots) into `~/claude-jobs/challenge-feature-923-house-surface.md` under a `LIVE:` heading. Push the branch (`git push -u origin feature/923-house-surface`). **Do not merge.** Report in a few lines — what was proven where, what the release note says about custom dashboards — and ask whether and when it ships (merge needs approval and `SEM_FEAT_OK="#923 …" git push origin develop`).
 
 ---
 

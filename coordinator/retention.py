@@ -1,6 +1,6 @@
 """#829 — retention for SEM's own fire-and-forget entities.
 
-Guido, 22.08: *"an option to have certain retention on sensors — for most of
+Asked 22.08: *"an option to have certain retention on sensors — for most of
 SEM's sensors the history isn't even important, these are fire and forget."*
 
 He is right, and the measurement says exactly which ones:

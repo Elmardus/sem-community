@@ -1,4 +1,4 @@
-"""A new install starts OBSERVING — it looks before it touches (Guido, 29.08).
+"""A new install starts OBSERVING — it looks before it touches (29.08).
 
 The old default was off, reasoning that "a real install actually controls
 hardware". Live on PROD 29.08 showed the cost of that reasoning: a fresh

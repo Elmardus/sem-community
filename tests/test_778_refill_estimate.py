@@ -1,6 +1,6 @@
 """#778 — "will it refill" is not a scalar question.
 
-Guido pinned this before anyone built it: the morning solar is also claimed by
+This was pinned before anyone built it: the morning solar is also claimed by
 tomorrow's packed EV blocks and loads. A 40 kWh day owing the house 12 kWh and
 the car 10 kWh refills the pack with 18 kWh, not 40 — and a budget handed the
 raw number would sell energy that was never coming back.

@@ -989,7 +989,7 @@ class TestANearMissIsAboutHardware:
 
 @pytest.mark.unit
 class TestAProposalCanActuallyBeAccepted:
-    """Guido, reading the card: *"Huawei Solar unconfirmed — how do I
+    """Reading the card: *"Huawei Solar unconfirmed — how do I
     confirm?"* Fair: the block said unconfirmed and offered no way to
     confirm, so the only route was to read the entity, scroll to the right
     section and re-enter it by hand. That is a chore wearing the word
@@ -1067,7 +1067,7 @@ class TestAProposalCanActuallyBeAccepted:
 
 @pytest.mark.unit
 class TestANearMissIsAnOfferNotAChore:
-    """Guido: *"'no role matched — please report' — how?"* Fair. When SEM has
+    """Asked: *"'no role matched — please report' — how?"* Fair. When SEM has
     already worked out which entity is the charging current, asking the user
     to file a bug report is the wrong end of the offer: the answer is *add
     this charger*, pre-filled. "Please report" stays for the case where SEM

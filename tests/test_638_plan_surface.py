@@ -243,7 +243,7 @@ def test_the_projection_carries_the_arbitrage_advice():
 
 
 def test_the_idle_answer_carries_its_why():
-    """(Guido, 08-08: uncapping a device made the plan 'disappear') — the
+    """(08-08: uncapping a device made the plan 'disappear') — the
     quiet answer was CORRECT but unexplained on the card: the why lived
     only in diagnose. The projection now carries it."""
     attrs = _energy_plan_attrs(

@@ -3,7 +3,7 @@
 The observer seam logged "OBSERVER · WOULD ACTIVATE X" — human-readable,
 grep-only, and on a host with a small log ring, gone in minutes. Building a
 simulation against it meant scraping logs over SSH (the N2 sim-actuator
-bridge, 13.08). Guido's call: make it standard, so anyone can simulate.
+bridge, 13.08). Decision: make it standard, so anyone can simulate.
 
 Two surfaces, one source of truth:
 - ``SurplusController.observer_decisions`` — the per-device map of the

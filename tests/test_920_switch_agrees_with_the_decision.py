@@ -82,7 +82,7 @@ class TestTheSwitchAnswersItsOwnLabel:
             assert _decision_may_sell("auto", {"may_export": False}, arb, spend) is False
 
     def test_self_consumption_never_sells(self):
-        """Guido, 06.09: 'I set it to self consumption, because I do not want
+        """06.09: 'I set it to self consumption, because I do not want
         to sell to grid.' That must hold with every feature switched on."""
         assert _switch_shows("self_consumption", None, True, True) is False
         assert _decision_may_sell("self_consumption", None, True, True) is False

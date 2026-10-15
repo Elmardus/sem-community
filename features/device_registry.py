@@ -844,7 +844,7 @@ class UnifiedDeviceRegistry:
             # right after this registry initializes. So the filter ran once on
             # the legacy pass and THIS loop — which re-derives the whole roster
             # from the Energy Dashboard on every refresh — put the lights
-            # straight back (Guido's PROD, beta.1: "Garage / Carport Licht" and
+            # straight back (PROD, beta.1: "Garage / Carport Licht" and
             # "Girlande" still on the planner card). One rule, applied at the
             # boundary that actually runs. Because the roster is re-derived,
             # an already-imported light retires itself on the next refresh —

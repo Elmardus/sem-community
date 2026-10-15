@@ -595,7 +595,7 @@ git commit -m "docs(#871): what a negative export price means and what SEM does"
 - `/tmp/venv-ci/bin/ruff check .` clean.
 - A **challenge record** at `~/claude-jobs/challenge-feature-871-negative-export.md` — `sem-ready.sh` gate 2b refuses a feature branch without one. Ask a ruflo reviewer to REFUTE: *"no sink relaxation in this change can move energy in a way the user did not ask for, and no safety gate is weakened by AVOID_EXPORT."*
 - **A live simulation on .175**, because the posture cannot be exercised by any real tariff: hold a negative export rate, confirm the posture flips, the sinks relax, and that flipping the switch off restores the previous behaviour exactly.
-- Merge on Guido's word with `SEM_FEAT_OK` — it is an enhancement.
+- Merge on approval with `SEM_FEAT_OK` — it is an enhancement.
 
 ## Self-review notes
 

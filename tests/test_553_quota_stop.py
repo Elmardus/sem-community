@@ -7,7 +7,7 @@ Live-proven on the real P30 (2026-08-08, ~22:30, observer-on windows):
   disable) never landed: the register read 0.0 all evening — writes to
   a disabled session don't persist. A silent no-op since it shipped.
 * A quota BELOW the session counter is rejected (register cleared).
-* A quota just ABOVE the session, written before enable (Guido's own
+* A quota just ABOVE the session, written before enable (PROD's own
   script order: set_energy → enable), terminates at the target and
   HOLDS — ten unpoliced minutes of silence, the evening's first.
 
@@ -64,7 +64,7 @@ class TestQuotaStop:
         stop path was never revisited, so SEM kept ENABLING the charger in
         order to stop it. On a box that was already idle that is a start,
         and it granted the firmware's 1 kWh floor on every plug-in against
-        a zero ask (Guido's report, 28.08). Measured the same evening:
+        a zero ask (PROD report, 28.08). Measured the same evening:
         plugged in and disabled with the dead-man armed, the box drew
         nothing for 28 minutes."""
         dev, hass = _keba(session_kwh=9.9)
@@ -102,7 +102,7 @@ class TestQuotaStop:
         """SUPERSEDED BY #854 (was: the dead-man still arms).
 
         The dead-man OFF and the 0 A write stay for brands whose stop IS a
-        current write. On KEBA the disable is the stop, and Guido's
+        current write. On KEBA the disable is the stop, and PROD's own
         two-year-old automation sends nothing else — every addition SEM
         made around it cost energy or started a fight with itself."""
         dev, hass = _keba(session_kwh=9.9)

@@ -170,7 +170,7 @@ class TestWhenItRunsOut:
 
 @pytest.mark.unit
 class TestCancellingIsSettingTheChargerBack:
-    """There is no Resume button and no Resume option. Guido: *"instead of
+    """There is no Resume button and no Resume option. Rule: *"instead of
     resume now the user could also just set the charger back"* — and they
     can, because the charge-mode select is right there. What that costs is
     the bookkeeping below: a pause nobody cancelled explicitly still has to
@@ -320,7 +320,7 @@ class TestTheButtonsSurviveSetup:
 # RienduPre pressed Pause and saw a charger on Off with no sign it was a pause
 # or when it would end. The deadline and the mode it returns to ride on the
 # charge-mode select's attributes — and only while the mode reads Off,
-# because picking a mode IS the cancel (Guido: "if the user sets the mode to
+# because picking a mode IS the cancel (rule: "if the user sets the mode to
 # any other mode again the timer has to reset").
 
 from unittest.mock import MagicMock, patch

@@ -7,7 +7,7 @@ switching and EG4/Luxpower are found and wired by SEM's generic crawler,
 because the crawler learns the ROLES these integrations expose. No brand
 gets its own code path.
 
-**The rule (Guido, 01.10.2026):** "this is the whole idea of SEM — we do
+**The rule (01.10.2026):** "this is the whole idea of SEM — we do
 not cover hardware integration, we connect to integrations with the crawler
 if possible." SEM drives a device only through the entities and services
 its Home Assistant integration exposes, and finds them by role. A brand is
@@ -37,7 +37,7 @@ branch `feature/hardware-wave` off develop.
 
 **Ship path:** build every task, suite green, ruflo told to refute, one
 deploy to .175 with the compressed sun sim (observer ON), a soak on
-Guido's PROD, merge to develop only on his word.
+PROD, merge to develop only on approval.
 
 ---
 
@@ -135,7 +135,7 @@ Nothing else.
 
 ## Task 0: The crawler rig — the real integrations, not hand-written fixtures
 
-Guido, 01.10.2026: "we easily can test these integrations, even install
+Rule, 01.10.2026: "we easily can test these integrations, even install
 them and test and use the crawler." Each target integration is loaded for
 real in a Home Assistant test instance, and SEM's crawler runs on the
 entities and services it actually creates. A pin bump that renames a key
@@ -251,7 +251,7 @@ or a string compare on a platform name.
 - [ ] .175: `SRC=/home/sem/sem-hw ~/bin/sem-deploy-175.sh`, then
   `timeout 1200 ~/bin/sem-sim-compress.sh 10.10.20.175 18.0 30`. Expect no
   SEM errors, no new entity, no new proposal for .175's own devices.
-- [ ] PROD soak on Guido's word (soak marker `BRANCH:` + `LADDER: hands-off`).
+- [ ] PROD soak on approval (soak marker `BRANCH:` + `LADDER: hands-off`).
 - [ ] Short posts on #1032, #1015, #810, and one Discussions call for a
   Tesla owner and a Zappi owner.
 
@@ -275,7 +275,7 @@ prove the role finds the same entities, then delete the path.
 
 ---
 
-## Decision for Guido
+## Open decision
 
 **Order:** Tesla and Zappi have the most installs but no owner to prove
 them yet; Zaptec, Easee and EG4 have reporters waiting. Build the roles in

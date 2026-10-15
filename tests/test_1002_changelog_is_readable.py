@@ -28,7 +28,7 @@ import pytest
 
 CHANGELOG = Path(__file__).resolve().parent.parent / "CHANGELOG.md"
 
-#: Guido, 22.09.2026. A changelog line says what changed, in common words.
+#: Rule, 22.09.2026. A changelog line says what changed, in common words.
 #: Anything longer is the reasoning, and the reasoning belongs in the issue.
 MAX_WORDS = 25
 

@@ -2889,7 +2889,7 @@ those people.
   offered with different minimums and steps on two pages (5 kWh/1 kWh vs
   1 kWh/0.5 kWh), so a small pack saved on one page was refused by the
   other — both now allow 1–100 kWh in 0.5 kWh steps.
-- 🧹 **SEM writes far fewer recorder rows** (#829, Guido: *"SEM is gathering a
+- 🧹 **SEM writes far fewer recorder rows** (#829: *"SEM is gathering a
   lot of information and cluttering HA"*): measured on a production system,
   SEM wrote **25 % of all state rows with 13 % of the entities** — not from
   recording too much, but from a handful of entities writing a row every
@@ -4457,7 +4457,7 @@ keeps it maintained.
 
 ### 🐛 Fixes
 - 🔋 **Battery STOP flooded the Modbus bus between charge blocks** (#757, from
-  Guido's release/1.8 audit) — while the scheduler is idle/target-reached it
+  the release/1.8 audit) — while the scheduler is idle/target-reached it
   repeats a STOP_FORCE_CHARGE verdict every cycle, and each brand adapter
   re-issued the inverter stop each time (~1800 writes/night on the single
   serial link, colliding with the huawei_solar read coordinators — the #538
@@ -4482,7 +4482,7 @@ keeps it maintained.
 
 ### 🐛 Fixes
 - 🔌 **A restart mid-charge silently rewrote the session** (#753, spotted
-  live by Guido: top chip 1.6 kWh vs the charger's own 6.0 kWh) — the #282
+  live on PROD: top chip 1.6 kWh vs the charger's own 6.0 kWh) — the #282
   session persistence worked, but the restart's sensor warm-up published a
   false "disconnected", the end-detection finalized the session and a fresh
   one started when charging resumed — amputating session cost and solar
@@ -5214,7 +5214,7 @@ keeps it maintained.
   overnight battery drain the boundary exists to prevent. The latch is gone: the sunrise meter
   day is computed statelessly by the shared TimeManager class — restart-proof by construction,
   and in winter the day now rolls at actual sunrise instead of the 07:00 night-window cap.
-  (by @traktore-org, root-caused by Guido's review question)
+  (by @traktore-org, root-caused in review)
 - 🕛 **Overnight top-ups no longer flap at midnight** (#703) — the grid/battery top-up force was
   stamped and expired against the *calendar* date while a load's runtime day is held to **sunrise**,
   so every load running an overnight top-up was stopped at exactly 00:00 ("day rollover") and
@@ -6230,7 +6230,7 @@ keeps it maintained.
   amps are now `max(deadline-required, peak-managed)`, so a lazy deadline no longer
   pins the session at the floor; a tight deadline still forces the required rate.
 - ☀️🌙 **The "At least" floor is now the overnight guarantee in every mode — Solar only
-  included** (#634, Guido's design) — the charge mode is the *daytime* axis; if the day's
+  included** (#634) — the charge mode is the *daytime* axis; if the day's
   solar charging delivered less than the "At least" floor, the DIFFERENCE tops up overnight
   from grid by the Charge-by time (deadline-sized, peak-managed #630). On good-solar days it
   never runs; floor 0 keeps the classic "Solar only never grids at night" contract exactly.
@@ -6266,7 +6266,7 @@ keeps it maintained.
 
 ### 🐛 Fixes (from the #629 overnight soak)
 
-- ⚡ **Night top-up now runs at the peak-managed headroom rate** (#630, Guido) — the plain
+- ⚡ **Night top-up now runs at the peak-managed headroom rate** (#630) — the plain
   `min_plus_solar` night top-up crept at the Min floor even with kilowatts of peak headroom
   free. It now charges at the #274/C1 peak-managed rate (peak limit − expected home −
   higher-priority chargers − **live cheap-hours load draw**, so a running #620 load is never
@@ -6857,14 +6857,14 @@ keeps it maintained.
   not assumed. A median-of-3 pre-filter smooths the surplus input the same way
   the EV path is smoothed. Explicit device `rated_power` shows on the Control
   card (was shadowed by autodiscovery), and Energy-Dashboard re-discovery no
-  longer destroys service-registered devices. (by @guidoeberle in #559)
+  longer destroys service-registered devices. (#559)
 
 ### 🔌 EV charger no longer flaps on/off (KEBA UDP power blips, #573)
 - 🐛 On a KEBA P30 in `min_plus_solar`, the charger cycled on/off every ~15 s —
   a single-cycle UDP power blip to ~0 W spiked computed home consumption, crashed
   the EV surplus below the battery-assist gate and collapsed the budget. A
   median-of-3 filter on `ev_power` absorbs the blip at the source. PROD-confirmed
-  steady across solar_only ↔ min_plus_solar mode switches. (reported by Guido)
+  steady across solar_only ↔ min_plus_solar mode switches.
 
 ### ⚙️ Config on the dashboard — settings apply live
 - ✨ PV-string rename, EV charge target / range / phases, and structural config
@@ -6901,7 +6901,7 @@ keeps it maintained.
   the charger idles → the contactor opens → recovers → repeat. Fix: a
   median-of-3 filter on `ev_power` in the reader absorbs the single-cycle blip
   at the source (a genuine start/stop is 2+ cycles and still tracks within
-  one), so the budget stays steady and the car charges flat. (reported by Guido)
+  one), so the budget stays steady and the car charges flat.
 
 ### ☀️ Lifetime solar production sensor (#573)
 - ✨ New `sensor.sem_lifetime_solar_yield_energy` ("Lifetime Solar Production")
@@ -7625,7 +7625,7 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
   transient (hold) vs structural (stop) on `ChargerDecision.bridgeable`, and the
   stability layer simply honours the flag — no re-derivation — plus a durable
   stop and a post-stop settle so a winding-down car can't re-open the hold.
-  (by @guidoeberle in #461)
+  (#461)
 
 ### ⚙️ Config — knobs apply without a reload (#547)
 - ✨ **Changing a setting now takes effect live.** Scalars cached on a controller
@@ -7633,7 +7633,7 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
   EV priority + min/max current + shed priority, tariff rates) used to need a full
   integration reload. `refresh_runtime_config()` now pushes them into the live
   controllers on every config change — a refresh, not a rebuild, so timers, cost
-  accumulators and smoothing windows are preserved. (by @guidoeberle in #547)
+  accumulators and smoothing windows are preserved. (#547)
 
 ### 🔌 EV / Load management — single-writer peak control (#461)
 - 🐛 **Load management could fight the EV controller (or silently fail to shed it).**
@@ -7642,22 +7642,22 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
   already peak-managed by the night planner — both through the single
   `decide()`/reconciler writer. The old side-channel (`number.set_value 0` /
   `keba.set_current 0`) fought the reconciler heartbeat on KEBA and mis-read
-  number-entity Wallbox chargers, so it could only flap or fail. (by @guidoeberle in #461)
+  number-entity Wallbox chargers, so it could only flap or fail. (#461)
 
 # [1.7.3-beta.65] — 26.06.2026
 
 > Hardens the battery-protection limit against an EV-ramp sensor-lag spike.
 
 ### 🔋 Battery — spike-proof the discharge-protection limit (#536)
-- 🐛 **A fast EV load ramp could briefly over-allow battery discharge.** When the car ramps hard (e.g. `always_max` to 10 kW), the grid meter registers the import a cycle before the KEBA `ev_power` sensor reports the draw, so the energy-balance `home_consumption_power` transiently inflates by ~the car's draw (seen on PROD: spiked to 9213 W). Since the discharge-protection clamp limits the battery to the home load, that spike briefly raised the limit and let the inverter feed a little battery into the car below the buffer. `_smooth_home_consumption` now has a **symmetric upward-spike guard** (it already held the *dip* direction): a one-cycle jump above the last value + 2 kW is treated as the EV/grid sensor lag and the last good value is held for up to 2 cycles; a genuine, persistent rise (an appliance) is accepted once the short window expires. (by @guidoeberle in #536)
+- 🐛 **A fast EV load ramp could briefly over-allow battery discharge.** When the car ramps hard (e.g. `always_max` to 10 kW), the grid meter registers the import a cycle before the KEBA `ev_power` sensor reports the draw, so the energy-balance `home_consumption_power` transiently inflates by ~the car's draw (seen on PROD: spiked to 9213 W). Since the discharge-protection clamp limits the battery to the home load, that spike briefly raised the limit and let the inverter feed a little battery into the car below the buffer. `_smooth_home_consumption` now has a **symmetric upward-spike guard** (it already held the *dip* direction): a one-cycle jump above the last value + 2 kW is treated as the EV/grid sensor lag and the last good value is held for up to 2 cycles; a genuine, persistent rise (an appliance) is accepted once the short window expires. (#536)
 
 # [1.7.3-beta.64] — 26.06.2026
 
 > The battery now stops feeding the EV at the buffer SoC floor — cleanly.
 
 ### 🔋 Battery — enforce the buffer SoC floor (#536 follow-up to #545)
-- 🐛 **The battery drained into the EV below the buffer SoC.** With #545's aggressive assist, a high house load kept surplus just above the gate while SoC fell below the buffer (PROD: 83% with an 85% buffer), and the discharge clamp — which keyed only on `surplus < gate`, never on SoC — let the inverter keep feeding the car well below the user's reserve. The clamp now also fires when **`SoC < buffer_soc`**, so below the buffer the battery is reserved for the house **in every zone, regardless of surplus**. Above the buffer the #545 assist is unchanged. (A zone-by-zone audit confirmed the EV engine was already correct in all four zones — the gap was isolated to the battery clamp.) (by @guidoeberle in #536)
-- 🐛 **The EV stop-bridge never fired with a bursty car.** The disable-bridge stop timer only accumulated while the car drew continuously, and the draw-latch was wiped every deficit cycle — so a Renault Zoe blipping between pulses reset the timer each cycle (170→99→20 s, never reaching 180 s) and the contactor never opened. The latch now persists through the bridge (refreshed on each real draw, cleared only on a genuine stop), so the car stops cleanly instead of grid-charging indefinitely. (by @guidoeberle in #536)
+- 🐛 **The battery drained into the EV below the buffer SoC.** With #545's aggressive assist, a high house load kept surplus just above the gate while SoC fell below the buffer (PROD: 83% with an 85% buffer), and the discharge clamp — which keyed only on `surplus < gate`, never on SoC — let the inverter keep feeding the car well below the user's reserve. The clamp now also fires when **`SoC < buffer_soc`**, so below the buffer the battery is reserved for the house **in every zone, regardless of surplus**. Above the buffer the #545 assist is unchanged. (A zone-by-zone audit confirmed the EV engine was already correct in all four zones — the gap was isolated to the battery clamp.) (#536)
+- 🐛 **The EV stop-bridge never fired with a bursty car.** The disable-bridge stop timer only accumulated while the car drew continuously, and the draw-latch was wiped every deficit cycle — so a Renault Zoe blipping between pulses reset the timer each cycle (170→99→20 s, never reaching 180 s) and the contactor never opened. The latch now persists through the bridge (refreshed on each real draw, cleared only on a genuine stop), so the car stops cleanly instead of grid-charging indefinitely. (#536)
 
 # [1.7.3-beta.63] — 26.06.2026
 
@@ -7672,14 +7672,14 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
 > The home battery now empties into the EV at high SoC instead of sitting idle.
 
 ### 🔋 EV — max out the battery into the car (#545)
-- ⚡ **"Max out till self-consumption":** when the home battery is in the assist band (SoC ≥ the Buffer SoC) and there's real solar surplus past the Solar Gate, SEM now offers the **full** battery-assist potential — it raises the offered amps so the inverter discharges the battery **into the car, down to the Buffer SoC** (the self-consumption reserve floor), instead of only topping the car up to the charger minimum. This fixes the chicken-and-egg where a **full battery sat idle while the EV grid-charged** (observed live: at 100% SoC, SEM offered only ~8 A, the car drew ~3 kW from solar, the battery never assisted, and a grid night-charge was still needed). The assist self-tapers as SoC falls toward the Buffer and is off-limits below it, so the battery is never drained past the floor. Solar-gated; pure amps — SEM commands no battery directly, the inverter's self-consumption does the discharge. Aligned across both budget layers (`decide.battery_assist_budget_w` + the canonical `calculate_canonical_ev_budget`) so they agree (#282). Docs updated (EV_CHARGING_LOGIC, ARCHITECTURE). (by @guidoeberle in #545)
+- ⚡ **"Max out till self-consumption":** when the home battery is in the assist band (SoC ≥ the Buffer SoC) and there's real solar surplus past the Solar Gate, SEM now offers the **full** battery-assist potential — it raises the offered amps so the inverter discharges the battery **into the car, down to the Buffer SoC** (the self-consumption reserve floor), instead of only topping the car up to the charger minimum. This fixes the chicken-and-egg where a **full battery sat idle while the EV grid-charged** (observed live: at 100% SoC, SEM offered only ~8 A, the car drew ~3 kW from solar, the battery never assisted, and a grid night-charge was still needed). The assist self-tapers as SoC falls toward the Buffer and is off-limits below it, so the battery is never drained past the floor. Solar-gated; pure amps — SEM commands no battery directly, the inverter's self-consumption does the discharge. Aligned across both budget layers (`decide.battery_assist_budget_w` + the canonical `calculate_canonical_ev_budget`) so they agree (#282). Docs updated (EV_CHARGING_LOGIC, ARCHITECTURE). (#545)
 
 # [1.7.3-beta.61] — 26.06.2026
 
 > Fixes EV charging running past the configured max SOC during solar charging.
 
 ### 🔌 EV — stop at max SOC (#548)
-- 🐛 **The EV charged past its configured max SOC** in solar/surplus charging (reported by @RienduPre, Wallbox Pulsar Plus). The max-SOC ceiling (`soc_limit_active`) only reached the retired ChargingStateMachine (→ `SOLAR_TARGET_REACHED`), and that state was then **overwritten by the per-charger decision** — while the `decide()` day path has no max-SOC check of its own, charging whenever surplus ≥ min. So nothing actually stopped the charge at the ceiling. Now the ceiling is plumbed into `ChargerView.soc_ceiling_reached` (from the value the coordinator already computes) and **guarded in `decide()` before mode dispatch**, so **every** mode (`solar_only`/`min_plus_solar`/`always_max`/`solar_plus_cheap`) stops at the max SOC. kWh-target users are unaffected (their max is effectively unlimited). The stop now reads as **"Target reached"**. (by @guidoeberle in #548)
+- 🐛 **The EV charged past its configured max SOC** in solar/surplus charging (reported by @RienduPre, Wallbox Pulsar Plus). The max-SOC ceiling (`soc_limit_active`) only reached the retired ChargingStateMachine (→ `SOLAR_TARGET_REACHED`), and that state was then **overwritten by the per-charger decision** — while the `decide()` day path has no max-SOC check of its own, charging whenever surplus ≥ min. So nothing actually stopped the charge at the ceiling. Now the ceiling is plumbed into `ChargerView.soc_ceiling_reached` (from the value the coordinator already computes) and **guarded in `decide()` before mode dispatch**, so **every** mode (`solar_only`/`min_plus_solar`/`always_max`/`solar_plus_cheap`) stops at the max SOC. kWh-target users are unaffected (their max is effectively unlimited). The stop now reads as **"Target reached"**. (#548)
 
 # [1.7.3-beta.60] — 26.06.2026
 
@@ -7688,7 +7688,7 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
 > candidates turned out to have a consumer and were kept).
 
 ### 🧹 Dead sensors removed (#544)
-- 🗑️ **Removed 16 orphan sensors** — published, enabled-by-default, but read by no card, generator, or decision (pure entity clutter): the fleet EV-intelligence cluster (`ev_taper_ratio`, `ev_taper_minutes_to_full`, `ev_estimated_soc`, `ev_last_full_charge`, `ev_energy_since_full`, `ev_predicted_daily_consumption`, `ev_battery_health`), the forecast-accuracy cluster (`forecast_accuracy_today`, `forecast_accuracy_7d`, `forecast_deviation_kwh`, `forecast_corrected_tomorrow`, `forecast_power_now_w`, `forecast_power_next_hour_w`), and the predictor outputs (`predicted_consumption_next_hour`, `predicted_consumption_today_kwh`, `predicted_solar_next_hour`). Swept descriptions + population + metadata across `strings.json`/`icons.json`/15 translations. **Breaking** for any custom dashboard/automation that referenced these. Kept (verified live): `ev_taper_trend` (diagnostic), `forecast_correction_factor` & `forecast_history_days` (read by the dampening/correction sensor attributes). (by @guidoeberle in #544)
+- 🗑️ **Removed 16 orphan sensors** — published, enabled-by-default, but read by no card, generator, or decision (pure entity clutter): the fleet EV-intelligence cluster (`ev_taper_ratio`, `ev_taper_minutes_to_full`, `ev_estimated_soc`, `ev_last_full_charge`, `ev_energy_since_full`, `ev_predicted_daily_consumption`, `ev_battery_health`), the forecast-accuracy cluster (`forecast_accuracy_today`, `forecast_accuracy_7d`, `forecast_deviation_kwh`, `forecast_corrected_tomorrow`, `forecast_power_now_w`, `forecast_power_next_hour_w`), and the predictor outputs (`predicted_consumption_next_hour`, `predicted_consumption_today_kwh`, `predicted_solar_next_hour`). Swept descriptions + population + metadata across `strings.json`/`icons.json`/15 translations. **Breaking** for any custom dashboard/automation that referenced these. Kept (verified live): `ev_taper_trend` (diagnostic), `forecast_correction_factor` & `forecast_history_days` (read by the dampening/correction sensor attributes). (#544)
 
 ### 🔒 Census cleanup closed (#543)
 - ✅ With #544 done, the census cleanup (#543) is complete — the knob-reader contract lint (`tests/test_knob_wiring.py`) was already in place from the 2026-06-25 chunk and confirms all 26 NUMBER knobs are wired. The one remaining item (knobs read only at controller construction don't apply until reload) is a behavioral fix, split to #547.
@@ -7700,17 +7700,17 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
 > on PROD (KEBA P30 + Renault Zoe) across all four charging modes.
 
 ### 🔋 Battery — overnight drain root cause (#536)
-- 🐛 **The home battery drained overnight to feed the EV** (PROD 93→41 %). The discharge-protection clamp gated on the *instantaneous* draw flag (`ev_charging`), which a bursty car (Renault Zoe) toggles on/off every few seconds — so the clamp dropped in the gaps, the battery discharged freely, and that energy fed the next pull. The clamp now gates on **`ev_connected`** (vehicle plugged in), so it **holds steady** through the car's pulses. Live-verified: `battery→ev = 0 W` in every solar mode all afternoon. (by @guidoeberle in #536)
+- 🐛 **The home battery drained overnight to feed the EV** (PROD 93→41 %). The discharge-protection clamp gated on the *instantaneous* draw flag (`ev_charging`), which a bursty car (Renault Zoe) toggles on/off every few seconds — so the clamp dropped in the gaps, the battery discharged freely, and that energy fed the next pull. The clamp now gates on **`ev_connected`** (vehicle plugged in), so it **holds steady** through the car's pulses. Live-verified: `battery→ev = 0 W` in every solar mode all afternoon. (#536)
 
 ### 🧹 Config — verify-first knob cleanup (#536)
-- 🧹 **Removed three dead/redundant battery knobs** after auditing each live (two of the original four turned out to be live and were handled, not blindly cut): `battery_minimum_soc` (labelled "hard stop" but never gated discharge — its only live use, the empty-ETA, now references the real floor `battery_priority_soc`), `battery_assist_floor_soc` (shadowed by `buffer_soc` — folded in as the single assist floor), and the comment-only `battery_hold_solar_ev`. (by @guidoeberle in #536)
-- 🐛 **Fixed the `minimum_solar_power` default inconsistency** — a legacy config missing the key silently used 200 W while a fresh install seeded 1000 W; the fallback now matches the seeded default. (by @guidoeberle in #536)
-- 📝 **Corrected the misleading "Surplus floor" help text** — `minimum_solar_power` gates **raw PV production** ("is the sun up"), distinct from `battery_assist_min_surplus` (export surplus); clarified in English + 15 translations. The two were *not* collapsed — they measure different quantities and both feed the #461 deep-deficit logic. (by @guidoeberle in #536)
+- 🧹 **Removed three dead/redundant battery knobs** after auditing each live (two of the original four turned out to be live and were handled, not blindly cut): `battery_minimum_soc` (labelled "hard stop" but never gated discharge — its only live use, the empty-ETA, now references the real floor `battery_priority_soc`), `battery_assist_floor_soc` (shadowed by `buffer_soc` — folded in as the single assist floor), and the comment-only `battery_hold_solar_ev`. (#536)
+- 🐛 **Fixed the `minimum_solar_power` default inconsistency** — a legacy config missing the key silently used 200 W while a fresh install seeded 1000 W; the fallback now matches the seeded default. (#536)
+- 📝 **Corrected the misleading "Surplus floor" help text** — `minimum_solar_power` gates **raw PV production** ("is the sun up"), distinct from `battery_assist_min_surplus` (export surplus); clarified in English + 15 translations. The two were *not* collapsed — they measure different quantities and both feed the #461 deep-deficit logic. (#536)
 
 ### 🗑️ Internal — legacy retirement, stage 1 (#536)
-- 🗑️ Removed the deprecated proportional `FlowCalculator.calculate_energy_flows` (zero production callers since #282; the timing-aware `integrate_energy_flows` is canonical). (by @guidoeberle in #536)
+- 🗑️ Removed the deprecated proportional `FlowCalculator.calculate_energy_flows` (zero production callers since #282; the timing-aware `integrate_energy_flows` is canonical). (#536)
 
-**Thanks** to @guidoeberle for the PROD live-testing across all four charging modes.
+All four charging modes were live-tested on PROD.
 
 # [1.7.3-beta.58] — 26.06.2026
 

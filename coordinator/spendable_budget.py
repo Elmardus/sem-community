@@ -129,8 +129,8 @@ def spendable_budget(
     resumes. ``pessimism`` (>= 1) inflates the reserve — the user's own margin
     against a forecast that disappoints.
 
-    ``expected_refill_kwh`` is **NOT tomorrow's raw solar forecast.** Guido
-    pinned this on #778 before anyone built it: *"will it refill" is not a
+    ``expected_refill_kwh`` is **NOT tomorrow's raw solar forecast.** This
+    was pinned on #778 before anyone built it: *"will it refill" is not a
     scalar forecast question — the morning solar is also claimed by tomorrow's
     packed EV blocks and loads, and the day ledger is the only component that
     already does that subtraction.* Wiring this to ``forecast_tomorrow_kwh``

@@ -1,6 +1,6 @@
 """#830 — the option surface is shrink-only.
 
-Guido, 22.08: *"SEM is getting complicated and complicated, users are getting
+22.08: *"SEM is getting complicated and complicated, users are getting
 more lost in all the options we provide."*
 
 **Every option is a decision SEM could not make for itself.** So the count is

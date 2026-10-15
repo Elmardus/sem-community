@@ -1,6 +1,6 @@
 """#909 — the peak block's numbers reach the card.
 
-Guido, 03.09, with the EV card and the Load Management card on one screen:
+03.09, with the EV card and the Load Management card on one screen:
 *"How is this possible? 4.3 kW charging and 4.36 kW margin."* Both were
 right. "Current Peak" is the **15-minute rolling average** of grid import —
 the metric a demand tariff bills — and the car had run six of those fifteen

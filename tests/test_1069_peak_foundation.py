@@ -151,7 +151,7 @@ def _run(st, decision_fn, view_fn, adapter, t0, t1, step=10.0):
     ("min_plus_solar", True),    # a night floor, outside it too
 ])
 class TestFinding6OneStabilityRuleForSurplusAndPeak:
-    """Guido (08.10): the peak pause goes through the same gate as surplus —
+    """(08.10): the peak pause goes through the same gate as surplus —
     stop only after the user's disable delay, restart only after the user's
     enable delay and with clear room."""
 

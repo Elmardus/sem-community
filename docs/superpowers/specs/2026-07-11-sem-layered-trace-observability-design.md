@@ -1,6 +1,6 @@
 # SEM Layered Trace / Observability Arc — Design Spec
 
-**Status:** Approved design (brainstormed with Guido 2026-07-11) — build target 1.7.5/1.8.0, sequenced **after HA-TEST isolation, before #576**.
+**Status:** Approved design (brainstormed 2026-07-11) — build target 1.7.5/1.8.0, sequenced **after HA-TEST isolation, before #576**.
 **Motivation:** the 2026-07-10 EV flap took ~5 hours to root-cause because "what is SEM deciding vs commanding vs observing" is scattered across three places that don't link. See [[project_ev_flap_udp_blip]], [[feedback_diagnose_before_touching_live]].
 
 ---
@@ -13,7 +13,7 @@ SEM already has three implicit layers, but each emits status in a *different pla
 
 **Non-goal:** restructuring the control logic. This is an **observability layer over** the existing, battle-tested `decide` / `stability` / `reconciler` code. No behaviour change.
 
-## 2. The three layers (Guido's model → SEM modules)
+## 2. The three layers (the model → SEM modules)
 
 | Layer | Responsibility ("…") | SEM modules | Status emitted today |
 |---|---|---|---|

@@ -2,7 +2,7 @@
 
 Follow-up to #679/#634, and the layer @onkelfu's #627 install actually sits on.
 
-Guido's model (settled): the overnight floor is the *single* night-charge control —
+The model (settled): the overnight floor is the *single* night-charge control —
 night charge always tops up the gap between surplus and that target, and **floor 0
 means no night charge**. No boolean opt-in. So "I don't want overnight charging" has
 to be expressible by setting the floor to 0.
@@ -12,7 +12,7 @@ per-charger number entity (which the config-card knob mirrors, ``_renderZoneKnob
 reads ``e.attributes.min``) and on all three options-flow steps. The kWh floor
 (``daily_ev_target``) already reached 0. The fix lowers the ``%`` *floor* to 0 in
 those four places; the ``_max`` solar **ceiling** is lowered to 0 too, so both
-handles span 0–100 and the SOC target matches the kWh target (Guido: "the soc
+handles span 0–100 and the SOC target matches the kWh target (rule: "the soc
 range is 0 to 100%"). The runtime clamps the effective ceiling to ``>= floor``
 (``_resolve_target``), so a Max below the Min is harmless, and daytime charging
 follows the ceiling — ``At least = 0`` removes only the overnight grid guarantee.
@@ -95,7 +95,7 @@ class TestZeroIsReachableInSource:
 
     def test_the_solar_ceiling_also_reaches_zero(self):
         """Both handles span 0–100 so the % target matches the kWh target
-        (Guido). Runtime clamps effective ceiling >= floor (_resolve_target)."""
+        (decision). Runtime clamps effective ceiling >= floor (_resolve_target)."""
         mins = _ceiling_slider_mins()
         assert mins and all(m == 0 for m in mins), mins
 

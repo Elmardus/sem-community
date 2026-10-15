@@ -243,7 +243,7 @@ class SEMEnergyPlanCard extends SEMLitBase {
         </span>`;
     }
 
-    // The NEXT energy day, in the SAME layout as Today (Guido, 08-08:
+    // The NEXT energy day, in the SAME layout as Today (08-08:
     // "a line for each device is clean — and the house battery should
     // have a spot, we know the rhythm"): one row per known ask with its
     // provisional windows as track segments, the battery's predicted
@@ -450,7 +450,7 @@ class SEMEnergyPlanCard extends SEMLitBase {
     // verdict at all. One renderer, two callers: two copies is how the busy
     // and the quiet night came to disagree.
     _renderArb(arb) {
-        // (16.08, Guido's PROD) The advisor runs on every stamp as a ledger
+        // (16.08, PROD) The advisor runs on every stamp as a ledger
         // audit, but a verdict for a feature that cannot act is not an
         // answer — it reads as "SEM wanted to trade and the battery was in
         // the way". Render only where arbitrage is actually open: the
@@ -474,7 +474,7 @@ class SEMEnergyPlanCard extends SEMLitBase {
                 why = '', whyCodes = [], notSched = [], arb = null) {
         // (#638 C7) translated sentences from the machine codes; the raw
         // diagnostic prose survives only as the hover tooltip. Rendering
-        // it verbatim read as an unfinished placeholder (Guido, first
+        // it verbatim read as an unfinished placeholder (first
         // live look at the one-gate card).
         const sentences = (whyCodes || [])
             .map(c => this._t('energy_plan_whyc_' + c))
@@ -534,7 +534,7 @@ class SEMEnergyPlanCard extends SEMLitBase {
         // ``pending`` used to self-hide entirely — fine as a System-tab
         // diagnostic, wrong on the Control tab: after a daytime restart
         // (the stash is in-memory, task #14) the card vanished until the
-        // night-window stamp and read as broken — Guido hit exactly that
+        // night-window stamp and read as broken — PROD hit exactly that
         // on 2026-08-05. Show a slim placeholder saying when the plan
         // comes — the REAL window-open time (sunset-anchored, config-
         // aware) from sensor.sem_night_start_time, never a hardcoded hour.
@@ -884,7 +884,7 @@ class SEMEnergyPlanCard extends SEMLitBase {
             /* (#744) The name column is a NAME now, not an entity slug, so
                it no longer eats the row — but min-width:0 keeps a long one
                from pushing the reason into a two-words-per-line ribbon on a
-               phone (Guido's 23:50 card). The reason takes what is left and
+               phone (the PROD 23:50 card). The reason takes what is left and
                sits right. */
             .notsched-row {
                 display: flex;

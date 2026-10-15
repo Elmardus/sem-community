@@ -333,7 +333,7 @@ def _battery_assist_split(view: ChargerView) -> tuple[float, float]:
     # measured, floored and permissioned before it gets here. Master switch
     # OFF by default: this is the first non-inert behaviour in the arc.
     #
-    # (03.09, Guido: "why do I have to switch it on since I chose the option
+    # (03.09: "why do I have to switch it on since I chose the option
     # on the EV charger") The CONSENT is the charger's mode: *Solar + battery*
     # already says the pack may feed this car. The master switch was the
     # release train's inertness device for the arc, not a user concept; it
@@ -599,7 +599,7 @@ def _assist_blocked_why(f) -> str:
     caller's gate IS this function being non-empty. A further reason adds a
     branch here and reaches every reader at once.
 
-    KNOWN GAP, deliberately not closed here (#983 review, for Guido): #878 gave
+    KNOWN GAP, deliberately not closed here (#983 review, needs a decision): #878 gave
     ``battery_assist_potential_w`` an effective floor of
     ``max(buffer_soc, dynamic_floor_pct)``, so a pack at 75 % with a 70 %
     buffer and an 80 % overnight floor delivers ZERO assist while this resolver

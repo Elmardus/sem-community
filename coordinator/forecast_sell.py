@@ -5,8 +5,8 @@ phase = ``spending``). The actuation side ships too: ``decide_battery``
 sells on a DISCHARGING_ARBITRAGE verdict, budget-capped, floor-guarded,
 permission-bound. But the only thing that OPENS a sell today is the
 arbitrage engine — profitability math that requires a dynamic import
-forecast and never fires on a fixed export price. Guido's install and the
-reporter's both have fixed prices: a budget with no trigger.
+forecast and never fires on a fixed export price. PROD and the
+reporter's install both have fixed prices: a budget with no trigger.
 
 This module is the missing WHETHER + the plan's WHEN for forecast-led
 spending:

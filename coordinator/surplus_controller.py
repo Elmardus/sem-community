@@ -63,7 +63,7 @@ def tier1_battery_reserved_w(devices, *, below_priority, allowance_w,
                              exclude_ids=()) -> float:
     """(#885) Pack watts claimed by Tier-1 loads that OUTRANK a charger.
 
-    Guido, 31.08: *"The order tells who is first and gets power from the
+    Rule, 31.08: *"The order tells who is first and gets power from the
     battery. The next will get powered from the grid if there is nothing
     left."* The one priority axis is
     :meth:`UnifiedDeviceRegistry.priority_for` — loads, the battery and
@@ -309,7 +309,7 @@ def build_battery_tier_context(
     from the battery this cycle. Before it, this function returned the FULL
     ``battery_assist_max_power`` regardless, so on a 5000 W pack the chargers
     could be offered 5000 W and the loads another 5000 W in the same cycle.
-    Guido, 31.08: *"The order tells who is first and gets power from the
+    Rule, 31.08: *"The order tells who is first and gets power from the
     battery. The next will get powered from the grid if there is nothing
     left."* Netting the budget is that sentence.
 

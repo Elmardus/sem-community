@@ -1,6 +1,6 @@
 """park-on-disconnect — a car that leaves must leave the box OFF.
 
-Guido, PROD 26.08: he set the EV target to 0, yet the car "started charging
+PROD 26.08: the EV target was set to 0, yet the car "started charging
 as soon as I plugged in." The recorder proved SEM sent the box NOTHING for
 the four hours between the previous session ending and the plug-in — it was
 left ENABLED, and an enabled KEBA (auth off at the DIP level) auto-starts any

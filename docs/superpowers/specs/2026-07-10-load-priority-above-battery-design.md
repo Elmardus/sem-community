@@ -19,7 +19,7 @@ Two concrete cases we're solving:
 
 - **Generic loads** (reporter): a pool pump at priority 1 should consume solar that
   would otherwise charge the battery; a low-priority load should keep yielding to it.
-- **EV** (Guido, live): 4 kW solar, home 1.75 kW, battery charging 2.4 kW at 85 % SOC,
+- **EV** (PROD, live): 4 kW solar, home 1.75 kW, battery charging 2.4 kW at 85 % SOC,
   car connected drawing **0 W** — the battery eats the ~2.3 kW that could charge the car.
 
 ## 2. The model — one priority walk
@@ -157,7 +157,7 @@ entire EV state-machine/budget/reconciler stack.
 
 ## 6.5 Retire the battery-assist Solar Gate (`battery_assist_min_surplus_w`)
 
-**Motivation (Guido, 2026-07-10):** the v1.7.4-beta.35 EV flap traced to the
+**Motivation (2026-07-10):** the v1.7.4-beta.35 EV flap traced to the
 battery-assist **Solar Gate** — `battery_assist_min_surplus_w` (default 1200 W)
 in `decide.py:battery_assist_budget_w`. Its *intent* is sound: "only let the
 battery discharge into the EV when the sun is actually producing — never drain
@@ -208,7 +208,7 @@ and **LIFO/anti-flicker** guard the residual jitter. No new anti-oscillation mac
   U3/U4/U5/U6 and the reporter's generic-loads ask. Almost entirely reuse.
 - **Phase 2 — EV (careful, NOT a merge):** feed the same pre-battery surplus figure into
   the EV budget's input above the zone, min-gated, plus the EV-first ordering guard
-  (§5). The EV's own control stack is untouched. Delivers U1/U2 and Guido's car case.
+  (§5). The EV's own control stack is untouched. Delivers U1/U2 and the PROD car case.
 
 Phase 1 is shippable on its own; Phase 2 reuses the exact same pool quantity and adds
 **no coupling between the two control paths** — only a shared input number + an ordering

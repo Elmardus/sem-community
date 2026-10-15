@@ -1,6 +1,6 @@
 """#1027 — a SEM that only watches neither parks a charger nor hands one back.
 
-Guido's test install ran with the observer switch ON, watching a KEBA that a
+A test install ran with the observer switch ON, watching a KEBA that a
 second SEM really controls. Removing it sent ``keba.enable`` and put the box's
 failsafe back on its charging fallback. No car was plugged in, so nothing
 happened that day.

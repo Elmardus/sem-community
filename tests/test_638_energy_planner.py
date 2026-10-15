@@ -183,7 +183,7 @@ class TestPlanQuality:
 
 
 class TestBatterySourcedDemands:
-    """Guido's axis: WHERE the energy comes from changes what constrains it.
+    """The axis: WHERE the energy comes from changes what constrains it.
     A Tier-2 load off the home battery touches no grid meter — no peak cap,
     no price — it spends the shared battery budget instead."""
 
@@ -468,7 +468,7 @@ class TestReviewFindings:
 
 
 class TestSharedDischargeBudget:
-    """Guido (2026-07-29): the battery TOTAL discharge limit is a shared
+    """(2026-07-29): the battery TOTAL discharge limit is a shared
     per-slot bottleneck — home's battery share + every Tier-2 draw sum
     against the inverter's capability, not each against the full limit."""
 

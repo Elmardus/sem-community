@@ -48,7 +48,7 @@ def _card_doc_links():
 
 
 @pytest.mark.unit
-class TestGuiDocsAnchors:
+class TestDocsAnchorsGui:
     def test_links_found(self):
         links = _card_doc_links()
         assert len(links) >= 12, (

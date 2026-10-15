@@ -566,7 +566,7 @@ class SEMStorage:
     def get_energy_plan_state(self) -> Dict[str, Any]:
         """(#638) Tonight's stamped plan + period + demand signature —
         a reboot must not silently reshuffle a night the actuation is
-        steering by (Guido's Aug-5 note, made acute 00:20 on 08-09).
+        steering by (the Aug-5 note, made acute 00:20 on 08-09).
 
         ``overnight_plan`` is the same state under the planner's old name.
         An upgrade at 23:50 is still a reboot mid-night, and the whole point

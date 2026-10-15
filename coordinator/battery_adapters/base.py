@@ -65,7 +65,7 @@ def unload_release_reason(adapter, was_observer: bool) -> Optional[str]:
 
 
 async def async_release_batteries_on_unload(coordinator) -> dict:
-    """(#936 — Guido, 08.09.2026: *"on uninstall SEM should go to observation
+    """(#936 — rule, 08.09.2026: *"on uninstall SEM should go to observation
     mode on and then uninstall"*.) Flip the coordinator to observer mode
     FIRST, so no cycle still in flight commands anything, then hand back only
     what SEM itself commanded (see :func:`unload_release_reason`).

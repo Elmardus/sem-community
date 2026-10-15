@@ -10,7 +10,7 @@ charger-shaped that SEM is not managing, and says which device. That is
 the one line that would have prevented #803: it turns an invisible import
 into an offer.
 
-Guido's calls: a Repair (persists in the UI, has an action to take), a
+Decisions: a Repair (persists in the UI, has an action to take), a
 name-based guess, and HA's own translation machinery so the text arrives
 in the user's language exactly like the dashboard does.
 """

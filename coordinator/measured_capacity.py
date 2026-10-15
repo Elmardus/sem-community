@@ -1,6 +1,6 @@
 """#778 — what is a percent of this battery actually worth?
 
-Guido, 23.08: *"Does the battery SOC = energy also get a ledger, to have it all
+Asked 23.08: *"Does the battery SOC = energy also get a ledger, to have it all
 there — or would that be too complicated?"*
 
 Not complicated, and it needed **no new ledger**. Every sealed night from
@@ -233,7 +233,7 @@ def usable_nights(records: Optional[Iterable[dict]]) -> int:
 #: Nights needed before an overnight-need figure is offered.
 MIN_NEED_SAMPLES: int = 5
 
-#: Which percentile of observed drains to reserve for. Guido's framing on #778
+#: Which percentile of observed drains to reserve for. The framing on #778
 #: is the "learner-safe envelope" — a HIGH percentile, not an average. Reserving
 #: the typical night leaves the pack short on half of them, and being short is
 #: not symmetric with being generous: one costs a little export revenue, the

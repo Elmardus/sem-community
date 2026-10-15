@@ -1,6 +1,6 @@
 """arc #921 — the surface: four switches default OFF and persisted, four numbers, the state sensor.
 
-Guido, 20.08: every setting reachable on the SEM dashboard — the options flow
+20.08: every setting reachable on the SEM dashboard — the options flow
 alone is never enough. And every switch ships OFF (gate 4: complete and
 inert), which the persisted-flag table must say too, or the coordinator
 resolves it differently at setup than the switch does at runtime.
@@ -62,7 +62,7 @@ class TestSensor:
 
 
 class TestTheDashboardCarriesThem:
-    """Every setting in the GUI (Guido, 20.08): the Config tab's card renders
+    """Every setting in the GUI (20.08): the Config tab's card renders
     the toggles and numbers; the grid card shows the guard's state. Checked
     against the cards' PARSED entity registrations, not their source text (#925)."""
     ROOT = Path(__file__).resolve().parent.parent

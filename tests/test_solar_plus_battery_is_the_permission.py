@@ -1,7 +1,7 @@
 """Solar + battery on the charger IS the permission to spend the pack.
 
-Guido, 03.09: *"why do I have to switch it on since I chose the option on the
-EV charger — this just does not make sense."* He is right. The
+03.09: *"why do I have to switch it on since I chose the option on the
+EV charger — this just does not make sense."* That is right. The
 ``forecast_spending_enabled`` master switch was the release train's inertness
 device for the #778 arc (land asleep, wake deliberately), not a user concept.
 A charger set to *Solar + battery* has already said the pack may feed the car;

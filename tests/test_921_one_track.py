@@ -1,8 +1,8 @@
 """#955 — the export cut stays on SEM's one track, structurally.
 
-Guido, reading the built arc: *"is this implemented where all the decisions
+Reading the built arc: *"is this implemented where all the decisions
 are taking place, or are we on a second track? I remember having 3 layers in
-SEM."* He was right: the first build decided IN the coordinator, so there
+SEM."* That was right: the first build decided IN the coordinator, so there
 were two producers of ``BatteryDecision``, two ``actuate_battery`` call
 sites, and an observer surface where they clobbered each other under one key
 — which is how the cut came out invisible on .175.

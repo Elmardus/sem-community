@@ -1,6 +1,6 @@
 """#778 — a forecast ledger with a HORIZON, so day-2 can be trusted by evidence.
 
-Guido, 23.08: *"Are we creating a ledger for the forecast as well so we can
+Asked 23.08: *"Are we creating a ledger for the forecast as well so we can
 plan today with the forecast of tomorrow or the day after tomorrow?"*
 
 SEM already records forecast-vs-actual for **today** (``DailyForecastRecord``,

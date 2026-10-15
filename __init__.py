@@ -3697,7 +3697,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
                 coordinator._readopt_parked_chargers = None
             except Exception:  # noqa: BLE001 — teardown must finish
                 pass
-            # (#936 — Guido, 08.09.2026: "on uninstall SEM should go to
+            # (#936 — rule, 08.09.2026: "on uninstall SEM should go to
             # observation mode on and then uninstall.") Observer ON first, so
             # nothing still in flight commands anything; then hand back ONLY
             # what SEM itself commanded in this lifetime — a force op it

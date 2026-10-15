@@ -1,7 +1,7 @@
 """#855 — observer mode must RUN the brand path, not cut above it.
 
 Found live on .46 on 30.08.2026 during the 2.1 pre-release campaign, and
-fixed at Guido's word ("Please fix withheld_commands"). Observer mode was
+fixed on request ("Please fix withheld_commands"). Observer mode was
 ON, a charger's ``would_decisions`` entry said ``charge_at_amps 13A``
 against a hardware reading of 32 A — and ``withheld_commands`` was ``{}``.
 

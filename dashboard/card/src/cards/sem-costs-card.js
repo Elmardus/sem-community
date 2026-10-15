@@ -74,7 +74,7 @@ class SEMCostsCard extends SEMLitBase {
         // and avoided cost (solar/battery savings) were listed as visually
         // parallel rows, which invites adding them up — a double count,
         // because the savings are already the reason the net cost is low.
-        // Mockup approved by Guido 21.08: label each block, subtotal each,
+        // Mockup approved 21.08: label each block, subtotal each,
         // and say once that avoided cost is not cash.
         const avoided = solar + batt;
         return html`

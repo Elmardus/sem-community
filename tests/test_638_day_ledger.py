@@ -1,7 +1,7 @@
 """#638 day horizon — the day expressed as ledger slots the night packer
 already understands.
 
-The design rule (Guido: "even with dayplanner" — one mind, no second
+The design rule (rule: "even with dayplanner" — one mind, no second
 engine): the DAY becomes ``LedgerSlot``s — expected-surplus hours are
 price-0 slots capped at the surplus power (the sun is free but finite);
 deficit hours carry the import rate from the SAME tariff provider the
@@ -232,7 +232,7 @@ class TestTomorrowPreview:
 
 
 class TestProvisionalSocCurve:
-    """(Guido, 08-08: 'we can also predict the battery level and when the
+    """(08-08: 'we can also predict the battery level and when the
     devices get surplus — pull it together') — the missing half of the
     tomorrow walk: the ledger walk models the battery DISCHARGING to the
     home; through a surplus day the leftover sun CHARGES it. The curve is

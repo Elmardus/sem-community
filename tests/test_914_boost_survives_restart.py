@@ -227,7 +227,7 @@ class TestTheClaimIsByValue:
         """Documented, not an accident: 50 °C set by hand reads exactly like
         SEM's 50 °C boost and is claimed — the contract #766 already holds
         for a switch turned on in Solar mode. Persisting the commanded
-        setpoint would make the claim exact (class 85, left for Guido)."""
+        setpoint would make the claim exact (class 85, left open)."""
         hw = _tank("water_heater.dhw", _state("heat_pump", temperature=50.0))
         assert hw.adopt_if_running() is True
         assert hw._sem_commanded is False    # adopted — teardown never touches it (#908)

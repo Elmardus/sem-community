@@ -394,7 +394,7 @@ def pack_night(demands, ledger, *, floor_kwh=0.0, max_discharge_w=5000.0,
                             - s.home_batt_kwh - s.batt_out_kwh)
                 if avail <= 1e-9:
                     continue
-                # The discharge limit is a SHARED per-slot bottleneck (Guido,
+                # The discharge limit is a SHARED per-slot bottleneck (decision
                 # 2026-07-29): home's battery draw + every booked Tier-2 load
                 # sum against the inverter's total — INSTANTANEOUSLY, since
                 # allocations start at slot start and overlap. Peak, not

@@ -1,6 +1,6 @@
 /**
  * "4.3 kW charging and 4.36 kW margin" — both true, and the card explained
- * neither (Guido, 03.09). The peak block shows a 15-minute AVERAGE; the
+ * neither (03.09). The peak block shows a 15-minute AVERAGE; the
  * instantaneous draw and the #864 slot budget were missing, so the card read
  * as a contradiction at every ramp.
  *

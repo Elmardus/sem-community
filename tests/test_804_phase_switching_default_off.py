@@ -18,7 +18,7 @@ load on ONE phase, which a kW peak model cannot see (a 3×25 A connection is
 fused per phase, folded into #804 from the short-lived #843).
 
 Until then the actuation sits behind ``ev_phase_switching_enabled``, default
-OFF (Guido, 25.08: deactivate in 2.0, move the arc to 2.1). The house
+OFF (25.08: deactivate in 2.0, move the arc to 2.1). The house
 pattern — land it asleep, wake it deliberately — and the gate covers BOTH
 halves: the actuation AND the selector's existence, because a knob that
 visibly switches while the actuation is dormant is the #462 lie.

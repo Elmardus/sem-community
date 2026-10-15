@@ -136,7 +136,7 @@ class TestSnapshotCoherence:
 
 
 class TestEvLagAttributionGuard:
-    """(#699 follow-up, Guido) A 4 kW step with the EV sensor lagging must
+    """(#699 follow-up) A 4 kW step with the EV sensor lagging must
     not land on the home node just because the balance re-closed around it.
     The charging BINARY is the fast disambiguator: charging=on + ev_power~0
     means the equation cannot attribute correctly → keep shipping the last
