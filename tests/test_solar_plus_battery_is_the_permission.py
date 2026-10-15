@@ -95,9 +95,11 @@ class TestTheBatterySideReadsTheSameConsent:
         d = decide_battery(_bview(switch=False, ev_wants_pack=False))
         assert d.intent is BatteryIntent.LIMIT_DISCHARGE
 
-    def test_the_switch_alone_still_opens_it(self):
+    def test_the_switch_alone_no_longer_opens_it(self):
+        """(#1115) The switch is read per charger, in ``ev_wants_pack``:
+        bare, it let the pack feed a Solar-only car."""
         d = decide_battery(_bview(switch=True, ev_wants_pack=False))
-        assert d.intent is not BatteryIntent.LIMIT_DISCHARGE
+        assert d.intent is BatteryIntent.LIMIT_DISCHARGE
 
     def test_the_view_defaults_to_no_consent(self):
         assert BatteryView.__dataclass_fields__["ev_wants_pack"].default is False

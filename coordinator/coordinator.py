@@ -7613,7 +7613,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         self._vpp_publish = self._vpp_dispatcher.publish_state(decision)
 
     def _ev_wants_pack(self, power) -> bool:
-        """(03.09) Is any CONNECTED charger in *Solar + battery* mode?
+        """(03.09) Is any CONNECTED charger in a mode that takes the pack?
 
         That mode is the user's consent for the pack to feed the car — the
         same consent ``_battery_assist_split`` acts on — so the battery-side
@@ -7623,6 +7623,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         question); a single-charger install falls back to the fleet flag.
         """
         per = getattr(power, "ev_connected_per_charger", None) or {}
+        # (#1115) The forecast switch is consent only for Min + Solar — the
+        # one other mode the charger side offers the pack under the gate
+        # (``decide._battery_assist_split``). Solar only never takes it.
+        takers = {"solar_plus_battery"}
+        if self.config.get("forecast_spending_enabled", False):
+            takers.add("min_plus_solar")
         for cfg in (self.config.get("ev_chargers") or []):
             cid = str(cfg.get("id") or "")
             if not cid:
@@ -7631,7 +7637,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 mode = self._effective_charge_mode_for(cfg)
             except Exception:  # noqa: BLE001 — an unresolvable mode is no consent
                 continue
-            if mode != "solar_plus_battery":
+            if mode not in takers:
                 continue
             connected = per.get(cid) if cid in per else getattr(power, "ev_connected", False)
             if bool(connected):

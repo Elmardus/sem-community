@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A "Solar only" car no longer draws the home battery when forecast spending is on** (#1115). That switch only decides selling to the grid.
 - 🐛 **A "Solar + battery" load ranked above the battery now gets battery help while the battery charges** (#1114). Chargers already did.
 - 🐛 **A "Solar only" load now stops when only the home battery keeps it running** (#1112). It never runs on the battery.
 - 🐛 **A charger found after start-up no longer counts its car as house load** (#1125). SEM now reads that charger's power sensor.

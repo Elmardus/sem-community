@@ -817,9 +817,14 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
         # switch: a connected car in *Solar + battery* has already been told
         # it may have the pack (``ev_wants_pack``). Same gate as the charger
         # side, one more reader.
+        # (#1115) The forecast switch alone no longer opens it. The charger
+        # side reads the switch only for a mode that takes the pack
+        # (``_battery_assist_split``: Min + Solar); a Solar-only car is
+        # never offered any. Read here bare, it let the pack feed a
+        # Solar-only car. ``ev_wants_pack`` now carries the switch, per
+        # charger and per mode.
         spend_open = (
-            (bool(getattr(view, "forecast_spending_enabled", False))
-             or bool(getattr(view, "ev_wants_pack", False)))
+            bool(getattr(view, "ev_wants_pack", False))
             and float(getattr(view, "battery_spendable_kwh", 0.0) or 0.0) > 0.0
         )
         if (surplus_w < gate_w and not spend_open) or below_buffer or not _assist_ok:
