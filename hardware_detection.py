@@ -316,6 +316,16 @@ def _key_words(entry) -> List[str]:
     return [w for w in key.lower().split("_") if w]
 
 
+def _is_state_text(entry) -> bool:
+    """(#1126) Can this sensor be a status sensor — a word, not a reading?
+
+    Yes with no device class (a plain text sensor) or with ``enum``: Home
+    Assistant's class for a sensor with a fixed list of states, which is
+    what a charger's status is. Asking for no class alone refused Peblar's
+    ``cp_state``, so SEM never saw its car plugged in."""
+    return _declared_dc(entry) in ("", "enum")
+
+
 def _pauses_the_charge(entry) -> bool:
     """(#1042) A switch that pauses the CHARGE — and nothing else: V2C's
     "Pause dynamic control modulation" pauses the box's solar modulation.
@@ -3755,7 +3765,7 @@ def _discover_easee(entities) -> Dict[str, str]:
         name = own.get(str(eid), "")
         dc = entry.original_device_class
         # Easee uses sensor (not binary_sensor) for status (#68)
-        if eid.startswith("sensor.") and "status" in name and dc is None:
+        if eid.startswith("sensor.") and "status" in name and _is_state_text(entry):
             result.setdefault("ev_connected_sensor", eid)
             result.setdefault("ev_charging_sensor", eid)
             if entry.device_id:
@@ -4409,6 +4419,8 @@ def _discover_peblar(entities) -> Dict[str, str]:
 
     Peblar uses sensor for state (``suspended``, ``charging``,
     ``no_ev_connected`` — #1038: the states HA stores, not the labels).
+    (#1126) It is ``device_class: enum``, and its id is built in the
+    install's language (de ``…_zustand``); the key ``cp_state`` is not.
     Current control via number entity (charge_limit).
     """
     result: Dict[str, str] = {}
@@ -4417,7 +4429,8 @@ def _discover_peblar(entities) -> Dict[str, str]:
         eid = entry.entity_id
         name = own.get(str(eid), "")
         dc = entry.original_device_class
-        if eid.startswith("sensor.") and "state" in name and dc is None:
+        if (eid.startswith("sensor.") and _is_state_text(entry)
+                and ("state" in name or "state" in _key_words(entry))):
             result.setdefault("ev_connected_sensor", eid)
             result.setdefault("ev_charging_sensor", eid)
         if eid.startswith("sensor.") and dc == "power":
