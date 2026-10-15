@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **A charger counter that jumps when a session starts is no longer counted as charging** (#1101) — thanks @RienduPre. SEM had seen the box idle.
 - 🐛 **A charger is stored as its device; SEM reads its roles from it** (#1054) — thanks @weindler. Removed stays removed; the card shows what you set.
 - 🐛 **A second battery that ignores SEM's commands now gets a warning too** (#1124) — thanks @RienduPre. Before, only the first battery got one.
+- 🐛 **A Deye goes back to its own work mode when SEM lifts the export cut** (#1117). It stayed at Zero Export To Load.
+- 🐛 **The battery no longer feeds the car when a reading drops out while it is saved for later** (#1120). It covers only the house then.
+- 🐛 **Changing the import rate no longer saves the old rate as off-peak** (#1122). An off-peak rate you never entered follows the import rate.
 
 # [2.2.0-beta.18] — 14.10.2026
 

@@ -687,6 +687,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
     # covers at least what the meter is not allowed to buy. The verdict still
     # says WHEN; this is the floor under its HOW MUCH, and it is the same slot
     # budget the EV and the cheap-hours loads are already sized against.
+    _blind_release = None
     if _house_v is not None and getattr(_house_v, "state", "") == "held":
         _f = view.fleet
         _allowed = getattr(_f, "peak_slot_allowed_w", None)
@@ -707,7 +708,11 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
             # hold again and call it a release.
             _why = (", ".join(getattr(_f, "dark_inputs", ()) or ())
                     or "clamped balance")
-            return BatteryDecision(
+            # (#1120) The release frees the pack for the HOUSE. It is held
+            # aside, not returned: the EV clamp below still decides what a
+            # plugged-in car may take, so a blind cycle never hands the car a
+            # pack the user kept from it.
+            _blind_release = BatteryDecision(
                 battery_id=rt.battery_id, intent=BatteryIntent.LIMIT_DISCHARGE,
                 discharge_limit_w=float(
                     cfg.get("battery_max_discharge_power", 5000.0) or 5000.0),
@@ -718,27 +723,28 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                 reason=(f"house sink not held — {_why}: the house load is not "
                         "measured, so nothing shows the meter is under its limit"),
             )
-        _cover_w = peak_cover_floor_w(view, 0.0, _n)
-        _why = f"house sink held — {getattr(_house_v, 'reason', '')}"
-        _stop = reserve_stops_peak_cover(view)
-        if _stop is not None and cover_for_peak_w(
-                _allowed, max(0.0, float(view.home_consumption_w or 0.0)),
-                float(getattr(_f, "solar_w", 0.0) or 0.0)) > 0.0:
-            # CAUSE: `_stop` is reserve_stops_peak_cover's own sentence —
-            # the SOC and reserve it compared, or the unreadable SOC.
-            _why = (f"{_why}; the meter is over its limit, but {_stop} — "
-                    "the pack does not cover it")
-        elif _cover_w > 0.0:
-            _why = (
-                f"{_why}; the meter may buy {float(_allowed):.0f} W for the "
-                f"rest of this quarter hour, so the pack covers "
-                f"{_cover_w:.0f} W"
+        else:
+            _cover_w = peak_cover_floor_w(view, 0.0, _n)
+            _why = f"house sink held — {getattr(_house_v, 'reason', '')}"
+            _stop = reserve_stops_peak_cover(view)
+            if _stop is not None and cover_for_peak_w(
+                    _allowed, max(0.0, float(view.home_consumption_w or 0.0)),
+                    float(getattr(_f, "solar_w", 0.0) or 0.0)) > 0.0:
+                # CAUSE: `_stop` is reserve_stops_peak_cover's own sentence —
+                # the SOC and reserve it compared, or the unreadable SOC.
+                _why = (f"{_why}; the meter is over its limit, but {_stop} — "
+                        "the pack does not cover it")
+            elif _cover_w > 0.0:
+                _why = (
+                    f"{_why}; the meter may buy {float(_allowed):.0f} W for the "
+                    f"rest of this quarter hour, so the pack covers "
+                    f"{_cover_w:.0f} W"
+                )
+            return BatteryDecision(
+                battery_id=rt.battery_id, intent=BatteryIntent.LIMIT_DISCHARGE,
+                discharge_limit_w=_cover_w,
+                reason=_why,
             )
-        return BatteryDecision(
-            battery_id=rt.battery_id, intent=BatteryIntent.LIMIT_DISCHARGE,
-            discharge_limit_w=_cover_w,
-            reason=_why,
-        )
 
     # ─── LIMIT_DISCHARGE branch (unified solar gate) ───
     # The home battery must NEVER be drained to charge the EV when there
@@ -875,6 +881,9 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                        if _peak_raised else f"(home/{n} across fleet)")
                 ),
             )
+
+    if _blind_release is not None:
+        return _blind_release
 
     # ─── LIMIT_DISCHARGE for grid-funded loads (#620) ───
     # "Finish overnight from: Grid" must actually pull from the GRID. The

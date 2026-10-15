@@ -187,7 +187,7 @@ class TestDeyeDryRun:
         a._system_work_mode_entity = "select.deye_work_mode"
         a._system_work_mode_options = {"zero_export_to_load": "Zero Export To Load",
                                        "selling_first": "Selling First"}
-        a._get_state = MagicMock(return_value=current)
+        a._get_state = MagicMock(return_value=SimpleNamespace(state=current))  # a State, as HA returns (#1117)
         return a
 
     def test_a_cut_selects_zero_export_and_a_release_the_mode_it_found(self):

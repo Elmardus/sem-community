@@ -259,6 +259,18 @@ def _drop_stale_service_wiring(before: dict, submitted: dict, target: dict) -> N
         target.pop(k, None)
 
 
+def _unsaved_off_peak_shown(config: dict) -> Any:
+    """(#1040/#1122) What the Tariff page shows for an off-peak rate never
+    saved: the import rate, one price, as the backend reads it. ``None``
+    when an off-peak (or legacy night) rate is saved. The page shows it and
+    the submit drops it unedited, so both read this one helper."""
+    if config.get("electricity_off_peak_rate") is not None \
+            or config.get("electricity_nt_rate") is not None:
+        return None
+    v = config.get("electricity_import_rate")
+    return DEFAULT_ELECTRICITY_IMPORT_RATE if v is None else v
+
+
 def _merge_form_input(flow: Any, target: dict, user_input: dict) -> None:
     """Merge a submitted form into ``target``, honouring CLEARED fields.
 
@@ -3052,6 +3064,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         user_input["dynamic_tariff_entity"] = eid
                         _LOGGER.info("Auto-detected dynamic tariff entity: %s", eid)
                         break
+            # (#1122) An unsaved off-peak rate is SHOWN as the import rate,
+            # and HA sends every shown field back. Left as shown, it is not
+            # a price the user entered: keep it unsaved, so it follows the
+            # import rate instead of freezing the old one as a cheap night.
+            _shown = _unsaved_off_peak_shown(current_config)
+            if (_shown is not None
+                    and user_input.get("electricity_off_peak_rate") is not None
+                    and float(user_input["electricity_off_peak_rate"]) == float(_shown)):
+                user_input.pop("electricity_off_peak_rate")
             if not errors:
                 _merge_form_input(self, self._data, user_input)
                 return await self.async_step_load_management()
@@ -3176,7 +3197,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     # "unset": the old `or` showed 0.3387 and Submit saved it.
                     default=_c("electricity_off_peak_rate", _c(
                         "electricity_nt_rate",
-                        _c("electricity_import_rate", DEFAULT_ELECTRICITY_IMPORT_RATE))),
+                        _unsaved_off_peak_shown(current_config))),
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=0.0, max=10000.0, step=0.001, unit_of_measurement=f"{currency}/kWh", mode="box")  # #549 currency-agnostic
                 ),
