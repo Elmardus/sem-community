@@ -162,17 +162,35 @@ class TestThreeMissesBecomeARepairOnce:
 
     def test_a_reflected_write_clears_it(self):
         c = self._coord()
+        healed = self._adapter(0, entity="")
+        healed.last_verified_entity = "number.limit"
         with patch("custom_components.solar_energy_management.coordinator.repair_issues"
                    ".raise_battery_control_write_not_taken"), \
              patch("custom_components.solar_energy_management.coordinator.repair_issues"
                    ".clear_battery_control_write_not_taken") as clear:
             SEMCoordinator._raise_or_clear_battery_write_repair(
                 c, self._adapter(3), False)
-            SEMCoordinator._raise_or_clear_battery_write_repair(
-                c, self._adapter(0, entity=""), True)
+            SEMCoordinator._raise_or_clear_battery_write_repair(c, healed, True)
         clear.assert_called_once()
         assert clear.call_args.args[1] == "number.limit"
         assert not c._battery_write_repair_raised
+
+    def test_a_write_kept_by_another_entity_clears_nothing(self):
+        """(#1124, class 83) A kept write is evidence about the entity it
+        proved. Before every battery was asked, any kept write cleared every
+        raised Repair (class 84 left open (4))."""
+        c = self._coord()
+        other = self._adapter(0, entity="")
+        other.last_verified_entity = "select.other_strategy"
+        with patch("custom_components.solar_energy_management.coordinator.repair_issues"
+                   ".raise_battery_control_write_not_taken"), \
+             patch("custom_components.solar_energy_management.coordinator.repair_issues"
+                   ".clear_battery_control_write_not_taken") as clear:
+            SEMCoordinator._raise_or_clear_battery_write_repair(
+                c, self._adapter(3), False)
+            SEMCoordinator._raise_or_clear_battery_write_repair(c, other, True)
+        assert [k.args[1] for k in clear.call_args_list] == ["select.other_strategy"]
+        assert c._battery_write_repair_raised == {"number.limit"}
 
     def test_no_verdict_touches_nothing(self):
         c = self._coord()

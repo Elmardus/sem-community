@@ -1230,13 +1230,12 @@ class TestTheReadBackIsActuallyWired:
                              last_unverified_entity="number.limit",
                              last_unverified_wanted="1200 W",
                              last_unverified_seen="5000 W")
-        c = SimpleNamespace(hass=MagicMock(), _battery_adapters={"primary": ad},
-                            BATTERY_WRITE_STRIKES=SEMCoordinator.BATTERY_WRITE_STRIKES)
+        # (#1124) the real per-cycle method, not a copy of its lines
+        c = SEMCoordinator.__new__(SEMCoordinator)
+        c.hass = MagicMock()
+        c._battery_adapters = {"primary": ad}
         result = {}
-        _ad = SEMCoordinator._primary_battery_adapter(c)
-        assert _ad is ad
-        result["battery_control_write_verified"] = _ad.verify_pending_write()
-        result["battery_control_write_strikes"] = _ad.write_not_taken_strikes
+        SEMCoordinator._verify_battery_writes(c, result)
         assert result["battery_control_write_verified"] is False
         assert result["battery_control_write_strikes"] == 2
 
