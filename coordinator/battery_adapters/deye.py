@@ -294,6 +294,16 @@ class DeyeBatteryAdapter(BatteryControlAdapter):
         except Exception:  # noqa: BLE001 — never let a flaky read crash
             return None
 
+    def _select_option(self, entity_id: str) -> Optional[str]:
+        """(#1117) The option a select shows now, or None when unreadable.
+
+        ``_get_state`` returns the HA State object; comparing that with an
+        option name is never true. Export verbs read the option here."""
+        state = self._get_state(entity_id)
+        if state is None or not self._state_is_usable(state):
+            return None
+        return str(state.state)
+
     def _state_age_s(self, state, now: datetime) -> Optional[float]:
         """Age of a state in seconds (None if no timestamp -> treat as stale)."""
         ts = getattr(state, "last_updated", None) or getattr(
@@ -457,7 +467,7 @@ class DeyeBatteryAdapter(BatteryControlAdapter):
         target = (self._system_work_mode_options or {}).get("zero_export_to_load")
         if not ent or not target:
             raise NotImplementedError("no Deye system work mode select configured")
-        current = self._get_state(ent)
+        current = self._select_option(ent)
         if current == target:
             self._last_export_limit_w = 0.0
             return
@@ -485,7 +495,7 @@ class DeyeBatteryAdapter(BatteryControlAdapter):
         prior = getattr(self, "_export_mode_prior", None)
         if not ent:
             raise NotImplementedError("no Deye system work mode select configured")
-        if prior and self._get_state(ent) != prior:
+        if prior and self._select_option(ent) != prior:
             if not await self._write_and_verify(ent, prior, "select"):
                 raise RuntimeError("Deye work mode restore did not verify")
         self._export_mode_prior = None
@@ -507,7 +517,7 @@ class DeyeBatteryAdapter(BatteryControlAdapter):
         else:
             # the prior the real release restores — captured, else what the
             # select reads now (an observer rig has never cut)
-            option = getattr(self, "_export_mode_prior", None) or self._get_state(ent)
+            option = getattr(self, "_export_mode_prior", None) or self._select_option(ent)
             if not option:
                 return {"service": None, "data": None,
                         "why": f"{ent} is unreadable — nothing to restore to"}
