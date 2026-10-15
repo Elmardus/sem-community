@@ -230,6 +230,10 @@ class UnifiedDeviceRegistry:
         self._manual_mappings: Dict[str, Dict[str, Any]] = {}
         self._priority_overrides: Dict[str, int] = {}
         self._control_mode_overrides: Dict[str, str] = {}  # device_id → "off"/"peak_only"/"surplus"
+        # (#1119) ids whose mode the USER picked. The #805 freeze writes
+        # "peak_only" into the same map for every known id, so a stored
+        # peak_only alone does not say the user chose it.
+        self._user_control_modes: set = set()
         # (#122/#576) device_id → [parent_id] "Requires" link. Persisted HERE so
         # a device rebuild (drag → async_refresh_devices, the 35s re-discovery,
         # config change, restart) re-applies it — pre-fix it lived only on the
@@ -339,6 +343,7 @@ class UnifiedDeviceRegistry:
                 self._manual_mappings = data.get("mappings", {})
                 self._priority_overrides = data.get("priority_overrides", {})
                 self._control_mode_overrides: Dict[str, str] = data.get("control_modes", {})
+                self._user_control_modes = set(data.get("control_modes_user", []) or [])
                 self._dependency_overrides = data.get("dependencies", {})
                 # (#650) tolerate legacy/hand-edited stores: coerce to bool
                 self._critical_overrides = {
@@ -2118,6 +2123,33 @@ class UnifiedDeviceRegistry:
             dev.priority = self.priority_for(
                 did, seed=int(getattr(dev, "priority", 5) or 5))
             self._apply_goals(dev)
+            self._apply_saved_mode(did, dev)
+
+    def _apply_saved_mode(self, did: str, dev: Any) -> None:
+        """(#1119) A heat pump / boiler / climate is built in Solar mode on
+        every start; the mode the user picked must come back with it. A
+        service device carries its own mode in its spec (applied at build).
+
+        Applied when the user set it, or when it is not the value the #805
+        freeze writes for every known id — "off" or "surplus" can only be
+        the user's. A frozen "peak_only" is left alone: on these devices the
+        default was always Solar.
+        """
+        if did in getattr(self, "_service_registrations", {}):
+            return
+        stored = getattr(self, "_control_mode_overrides", {}).get(did)
+        if stored is None:
+            return
+        if (did not in getattr(self, "_user_control_modes", set())
+                and stored == LEGACY_DISCOVERED_CONTROL_MODE):
+            return
+        from ..devices.base import DeviceControlMode
+        try:
+            mode = DeviceControlMode(stored)
+        except ValueError:
+            return
+        if getattr(dev, "control_mode", None) is not mode:
+            dev.control_mode = mode
 
     def set_ev_chargers(self, chargers: List[Dict[str, Any]]) -> None:
         """(#576 P2.1) The coordinator hands its configured chargers here each
@@ -2630,6 +2662,7 @@ class UnifiedDeviceRegistry:
             return
 
         self._control_mode_overrides[device_id] = mode
+        self._user_control_modes.add(device_id)   # (#1119)
         # (#559 Phase 0) mode changes on service-registered devices persist
         # in their registration spec so the re-register at boot applies them.
         if device_id in self._service_registrations:
@@ -2931,6 +2964,7 @@ class UnifiedDeviceRegistry:
             "rated_power_recheck": sorted(self._ratings_to_recheck),
             "service_registrations": self._service_registrations,
             "device_goals": self._device_goals,
+            "control_modes_user": sorted(self._user_control_modes),   # (#1119)
         }
         await self._store.async_save(data)
         _LOGGER.debug("Saved device mappings to storage")

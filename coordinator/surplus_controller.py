@@ -721,6 +721,10 @@ def compute_load_intent(
         return LoadIntent(False, 0.0, None, "daily max cap reached")
     if getattr(device, "stop_condition_met", False):
         return LoadIntent(False, 0.0, None, "stop condition met")
+    # 3a. (#1121) The device's own run (Legionella) needs no sun: kept as
+    #     it is, never re-tuned. Only a shed (clause 2) or its own end stops it.
+    if active and getattr(device, "runs_without_surplus", False) is True:
+        return LoadIntent(True, held, None, "own run — ends at its own target")
 
     # 3b. A ScheduleDevice past its deadline is a hard commitment — force it on
     #     regardless of surplus or peak posture (matches the old deadline pass,
@@ -1854,7 +1858,10 @@ class SurplusController:
                 elif soc is not None and soc <= self._batt_reserve_soc:
                     reason = "overnight battery force ended (reserve SoC reached)"
             if reason:
-                if await _deactivate_owned(device):
+                # (#1135) the minimum run holds here as on every other stop
+                # pass — this one trusted the device to hold it itself, and a
+                # heat pump's SG-Ready stand-down does not.
+                if device.can_deactivate() and await _deactivate_owned(device):
                     device._offpeak_forced = False
                     device._offpeak_forced_date = None
                     device._batt_overnight_forced = False
@@ -2114,8 +2121,10 @@ class SurplusController:
                 # (#620) same for a Tier-2 overnight-battery forced device: it
                 # runs off the battery by design and is only ended by its OWN
                 # terms (reserve SoC / day rollover), never by the deficit LIFO.
+                # (#1121) …and a device's own run (Legionella) needs no sun.
                 if device._offpeak_forced or getattr(
-                        device, "_batt_overnight_forced", False):
+                        device, "_batt_overnight_forced", False) or getattr(
+                        device, "runs_without_surplus", False) is True:
                     continue
                 if device.is_active and device.can_deactivate():
                     consumption = device.get_current_consumption()

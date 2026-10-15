@@ -927,6 +927,13 @@ class ControllableDevice(ABC):
         active. The activation-side view of ``has_runtime_deficit``."""
         return self.has_runtime_deficit and not self.is_active
 
+    @property
+    def runs_without_surplus(self) -> bool:
+        """(#1121) A run the device started for its own reason and ends
+        itself — it needs no sun, so a deficit must not stop it. Peak and
+        phase sheds still do. None by default."""
+        return False
+
     # --- (#559) goal engine — grounded core (runtime target + stop condition) ---
 
     @property

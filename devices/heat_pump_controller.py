@@ -655,12 +655,13 @@ class HeatPumpController(SetpointDevice):
         if self.temperature_entity_id:
             state = self.hass.states.get(self.temperature_entity_id)
             if state and state.state not in ("unknown", "unavailable"):
-                try:
-                    val = float(state.state)
+                # (#1118) the sensor's own unit decides — °C out
+                from ..coordinator.units import temperature_state_to_celsius
+                val = temperature_state_to_celsius(state, None)
+                if val is not None:
                     self._last_temperature_reading_path = "sensor"
                     return val
-                except (ValueError, TypeError):
-                    self._last_temperature_reading_path = "sensor_invalid"
+                self._last_temperature_reading_path = "sensor_invalid"
             elif state:
                 self._last_temperature_reading_path = "sensor_unavailable"
             else:
