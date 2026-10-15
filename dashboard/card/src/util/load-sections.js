@@ -31,7 +31,7 @@ export function antiCyclePlaceholder(goals, effKey) {
  */
 export function antiCycleBounds(attrs) {
     const b = attrs && attrs.anti_cycle_bounds;
-    if (!b) return null;
+    if (!b || b.min == null || b.max == null) return null;
     const min = Number(b.min), max = Number(b.max);
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
     return { min, max };
@@ -51,6 +51,6 @@ export function antiCycleValue(raw, bounds) {
     if (raw === '' || raw == null) return null;
     const n = Number(raw);
     if (!Number.isFinite(n) || n < 1) return null;
-    if (!bounds) return n;
-    return Math.min(bounds.max, Math.max(bounds.min, n));
+    const v = bounds ? Math.min(bounds.max, Math.max(bounds.min, n)) : n;
+    return v < 1 ? null : v;
 }

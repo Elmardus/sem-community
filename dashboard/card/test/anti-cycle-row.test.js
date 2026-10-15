@@ -55,3 +55,12 @@ test('no published range: the value as typed, never a range made up here', () =>
     assert.equal(antiCycleValue('500', null), 500);
     assert.equal(antiCycleValue('0', null), null);
 });
+
+test('a range with a missing end is no range', () => {
+    assert.equal(antiCycleBounds({ anti_cycle_bounds: { min: 0, max: null } }), null);
+    assert.equal(antiCycleBounds({ anti_cycle_bounds: { min: 0 } }), null);
+});
+
+test('the limit never makes the "off" value', () => {
+    assert.equal(antiCycleValue('15', { min: 0, max: 0 }), null);
+});

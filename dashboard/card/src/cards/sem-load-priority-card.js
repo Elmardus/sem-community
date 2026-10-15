@@ -1246,6 +1246,21 @@ class SEMLoadPriorityCard extends SEMLitBase {
         return antiCycleBounds(ent?.attributes);
     }
 
+    /** (#1128) min/max on the input do not stop typing: the value is
+     *  limited here. Nothing to send (cleared, under 1) puts back what the
+     *  device holds; a value past the range shows the end it was set to. */
+    _onAntiCycleChange(device, key, bounds, e) {
+        const v = antiCycleValue(e.target.value, bounds);
+        if (v == null) {
+            const held = (device.goals || {})[key];
+            e.target.value = held != null ? String(held) : '';
+            return;
+        }
+        e.target.value = String(v);
+        device.goals = { ...(device.goals || {}), [key]: v };
+        this._sendDeviceUpdate(device.id, key, String(v));
+    }
+
     _renderAntiCycle(device) {
         // (#688) per-load anti-cycling — minutes, next to Min/Max/Mode (the
         // "well-placed" home the cycling report asked for). Blank ⇒ the solid
@@ -1260,30 +1275,19 @@ class SEMLoadPriorityCard extends SEMLitBase {
         // an ABSENT attribute renders no min/max at all rather than a range
         // this card invented (absent is not a default).
         const bounds = this._antiCycleBounds();
-        const onChange = (key) => (e) => {
-            // (#1128) min/max on the input do not stop typing: the value is
-            // limited here. Nothing to send (cleared, under 1) puts the held
-            // value back; a value past the range shows the end it was set to.
-            const v = antiCycleValue(e.target.value, bounds);
-            if (v == null) {
-                e.target.value = g[key] != null ? String(g[key]) : '';
-                return;
-            }
-            e.target.value = String(v);
-            device.goals = { ...(device.goals || {}), [key]: v };
-            this._sendDeviceUpdate(device.id, key, String(v));
-        };
         // (#914) The placeholder is the window the LIVE device is actually
         // holding — never a hard-coded "5" that was true for neither the
         // resistive default nor the heat-pump one. Absent live object ⇒ "—".
         const eff = (k) => antiCyclePlaceholder(g, k);
+        // (#1128) The arrows stop at 1, not the published 0: 0 turns
+        // anti-cycling off, and this card never sends it.
         const box = (key, effKey) => html`
             <input type="number" step="1" style="width:56px"
-                   min=${bounds ? bounds.min : nothing}
+                   min=${bounds ? Math.max(1, bounds.min) : nothing}
                    max=${bounds ? bounds.max : nothing}
                    .value="${g[key] != null && g[key] !== '' ? String(g[key]) : ''}"
                    placeholder="${eff(effKey)}"
-                   @change=${onChange(key)}
+                   @change=${(e) => this._onAntiCycleChange(device, key, bounds, e)}
                    @click=${(e) => e.stopPropagation()}>`;
         return html`
             <div class="ge-row">

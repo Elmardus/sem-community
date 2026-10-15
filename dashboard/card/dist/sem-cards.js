@@ -600,7 +600,7 @@ const e=globalThis,t=e.ShadowRoot&&(void 0===e.ShadyCSS||e.ShadyCSS.nativeShadow
 
                 </div>
             </div>
-        `}getCardSize(){return 3}static getStubConfig(){return{entity_prefix:Oe}}},{type:"sem-energy-impact-card",name:"SEM Energy Impact Card",description:"CO2 avoided and its tree equivalent — today, this year, lifetime",documentationURL:"https://github.com/traktore-org/sem-community/blob/develop/docs/DASHBOARD_GUIDE.md#sem-energy-impact-card",preview:!1});const je="daily_ev_energy",Ge="lifetime_ev_energy",Ke="lifetime_ev_solar_share",qe="lifetime_ev_cost",Ve="lifetime_ev_sessions",Ye="sensor.sem_";we("sem-ev-progress-card",class extends Fe{static get watchedEntities(){return[`${Ye}${je}`,`${Ye}${Ge}`,`${Ye}${Ke}`,`${Ye}${qe}`,`${Ye}${Ve}`,"number.sem_daily_ev_target","number.sem_charger_ev_charger_daily_ev_target"]}_evDailyTarget(){const e=this._hass?.states||{},t=Object.keys(e).filter(e=>/^number\.sem_charger_.+_daily_ev_target$/.test(e)).sort();if(t.length){const s=parseFloat(e[t[0]]?.state);if(!isNaN(s))return s}return this._state("number.sem_daily_ev_target",10)}setConfig(e){super.setConfig(e)}_prefix(){return this._config?.entity_prefix??Ye}_pct(e,t){return t<=0?0:Math.min(100,e/t*100)}_barColor(e,t){return 0===e?"#666":t>=100?"#8DC892":t>=70?"#ff9800":"#f44336"}_fmtEnergy(e){return null==e||isNaN(e)?"—":e.toFixed(e<10?2:1)+" kWh"}_fmtCost(e,t){return null==e||isNaN(e)?"—":e.toFixed(2)+" "+t}_fmtSessions(e){return null==e||isNaN(e)?"—":String(Math.round(e))}render(){if(!this._hass||!this._config)return K;const e=this._theme(),t=this._prefix(),s=this._state(`${t}${je}`),i=this._evDailyTarget(),r=this._state(`${t}${Ge}`),a=this._state(`${t}${Ke}`),o=this._state(`${t}${qe}`),n=this._state(`${t}${Ve}`),l=fe(this._hass),c=this._pct(s,i),d=this._barColor(i,c),p=i>0?W`<span class="target-pct">${Math.round(c)}% ${this._t("of_target")}</span>`:W`<span class="target-pct no-target">${this._t("no_target")}</span>`,h=["radial-gradient(ellipse 80% 70% at 20% 50%, rgba(141,200,146,0.06) 0%, transparent 70%)",`radial-gradient(circle at 2px 2px, ${e.dotColor} 0.7px, transparent 0.7px)`].join(", ");return W`
+        `}getCardSize(){return 3}static getStubConfig(){return{entity_prefix:Oe}}},{type:"sem-energy-impact-card",name:"SEM Energy Impact Card",description:"CO2 avoided and its tree equivalent — today, this year, lifetime",documentationURL:"https://github.com/traktore-org/sem-community/blob/develop/docs/DASHBOARD_GUIDE.md#sem-energy-impact-card",preview:!1});const je="daily_ev_energy",Ge="lifetime_ev_energy",Ke="lifetime_ev_solar_share",qe="lifetime_ev_cost",Ve="lifetime_ev_sessions",Ye="sensor.sem_";we("sem-ev-progress-card",class extends Fe{static get watchedEntities(){return[`${Ye}${je}`,`${Ye}${Ge}`,`${Ye}${Ke}`,`${Ye}${qe}`,`${Ye}${Ve}`,"number.sem_daily_ev_target","number.sem_charger_ev_charger_daily_ev_target"]}_evDailyTarget(){const e=this._hass?.states||{},t=Object.keys(e).filter(e=>/^number\.sem_charger_.+_daily_ev_target$/.test(e)).sort();if(t.length){const s=parseFloat(e[t[0]]?.state);if(!isNaN(s))return s}return this._state("number.sem_daily_ev_target",10)}setConfig(e){super.setConfig(e),this._prefix=e.entity_prefix??Ye}_pct(e,t){return t<=0?0:Math.min(100,e/t*100)}_barColor(e,t){return 0===e?"#666":t>=100?"#8DC892":t>=70?"#ff9800":"#f44336"}_fmtEnergy(e){return null==e||isNaN(e)?"—":e.toFixed(e<10?2:1)+" kWh"}_fmtCost(e,t){return null==e||isNaN(e)?"—":e.toFixed(2)+" "+t}_fmtSessions(e){return null==e||isNaN(e)?"—":String(Math.round(e))}render(){if(!this._hass||!this._config)return K;const e=this._theme(),t=this._prefix,s=this._state(`${t}${je}`),i=this._evDailyTarget(),r=this._state(`${t}${Ge}`),a=this._state(`${t}${Ke}`),o=this._state(`${t}${qe}`),n=this._state(`${t}${Ve}`),l=fe(this._hass),c=this._pct(s,i),d=this._barColor(i,c),p=i>0?W`<span class="target-pct">${Math.round(c)}% ${this._t("of_target")}</span>`:W`<span class="target-pct no-target">${this._t("no_target")}</span>`,h=["radial-gradient(ellipse 80% 70% at 20% 50%, rgba(141,200,146,0.06) 0%, transparent 70%)",`radial-gradient(circle at 2px 2px, ${e.dotColor} 0.7px, transparent 0.7px)`].join(", ");return W`
             <style>
                 :host {
                     display: block;
@@ -7125,25 +7125,25 @@ const e=globalThis,t=e.ShadowRoot&&(void 0===e.ShadyCSS||e.ShadyCSS.nativeShadow
                 <span class="ge-ctl">${_("comfort_limit",o,.5)}
                     <span class="ge-unit">${i}</span></span>
             </div>
-            <div class="ge-hint">${this._t("comfort_hint")}</div>`}_antiCycleBounds(){const e=this._hass?.states?.[`${this._prefix}controllable_devices_count`];return function(e){const t=e&&e.anti_cycle_bounds;if(!t)return null;const s=Number(t.min),i=Number(t.max);return Number.isFinite(s)&&Number.isFinite(i)?{min:s,max:i}:null}(e?.attributes)}_renderAntiCycle(e){const t=e.goals||{},s=this._antiCycleBounds(),i=i=>r=>{const a=function(e,t){if(""===e||null==e)return null;const s=Number(e);return!Number.isFinite(s)||s<1?null:t?Math.min(t.max,Math.max(t.min,s)):s}(r.target.value,s);null!=a?(r.target.value=String(a),e.goals={...e.goals||{},[i]:a},this._sendDeviceUpdate(e.id,i,String(a))):r.target.value=null!=t[i]?String(t[i]):""},r=e=>function(e,t){const s=(e||{})[t];if(null==s)return"—";const i=Number(s);return Number.isFinite(i)?String(i):"—"}(t,e),a=(e,a)=>W`
+            <div class="ge-hint">${this._t("comfort_hint")}</div>`}_antiCycleBounds(){const e=this._hass?.states?.[`${this._prefix}controllable_devices_count`];return function(e){const t=e&&e.anti_cycle_bounds;if(!t||null==t.min||null==t.max)return null;const s=Number(t.min),i=Number(t.max);return Number.isFinite(s)&&Number.isFinite(i)?{min:s,max:i}:null}(e?.attributes)}_onAntiCycleChange(e,t,s,i){const r=function(e,t){if(""===e||null==e)return null;const s=Number(e);if(!Number.isFinite(s)||s<1)return null;const i=t?Math.min(t.max,Math.max(t.min,s)):s;return i<1?null:i}(i.target.value,s);if(null==r){const s=(e.goals||{})[t];return void(i.target.value=null!=s?String(s):"")}i.target.value=String(r),e.goals={...e.goals||{},[t]:r},this._sendDeviceUpdate(e.id,t,String(r))}_renderAntiCycle(e){const t=e.goals||{},s=this._antiCycleBounds(),i=e=>function(e,t){const s=(e||{})[t];if(null==s)return"—";const i=Number(s);return Number.isFinite(i)?String(i):"—"}(t,e),r=(r,a)=>W`
             <input type="number" step="1" style="width:56px"
-                   min=${s?s.min:K}
+                   min=${s?Math.max(1,s.min):K}
                    max=${s?s.max:K}
-                   .value="${null!=t[e]&&""!==t[e]?String(t[e]):""}"
-                   placeholder="${r(a)}"
-                   @change=${i(e)}
+                   .value="${null!=t[r]&&""!==t[r]?String(t[r]):""}"
+                   placeholder="${i(a)}"
+                   @change=${t=>this._onAntiCycleChange(e,r,s,t)}
                    @click=${e=>e.stopPropagation()}>`;return W`
             <div class="ge-row">
                 <span class="ge-label">${this._t("anti_cycle_min_run")}</span>
                 <span class="ge-ctl">
-                    ${a("min_on_time_min","min_on_effective_min")}
+                    ${r("min_on_time_min","min_on_effective_min")}
                     <span class="ge-unit">${this._t("minutes_short")}</span>
                 </span>
             </div>
             <div class="ge-row">
                 <span class="ge-label">${this._t("anti_cycle_min_pause")}</span>
                 <span class="ge-ctl">
-                    ${a("min_off_time_min","min_off_effective_min")}
+                    ${r("min_off_time_min","min_off_effective_min")}
                     <span class="ge-unit">${this._t("minutes_short")}</span>
                 </span>
             </div>
