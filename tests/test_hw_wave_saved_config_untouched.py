@@ -23,6 +23,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 async def test_a_saved_charger_keeps_its_mapping(hass, fixture):
     from custom_components.solar_energy_management import (
         _drop_meters_saved_as_chargers,
+        _fill_state_sensors_of_own_save,
         _heal_offline_current_control_in_list,
     )
     from custom_components.solar_energy_management.hardware_detection import (
@@ -36,6 +37,7 @@ async def test_a_saved_charger_keeps_its_mapping(hass, fixture):
     discover_all_ev_chargers_from_registry(hass)
     assert _drop_meters_saved_as_chargers(hass, opts["ev_chargers"]) is None
     assert _heal_offline_current_control_in_list(hass, opts["ev_chargers"]) is None
+    assert _fill_state_sensors_of_own_save(hass, opts["ev_chargers"]) is None
     assert opts["ev_chargers"] == saved
 
 
@@ -52,6 +54,28 @@ async def test_a_role_found_charger_is_offered_never_saved_silently(hass):
     assert discover_ev_charger_from_registry(hass) == {}
     # the form the user confirms: offered
     assert discover_ev_charger_from_registry(hass, include_roles=True) == found[0]
+
+
+async def test_the_state_heal_never_saves_a_role_found_charger(hass):
+    """(#1126) The heal fills SEM's own save; setup never saved a charger
+    only the roles found, so a save with that id is not one to fill."""
+    from custom_components.solar_energy_management import (
+        _fill_state_sensors_of_own_save,
+        stable_discovered_charger_id,
+    )
+    from custom_components.solar_energy_management.hardware_detection import (
+        discover_all_ev_chargers_from_registry,
+    )
+    await replay(hass, load_capture("goecharger"))
+    roles = [c for c in discover_all_ev_chargers_from_registry(hass)
+             if c.get("_found_by") == "roles"]
+    assert roles and (roles[0].get("ev_connected_sensor")
+                      or roles[0].get("ev_charging_sensor"))
+    saved = {k: v for k, v in roles[0].items()
+             if not k.startswith("_")
+             and k not in ("ev_connected_sensor", "ev_charging_sensor")}
+    saved["id"] = stable_discovered_charger_id(roles[0])
+    assert _fill_state_sensors_of_own_save(hass, [saved]) is None
 
 
 async def test_a_brand_charger_still_comes_first(hass):

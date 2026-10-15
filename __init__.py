@@ -2280,6 +2280,18 @@ def _drop_meters_saved_as_chargers(hass, chargers):
     return [c for c in chargers if not any(c is d for d in dropped)]
 
 
+#: (#1126) What a saved charger reads its power from and drives. The heal
+#: below fills the state sensors only when each of these is what detection
+#: finds today: a Peblar saved before #1035 can hold one phase as its power
+#: and the single-phase switch as start/stop, and seeing the car would put
+#: those to work.
+_STATE_HEAL_MUST_MATCH = (
+    "ev_charging_power_sensor", "ev_current_control_entity",
+    "ev_start_stop_entity", "ev_charge_mode_entity",
+    "ev_charger_service", "ev_start_service", "ev_stop_service",
+)
+
+
 def _fill_state_sensors_of_own_save(hass, chargers):
     """(#1126, bug class 145) Give a charger SEM saved itself the plug and
     charging sensors detection now finds.
@@ -2289,10 +2301,13 @@ def _fill_state_sensors_of_own_save(hass, chargers):
     never saw a car plugged in. Detection re-runs only when NO charger is
     configured, so that install never corrects itself.
 
-    Only SEM's own save — the id setup gives that box — with NEITHER sensor
-    is touched, and only those two empty keys are filled. A charger the
-    user set up keeps what they chose. Returns a new list if anything
-    changed, else ``None``."""
+    Only SEM's own save — the id setup gives that box, from a brand path
+    (setup never saves a charger only the roles found, #1032) — with
+    NEITHER sensor is touched, and only when its power reading and its
+    controls are what detection finds today. Then only those two empty
+    keys are filled. The forms require both sensors, so a charger the user
+    set up is never a suspect. Returns a new list if anything changed,
+    else ``None``."""
     from .hardware_detection import discover_all_ev_chargers_from_registry
     keys = ("ev_connected_sensor", "ev_charging_sensor")
     suspects = [c for c in chargers or []
@@ -2301,11 +2316,20 @@ def _fill_state_sensors_of_own_save(hass, chargers):
     if not suspects:
         return None
     found = {stable_discovered_charger_id(d): d
-             for d in discover_all_ev_chargers_from_registry(hass)}
+             for d in discover_all_ev_chargers_from_registry(hass)
+             if d.get("_found_by") != "roles"}
     healed = []
     filled = []
     for c in chargers:
         d = found.get(c.get("id")) if any(c is s for s in suspects) else None
+        if d and any((c.get(k) or None) != (d.get(k) or None)
+                     for k in _STATE_HEAL_MUST_MATCH):
+            _LOGGER.warning(
+                "Saved EV charger %s has no plug or charging sensor, and its "
+                "power or control is not what detection finds now; left as "
+                "it is. Set the charger up again to fix it (#1126).",
+                c.get("id"))
+            d = None
         add = {k: d[k] for k in keys if d and d.get(k)}
         if add:
             c = {**c, **add}

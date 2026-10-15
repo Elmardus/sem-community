@@ -183,8 +183,8 @@ class TestEasee:
 
 def _asks_for_no_class(node) -> bool:
     """Does this expression ask that a device class be missing?
-    ``dc is None``, ``dc == None``, ``not dc``, ``dc in (None, …)`` on a
-    name ``dc`` or an ``original_device_class`` read."""
+    ``dc is None``, ``dc == None``, ``dc == ""``, ``not dc``, ``dc in
+    (None, …)`` on a name ``dc`` or an ``original_device_class`` read."""
     def is_class(n):
         if isinstance(n, ast.Name) and n.id in ("dc", "device_class"):
             return True
@@ -202,7 +202,7 @@ def _asks_for_no_class(node) -> bool:
     if isinstance(node, ast.Compare) and is_class(node.left):
         for op, right in zip(node.ops, node.comparators, strict=True):
             if isinstance(op, (ast.Is, ast.Eq)) and isinstance(right, ast.Constant) \
-                    and right.value is None:
+                    and right.value in (None, ""):
                 return True
             if isinstance(op, ast.In) and isinstance(right, (ast.Tuple, ast.List, ast.Set)) \
                     and any(isinstance(x, ast.Constant) and x.value is None
@@ -232,6 +232,7 @@ class TestNoBrandRuleAsksForAMissingDeviceClass:
     @pytest.mark.parametrize("shape", [
         "dc is None",
         "dc == None",
+        "dc == ''",
         "not dc",
         "dc in (None, 'x')",
         "entry.original_device_class is None",
@@ -246,6 +247,14 @@ class TestNoBrandRuleAsksForAMissingDeviceClass:
             "            pass\n"
         )
         assert _offenders(ast.parse(src)) == ["_discover_x:4"]
+
+    def test_no_brand_row_asks_for_a_missing_class(self):
+        """A ``_BRAND_HINTS`` row with ``device_class: None`` would make
+        the hint matcher ask for no class — the same rule."""
+        rows = [(brand, r["role"]) for brand, rules in hd._BRAND_HINTS.items()
+                for r in rules
+                if "device_class" in r and not r["device_class"]]
+        assert rows == []
 
     def test_the_fixed_form_passes_it(self):
         src = (
@@ -313,6 +322,24 @@ class TestASavedPeblarGetsItsStateSensor:
     def test_one_sensor_set_is_the_user_choice(self):
         saved = _saved_before_the_fix()
         saved[0]["ev_charging_sensor"] = "binary_sensor.my_car_charging"
+        assert _heal(saved, _peblar()) is None
+
+    def test_a_save_from_before_1035_is_left_alone(self):
+        """Before #1035 a Peblar could be saved with one phase as its
+        power and the single-phase switch as start/stop. Seeing the car
+        would put those to work, so the heal does not touch that save."""
+        for key, wrong in (
+                ("ev_charging_power_sensor",
+                 "sensor.peblar_ev_charger_power_phase_3"),
+                ("ev_start_stop_entity",
+                 "switch.peblar_ev_charger_force_single_phase")):
+            saved = _saved_before_the_fix()
+            saved[0][key] = wrong
+            assert _heal(saved, _peblar()) is None, key
+
+    def test_a_control_detection_no_longer_finds_is_left_alone(self):
+        saved = _saved_before_the_fix()
+        saved[0].pop("ev_start_stop_entity")
         assert _heal(saved, _peblar()) is None
 
     def test_a_second_charger_is_kept_as_it_is(self):
