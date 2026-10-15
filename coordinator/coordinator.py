@@ -5412,23 +5412,14 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # only exists after the first write. Same three-strike shape as
             # #824/#840, on the read-back side.
             try:
-                _ad = self._primary_battery_adapter()
-                _verify = getattr(_ad, "verify_pending_write", None)
-                if callable(_verify):
-                    _v = _verify()
-                    result["battery_control_write_verified"] = _v
-                    result["battery_control_write_strikes"] = int(
-                        getattr(_ad, "write_not_taken_strikes", 0) or 0)
-                    self._raise_or_clear_battery_write_repair(_ad, _v)
+                self._verify_battery_writes(result)
             except Exception:  # noqa: BLE001
                 pass
             # (#827) a brand whose discharge rate SEM cannot set says so.
             try:
-                _ad = self._primary_battery_adapter()
-                _cav = getattr(_ad, "discharge_rate_caveat", None)
-                if callable(_cav) and getattr(
-                        _ad, "_system_work_mode_control", False):
-                    result["battery_discharge_rate_caveat"] = _cav()
+                _cav = self._battery_discharge_rate_caveat()
+                if _cav:
+                    result["battery_discharge_rate_caveat"] = _cav
             except Exception:  # noqa: BLE001
                 pass
             # (#846) what SEM has learned each command really buys
@@ -6021,9 +6012,63 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
     #: (#915) strikes before a not-reflected battery write becomes a Repair
     BATTERY_WRITE_STRIKES: int = 3
 
+    def _verify_battery_writes(self, result: dict) -> None:
+        """(#915) Did each battery's last control write TAKE?
+
+        (#1124) EVERY battery is asked. Through ``_primary_battery_adapter()``
+        alone, a second battery (two Sessys) could ignore every write and
+        only the log said so — no Repair, no verdict on the card.
+
+        The card has one verdict for the house: False when any battery's
+        write was judged not kept this cycle, else True when one was kept,
+        else None (nothing judged). The strikes are the highest."""
+        verdicts = []
+        strikes = 0
+        for bid, ad in self._live_battery_adapters():
+            verify = getattr(ad, "verify_pending_write", None)
+            if not callable(verify):
+                continue
+            try:
+                v = verify()
+            except Exception as exc:  # noqa: BLE001 — one battery never costs the rest
+                _LOGGER.debug("battery %s: write read-back failed: %s", bid, exc)
+                continue
+            verdicts.append(v)
+            strikes = max(strikes, int(
+                getattr(ad, "write_not_taken_strikes", 0) or 0))
+            try:
+                self._raise_or_clear_battery_write_repair(ad, v)
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug("battery %s: write Repair failed: %s", bid, exc)
+        if not verdicts:
+            return
+        result["battery_control_write_verified"] = (
+            False if any(v is False for v in verdicts)
+            else True if any(v is True for v in verdicts) else None)
+        result["battery_control_write_strikes"] = strikes
+
+    def _battery_discharge_rate_caveat(self):
+        """(#827) The note of a battery whose discharge rate the inverter
+        sets, not SEM (a Deye in Selling First) — (#1124) whichever battery
+        it is. Through the first battery alone, a Deye second in the list
+        never had its note shown."""
+        for _bid, ad in self._live_battery_adapters():
+            cav = getattr(ad, "discharge_rate_caveat", None)
+            if callable(cav) and getattr(ad, "_system_work_mode_control", False):
+                return cav()
+        return None
+
+    def _live_battery_adapters(self):
+        """(#1124) ``(battery_id, adapter)`` for the batteries of the last
+        cycle — every cached adapter before the first one has run."""
+        adapters = getattr(self, "_battery_adapters", None) or {}
+        live = getattr(self, "_live_battery_ids", None)
+        return [(bid, ad) for bid, ad in list(adapters.items())
+                if live is None or bid in live]
+
     def _raise_or_clear_battery_write_repair(self, adapter, verdict) -> None:
         """(#915) Turn the adapter's read-back verdict into a Repair, once,
-        and clear it the moment a write is reflected again."""
+        and clear it the moment a write to that entity is reflected again."""
         from . import repair_issues as _ri
         entity_id = str(getattr(adapter, "last_unverified_entity", "") or "")
         raised = getattr(self, "_battery_write_repair_raised", None)
@@ -6038,13 +6083,28 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             if done is None:
                 done = self._battery_write_reconciled = set()
             proved = str(getattr(adapter, "last_verified_entity", "") or "")
-            stale = set(raised)
-            if proved and proved not in done:
-                stale.add(proved)
+            # (#1124, class 83) A reflected write is evidence about the
+            # entity it PROVED and nothing else. Every battery is asked now,
+            # so clearing everything raised would let a healthy battery take
+            # down the Repair of one that still ignores SEM — and that one
+            # filed it again on each judged miss. Two batteries set up on
+            # one entity (#531 warns about it) share one Repair: it stays
+            # while the OTHER one has three strikes or more and its last
+            # miss was on that entity.
+            _live = getattr(self, "_live_battery_ids", None)
+            ignored_elsewhere = any(
+                other is not adapter
+                and (_live is None or bid in _live)
+                and str(getattr(other, "last_unverified_entity", "") or "") == proved
+                and int(getattr(other, "write_not_taken_strikes", 0) or 0)
+                >= self.BATTERY_WRITE_STRIKES
+                for bid, other in list((getattr(self, "_battery_adapters", None)
+                                        or {}).items()))
+            if proved and not ignored_elsewhere:
+                if proved in raised or proved not in done:
+                    _ri.clear_battery_control_write_not_taken(self.hass, proved)
+                raised.discard(proved)
                 done.add(proved)
-            for eid in sorted(stale):
-                _ri.clear_battery_control_write_not_taken(self.hass, eid)
-            raised.clear()
             # (#945) A reflected write retires the silence clock below — for
             # the entity it PROVED, not for every entity: a primary switch
             # would otherwise re-arm another battery's hold from zero.
@@ -8731,6 +8791,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # #531: live battery count gates the global-mode fall-through in
         # _per_battery_config (single→multi bleed fix).
         _bat_count = len(battery_items)
+        # (#1124) …and which cached adapters are batteries THIS cycle: a
+        # synthetic "primary" from the first cycles stays in the cache once
+        # b1/b2 exist, and its frozen write ledger is no battery's answer.
+        self._live_battery_ids = frozenset(bid for bid, _ in battery_items)
 
         for batt_idx, (battery_id, runtime) in enumerate(battery_items):
             # Per-battery adapter cache. Each battery gets its OWN control

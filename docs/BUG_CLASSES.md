@@ -3537,7 +3537,7 @@ register away from the wish still says `write_refused`. Guard:
 still not re-sent; the restart case writes nothing.
 Siblings assessed: the battery adapters' `write_not_taken_strikes` (#915) raise a Repair keyed to
 the entity, and a same-value skip is no evidence either way, so the raise stays as it is — its
-install-wide clear is the known residual, class 84 (4). **Left open:** (1) a refused cap is
+install-wide clear was class 84 (4), closed by #1124: a kept write clears only the entity it proved. **Left open:** (1) a refused cap is
 never sent again while the wish stays near it (the 02.10 rule, pinned by
 `test_a_refused_cap_is_not_retried_with_a_slightly_different_value`) — one lost Modbus write keeps
 the old cap until the wish moves; a single retry after `PACING_MIN_WRITE_INTERVAL_S` would close
@@ -3680,6 +3680,8 @@ but an explicit `huawei` platform (the #919 shape — a question asked before th
 exists). Turning it on raises a new Repair on live installs: a decision, not a sweep. (4) #915's
 clear is install-wide within the primary adapter: any reflected write clears every raised write
 Repair, including one for another entity that still ignores writes (class 83's shape; pre-existing).
+**Closed by #1124** (class 146): a kept write clears only the entity it proved; the select's verdict
+carries its own entity, and a sent flip that lands proves the select in a fresh lifetime.
 (5) The pin verdict's first cycle is SEM's battery set at that moment: a synthetic `primary` that
 later becomes b1/b2 with a different per-battery platform can clear once and re-raise.
 Refs #933 #919 #900 #824 #915 #840 #845 #896 #911 #485 #944.
@@ -5942,3 +5944,13 @@ Refs #1128 #914 #1053.
 **Sweep question:** for every device-class test in discovery, is "no class" standing in for a kind of sensor that HA has a class for?
 **Left open:** a Peblar the user set up by hand with another sensor keeps it. A zero-config Peblar save from before #1035 with wrong power or start/stop gets no state sensor (warning in the log; set it up again).
 Refs #1126 #1038 #1035.
+
+### 146. A check every unit must pass, asked of the first unit only — GUARDED
+**Symptom:** on a two-battery home the second battery could ignore every write SEM sent, and only the log said so (#1124, found in #978's note: two Sessys). No Repair, no verdict on the card. The first battery got both.
+**Root shape:** one accessor answers "the battery" — `_primary_battery_adapter()`, the first in the list — and a check that every battery must pass was routed through it. The accessor came from class 74's fix: three dead `self._battery_adapter` reads were brought back to life through it, and so came back for the first battery only. Close to class 52 (a fleet read as one), but these are SEM's own adapters, and what is lost is a warning, not a reading.
+**Where it lives:** `coordinator.py` — the #915 write read-back and its Repair (**fixed**: `_verify_battery_writes` asks every battery of the last cycle, `_live_battery_adapters`; the card gets False when any battery's write was not kept, and the highest strike count); the #827 Deye rate note (**fixed**: `_battery_discharge_rate_caveat`, any battery). Asking every battery broke the Repair's clear: any kept write cleared every raised Repair (class 84 left open (4)), so the first battery's kept writes took down the second one's, and it was filed again on its next miss. **Fixed** (class 83): a kept write clears only the entity it proved. A Repair two batteries share on one entity (#531 warns) stays while the other battery has three strikes and its last miss was there. Scoping the clear showed two gaps in `battery_adapters/generic.py` that the old clear hid (review): the select's held verdict named whatever entity the limit verdict had just proved (**fixed**: the verdict carries its entity), and a select proved itself only after a miss in the same lifetime, so its Repair from before a restart stayed (**fixed**: a flip SEM sent that lands is proof). A synthetic `primary` left in the adapter cache once b1/b2 exist is not asked. Assessed and kept: `_run_battery_pipeline` (#845 mode watch — one install-wide entity; its expected modes from the first battery's brand are class 84 left open (3)) and `_export_control_adapter` (the last fallback after holder and capability, #955).
+**Closure:** a check every battery must pass loops over the batteries; `_primary_battery_adapter()` is for questions with one answer for the house.
+**Guard:** `tests/test_1124_every_battery_is_asked.py` — real generic adapters on one fake HA through the real per-cycle method: the second Sessy's refused mode change and a second battery's ignored limit each file one Repair; the first battery's kept writes after it clear nothing of the second's; a shared entity files once and clears when the other battery stops writing; a select that lands in the cycle the limit is judged is cleared; a fresh lifetime's first landing clears the select's old Repair; a stale `primary` holds nothing; the card verdict over every battery in either order; a Deye second in the list has its note. An AST check lists every `_primary_battery_adapter()` caller with why the first battery is enough (a new caller fails until declared, a stale one too), with a twin that fires on the old #1124 code.
+**Sweep question:** for every check or warning about "the battery" (or "the charger"), would a second one need the same check — and is it asked?
+**Left open:** the discharge-limit de-dup keyed on the SENT value is class 97, not this class (filed on its own).
+Refs #1124 #978 #915 #827 #933.
