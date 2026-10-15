@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Repairs of a removed charger now clear when SEM starts** (#1139). They stayed forever. "Not accepting commands" still stays (#1140).
+
 # [2.2.0-beta.19] — 15.10.2026
 
 - ✨ **SEM finds your grid CO₂ sensor by its unit** (#1088). CO₂ avoided can use its live value, not a fixed average. Off by default.

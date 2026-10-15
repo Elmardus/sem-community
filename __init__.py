@@ -1817,6 +1817,31 @@ from .utils.device_names import (  # noqa: E402  (#1053)
     HEAT_PUMP_DEFAULT, charger_display_name, device_display_name,
 )
 
+
+def _sweep_orphan_charger_repairs(hass, coordinator, chargers,
+                                  keep_ids=()) -> int:
+    """(#1139) Clear the per-charger Repairs no registered charger owns.
+
+    The pairs are the ones ``SEMCoordinator._check_charger_control_entities``
+    judges: each listed charger's own control entities. A charger id is kept
+    when it is listed (a parked or skipped one may come back without a
+    reload), was registered (a positional or flat-key fallback), or is in
+    ``keep_ids`` (the late-found primary, which appears after setup).
+    """
+    from .coordinator.repair_issues import clear_orphan_charger_repairs
+    keys = [k for k, _ in getattr(coordinator, "_CONTROL_CAPABILITIES", ())]
+    if not keys:
+        return 0      # no control check to judge by: delete nothing
+    rows = [c for c in (chargers or []) if isinstance(c, dict)]
+    ids = {str(c["id"]) for c in rows if c.get("id")}
+    ids |= {str(cid) for cid in (getattr(coordinator, "_ev_devices", None) or {})}
+    ids |= {str(cid) for cid in keep_ids}
+    pairs = {(str(c["id"]), str(c[k])) for c in rows if c.get("id")
+             for k in keys if c.get(k)}
+    return clear_orphan_charger_repairs(
+        hass, charger_ids=ids, control_entities=pairs)
+
+
 def _heat_pump_rows(full_config: dict) -> list[dict]:
     """#685: one row per heat pump — flat keys are the PRIMARY unit
     (device_id "heat_pump", full back-compat), the ``heat_pumps`` list
@@ -2986,6 +3011,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             )
         else:
             _LOGGER.debug("EV charger not configured (no power sensor or control method)")
+
+        # (#1139) The charger list is final here; a Repair of a charger or a
+        # control entity that left it has nobody left to clear it.
+        try:
+            # the late retry may still build the primary "ev_charger"
+            _late = (not coordinator._ev_devices
+                     and _REFS_KEY not in (entry.options or {}))
+            _sweep_orphan_charger_repairs(
+                hass, coordinator, ev_chargers_config,
+                keep_ids=("ev_charger",) if _late else ())
+        except Exception:  # noqa: BLE001 — a Repair never costs a setup
+            _LOGGER.debug("orphan charger-repair sweep failed", exc_info=True)
 
         # Register heat pump SG-Ready controller(s) if configured.
         # (#685) The flat heat_pump_* keys are the PRIMARY unit (device_id

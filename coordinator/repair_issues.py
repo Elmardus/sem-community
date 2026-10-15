@@ -1673,6 +1673,65 @@ def clear_charger_control_entity_broken(
         _LOGGER.debug("issue_registry.delete failed for %s: %s", entity_id, e)
 
 
+#: (#1139) The Repairs SEM files for ONE charger, by the id builder that names
+#: it. Only the charger's own checks clear them, and only while that charger
+#: and that entity are in the config — so a charger the user removed, or an
+#: entity they replaced, left its Repair in Settings forever (@OddmarDam:
+#: "entity missing" for a deleted "New charger 1", whose ids HA had renamed
+#: under it). ``charger_actuation_failed`` is not here: load devices driven
+#: by current file it under their own id, and this sweep knows no load ids.
+_CHARGER_ONLY_ISSUE_IDS = (
+    _failsafe_issue_id,
+    _stop_unenforceable_issue_id,
+    _stop_war_stand_down_issue_id,
+    _phase_mismatch_issue_id,
+    _soc_cap_issue_id,
+)
+
+
+def clear_orphan_charger_repairs(
+    hass: HomeAssistant,
+    *,
+    charger_ids,
+    control_entities,
+) -> int:
+    """(#1139) Delete every per-charger Repair no configured charger owns.
+
+    ``charger_ids`` are the chargers SEM runs now; ``control_entities`` the
+    ``(charger id, entity id)`` pairs whose control check runs now. A
+    ``charger_control_entity_broken`` Repair outside those pairs, or a
+    per-charger Repair of an id outside ``charger_ids``, is deleted. Called
+    once per setup, after the chargers are registered: every config change
+    reloads SEM, so that is when an owner can disappear.
+
+    Returns the count cleared."""
+    keep = {_control_entity_issue_id(str(cid), eid)
+            for cid, eid in control_entities}
+    prefixes = [_control_entity_issue_id("", "")[:-1]]
+    for build in _CHARGER_ONLY_ISSUE_IDS:
+        prefixes.append(build(""))
+        keep |= {build(str(cid)) for cid in charger_ids}
+    try:
+        registry = ir.async_get(hass)
+        orphans = [issue_id for (domain, issue_id) in list(registry.issues)
+                   if domain == DOMAIN and issue_id.startswith(tuple(prefixes))
+                   and issue_id not in keep]
+    except Exception as e:  # noqa: BLE001 — never fail a setup over a repair
+        _LOGGER.debug("Orphan charger-repair sweep failed: %s", e)
+        return 0
+    cleared = 0
+    for issue_id in orphans:
+        try:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+            cleared += 1
+            _LOGGER.info("Cleared orphan charger repair: %s (charger or "
+                         "entity no longer in SEM config)", issue_id)
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.debug("issue_registry.delete failed for orphan %s: %s",
+                          issue_id, e)
+    return cleared
+
+
 _PREVIOUS_INSTALL_ISSUE_ID = "previous_install_leftovers"
 
 
