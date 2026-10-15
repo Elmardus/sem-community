@@ -1274,7 +1274,7 @@ SEM supports active control of **multiple EV chargers** (v1.4.0+). Add chargers 
 
 **Night charging** distributes the nightly target equally across connected chargers.
 
-**Per-charger features:** Each charger gets its own session tracking, stall detection, enable/disable delays, and taper detection. The primary charger (first configured) drives the EV Intelligence SOC tracking and charge skip decisions.
+**Per-charger features:** Each charger gets its own session tracking, stall detection, enable/disable delays, and taper detection. Each car's charge level estimate uses its own battery size and target. The primary charger (first configured) drives the charge skip decisions.
 
 ### Session history and export
 
