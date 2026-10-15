@@ -57,6 +57,10 @@ class BatteryTierContext:
     #: this one now compute it through the SAME helper, so they cannot
     #: disagree about how deep the pack may go.
     effective_floor_soc: float = 0.0
+    #: (#1114) The same budget for a load ranked ABOVE the battery: its
+    #: Solar Gate counts the pack's charge power it may reclaim, as a
+    #: charger above the battery does. ``None`` = no difference.
+    assist_budget_above_battery_w: Optional[float] = None
 
 
 def tier1_battery_reserved_w(devices, *, below_priority, allowance_w,
@@ -299,6 +303,7 @@ def build_battery_tier_context(
     config, battery_soc, true_surplus_w,
     assist_committed_w: float = 0.0,
     dynamic_floor_pct=None,
+    reclaim_w: float = 0.0,
 ) -> BatteryTierContext:
     """(#625, extracted from the coordinator's update cycle) Pure computation
     of the battery-tier context handed to :meth:`SurplusController.update`.
@@ -319,6 +324,13 @@ def build_battery_tier_context(
     through a floor the chargers were respecting. A floor kept by one
     consumer and ignored by the other is not a floor. ``None`` falls back to
     the buffer — never to no floor at all.
+
+    (#1114) ``reclaim_w`` — the pack's charge power a load above the
+    battery may take (#576). A charger above the battery reads its Solar
+    Gate with that power in (``decide.self_consumption_surplus_w``); the
+    loads read it without, so a "Solar + battery" load above the battery
+    got no help while the pack charged. One gate: a load above the battery
+    gets the budget with the reclaim counted, a load below it does not.
     """
     from ..consts.core import (
         DEFAULT_BATTERY_ASSIST_MAX_POWER as _DEF_ASSIST,
@@ -337,16 +349,19 @@ def build_battery_tier_context(
     # consumed in device order. Never negative — an over-commitment upstream
     # must leave zero here, not a negative budget that reads as a credit.
     remaining = max(0.0, cap - max(0.0, float(assist_committed_w or 0.0)))
-    assist_budget = (
+    above_floor = battery_soc is not None and battery_soc > effective_floor
+    assist_budget = remaining if (above_floor and true_surplus_w >= solar_gate) else 0.0
+    above_battery = (
         remaining
-        if (battery_soc is not None and battery_soc > effective_floor
-            and true_surplus_w >= solar_gate)
+        if (above_floor and true_surplus_w + max(0.0, float(reclaim_w or 0.0))
+            >= solar_gate)
         else 0.0
     )
     return BatteryTierContext(
         soc=battery_soc, buffer_soc=buffer_soc,
         reserve_soc=reserve_soc, assist_budget_w=assist_budget,
         effective_floor_soc=effective_floor,
+        assist_budget_above_battery_w=above_battery,
     )
 
 
@@ -1216,6 +1231,8 @@ class SurplusController:
         self._batt_buffer_soc: float = 100.0
         self._batt_reserve_soc: float = 100.0
         self._batt_assist_budget_w: float = 0.0
+        self._batt_assist_budget_above_w: Optional[float] = None
+        self._batt_priority: Optional[int] = None
         self._tier1_budget_left: float = 0.0
         # (arc Phase 4) last raw surplus samples for the median-of-3 pre-filter
         self._surplus_samples: List[float] = []
@@ -1570,6 +1587,9 @@ class SurplusController:
         battery_buffer_soc: float = 100.0,
         battery_reserve_soc: float = 100.0,
         battery_assist_budget_w: float = 0.0,
+        # (#1114) the budget for a load ranked above the battery (its gate
+        # counts the reclaim). None = the same as ``battery_assist_budget_w``.
+        battery_assist_budget_above_w: Optional[float] = None,
         observer: bool = False,
         is_night: bool = True,
         # (#638 G4) device_id → True/False window verdicts from the joint
@@ -1644,6 +1664,10 @@ class SurplusController:
         self._batt_buffer_soc = battery_buffer_soc
         self._batt_reserve_soc = battery_reserve_soc
         self._batt_assist_budget_w = max(0.0, float(battery_assist_budget_w or 0.0))
+        self._batt_assist_budget_above_w = (
+            None if battery_assist_budget_above_w is None
+            else max(0.0, float(battery_assist_budget_above_w)))
+        self._batt_priority = battery_priority
         # (#633) "Finish overnight from: Battery" is a NIGHT source — the
         # Tier-2 pass and its force-expiry both gate on this cycle flag.
         self._is_night_cycle = bool(is_night)
@@ -1738,7 +1762,8 @@ class SurplusController:
         # (#620) Tier-1 running budget — the battery can only supply its assist
         # budget ONCE, not once per device. Decremented as each battery-assist
         # load draws from it, so N loads can't each claim the full budget.
-        self._tier1_budget_left = self._batt_assist_budget_w
+        self._tier1_budget_left = max(
+            self._batt_assist_budget_w, self._batt_assist_budget_above_w or 0.0)
         # (#885) Clear each device's recorded battery draw before the walk
         # re-measures it. This is what the per-charger reservation reads for
         # loads that are ALREADY RUNNING, so a stale value would keep
@@ -2491,7 +2516,18 @@ class SurplusController:
             return 0.0
         # Running budget: shrinks as earlier (higher-priority) battery-assist
         # loads claim it this cycle, so the battery isn't multi-spent.
-        return max(0.0, min(self._batt_assist_budget_w, self._tier1_budget_left))
+        return max(0.0, min(self._tier1_budget_for(device), self._tier1_budget_left))
+
+    def _tier1_budget_for(self, device) -> float:
+        """(#1114) The Tier-1 budget this device's Solar Gate opens: a load
+        ranked above the battery counts the charge power it may reclaim,
+        the way a charger above the battery does."""
+        above = getattr(self, "_batt_assist_budget_above_w", None)
+        bprio = getattr(self, "_batt_priority", None)
+        if (above is not None and bprio is not None
+                and int(getattr(device, "priority", 0)) < int(bprio)):
+            return above
+        return self._batt_assist_budget_w
 
     def _tier2_overnight_eligible(self, device) -> bool:
         """(#620) Tier 2 — may this device draw the battery BELOW the buffer,

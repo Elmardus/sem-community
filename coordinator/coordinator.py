@@ -6562,6 +6562,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 dynamic_floor_pct=(
                     (getattr(self, "_planning_evidence", None) or {})
                     .get("battery_dynamic_floor_pct")),
+                # (#1114) a load above the battery reads the charger's gate
+                reclaim_w=reclaim_w,
             )
             # (#653) Tick the appliance scheduler BEFORE allocation.
             #
@@ -6589,6 +6591,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 battery_buffer_soc=btc.effective_floor_soc,
                 battery_reserve_soc=btc.reserve_soc,
                 battery_assist_budget_w=btc.assist_budget_w,
+                battery_assist_budget_above_w=btc.assist_budget_above_battery_w,
                 observer=self._observer_mode,
                 # (#633) overnight sources are NIGHT sources.
                 is_night=bool(self.time_manager.is_night_mode()),
