@@ -367,6 +367,7 @@ def solar_bounded_surplus(
     *,
     grid_import_w: "Optional[float]" = 0.0,
     ev_draw_w: float = 0.0,
+    battery_discharge_w: "Optional[float]" = 0.0,
 ) -> float:
     """The feedback-free SOLAR surplus, physically bounded by production (#620).
 
@@ -402,6 +403,14 @@ def solar_bounded_surplus(
     ramp or a stop, and that import is the car's. ``grid_import_w=None`` takes nothing
     off: the running loads hold, and nothing new can start on a dark meter.
 
+    (#1112) The home battery is the other source that is not the sun. In a
+    battery home the pack covers a load the sun no longer funds, the meter
+    reads 0 W, and a Solar-only load ran on the pack. So the pack's
+    discharge (``battery_discharge_w``, sustained like the import) comes
+    off the same way, and the chargers' draw explains it as it explains
+    the import. A "Solar + battery" load gets its pack share back through
+    the Tier-1 headroom, which now sees the shortfall it pays for.
+
     The result is then clamped to ``[0, solar]``: **you cannot have more SOLAR
     surplus than the sun is producing.** This one physical invariant is the whole
     guard — between sunset and sunrise ``solar_w`` is ~0, so the surplus is
@@ -410,7 +419,9 @@ def solar_bounded_surplus(
     hit when a load ran off the battery at night). ``solar_w=None`` (sensor
     unavailable) skips the cap and falls back to the raw add-back.
     """
-    deficit = loads_import_deficit_w(grid_import_w, ev_draw_w=ev_draw_w)
+    deficit = loads_import_deficit_w(
+        grid_import_w, ev_draw_w=ev_draw_w,
+        battery_discharge_w=battery_discharge_w)
     surplus = float(grid_export_w) - deficit + float(active_draw_w)
     if solar_w is not None:
         surplus = min(surplus, float(solar_w))
@@ -419,13 +430,18 @@ def solar_bounded_surplus(
 
 def loads_import_deficit_w(
     grid_import_w: "Optional[float]", *, ev_draw_w: float = 0.0,
+    battery_discharge_w: "Optional[float]" = 0.0,
 ) -> float:
     """(#1102) The import the loads' pool carries: the meter's import less
     what the chargers' draw explains and less ``IMPORT_DEADBAND_W``.
-    ``None`` (no live reading) is no evidence — nothing."""
+    ``None`` (no live reading) is no evidence — nothing.
+
+    (#1112) Plus the pack's discharge: power the sun did not make. A dark
+    battery reading (``None``) adds nothing."""
     if grid_import_w is None:
         return 0.0
-    return max(0.0, float(grid_import_w)
+    not_sun = float(grid_import_w) + max(0.0, float(battery_discharge_w or 0.0))
+    return max(0.0, not_sun
                - max(0.0, float(ev_draw_w or 0.0)) - IMPORT_DEADBAND_W)
 
 

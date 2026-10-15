@@ -6430,6 +6430,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 self._loads_import_window = {}
                 self._loads_car_start = {}
                 self._loads_car_window = {}
+            if not hasattr(self, "_loads_discharge_window"):
+                self._loads_discharge_window = {}
             # FLEET-READ: every charger's grid draw is its own, not the loads'
             ev_live_w = float(getattr(power, "ev_power", 0.0) or 0.0)
             # a car plugged in or out, SEM's offer moving, or the car's draw
@@ -6454,6 +6456,18 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 self._loads_car_window, _now_mono,
                 ev_draw_w=ev_live_w, car_active=car_active,
             )
+            # (#1112) The pack's discharge is the other power the sun did
+            # not make: in a battery home it covers a load the sun no
+            # longer funds and the meter reads 0 W. Held the same two
+            # minutes as the import; a dark battery reading adds nothing.
+            loads_discharge_w = sustained_import(
+                self._loads_discharge_window, _now_mono,
+                grid_import_w=float(
+                    getattr(power, "battery_discharge_power", 0.0) or 0.0),
+                grid_import_known=not bool(
+                    getattr(power, "battery_power_all_unavailable", False)),
+                car_active=car_active,
+            ) or 0.0
             loads_export_w = float(getattr(power, "grid_export_power", 0.0) or 0.0)
             loads_draw_w = self._surplus_controller.active_surplus_draw_w()
             # (#620) Feedback-free SOLAR surplus, physically bounded by the live
@@ -6466,6 +6480,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 solar_w=getattr(power, "solar_power", None),
                 grid_import_w=loads_import_w,
                 ev_draw_w=ev_draw_w,
+                battery_discharge_w=loads_discharge_w,
             )
             # (#1102) …and the reclaim takes off only the import this side
             # could not, so a running load does not pay it twice.
@@ -6525,7 +6540,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # less the chargers' share and the deadband) — "the boiler
                 # stopped when the car started" reads from a dump.
                 "loads_deficit_w": round(loads_import_deficit_w(
-                    loads_import_w, ev_draw_w=ev_draw_w)),
+                    loads_import_w, ev_draw_w=ev_draw_w,
+                    battery_discharge_w=loads_discharge_w)),
             }
             # ONE pipeline, observer or not. Layers 1+2 (management + decision)
             # always run against the live sensors; the ``observer`` flag cuts the
