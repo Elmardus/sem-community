@@ -725,7 +725,7 @@
         "name": "Kapacitetsavvikelse"
       },
       "battery_charge_pacing": {
-        "name": "Batteriets laddningsdämpning"
+        "name": "Batteriets laddningstakt"
       },
       "battery_charge_power": {
         "name": "Batteriets laddeffekt"
@@ -1509,7 +1509,7 @@
         "name": "Prognosstyrd förbrukning"
       },
       "battery_charge_pacing_enabled": {
-        "name": "Batteriets laddningsdämpning"
+        "name": "Batteriets laddningstakt"
       },
       "export_guard_enabled": {
         "name": "Exportvakt"
