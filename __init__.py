@@ -2883,7 +2883,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             # #470 rule preserved by list position).
             ev_priority = int(_cfg("ev_surplus_priority", 3 + idx))
 
-            # Also auto-fill sensor reader config from first charger
+            # Also auto-fill sensor reader config from first charger.
+            # (#1125) No power sensor here, on purpose: the reader reads it
+            # from the charger's own entry in ``ev_chargers``.
             if idx == 0:
                 for key in ("ev_connected_sensor", "ev_charging_sensor", "ev_total_energy_sensor"):
                     if not full_config.get(key) and charger_cfg.get(key):

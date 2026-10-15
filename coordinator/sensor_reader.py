@@ -735,9 +735,16 @@ class SensorReader:
             if not field.name.startswith("ev_"):
                 continue  # a charger brings charger sensors only
             value = getattr(late, field.name)
-            if value and not getattr(self.config, field.name, None):
-                setattr(self.config, field.name, value)
-                taken.append(field.name)
+            if not value:
+                continue
+            kept = getattr(self.config, field.name, None)
+            if kept:
+                if kept != value:
+                    _LOGGER.debug("Late charger: %s keeps %s, not the found %s",
+                                  field.name, kept, value)
+                continue
+            setattr(self.config, field.name, value)
+            taken.append(field.name)
         return taken
 
     def _read_solar_power(self, entity_id: Optional[str]) -> float:
