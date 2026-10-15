@@ -947,6 +947,9 @@ integration declares). If it holds by hand but not for SEM, the integration
 may need a companion switch or mode first; tell us the brand and the entity
 and it becomes a row in the support matrix.
 
+Every battery is checked, not only the first one. The Repair names the
+entity, so you can see which battery did not keep the value.
+
 The Repair clears itself the moment a write is reflected.
 
 ## The battery charge limit does not follow SEM's pacing (2.2, #820)
