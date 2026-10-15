@@ -78,7 +78,8 @@ DECLARED: dict[str, str] = {
         "a lifetime's first verdict always acts (pinned in test_933)",
     "coordinator/coordinator.py::SEMCoordinator._raise_or_clear_battery_write_repair":
         "the entity a reflected write proves is cleared once per lifetime "
-        "(last_verified_entity, _battery_write_reconciled, #933)",
+        "(last_verified_entity, _battery_write_reconciled, #933); only that "
+        "entity, and not while another battery still misses there (#1124)",
     "coordinator/coordinator.py::SEMCoordinator._run_battery_pipeline":
         "the mode watch's first expected reading is a clear edge "
         "(BatteryModeWatch._settled, #933); a restart drops the "

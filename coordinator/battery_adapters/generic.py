@@ -90,6 +90,9 @@ class GenericBatteryAdapter(BatteryControlAdapter):
         self._strategy_miss_said = None
         #: a miss / a landing not yet turned into a #915 verdict
         self._strategy_verdict = None
+        #: (wanted, seen) of the miss in ``_strategy_verdict`` — (#1124) the
+        #: limit's own verdict can re-point the ledger before it is reported
+        self._strategy_miss = ("", "")
         self._setpoint_withheld_said = False
         # #523: AC-coupled batteries (Sessy, …) expose ONE bidirectional power
         # setpoint — the same ``battery_force_discharge_control_entity`` that
@@ -201,6 +204,13 @@ class GenericBatteryAdapter(BatteryControlAdapter):
             self.last_unverified_entity = ""
             self.last_verified_entity = self._strategy_entity
             self._strategy_verdict = True
+        elif sent and self._strategy_verdict is None:
+            # (#1124, class 84) A flip SEM SENT that the select now reads is
+            # proof too. Before, only a landing after a miss in this same
+            # lifetime proved the select, so its Repair from before a
+            # restart never cleared. The strikes stay: they may be the
+            # limit entity's.
+            self._strategy_verdict = True
 
     def _strategy_missed(self, value: str, age_s: float) -> None:
         seen = self._strategy_state_text()
@@ -212,6 +222,7 @@ class GenericBatteryAdapter(BatteryControlAdapter):
             f"power strategy not taken by {self._strategy_entity}: "
             f"wanted {value}, reads {seen}")
         self._strategy_verdict = False
+        self._strategy_miss = (value, seen)
         if self._strategy_miss_said != (value, seen):
             self._strategy_miss_said = (value, seen)
             _LOGGER.warning(
@@ -353,6 +364,15 @@ class GenericBatteryAdapter(BatteryControlAdapter):
         v = super().verify_pending_write()
         if v is None and self._strategy_verdict is not None:
             v, self._strategy_verdict = self._strategy_verdict, None
+            # (#1124) The held verdict speaks for the SELECT. A limit write
+            # judged since has pointed the ledger at its own entity, and a
+            # kept write clears only the entity it names.
+            if v is True:
+                self.last_verified_entity = self._strategy_entity
+            else:
+                self.last_unverified_entity = self._strategy_entity
+                (self.last_unverified_wanted,
+                 self.last_unverified_seen) = self._strategy_miss
         return v
 
     async def _enter_active_strategy(self) -> bool:

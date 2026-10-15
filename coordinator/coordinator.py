@@ -6008,8 +6008,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         else None (nothing judged). The strikes are the highest."""
         verdicts = []
         strikes = 0
-        for bid, ad in list((getattr(self, "_battery_adapters", None)
-                             or {}).items()):
+        for bid, ad in self._live_battery_adapters():
             verify = getattr(ad, "verify_pending_write", None)
             if not callable(verify):
                 continue
@@ -6037,11 +6036,19 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         sets, not SEM (a Deye in Selling First) — (#1124) whichever battery
         it is. Through the first battery alone, a Deye second in the list
         never had its note shown."""
-        for ad in list((getattr(self, "_battery_adapters", None) or {}).values()):
+        for _bid, ad in self._live_battery_adapters():
             cav = getattr(ad, "discharge_rate_caveat", None)
             if callable(cav) and getattr(ad, "_system_work_mode_control", False):
                 return cav()
         return None
+
+    def _live_battery_adapters(self):
+        """(#1124) ``(battery_id, adapter)`` for the batteries of the last
+        cycle — every cached adapter before the first one has run."""
+        adapters = getattr(self, "_battery_adapters", None) or {}
+        live = getattr(self, "_live_battery_ids", None)
+        return [(bid, ad) for bid, ad in list(adapters.items())
+                if live is None or bid in live]
 
     def _raise_or_clear_battery_write_repair(self, adapter, verdict) -> None:
         """(#915) Turn the adapter's read-back verdict into a Repair, once,
@@ -6064,17 +6071,19 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # entity it PROVED and nothing else. Every battery is asked now,
             # so clearing everything raised would let a healthy battery take
             # down the Repair of one that still ignores SEM — and that one
-            # filed it again on its next miss, every cycle. Two batteries
-            # set up on one entity (#531 warns about it) share one Repair:
-            # it stays while the OTHER one still sees its writes there
-            # ignored three times or more.
+            # filed it again on each judged miss. Two batteries set up on
+            # one entity (#531 warns about it) share one Repair: it stays
+            # while the OTHER one has three strikes or more and its last
+            # miss was on that entity.
+            _live = getattr(self, "_live_battery_ids", None)
             ignored_elsewhere = any(
                 other is not adapter
+                and (_live is None or bid in _live)
                 and str(getattr(other, "last_unverified_entity", "") or "") == proved
                 and int(getattr(other, "write_not_taken_strikes", 0) or 0)
                 >= self.BATTERY_WRITE_STRIKES
-                for other in list((getattr(self, "_battery_adapters", None)
-                                   or {}).values()))
+                for bid, other in list((getattr(self, "_battery_adapters", None)
+                                        or {}).items()))
             if proved and not ignored_elsewhere:
                 if proved in raised or proved not in done:
                     _ri.clear_battery_control_write_not_taken(self.hass, proved)
@@ -8757,6 +8766,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # #531: live battery count gates the global-mode fall-through in
         # _per_battery_config (single→multi bleed fix).
         _bat_count = len(battery_items)
+        # (#1124) …and which cached adapters are batteries THIS cycle: a
+        # synthetic "primary" from the first cycles stays in the cache once
+        # b1/b2 exist, and its frozen write ledger is no battery's answer.
+        self._live_battery_ids = frozenset(bid for bid, _ in battery_items)
 
         for batt_idx, (battery_id, runtime) in enumerate(battery_items):
             # Per-battery adapter cache. Each battery gets its OWN control
