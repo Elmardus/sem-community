@@ -620,8 +620,8 @@ def _reject_capability_sensor(result: Dict[str, str], entities) -> None:
 
     SWAP ONLY, never drop. Removing the role looks like the fail-closed
     move and is not one in this tree: a charger with no power entity is
-    still registered (``coordinator._retry_ev_device_setup`` gates on the
-    service, not the sensor), KEBA's adapter decides ``actual_charging``
+    still registered by a saved card (setup's gate reads the config, not
+    the sensor's state), KEBA's adapter decides ``actual_charging``
     from power alone so it would read "never charging", the 18-cycle
     ``ev_power < 50`` rule would anchor its SoC at 100 %, and in a
     multi-charger install the missing per-charger key falls back to the
@@ -5441,8 +5441,8 @@ def _wire_wattpilot(hass, device, charger_id: str, current_entity_id) -> None:
 def wire_current_entity(hass, device, charger_id: str, current_entity_id) -> None:
     """(#976) What the current entity's PLATFORM implies for control, applied
     to a freshly built charger device — the ONE producer, called by every
-    builder (the setup-time builder in ``__init__`` and the coordinator's
-    late retry).
+    builder (the setup-time builder in ``__init__``; a charger found after
+    start-up is saved and built there too, #1136).
 
     * ``zero_amps_parks_a_limit`` — on the OCPP integration the maximum-
       current number is a charging profile the charge point KEEPS, so a

@@ -3207,10 +3207,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         """
         obs = bool(getattr(self, "_observer_mode", False))
         # (coverage-audit F3) BOTH discovery shapes: the multi-charger dict
-        # AND the legacy ``_ev_device`` fallback that ``_retry_ev_device_setup``
-        # fills when a charger integration loads after SEM. The retry path
-        # never touches ``_ev_devices``, so iterating only the dict left a
-        # late-discovered charger holding observer_mode=False forever —
+        # AND the legacy ``_ev_device`` slot. The late retry once filled only
+        # that slot (#1136 now saves the find and setup builds it), so
+        # iterating only the dict left a late-discovered charger holding
+        # observer_mode=False forever —
         # masked today by actuate()'s older decision-level gate, which is
         # exactly the gate #855 wants to retire. Dedupe by identity: on a
         # normal install the fallback IS an entry of the dict.
@@ -11858,74 +11858,41 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             self._detection_report = None
 
     async def _retry_ev_device_setup(self) -> None:
-        """Retry EV device setup if KEBA wasn't available at startup."""
-        from ..hardware_detection import (
-            discover_ev_charger_from_registry, wire_current_entity,
-        )
-        from ..devices.base import CurrentControlDevice, resolve_max_current
+        """Save a charger found after start-up; setup builds it (#1136).
 
+        A charger whose integration loads after SEM is found here. This used
+        to build the device itself — a second, smaller builder that wanted a
+        current service, skipped load management and left the charger out
+        of SEM's config, so its energy counter and priority row never saw
+        it. Now the find is saved exactly as setup saves its own find
+        (``build_discovered_charger_storage``). The options update reloads
+        SEM, and setup's one builder builds it like any saved charger.
+        """
+        from ..hardware_detection import (
+            charger_is_complete, discover_ev_charger_from_registry,
+        )
+        from .. import build_discovered_charger_storage
+
+        entry = self.config_entry
+        if entry is None or (self.config.get("ev_chargers") or []):
+            # Not set up yet, or a saved charger exists: discovery must
+            # never overwrite what the user saved.
+            self._ev_retry_count = 999
+            return
         ev_auto = discover_ev_charger_from_registry(self.hass)
-        if not ev_auto or not ev_auto.get("ev_charger_service"):
+        # The same gate setup's builder applies: a power reading and any
+        # way to act. A half find waits for the next retry.
+        if not ev_auto or not charger_is_complete(ev_auto):
             return
 
         _LOGGER.info("Late-discovered EV charger: %s", list(ev_auto.keys()))
-        self.refresh_detection_report()
-
-        ev_device = CurrentControlDevice(
-            hass=self.hass,
-            device_id="ev_charger",
-            name="EV Charger",
-            priority=self.config.get("ev_surplus_priority", 3),
-            min_current=6.0,
-            # (#746) one resolver — see devices.base.resolve_max_current.
-            max_current=resolve_max_current(self.config.get),
-            phases=int(self.config.get("ev_phases", 3)),
-            voltage=230.0,
-            power_entity_id=ev_auto.get("ev_charging_power_sensor"),
-            charger_service=ev_auto.get("ev_charger_service"),
-            charger_service_entity_id=ev_auto.get("ev_charger_service_entity_id"),
-            current_entity_id=ev_auto.get("ev_current_control_entity"),
-        )
-        # Per-integration charger profile (#82)
-        if ev_auto.get("ev_service_param_name"):
-            ev_device.service_param_name = ev_auto["ev_service_param_name"]
-        from ..utils.service_data import service_extra_data
-        ev_device.service_extra_data = service_extra_data(
-            ev_auto.get("ev_charger_service_data", ""))
-        if ev_auto.get("ev_service_device_id"):
-            ev_device.service_device_id = ev_auto["ev_service_device_id"]
-        if ev_auto.get("ev_start_stop_entity"):
-            ev_device.start_stop_entity = ev_auto["ev_start_stop_entity"]
-        # (#976) what the current entity's platform implies for control —
-        # the same producer the setup-time builder calls, so a late-built
-        # device carries the 0 A refusal flag and the adopted switch too.
-        wire_current_entity(self.hass, ev_device, "ev_charger",
-                            ev_auto.get("ev_current_control_entity"))
-        if ev_auto.get("ev_charge_mode_entity"):
-            ev_device.charge_mode_entity = ev_auto["ev_charge_mode_entity"]
-            ev_device.charge_mode_start = ev_auto.get("ev_charge_mode_start")
-            ev_device.charge_mode_stop = ev_auto.get("ev_charge_mode_stop")
-        if ev_auto.get("ev_start_service"):
-            ev_device.start_service = ev_auto["ev_start_service"]
-            import json as _json
-            ev_device.start_service_data = _json.loads(ev_auto.get("ev_start_service_data", "{}"))
-        if ev_auto.get("ev_stop_service"):
-            ev_device.stop_service = ev_auto["ev_stop_service"]
-            import json as _json
-            ev_device.stop_service_data = _json.loads(ev_auto.get("ev_stop_service_data", "{}"))
-        self._surplus_controller.register_device(ev_device)
-        self._ev_device = ev_device
-        ev_device.managed_externally = True
-        self._ev_retry_count = 999  # Stop retrying
-
-        # (#1125) Hand the found sensors to the reader through its own
-        # start-up parse. The key list that stood here had no power sensor,
-        # so the car's draw counted as house load.
-        for reader_key in self._sensor_reader.adopt_late_charger(ev_auto):
-            _LOGGER.info("Set sensor reader %s = %s", reader_key,
-                         getattr(self._sensor_reader.config, reader_key))
-
-        _LOGGER.info("EV charger registered via late discovery: service=%s", ev_auto.get("ev_charger_service"))
+        new_data, new_options, _ = build_discovered_charger_storage(
+            dict(entry.data or {}), dict(entry.options or {}), ev_auto)
+        self._ev_retry_count = 999  # Stop retrying: setup takes it from here
+        # The options change reloads SEM (``async_update_options``).
+        self.hass.config_entries.async_update_entry(
+            entry, data=new_data, options=new_options)
+        _LOGGER.info("EV charger saved via late discovery; SEM reloads to build it")
 
     # ─── Legacy strategy machine removed (arch Step 7) ──────────
     # _determine_charging_strategy / _self_consumption_strategy /

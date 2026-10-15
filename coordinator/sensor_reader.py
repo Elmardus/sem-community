@@ -6,8 +6,8 @@ import math
 import re
 import time
 from collections import deque
-from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass, fields, replace
+from typing import Any, Dict, Optional, Tuple
+from dataclasses import dataclass, replace
 
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -715,37 +715,6 @@ class SensorReader:
             ev_plug_sensor=config.get("ev_connected_sensor") or config.get("ev_plug_sensor", ""),
             ev_charging_sensor=config.get("ev_charging_sensor", ""),
         )
-
-    def adopt_late_charger(self, found: Dict[str, Any]) -> List[str]:
-        """(#1125) Take the EV sensors of a charger found after start-up.
-
-        The reader parses its sensors once, at start-up. A charger whose
-        integration loads after SEM is built later
-        (``_retry_ev_device_setup``) and hands its sensors over here. That
-        hand-over used to be a key list typed beside ``_parse_config``, and
-        the list had no power sensor: with no Energy Dashboard EV sensor,
-        ``ev_power`` read 0 W, so the car's draw counted as house load and
-        the charger's own view saw no draw (class 24). The found keys now go
-        through the same parse as start-up, so every EV sensor the reader
-        knows is taken. A sensor already set is kept. Returns the fields set.
-        """
-        late = self._parse_config(found or {})
-        taken: List[str] = []
-        for field in fields(SensorConfig):
-            if not field.name.startswith("ev_"):
-                continue  # a charger brings charger sensors only
-            value = getattr(late, field.name)
-            if not value:
-                continue
-            kept = getattr(self.config, field.name, None)
-            if kept:
-                if kept != value:
-                    _LOGGER.debug("Late charger: %s keeps %s, not the found %s",
-                                  field.name, kept, value)
-                continue
-            setattr(self.config, field.name, value)
-            taken.append(field.name)
-        return taken
 
     def _read_solar_power(self, entity_id: Optional[str]) -> float:
         """(#1065) Read one solar power sensor — the ONE door for every
