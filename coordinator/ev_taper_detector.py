@@ -245,14 +245,16 @@ class EVTaperDetector:
         The flat key holds the setup value or the primary's copy, so every
         detector that read it gave each car the first car's pack. Looked up
         on every call: a card write puts fresh dicts into ``ev_chargers``.
-        A null value counts as unset at both levels.
+        A null value counts as unset at both levels. An entry without an id
+        is matched by its place, as setup names it (``ev_charger_<idx>``).
         """
         chargers = self._config.get("ev_chargers") or []
         if self._charger_id is None:
             own = chargers[0] if chargers else None
         else:
-            own = next((c for c in chargers if isinstance(c, dict)
-                        and c.get("id") == self._charger_id), None)
+            own = next((c for i, c in enumerate(chargers) if isinstance(c, dict)
+                        and (c.get("id") or f"ev_charger_{i}") == self._charger_id),
+                       None)
         if isinstance(own, dict) and own.get(key) is not None:
             return own[key]
         value = self._config.get(key)

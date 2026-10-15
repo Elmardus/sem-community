@@ -16,6 +16,7 @@ import ast
 import copy
 import inspect
 import pathlib
+import textwrap
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -172,31 +173,65 @@ class TestTheCoordinatorHandsEachDetectorItsCar:
 
     def test_every_detector_built_in_the_package_names_its_charger(self):
         """A detector built without ``charger_id`` falls back to the
-        primary's car. Every construction must say whose car it tracks."""
-        bad = [site for site, named in _detector_constructions() if not named]
-        assert bad == []
+        primary's car. Every construction must say whose car it tracks;
+        only the primary default in ``__init__`` may say None."""
+        sites = _detector_constructions()
+        assert [s for s, _fn, kind in sites if kind == "missing"] == []
+        assert [s for s, fn, kind in sites
+                if kind == "none" and fn != "__init__"] == []
 
     def test_the_guard_finds_the_constructions(self):
-        """Vacuity twin: the walk above must see the three real sites."""
-        assert len(_detector_constructions()) >= 3
+        """Vacuity twin: the walk sees the live loop and the restore, each
+        passing a real charger id."""
+        named = {fn for _s, fn, kind in _detector_constructions() if kind == "named"}
+        assert {"_update_ev_intelligence", "_restore_per_charger_detectors"} <= named
+
+    def test_the_self_heal_reads_the_car_s_own_pack(self):
+        """The self-heal in ``_update_ev_intelligence`` sizes the healed
+        estimate with the detector's pack, not the flat key."""
+        tree = ast.parse(textwrap.dedent(
+            inspect.getsource(SEMCoordinator._update_ev_intelligence)))
+        flat = [n.lineno for n in ast.walk(tree)
+                if isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Attribute) and n.func.attr == "get"
+                and n.args and isinstance(n.args[0], ast.Constant)
+                and n.args[0].value == "ev_battery_capacity_kwh"]
+        assert flat == []
+        assert any(isinstance(n, ast.Attribute) and n.attr == "capacity_kwh"
+                   for n in ast.walk(tree))
+
+    def test_a_charger_without_an_id_is_matched_by_its_place(self):
+        """Setup names an id-less entry ``ev_charger_<idx>``; so does the
+        detector, so the second car still reads its own pack."""
+        cfg = _cfg()
+        del cfg["ev_chargers"][1]["id"]
+        assert _det("ev_charger_1", cfg).capacity_kwh == 80.0
 
 
 def _detector_constructions():
     """Every ``EVTaperDetector(...)`` call in the package (tests excluded):
-    ``(file:line, passes charger_id)``."""
-    found = []
+    ``(file:line, enclosing function, kind)`` — kind is ``missing`` (no
+    ``charger_id``), ``none`` (``charger_id=None``) or ``named``."""
+    found = {}
     for path in PKG.rglob("*.py"):
         if "tests" in path.relative_to(PKG).parts:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if (isinstance(node, ast.Call)
-                    and getattr(node.func, "id", None) == "EVTaperDetector"):
-                found.append((
-                    f"{path.relative_to(PKG)}:{node.lineno}",
-                    any(k.arg == "charger_id" for k in node.keywords),
-                ))
-    return found
+        scopes = [tree] + [n for n in ast.walk(tree) if isinstance(
+            n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        for scope in scopes:   # outer first, so the innermost function wins
+            for node in ast.walk(scope):
+                if not (isinstance(node, ast.Call)
+                        and getattr(node.func, "id", None) == "EVTaperDetector"):
+                    continue
+                kw = next((k.value for k in node.keywords
+                           if k.arg == "charger_id"), None)
+                kind = ("missing" if kw is None else
+                        "none" if isinstance(kw, ast.Constant) and kw.value is None
+                        else "named")
+                found[f"{path.relative_to(PKG)}:{node.lineno}"] = (
+                    getattr(scope, "name", None), kind)
+    return [(site, fn, kind) for site, (fn, kind) in sorted(found.items())]
 
 
 def _detector_config_reads():
