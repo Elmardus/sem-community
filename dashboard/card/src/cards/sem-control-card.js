@@ -197,7 +197,7 @@ class SEMControlCard extends SEMLitBase {
 
     // ── Shared control renderers ──
 
-    _renderStepper(entityId, labelKey, T, helpKey) {
+    _renderStepper(entityId, labelKey, T) {
         const entity = this._hass?.states[entityId];
         if (!entity) return nothing;
         const frozen = this._frozenEntities[entityId];
@@ -229,7 +229,6 @@ class SEMControlCard extends SEMLitBase {
                         >+</button>
                     </div>
                 </div>
-                ${(this._showHelp && helpKey) ? html`<div class="setting-help-text">${this._t(helpKey)}</div>` : nothing}
             </div>
         `;
     }

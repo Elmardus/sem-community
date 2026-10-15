@@ -245,7 +245,7 @@ class SEMFlowCard extends SEMLitBase {
                             <div class="pv-chip"
                                  title="${s.entityId}"
                                  data-entity="${s.entityId}"
-                                 @click=${() => this._fireMoreInfo?.(s.entityId)}>
+                                 @click=${() => this._fireMoreInfo(s.entityId)}>
                                 <span class="pv-chip-label">${s.name}</span>
                                 <span class="pv-chip-value">${(Math.abs(s.watts)/1000).toFixed(2)} kW</span>
                             </div>
@@ -939,11 +939,6 @@ class SEMFlowCard extends SEMLitBase {
                 if (config.url_path) window.open(config.url_path, '_blank');
                 break;
         }
-    }
-
-    _fireMoreInfo(entityId) {
-        if (!entityId) return;
-        this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId }, bubbles: true, composed: true }));
     }
 
     // ── Glow intensity ──
