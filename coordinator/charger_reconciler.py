@@ -783,9 +783,13 @@ class ChargerReconciler:
             if desired is DesiredState.OFF:
                 fs = self._failsafe_action()
                 if fs:
+                    if not observed.enable_controllable and not observed.connected:
+                        return fs
                     if not observed.enable_controllable:
                         return fs + [Action(ActionKind.REPORT_ENABLE_BLOCKED)]
                     return fs + self._gated_disable(now, bypass_anticycle=_stop_is_a_demand)
+                if not observed.enable_controllable and not observed.connected:
+                    return [Action(ActionKind.NONE)]
                 if not observed.enable_controllable:
                     # #548 — the contactor is app/cloud-locked (Wallbox
                     # Eco-Smart / Scheduled / Power-Sharing): SEM cannot
@@ -856,6 +860,10 @@ class ChargerReconciler:
         # action). Keyed on the ACTUAL switch state, NOT on power, so a
         # full-but-plugged car (switch on, drawing 0 W) does not churn.
         enable_actions: List[Action] = []
+        if not observed.enable_controllable and not observed.connected:
+            # (#1032) No car: a switch the device makes unavailable has
+            # nothing to start, so there is nothing to report.
+            return [Action(ActionKind.NONE)]
         if not observed.enable_controllable:
             # Switch present but unavailable/unknown (locked / eco-smart):
             # SEM cannot drive it → charging is silently impossible. Surface.
