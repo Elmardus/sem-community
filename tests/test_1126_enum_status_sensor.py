@@ -200,7 +200,7 @@ def _asks_for_no_class(node) -> bool:
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return is_class(node.operand)
     if isinstance(node, ast.Compare) and is_class(node.left):
-        for op, right in zip(node.ops, node.comparators):
+        for op, right in zip(node.ops, node.comparators, strict=True):
             if isinstance(op, (ast.Is, ast.Eq)) and isinstance(right, ast.Constant) \
                     and right.value is None:
                 return True
