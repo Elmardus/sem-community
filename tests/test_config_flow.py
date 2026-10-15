@@ -484,8 +484,12 @@ class TestSolarEnergyManagementConfigFlow:
         assert data["enable_charger_notifications"] is True
 
     @pytest.mark.asyncio
-    async def test_duplicate_entry_prevention(self, mock_hass):
-        """Duplicate setup is caught by the unique-id guard in the hardware step."""
+    async def test_duplicate_entry_prevention(self, mock_hass, caplog):
+        """(#1133) A second install aborts as "already configured".
+
+        The abort used to be caught by the step's broad ``except``: logged
+        as "Unexpected exception creating entry" and the form shown again.
+        """
         flow = _create_flow(mock_hass)
         flow._data = {}
         flow._energy_dashboard_config = _make_energy_dashboard_config()
@@ -501,13 +505,11 @@ class TestSolarEnergyManagementConfigFlow:
         with patch(
             "custom_components.solar_energy_management.config_flow.discover_inverter_from_registry",
             return_value=None,
-        ):
-            result = await flow.async_step_hardware(user_input=VALID_HARDWARE_INPUT)
+        ), pytest.raises(AbortFlow) as raised:
+            await flow.async_step_hardware(user_input=VALID_HARDWARE_INPUT)
 
-        # AbortFlow caught by the generic except, form re-displayed with base error
-        assert result["type"] == FlowResultType.FORM
-        assert result["step_id"] == "hardware"
-        assert result["errors"]["base"] == "unknown"
+        assert raised.value.reason == "already_configured"
+        assert "Unexpected exception" not in caplog.text
         flow._abort_if_unique_id_configured.assert_called_once()
 
     @pytest.mark.asyncio

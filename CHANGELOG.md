@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ **One outdoor temperature for all of SEM** (#1082). Found by its name or your weather entity; car taper, snow and battery nights use it.
 - ✨ **The home forecast learns how cold days raise your load** (#1082). The plans use it only when switched on. Off by default.
 - ✨ **Each car session shows its CO₂** (#1088), in the session list and the CSV. The weekly summary adds what your solar avoided.
+- 🐛 **Adding SEM a second time now says it is already set up** (#1133). Setup showed an unknown error and logged a crash instead.
 - 🐛 **A charger found after start-up no longer counts its car as house load** (#1125). SEM now reads that charger's power sensor.
 - 🐛 **SEM now sees a Peblar's car plugged in** (#1126). Its state sensor was skipped; a Peblar setup saved earlier gets it at startup.
 - 🐛 **With two chargers, each car's charge level estimate uses its own battery size** (#1127). The second car used the first car's size and target.

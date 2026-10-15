@@ -1168,10 +1168,12 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            # (#1133) Outside the try: the abort must reach HA as an abort.
+            # Inside, the broad ``except`` caught it, logged it as an
+            # unexpected error and showed the form again.
+            await self.async_set_unique_id(DOMAIN)
+            self._abort_if_unique_id_configured()
             try:
-                await self.async_set_unique_id(DOMAIN)
-                self._abort_if_unique_id_configured()
-
                 # Apply silent defaults first, then layer hardware auto-detection,
                 # user's hardware answers, and discharge entity on top.
                 merged: dict[str, Any] = {}
