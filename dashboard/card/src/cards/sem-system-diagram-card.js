@@ -833,7 +833,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
                             <div class="pv-chip"
                                  title="${s.entityId}"
                                  data-entity="${s.entityId}"
-                                 @click=${() => this._fireMoreInfo?.(s.entityId)}>
+                                 @click=${() => this._fireMoreInfo(s.entityId)}>
                                 <span class="pv-chip-label">${s.name}</span>
                                 <span class="pv-chip-value">${(Math.abs(s.watts)/1000).toFixed(2)} kW</span>
                             </div>
@@ -1733,13 +1733,6 @@ class SEMSystemDiagramCard extends SEMLitBase {
                         </div>`;
                 })}
             </div>`;
-    }
-
-    _fireMoreInfo(entityId) {
-        this.dispatchEvent(new CustomEvent('hass-more-info', {
-            bubbles: true, composed: true,
-            detail: { entityId },
-        }));
     }
 
     _renderDeviceStrip(H) {

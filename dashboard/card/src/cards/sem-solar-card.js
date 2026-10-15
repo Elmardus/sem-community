@@ -346,7 +346,7 @@ class SEMSolarCard extends SEMLitBase {
                                 <div class="pv-chip"
                                      title="${s.entityId}"
                                      data-entity="${s.entityId}"
-                                     @click=${() => this._fireMoreInfo?.(s.entityId)}>
+                                     @click=${() => this._fireMoreInfo(s.entityId)}>
                                     <span class="pv-chip-label">${s.name}</span>
                                     <span class="pv-chip-value">${(Math.abs(s.watts)/1000).toFixed(2)} kW</span>
                                 </div>
@@ -444,7 +444,7 @@ class SEMSolarCard extends SEMLitBase {
                                 ${pvStrings.map(s => html`
                                     <div class="flow-row"
                                          style="cursor:pointer"
-                                         @click=${() => this._fireMoreInfo?.(s.entityId)}>
+                                         @click=${() => this._fireMoreInfo(s.entityId)}>
                                         <div class="flow-dot" style="background:#ff9800"></div>
                                         <span class="flow-label">${s.name}</span>
                                         <div class="flow-vals">

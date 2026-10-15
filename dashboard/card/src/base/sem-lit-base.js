@@ -117,6 +117,13 @@ export class SEMLitBase extends LitElement {
         return this._hass;
     }
 
+    // (#1128) Open HA's more-info dialog. Here, not in each card: the Solar
+    // card called it without a copy of its own, so its clicks did nothing.
+    _fireMoreInfo(entityId) {
+        if (!entityId) return;
+        this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId }, bubbles: true, composed: true }));
+    }
+
     // ── Debounced update — batches rapid state changes into single render ──
     _scheduleUpdate() {
         if (this._updateTimer) return; // already scheduled
