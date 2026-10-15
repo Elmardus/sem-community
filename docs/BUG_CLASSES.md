@@ -5912,3 +5912,13 @@ Refs #1101 #1049 #782 #658 #681 #1024.
 **Guard:** `tests/test_1129_untranslated_prose.py` — a value with three or more plain English words that equals English fails. Hyphenated or dotted names (`Open-Meteo`) and codes are not words, so no exception list.
 **Left open:** a value of one or two words (`Battery`, `Charge Tonight`) copied from English is not caught.
 Refs #1129 #675 #674.
+
+### 144. A card reads a member it never defines — JavaScript answers `undefined`, not an error — GUARDED
+**Symptom:** the load list's minimum run and pause fields took any value (#1128). The Solar card's per-string rows showed a hand cursor, and a click did nothing. Nothing in the log.
+**Root shape:** a card reads `this.x`, and no line in the card or `SEMLitBase` sets or defines `x`. JavaScript gives `undefined` for a missing member, so `${this._prefix}name` becomes `undefinedname` and finds no entity, and `this._fireMoreInfo?.()` calls nothing. Two names for one thing invite it: every card kept its entity prefix in `_prefix` (which `SEMLitBase._valLabel` reads), the load list in `entityPrefix`, and one line copied from another card used the other name. The same family as class 31 (an unbound name in Python), with no error at all.
+**Where it lives:** `sem-load-priority-card.js` (`_antiCycleBounds` read `_prefix`), `sem-solar-card.js` (`_fireMoreInfo`, defined only in the flow and system diagram cards), `sem-control-card.js` (`_showHelp`, whose toggle was removed in June: dead, no effect). All **swept**.
+**Closure:** the load list uses `_prefix`, like every card. `_fireMoreInfo` lives once, in `SEMLitBase`. The dead help line is gone. A typed anti-cycle value is limited to the published range (`antiCycleValue` in `util/load-sections.js`): an input's min/max limit its arrows, not typing.
+**Guard:** `dashboard/card/test/member-defined.test.js` — loads every card with Lit replaced by a stub and fails when the source reads `this.<name>` that the class chain, a write in the card or base, a declared property, or a short list of browser element members does not define. One name for the prefix in every card. The real load list finds the published range. On the old source three tests fail with the three faults above. `anti-cycle-row.test.js` pins the value rule.
+**Sweep question:** for every `this.x` a card reads — which line sets it, and is that line in this card or its base?
+**Left open:** reads by bracket (`this[key]`) and members of other objects (`dev.x`, `config.x`) are not checked.
+Refs #1128 #914 #1053.
