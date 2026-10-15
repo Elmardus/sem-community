@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **The "or:" label on the Configuration tab is now translated** (#1129). It was still English in 13 languages.
 # [2.2.0-beta.19] — 15.10.2026
 
 - ✨ **SEM finds your grid CO₂ sensor by its unit** (#1088). CO₂ avoided can use its live value, not a fixed average. Off by default.
