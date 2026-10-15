@@ -259,8 +259,10 @@ class TestOneProducer:
         one built at setup: the flag, and the adopted switch."""
         from custom_components.solar_energy_management.coordinator.coordinator import SEMCoordinator
         hass = _hass()
+        from custom_components.solar_energy_management.coordinator.sensor_reader import SensorReader
         me = SimpleNamespace(hass=hass, config={"ev_surplus_priority": 3, "ev_phases": 3},
                              _surplus_controller=MagicMock(),
+                             _sensor_reader=SensorReader(MagicMock(), {}),   # (#1125)
                              refresh_detection_report=lambda: None)
         auto = {"ev_charger_service": "number.set_value",
                 "ev_current_control_entity": NUM,

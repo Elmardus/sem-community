@@ -56,9 +56,10 @@ def chargers_outside_home(chargers, power) -> list:
     ``home`` takes ``ev_power`` out, so these are already out of it. A
     charger is in ``ev_power`` when its own sensor was summed, or when one
     fleet sensor (Energy Dashboard or the top-level sensor) was read for
-    the whole EV side. A charger the reader never read — a late-found box
-    whose sensor was not handed to the reader, a second box with no sensor
-    of its own — is still inside ``home``, and stays a member.
+    the whole EV side. A charger the reader never read — a second box with
+    no sensor of its own, a late-found box with no power sensor (#1125
+    hands over the one it has) — is still inside ``home``, and stays a
+    member.
     """
     if getattr(power, "ev_power_fleet_entity", None):
         return [c for c in (chargers or ()) if c is not None]
