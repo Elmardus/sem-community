@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
-- 🐛 **A charger found after start-up is now set up like one found at setup** (#1136). SEM saves it and reloads; load management and its energy counter now include it.
+- 🐛 **Each away car's charge estimate drops by its own daily use** (#1132). Before, two cars both dropped by the sum of both.
+- 🐛 **A late-found charger is now set up like one found at setup** (#1136). SEM saves it and reloads. Load management and its energy counter include it.
 - 🐛 **Adding SEM a second time now says it is already set up** (#1133). Setup showed an unknown error and logged a crash instead.
 - 🐛 **A charger found after start-up no longer counts its car as house load** (#1125). SEM now reads that charger's power sensor.
 - 🐛 **SEM now sees a Peblar's car plugged in** (#1126). Its state sensor was skipped; a Peblar setup saved earlier gets it at startup.

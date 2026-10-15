@@ -110,6 +110,11 @@ class ConsumptionPredictor:
         self._consumption_profile = HourlyProfile()
         self._solar_profile = HourlyProfile()
         self._ev_profile = HourlyProfile()  # Daily EV consumption per weekday
+        # (#1132) The same, per car: each charger's own closed EV day. The
+        # fleet profile above learns the TOTAL of all chargers, which is one
+        # car's use only on a one-charger install.
+        self._car_ev_profiles: Dict[str, HourlyProfile] = {}
+        self._last_car_ev_observation_day: Dict[str, int] = {}
         self._last_observation_hour: Optional[int] = None
         self._last_ev_observation_day: Optional[int] = None
         self._training_status = "cold_start"
@@ -320,6 +325,37 @@ class ConsumptionPredictor:
             daily_ev_kwh, dt.strftime("%A"), dow,
         )
 
+    def observe_car_ev(self, dt: datetime, charger_id: str,
+                       daily_ev_kwh: float) -> None:
+        """(#1132) Record one car's own EV day, once per calendar day.
+
+        Called when that charger's own EV day closes, with the kWh it
+        delivered. Same weekday bin as ``observe_ev``.
+        """
+        if not charger_id or daily_ev_kwh is None or daily_ev_kwh <= 0:
+            return
+        day_key = dt.toordinal()
+        if self._last_car_ev_observation_day.get(charger_id) == day_key:
+            return
+        self._last_car_ev_observation_day[charger_id] = day_key
+        profile = self._car_ev_profiles.setdefault(charger_id, HourlyProfile())
+        profile.update(dt.weekday(), 12, float(daily_ev_kwh))
+        _LOGGER.debug("EV predictor: %s observed %.1f kWh on %s",
+                      charger_id, daily_ev_kwh, dt.strftime("%A"))
+
+    def predict_car_ev_consumption_tomorrow(self, from_dt: datetime,
+                                            charger_id: str) -> float:
+        """(#1132) One car's predicted EV use tomorrow, from its own days.
+
+        0.0 when that car has no days yet; the caller then falls back to
+        the car's own daily target, never to the fleet total.
+        """
+        profile = self._car_ev_profiles.get(charger_id)
+        if profile is None:
+            return 0.0
+        value = profile.predict((from_dt + timedelta(days=1)).weekday(), 12)
+        return 0.0 if value is None else round(value, 1)
+
     def predict_ev_consumption_tomorrow(self, from_dt: datetime) -> float:
         """Predict tomorrow's EV consumption in kWh.
 
@@ -369,6 +405,8 @@ class ConsumptionPredictor:
             "consumption": self._consumption_profile.get_state(),
             "solar": self._solar_profile.get_state(),
             "ev": self._ev_profile.get_state(),
+            "ev_per_car": {cid: prof.get_state()
+                           for cid, prof in self._car_ev_profiles.items()},
             "training_status": self._training_status,
         }
 
@@ -379,4 +417,9 @@ class ConsumptionPredictor:
         self._consumption_profile.restore_state(state.get("consumption", {}))
         self._solar_profile.restore_state(state.get("solar", {}))
         self._ev_profile.restore_state(state.get("ev", {}))
+        self._car_ev_profiles = {}
+        for cid, prof_state in (state.get("ev_per_car") or {}).items():
+            prof = HourlyProfile()
+            prof.restore_state(prof_state)
+            self._car_ev_profiles[str(cid)] = prof
         self._training_status = state.get("training_status", "cold_start")

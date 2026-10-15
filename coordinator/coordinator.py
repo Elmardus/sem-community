@@ -13672,6 +13672,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     target_time
                 ).isoformat()
                 if self._daily_ev_per_charger_date.get(cid) != ev_day:
+                    # (#1132) The bucket closing is this car's own EV day:
+                    # learn it, so its away-day estimate drops by its own
+                    # use, not by every car's.
+                    if self._daily_ev_per_charger_date.get(cid) is not None:
+                        self._predictor.observe_car_ev(
+                            dt_util.now() - timedelta(days=1), cid,
+                            self._daily_ev_per_charger.get(cid, 0.0))
                     # Per-charger reset (Car A at 07:00, Car B at 08:00 don't
                     # disturb each other) — only this cid's bucket rolls over.
                     self._daily_ev_per_charger[cid] = 0.0
@@ -14603,14 +14610,24 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         if not targets:
             return
 
-        # Shared across chargers — computed once, only when something decays.
-        predicted = self._predictor.predict_ev_consumption_tomorrow(now_time)
+        # (#1132) The fleet prediction learns the TOTAL of all chargers: it
+        # is one car's use only when there is one car. With more, each car
+        # drops by its own learned use (0 until it has days → its own
+        # daily target below).
+        fleet = self._predictor.predict_ev_consumption_tomorrow(now_time)
+        configured = (getattr(self, "config", None) or {}).get("ev_chargers") or []
+        one_car = max(len(detectors), len(configured)) <= 1
         temp_factor = EVTaperDetector.temperature_correction_factor(
             self._read_outdoor_temperature()
         )
         for cid, det in targets:
             if cid is not None:
                 _LOGGER.debug("Day rollover: decaying virtual SOC for %s", cid)
+            predicted = (
+                fleet if one_car or cid is None
+                else self._predictor.predict_car_ev_consumption_tomorrow(
+                    now_time, cid)
+            )
             # (#1127) each car falls back to its own daily target
             fallback = det.car_setting("daily_ev_target", 10)
             det.apply_daily_decay(predicted, fallback, temp_factor)
