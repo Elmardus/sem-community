@@ -61,14 +61,11 @@ class SEMEvProgressCard extends SEMLitBase {
 
     setConfig(config) {
         super.setConfig(config);
+        // (#1128) a field, like every card: SEMLitBase reads `_prefix` as text.
+        this._prefix = config.entity_prefix ?? DEFAULT_PREFIX;
     }
 
     /* ── Derived helpers ── */
-
-    /** Resolve prefix — sensor entities share DEFAULT_PREFIX; number entity is fixed. */
-    _prefix() {
-        return this._config?.entity_prefix ?? DEFAULT_PREFIX;
-    }
 
     _pct(daily, target) {
         if (target <= 0) return 0;
@@ -103,7 +100,7 @@ class SEMEvProgressCard extends SEMLitBase {
         if (!this._hass || !this._config) return nothing;
 
         const T      = this._theme();
-        const prefix = this._prefix();
+        const prefix = this._prefix;
 
         const daily    = this._state(`${prefix}${SUFFIX_DAILY_EV_ENERGY}`);
         const target   = this._evDailyTarget();

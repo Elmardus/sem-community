@@ -216,7 +216,7 @@ const source = (f) => readFileSync(new URL(f, CARD_DIR), 'utf8');
 
 test('the load list compares every SEM sensor it reads', () => {
     const src = source('sem-load-priority-card.js');
-    const reads = new Set([...src.matchAll(/\$\{this\.entityPrefix\}([a-z0-9_]+)`/g)].map((m) => m[1]));
+    const reads = new Set([...src.matchAll(/\$\{this\._prefix\}([a-z0-9_]+)`/g)].map((m) => m[1]));
     assert.ok(reads.has('target_peak_limit'), 'the check reads nothing');
     const missing = [...reads].filter((s) => !LOAD_PRIORITY_READS.includes(s));
     assert.deepEqual(missing, [], 'read but not compared');

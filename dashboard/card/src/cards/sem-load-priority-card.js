@@ -14,7 +14,7 @@
  */
 
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
-import { antiCyclePlaceholder, antiCycleBounds } from '../util/load-sections.js';
+import { antiCyclePlaceholder, antiCycleBounds, antiCycleValue } from '../util/load-sections.js';
 import { shedReasonKey } from '../util/shed-reason.js';
 import { importKw, slotStatus } from '../util/peak-slot.js';
 import { repeat } from 'lit/directives/repeat.js';
@@ -77,7 +77,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
 
     setConfig(config) {
         this._config      = config;
-        this.entityPrefix = config.entity_prefix || 'sensor.sem_';
+        this._prefix = config.entity_prefix || 'sensor.sem_';
         this.requestUpdate();
     }
 
@@ -117,7 +117,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
     }
 
     _readStates(hass) {
-        return LOAD_PRIORITY_READS.map((s) => hass?.states?.[`${this.entityPrefix}${s}`]);
+        return LOAD_PRIORITY_READS.map((s) => hass?.states?.[`${this._prefix}${s}`]);
     }
 
     get hass() { return this._hass; }
@@ -399,10 +399,10 @@ class SEMLoadPriorityCard extends SEMLitBase {
     // ── Device data extraction ──
     _updateDeviceData() {
         if (!this._hass) return;
-        const targetPeakEntity  = this._hass.states[`${this.entityPrefix}target_peak_limit`];
-        const currentPeakEntity = this._hass.states[`${this.entityPrefix}consecutive_peak_15min`];
-        const statusEntity      = this._hass.states[`${this.entityPrefix}load_management_status`];
-        const devicesEntity     = this._hass.states[`${this.entityPrefix}controllable_devices_count`];
+        const targetPeakEntity  = this._hass.states[`${this._prefix}target_peak_limit`];
+        const currentPeakEntity = this._hass.states[`${this._prefix}consecutive_peak_15min`];
+        const statusEntity      = this._hass.states[`${this._prefix}load_management_status`];
+        const devicesEntity     = this._hass.states[`${this._prefix}controllable_devices_count`];
 
         if (targetPeakEntity)  this.targetPeakLimit      = parseFloat(targetPeakEntity.state)  || 5.0;
         if (targetPeakEntity)  this.peakLimitUnlimited   = targetPeakEntity.attributes?.peak_limit_unlimited || false;
@@ -428,7 +428,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
             this.slotAllowedW = targetPeakEntity.attributes?.peak_slot_allowed_w ?? null;
             this.slotUsedKwh  = targetPeakEntity.attributes?.peak_slot_used_kwh ?? null;
         }
-        const gridEntity = this._hass.states[`${this.entityPrefix}grid_power`];
+        const gridEntity = this._hass.states[`${this._prefix}grid_power`];
         this.gridImportKw = gridEntity ? importKw(gridEntity.state) : null;
         if (statusEntity)      this.loadManagementStatus = statusEntity.state || 'normal';
 
@@ -1246,6 +1246,21 @@ class SEMLoadPriorityCard extends SEMLitBase {
         return antiCycleBounds(ent?.attributes);
     }
 
+    /** (#1128) min/max on the input do not stop typing: the value is
+     *  limited here. Nothing to send (cleared, under 1) puts back what the
+     *  device holds; a value past the range shows the end it was set to. */
+    _onAntiCycleChange(device, key, bounds, e) {
+        const v = antiCycleValue(e.target.value, bounds);
+        if (v == null) {
+            const held = (device.goals || {})[key];
+            e.target.value = held != null ? String(held) : '';
+            return;
+        }
+        e.target.value = String(v);
+        device.goals = { ...(device.goals || {}), [key]: v };
+        this._sendDeviceUpdate(device.id, key, String(v));
+    }
+
     _renderAntiCycle(device) {
         // (#688) per-load anti-cycling — minutes, next to Min/Max/Mode (the
         // "well-placed" home the cycling report asked for). Blank ⇒ the solid
@@ -1253,14 +1268,6 @@ class SEMLoadPriorityCard extends SEMLitBase {
         // window. min_on holds the load through a passing cloud; min_off blocks
         // a too-soon restart — together they cap cycling at a ~10-min period.
         const g = device.goals || {};
-        const onChange = (key) => (e) => {
-            const v = e.target.value;
-            // Clearing the field must not send '' (a service error) or 0 (the
-            // disabled sentinel) — leave the prior value / default untouched.
-            if (v === '' || v == null || Number(v) < 1) return;
-            device.goals = { ...(device.goals || {}), [key]: v };
-            this._sendDeviceUpdate(device.id, key, String(v));
-        };
         // (#914) ONE bounds table. The range used to be re-declared here as
         // min="1" max="120" — a second copy of a number that lives nowhere
         // else, which is how a card and a backend come to disagree. It is now
@@ -1272,13 +1279,15 @@ class SEMLoadPriorityCard extends SEMLitBase {
         // holding — never a hard-coded "5" that was true for neither the
         // resistive default nor the heat-pump one. Absent live object ⇒ "—".
         const eff = (k) => antiCyclePlaceholder(g, k);
+        // (#1128) The arrows stop at 1, not the published 0: 0 turns
+        // anti-cycling off, and this card never sends it.
         const box = (key, effKey) => html`
             <input type="number" step="1" style="width:56px"
-                   min=${bounds ? bounds.min : nothing}
+                   min=${bounds ? Math.max(1, bounds.min) : nothing}
                    max=${bounds ? bounds.max : nothing}
                    .value="${g[key] != null && g[key] !== '' ? String(g[key]) : ''}"
                    placeholder="${eff(effKey)}"
-                   @change=${onChange(key)}
+                   @change=${(e) => this._onAntiCycleChange(device, key, bounds, e)}
                    @click=${(e) => e.stopPropagation()}>`;
         return html`
             <div class="ge-row">
