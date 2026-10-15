@@ -160,6 +160,24 @@ class BatteryControlAdapter(ABC):
     #: fault, and the sensor-unavailable Repair's business, not this one's.
     _WRITE_REPORT_WAIT_S: float = 180.0
 
+    #: (#1138) A limit write the entity did not keep is sent ONCE more: the
+    #: 100 W same-limit skip below would otherwise hold the old register
+    #: value until the wanted limit moves. ``_limit_resent_for_w`` is the
+    #: limit that already had its one extra send, so a register that keeps
+    #: refusing is not written every cycle (#538, #900).
+    _limit_resend_due: bool = False
+    _limit_resent_for_w: "Optional[float]" = None
+
+    def _limit_already_sent(self, watts: float) -> bool:
+        """The same-limit skip for ``command_limit_discharge``: True when the
+        last limit is within 100 W of ``watts`` and nothing asks for a
+        re-send. A pending re-send is used up by the call that sees it."""
+        if self._limit_resend_due:
+            self._limit_resend_due = False
+            return False
+        return (self._last_discharge_limit_w >= 0
+                and abs(watts - self._last_discharge_limit_w) < 100.0)
+
     def _note_pending_write(self, entity_id: str, watts: float) -> None:
         import time as _time
         pending = getattr(self, "_pending_write", None)
@@ -223,11 +241,16 @@ class BatteryControlAdapter(ABC):
             or (ceiling_w is not None and watts >= ceiling_w
                 and abs(seen_w - ceiling_w) <= tol_w))
         if reflected:
+            self._limit_resent_for_w = None
             self.write_not_taken_strikes = 0
             self.last_unverified_entity = ""
             self.last_verified_entity = entity_id
             return True
         self.write_not_taken_strikes += 1
+        if (entity_id == getattr(self, "_discharge_control_entity", None)
+                and self._limit_resent_for_w != watts):
+            self._limit_resend_due = True
+            self._limit_resent_for_w = watts
         self.last_unverified_entity = entity_id
         label = str(attrs.get("unit_of_measurement") or "W")
         self.last_unverified_wanted = f"{watts / scale:g} {label}"

@@ -52,8 +52,7 @@ class GoodWeBatteryAdapter(BatteryControlAdapter):
             self._last_intent = BatteryIntent.LIMIT_DISCHARGE
             return
         watts = max(0.0, min(watts, self._max_discharge_w))
-        if (self._last_discharge_limit_w >= 0
-                and abs(watts - self._last_discharge_limit_w) < 100.0):
+        if self._limit_already_sent(watts):
             self._last_intent = BatteryIntent.LIMIT_DISCHARGE
             return
         await self._apply_discharge_limit(watts)
