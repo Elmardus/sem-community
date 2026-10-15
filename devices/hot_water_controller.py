@@ -284,30 +284,31 @@ class HotWaterController(SwitchDevice):
             if state:
                 temp = state.attributes.get("current_temperature")
                 if temp is not None:
-                    try:
-                        val = float(temp)
+                    # (#1118) in the install's unit — °C out
+                    val = self._attribute_temp_c(temp)
+                    if val is not None:
                         self._last_temperature_reading_path = "entity_attribute"
                         self._last_temperature_reading = val
                         return val
-                    except (ValueError, TypeError):
-                        # Attribute present but non-numeric — fall
-                        # through to the separate sensor path so we
-                        # can still produce a reading. Remember that
-                        # we saw a bad attribute so the diagnostic
-                        # path captures it if the fallback also fails.
-                        attribute_invalid = True
+                    # Attribute present but non-numeric — fall
+                    # through to the separate sensor path so we
+                    # can still produce a reading. Remember that
+                    # we saw a bad attribute so the diagnostic
+                    # path captures it if the fallback also fails.
+                    attribute_invalid = True
 
         # For switch or fallback: use separate temperature sensor
         if self.temperature_entity_id:
             state = self.hass.states.get(self.temperature_entity_id)
             if state and state.state not in ("unknown", "unavailable"):
-                try:
-                    val = float(state.state)
+                # (#1118) the sensor's own unit decides — °C out
+                from ..coordinator.units import temperature_state_to_celsius
+                val = temperature_state_to_celsius(state, None)
+                if val is not None:
                     self._last_temperature_reading_path = "separate_sensor"
                     self._last_temperature_reading = val
                     return val
-                except (ValueError, TypeError):
-                    self._last_temperature_reading_path = "separate_sensor_invalid"
+                self._last_temperature_reading_path = "separate_sensor_invalid"
             elif state:
                 self._last_temperature_reading_path = "separate_sensor_unavailable"
             else:
