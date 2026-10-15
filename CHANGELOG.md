@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
-- 🐛 **No Repair for a charger switch that is unavailable while no car is plugged in** (#1032). Zaptec does this. With a car, SEM still reports it.
+- 🐛 **No Repair for a charger switch that is unavailable while no car is plugged in** (#1032). Zaptec does this. With a car, it still reports.
 - ✨ **SEM finds your grid CO₂ sensor by its unit** (#1088). CO₂ avoided can use its live value, not a fixed average. Off by default.
 - ✨ **One outdoor temperature for all of SEM** (#1082). Found by its name or your weather entity; car taper, snow and battery nights use it.
 - ✨ **The home forecast learns how cold days raise your load** (#1082). The plans use it only when switched on. Off by default.
