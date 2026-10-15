@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A charger found after start-up no longer counts its car as house load** (#1125). SEM now reads that charger's power sensor.
 - 🐛 **SEM now sees a Peblar's car plugged in** (#1126). Its state sensor was skipped; a Peblar setup saved earlier gets it at startup.
 - 🐛 **With two chargers, each car's charge level estimate uses its own battery size** (#1127). The second car used the first car's size and target.
 - 🐛 **The load list keeps minimum run and pause inside the allowed range** (#1128). Clicking a solar string now opens its details.
