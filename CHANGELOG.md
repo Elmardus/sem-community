@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A removed charger no longer leaves its Repairs behind** (#1139). They stayed in Settings forever; now they clear when SEM starts.
+
 # [2.2.0-beta.19] — 15.10.2026
 
 - ✨ **SEM finds your grid CO₂ sensor by its unit** (#1088). CO₂ avoided can use its live value, not a fixed average. Off by default.

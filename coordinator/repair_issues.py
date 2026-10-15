@@ -1676,7 +1676,7 @@ def clear_charger_control_entity_broken(
 #: (#1139) The Repairs SEM files for ONE charger, by the id builder that names
 #: it. Only the charger's own checks clear them, and only while that charger
 #: and that entity are in the config — so a charger the user removed, or an
-#: entity they replaced, left its Repair in Settings for good (@OddmarDam:
+#: entity they replaced, left its Repair in Settings forever (@OddmarDam:
 #: "entity missing" for a deleted "New charger 1", whose ids HA had renamed
 #: under it). ``charger_actuation_failed`` is not here: load devices driven
 #: by current file it under their own id, and this sweep knows no load ids.
