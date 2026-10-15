@@ -164,7 +164,7 @@ this build: the merge displacement and `device_of`, the data-side prune in
 `set_option` (no data list exists). PR #1091 is closed unmerged when this
 lands.
 
-## Decided (Guido, 11.10.2026: "Perfect go ahead") — all five at the defaults below
+## Decided (11.10.2026) — all five at the defaults below
 
 ## Open decisions (defaults in brackets)
 

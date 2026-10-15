@@ -257,7 +257,7 @@ class TestEdits:
         assert charger_is_complete(out[0])
 
     def test_a_second_charger_on_a_device_needs_a_connector(self):
-        """Decided (Guido, 11.10): one charger per device unless the user
+        """Decided (11.10): one charger per device unless the user
         says which connector it is. Without it, a second, different charger
         for the same device is not added; with it, it is."""
         refs, resolved = self._start()
