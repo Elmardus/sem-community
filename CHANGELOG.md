@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **The Configuration tab and setup screens are now in your language** (#1129). About 7,300 texts in 15 languages were still English.
 - 🐛 **A charger counter that jumps when a session starts is no longer counted as charging** (#1101) — thanks @RienduPre. SEM had seen the box idle.
 - 🐛 **A charger is stored as its device; SEM reads its roles from it** (#1054) — thanks @weindler. Removed stays removed; the card shows what you set.
+- 🐛 **A second battery that ignores SEM's commands now gets a warning too** (#1124) — thanks @RienduPre. Before, only the first battery got one.
 
 # [2.2.0-beta.18] — 14.10.2026
 
