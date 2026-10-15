@@ -233,13 +233,14 @@ class TestOneProducer:
 
     def test_every_construction_site_calls_the_producer(self):
         """Structural: each production ``CurrentControlDevice(...)`` — the
-        setup-time builder AND the coordinator's late retry — sits in a
-        function that calls ``wire_current_entity``."""
+        setup-time builder (#1136: the late retry saves its find and
+        setup builds it) — sits in a function that calls
+        ``wire_current_entity``."""
         import ast as _ast
         from pathlib import Path
         from custom_components.solar_energy_management.tests import ast_contracts
         sites = ast_contracts.call_sites("CurrentControlDevice")
-        assert {"__init__.py", "coordinator/coordinator.py"} <= {rel for rel, _, _ in sites}, sites
+        assert "__init__.py" in {rel for rel, _, _ in sites}, sites
         root = Path(ast_contracts.__file__).resolve().parent.parent
         for rel, lineno, _ in sites:
             tree = _ast.parse((root / rel).read_text(encoding="utf-8"))
@@ -254,16 +255,14 @@ class TestOneProducer:
                 f"without wire_current_entity()")
 
     @pytest.mark.asyncio
-    async def test_the_late_retry_builds_a_wired_device(self):
-        """A charge point discovered AFTER startup carries the same facts as
-        one built at setup: the flag, and the adopted switch."""
+    async def test_the_late_retry_saves_the_find_for_setup(self):
+        """(#1136) A charge point discovered AFTER startup is saved, not
+        built: setup's builder (pinned above) wires it after the reload."""
         from custom_components.solar_energy_management.coordinator.coordinator import SEMCoordinator
         hass = _hass()
-        from custom_components.solar_energy_management.coordinator.sensor_reader import SensorReader
-        me = SimpleNamespace(hass=hass, config={"ev_surplus_priority": 3, "ev_phases": 3},
-                             _surplus_controller=MagicMock(),
-                             _sensor_reader=SensorReader(MagicMock(), {}),   # (#1125)
-                             refresh_detection_report=lambda: None)
+        me = SimpleNamespace(hass=hass, config={},
+                             config_entry=SimpleNamespace(data={}, options={}),
+                             _ev_retry_count=1)
         auto = {"ev_charger_service": "number.set_value",
                 "ev_current_control_entity": NUM,
                 "ev_charging_power_sensor": "sensor.ocpp_cp_power_active_import"}
@@ -271,5 +270,6 @@ class TestOneProducer:
                    ".discover_ev_charger_from_registry", return_value=auto), \
                 _registry([_e(NUM), _e(AVAIL), _e(SW)]):
             await SEMCoordinator._retry_ev_device_setup(me)
-        dev = me._surplus_controller.register_device.call_args.args[0]
-        assert dev.zero_amps_parks_a_limit is True and dev.start_stop_entity == SW
+        card = hass.config_entries.async_update_entry.call_args.kwargs[
+            "options"]["ev_chargers"][0]
+        assert card["ev_current_control_entity"] == NUM

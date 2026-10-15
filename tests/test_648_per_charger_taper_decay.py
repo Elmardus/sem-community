@@ -86,23 +86,22 @@ class TestEveryChargerDecays648:
         d1.apply_daily_decay.assert_called_once()
         d2.apply_daily_decay.assert_called_once()
 
-    def test_every_detector_gets_the_same_inputs(self):
-        """Prediction / temperature are household-level and computed once.
-        The fallback is each car's own daily target (#1127); equal here."""
-        d1, d2, d3 = _det(), _det(), _det()
-        # One charger IS plugged in — the shared inputs must still be computed
-        # exactly once, not once per decaying detector.
+    def test_every_detector_gets_its_own_prediction_and_target(self):
+        """Temperature is household-level; the prediction and the fallback
+        are each car's own (#1132, #1127). The plugged car is skipped."""
+        d1, d2, d3 = _det(), _det(daily_target=7), _det()
         c = _coord(
             {"keba": d1, "wallbox": d2, "easee": d3},
             {"easee": True},
             predicted=12.0,
         )
+        own = {"keba": 12.0, "wallbox": 3.0}
+        c._predictor.predict_car_ev_consumption_tomorrow = MagicMock(
+            side_effect=lambda now, cid: own[cid])
         c._apply_daily_taper_decay(MagicMock(), _power(False))
         d3.apply_daily_decay.assert_not_called()
-        assert d1.apply_daily_decay.call_args == d2.apply_daily_decay.call_args
-        assert d1.apply_daily_decay.call_args[0][0] == 12.0     # predicted
-        assert d1.apply_daily_decay.call_args[0][1] == 10       # daily_ev_target
-        assert c._predictor.predict_ev_consumption_tomorrow.call_count == 1
+        assert d1.apply_daily_decay.call_args[0][:2] == (12.0, 10)
+        assert d2.apply_daily_decay.call_args[0][:2] == (3.0, 7)
 
     def test_a_detector_that_never_saw_full_does_not_decay(self):
         """No ``last_full_timestamp`` = no anchor, so there is nothing to decay

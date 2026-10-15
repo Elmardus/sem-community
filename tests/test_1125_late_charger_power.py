@@ -14,17 +14,17 @@ car inside the house. The charger's own view saw 0 W too (``build_view``
 takes the fleet figure when no charger has a sensor of its own). Found as
 bug class 120's first open item (#1044).
 
-Pinned here: the found keys go through the reader's own start-up parse
-(``SensorReader.adopt_late_charger``), so every EV sensor the reader knows
-is handed over — a field added later is handed over too (bug class 24).
+Pinned here: since #1136 the late retry saves the find as setup saves its
+own, and setup's one builder and the reader's own start-up parse take it
+from the saved card. So the late charger's power is read like any saved
+charger's, and no second hand-over list can leave a sensor out (bug class
+24).
 """
 from __future__ import annotations
 
 import ast
-import inspect
 import pathlib
 import textwrap
-from dataclasses import fields
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
@@ -36,10 +36,8 @@ from custom_components.solar_energy_management.coordinator.coordinator import (
 )
 from custom_components.solar_energy_management.coordinator.health_check import (
     chargers_outside_home,
-    sem_ev_chargers,
 )
 from custom_components.solar_energy_management.coordinator.sensor_reader import (
-    SensorConfig,
     SensorReader,
 )
 from custom_components.solar_energy_management.coordinator.build_view import (
@@ -57,7 +55,6 @@ from custom_components.solar_energy_management.hardware_detection import (
 from custom_components.solar_energy_management.tests.ast_contracts import (
     _SKIP_DIRS,
     _production_files,
-    calls,
 )
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -106,30 +103,43 @@ def _hass(extra=None):
     return hass
 
 
-def _reader(config=None, *, dashboard=None, states=None):
-    """A real reader. ``config`` None is the legacy path with a solar and a
-    grid sensor; ``dashboard`` puts it on the Energy Dashboard path;
+BASE = {"solar_production_sensor": PV, "grid_power_sensor": GRID}
+
+
+def _reader(config, *, dashboard=None, states=None):
+    """A real reader. ``dashboard`` puts it on the Energy Dashboard path;
     ``states`` overrides sensor states."""
-    reader = SensorReader(_hass(states), dict(config if config is not None else {
-        "solar_production_sensor": PV, "grid_power_sensor": GRID}))
+    reader = SensorReader(_hass(states), dict(config))
     reader._sign_vote_warmup = 0
     if dashboard is not None:
         reader.set_energy_dashboard_config(dashboard)
     return reader
 
 
-async def _late_retry(reader, found=KEBA):
+async def _late_retry(found=KEBA):
     """The coordinator's REAL late retry, on a stub that carries what it
-    reads, with the charger found by discovery."""
-    me = SimpleNamespace(
-        hass=MagicMock(), config={"ev_surplus_priority": 3, "ev_phases": 3},
-        _surplus_controller=MagicMock(), _sensor_reader=reader,
-        _ev_device=None, _ev_devices={},
-        refresh_detection_report=lambda: None,
-    )
+    reads, with the charger found by discovery. Returns the saved card."""
+    entry = SimpleNamespace(data={}, options={})
+    hass = MagicMock()
+    me = SimpleNamespace(hass=hass, config={}, config_entry=entry,
+                         _ev_retry_count=1)
     with patch(_DISCOVER, return_value=dict(found)):
         await SEMCoordinator._retry_ev_device_setup(me)
-    return me
+    if not hass.config_entries.async_update_entry.called:
+        return None
+    return hass.config_entries.async_update_entry.call_args.kwargs[
+        "options"]["ev_chargers"][0]
+
+
+async def _saved(config=None, found=KEBA, **kw):
+    """What setup reads after the reload: SEM's config with the saved
+    card, and the charger device built from it."""
+    card = await _late_retry(found)
+    assert card is not None
+    reader = _reader({**(BASE if config is None else config),
+                      "ev_chargers": [card]}, **kw)
+    device = SimpleNamespace(power_entity_id=card.get("ev_charging_power_sensor"))
+    return reader, device
 
 
 def _home(readings):
@@ -145,34 +155,27 @@ def _home(readings):
 class TestTheLateChargerIsRead:
 
     @pytest.mark.asyncio
-    async def test_its_power_sensor_reaches_the_reader(self):
-        reader = _reader()
-        me = await _late_retry(reader)
-        assert reader.config.ev_power_sensor == POWER
-        assert reader.config.ev_plug_sensor == PLUG
-        assert reader.config.ev_charging_sensor == CHARGING
-        assert me._ev_device.power_entity_id == POWER
+    async def test_its_power_sensor_is_saved(self):
+        card = await _late_retry()
+        assert card["ev_charging_power_sensor"] == POWER
+        assert card["ev_connected_sensor"] == PLUG
+        assert card["ev_charging_sensor"] == CHARGING
 
     @pytest.mark.asyncio
     async def test_the_car_is_not_house_load(self):
-        reader = _reader()
-        me = await _late_retry(reader)
+        reader, device = await _saved()
         readings = reader.read_power()
         assert readings.ev_power == EV_W
-        assert readings.ev_power_fleet_entity == POWER
         assert _home(readings) == SOLAR_W - EV_W
         # bug class 120: the charger this read covers is out of ``home``,
         # so the baseload does not take it away a second time.
-        chargers = sem_ev_chargers(me)
-        assert chargers == [me._ev_device]
-        assert chargers_outside_home(chargers, readings) == chargers
+        assert chargers_outside_home([device], readings) == [device]
 
     @pytest.mark.asyncio
     async def test_the_charger_sees_its_own_draw(self):
-        """``build_view`` gives the only charger the fleet figure; before the
-        fix that was 0 W, so the charger never saw the car drawing (#536)."""
-        reader = _reader()
-        await _late_retry(reader)
+        """``build_view`` gives the only charger the fleet figure; before
+        #1125 that was 0 W, so the charger never saw the car drawing."""
+        reader, _ = await _saved()
         view = build_charger_view(
             FleetCycleState(power=reader.read_power(), config={},
                             is_night=False, tariff_level=None,
@@ -183,35 +186,17 @@ class TestTheLateChargerIsRead:
 
     @pytest.mark.asyncio
     async def test_a_charging_flag_with_no_draw_is_not_a_charge(self):
-        """The 500 W floor (#739) gates the charging flag on the power the
-        reader now has, as it does for a charger built at setup."""
-        reader = _reader(states={POWER: _state(100.0)})
-        await _late_retry(reader)
+        """The 500 W floor (#739) gates the charging flag on the power."""
+        reader, _ = await _saved(states={POWER: _state(100.0)})
         assert reader.read_power().ev_charging is False
 
     @pytest.mark.asyncio
-    async def test_a_car_drawing_is_connected_whatever_the_plug_says(self):
-        """The physics check (#285) needs the draw to see the car: plug and
-        charging flag both read off, only the 7 kW says a car is there."""
-        reader = _reader(states={PLUG: _state("off", None),
-                                 CHARGING: _state("off", None)})
-        await _late_retry(reader)
-        assert reader.read_power().ev_connected is True
-
-    @pytest.mark.asyncio
-    async def test_the_old_hand_over_kept_the_car_in_the_house(self):
-        """The twin: the new code given a find with no power sensor — what
-        the old key list handed over (plug and charging). The car's 7 kW is
-        house load, and the charger is still inside ``home`` — the number
-        this fix moves."""
-        reader = _reader()
+    async def test_a_find_with_no_power_sensor_is_not_saved(self):
+        """The twin: what the old hand-over gave (plug and charging, no
+        power) is not a charger SEM can run, so nothing is saved and the
+        retry tries again; the car is never quietly left in the house."""
         old = {k: v for k, v in KEBA.items() if k != "ev_charging_power_sensor"}
-        me = await _late_retry(reader, old)
-        readings = reader.read_power()
-        assert reader.config.ev_power_sensor is None
-        assert readings.ev_power == 0.0
-        assert _home(readings) == SOLAR_W
-        assert chargers_outside_home(sem_ev_chargers(me), readings) == []
+        assert await _late_retry(old) is None
 
     @pytest.mark.asyncio
     async def test_on_the_energy_dashboard_path_too(self):
@@ -219,114 +204,18 @@ class TestTheLateChargerIsRead:
         shape the issue names."""
         ed = EnergyDashboardConfig(solar_power=PV, solar_power_list=[PV],
                                    has_solar=True)
-        reader = _reader({}, dashboard=ed)
-        await _late_retry(reader)
+        reader, _ = await _saved({}, dashboard=ed)
         readings = reader.read_power()
         assert readings.ev_power == EV_W
-        assert readings.ev_power_fleet_entity == POWER
         assert _home(readings) == SOLAR_W - EV_W
 
-    @pytest.mark.asyncio
-    async def test_an_energy_dashboard_ev_sensor_still_wins(self):
-        """The Energy Dashboard's EV sensor is read first, as before; the
-        late sensor is only the fallback."""
-        ed_ev = "sensor.ed_ev_power"
-        ed = EnergyDashboardConfig(solar_power=PV, solar_power_list=[PV],
-                                   has_solar=True, ev_power=ed_ev)
-        reader = _reader({}, dashboard=ed, states={ed_ev: _state(6500.0)})
-        await _late_retry(reader)
-        readings = reader.read_power()
-        assert readings.ev_power_fleet_entity == ed_ev
-        assert readings.ev_power == 6500.0
-
-    @pytest.mark.asyncio
-    async def test_a_sensor_the_user_set_is_kept(self):
-        mine = "sensor.my_ev_meter"
-        reader = _reader({"solar_production_sensor": PV,
-                          "grid_power_sensor": GRID,
-                          "ev_power_sensor": mine})
-        await _late_retry(reader)
-        assert reader.config.ev_power_sensor == mine
-        assert reader.config.ev_plug_sensor == PLUG
-
 
 # ───────────────────────────────────────────────────────────────────────
-# 2. one parse — the hand-over cannot leave a field out again
+# 2. no second writer of the reader config
 # ───────────────────────────────────────────────────────────────────────
-
-def _keys_the_parse_reads() -> set:
-    """Every config key ``_parse_config`` reads, from its own source."""
-    tree = ast.parse(textwrap.dedent(inspect.getsource(SensorReader._parse_config)))
-    keys = set()
-    for n in ast.walk(tree):
-        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-                and n.func.attr == "get" and n.args
-                and isinstance(n.args[0], ast.Constant)
-                and isinstance(n.args[0].value, str)):
-            keys.add(n.args[0].value)
-    return keys
-
-
-def _keys_discovery_writes() -> set:
-    """Every key the charger discovery writes into a find (a subscript store
-    or a ``setdefault``), from ``hardware_detection.py``'s own source."""
-    tree = ast.parse((_ROOT / "hardware_detection.py").read_text(encoding="utf-8"))
-    keys = set()
-    for n in ast.walk(tree):
-        if (isinstance(n, ast.Subscript) and isinstance(n.ctx, ast.Store)
-                and isinstance(n.slice, ast.Constant)
-                and isinstance(n.slice.value, str)):
-            keys.add(n.slice.value)
-        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-                and n.func.attr == "setdefault" and n.args
-                and isinstance(n.args[0], ast.Constant)):
-            keys.add(n.args[0].value)
-    return keys
-
 
 @pytest.mark.unit
-class TestOneParse:
-
-    def test_every_key_discovery_finds_and_the_parse_reads_is_taken(self):
-        """Independent of the field names: each key the discovery writes
-        and the start-up parse reads is taken on its own — a reader field
-        not named ``ev_*`` would fail here."""
-        shared = _keys_discovery_writes() & _keys_the_parse_reads()
-        assert {"ev_charging_power_sensor", "ev_connected_sensor",
-                "ev_charging_sensor"} <= shared
-        for key in sorted(shared):
-            reader = SensorReader(MagicMock(), {})
-            assert reader.adopt_late_charger({key: "sensor.x"}), key
-
-    def test_every_ev_field_the_parse_knows_is_handed_over(self):
-        """Derived, not listed: a found dict with every key the start-up
-        parse reads fills every EV field — a field added to the parse later
-        is handed over without anyone touching the late path."""
-        keys = _keys_the_parse_reads()
-        assert "ev_charging_power_sensor" in keys  # the scan can see
-        reader = SensorReader(MagicMock(), {})
-        taken = reader.adopt_late_charger({k: f"sensor.{k}" for k in keys})
-        ev_fields = {f.name for f in fields(SensorConfig)
-                     if f.name.startswith("ev_")}
-        assert set(taken) == ev_fields
-        for name in ev_fields:
-            assert getattr(reader.config, name), name
-
-    def test_a_charger_brings_charger_sensors_only(self):
-        reader = SensorReader(MagicMock(), {})
-        reader.adopt_late_charger({"solar_production_sensor": "sensor.x",
-                                   "battery_soc_sensor": "sensor.y"})
-        assert reader.config.solar_power_sensor is None
-        assert reader.config.battery_soc_sensor is None
-
-    def test_an_empty_find_changes_nothing(self):
-        reader = SensorReader(MagicMock(), {"ev_power_sensor": "sensor.m"})
-        assert reader.adopt_late_charger({}) == []
-        assert reader.adopt_late_charger(None) == []
-        assert reader.config.ev_power_sensor == "sensor.m"
-
-    def test_the_late_path_hands_over_through_the_reader(self):
-        assert calls(SEMCoordinator._retry_ev_device_setup, "adopt_late_charger")
+class TestOneWriter:
 
     def test_no_one_else_writes_the_readers_fields(self):
         """Structural: outside ``sensor_reader.py`` no production code sets

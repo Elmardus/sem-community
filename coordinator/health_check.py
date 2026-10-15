@@ -36,9 +36,8 @@ def sem_ev_chargers(coordinator) -> list:
     """(#1044) SEM's own EV chargers — both discovery shapes, deduped by
     identity.
 
-    The multi-charger dict AND the legacy ``_ev_device`` that
-    ``_retry_ev_device_setup`` fills when a charger integration loads after
-    SEM (the walk ``_push_observer_mode_to_devices`` does, for the reason it
+    The multi-charger dict AND the legacy ``_ev_device`` single-charger
+    slot (the walk ``_push_observer_mode_to_devices`` does, for the reason it
     gives). ``getattr`` throughout: the filing seam runs on bare stubs in
     tests, and a stub with no chargers simply has none.
     """
