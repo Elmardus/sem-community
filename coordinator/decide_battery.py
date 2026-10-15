@@ -823,11 +823,25 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
         # switch: a connected car in *Solar + battery* has already been told
         # it may have the pack (``ev_wants_pack``). Same gate as the charger
         # side, one more reader.
+        # (#1115) The forecast switch alone no longer opens it. The charger
+        # side reads the switch only for a mode that takes the pack
+        # (``_battery_assist_split``: Min + Solar); a Solar-only car is
+        # never offered any. Read here bare, it let the pack feed a
+        # Solar-only car. ``ev_wants_pack`` now carries the switch, per
+        # charger and per mode.
         spend_open = (
-            (bool(getattr(view, "forecast_spending_enabled", False))
-             or bool(getattr(view, "ev_wants_pack", False)))
+            bool(getattr(view, "ev_wants_pack", False))
             and float(getattr(view, "battery_spendable_kwh", 0.0) or 0.0) > 0.0
         )
+        # (#1130) One pack serves every car. While a connected car's mode
+        # must not use it, opening the clamp fed that car too. So the pack
+        # stays held — at the house plus the assist the cars that may use
+        # it were offered (they share that, in device order).
+        _shared = getattr(view, "ev_pack_shared_w", None)
+        _held_for_cars = bool(spend_open and _shared is not None)
+        _cars_total_w = max(0.0, float(_shared or 0.0)) if _held_for_cars else 0.0
+        if _held_for_cars:
+            spend_open = False
         if (surplus_w < gate_w and not spend_open) or below_buffer or not _assist_ok:
             # #531: split the home budget across the fleet — N batteries each
             # told to inject the FULL home load over-injects N× and leaks the
@@ -843,6 +857,9 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
             _floored_w = peak_cover_floor_w(view, home_w, n)
             _peak_raised = _floored_w > home_w
             home_w = _floored_w
+            _cars_w = (_cars_total_w / n
+                       if (_cars_total_w > 0 and not below_buffer and _assist_ok)
+                       else 0.0)
             if not _assist_ok:
                 # (#1066) The permission alone decides here — name it, not
                 # a surplus or SOC comparison that did not choose (#983).
@@ -867,14 +884,18 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                     f"ev plugged in + solar surplus {surplus_w:.0f}W < gate "
                     f"{gate_w:.0f}W"
                 )
+            if _held_for_cars and not below_buffer and _assist_ok:
+                why = ("a plugged-in car may not use the battery — it covers "
+                       f"the house + {_cars_w:.0f} W offered to the cars "
+                       "that may")
             if gf_w > 0:
                 why += f" (excl. {gf_w:.0f}W grid-funded load)"
             return BatteryDecision(
                 battery_id=rt.battery_id,
                 intent=BatteryIntent.LIMIT_DISCHARGE,
-                discharge_limit_w=home_w,
+                discharge_limit_w=home_w + _cars_w,
                 reason=(
-                    f"{why} → discharge limit {home_w:.0f} W "
+                    f"{why} → discharge limit {home_w + _cars_w:.0f} W "
                     + (f"— raised, the meter may buy only "
                        f"{float(view.fleet.peak_slot_allowed_w):.0f} W for the "
                        f"rest of this quarter hour"

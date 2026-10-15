@@ -429,6 +429,10 @@ class BatteryView:
     """(03.09) A CONNECTED charger in *Solar + battery* mode — the consent
     the charger side already acts on (``_battery_assist_split``), so the
     discharge clamp reads the same one instead of a separate master switch."""
+    ev_pack_shared_w: Optional[float] = None
+    """(#1130) With a connected car whose mode must not use the pack: the
+    assist the cars that may use it were offered this cycle. The clamp
+    then holds the pack at house + this. ``None`` = no such car."""
     battery_spendable_kwh: float = 0.0
     forecast_spending_enabled: bool = False
     dynamic_floor_pct: float = None

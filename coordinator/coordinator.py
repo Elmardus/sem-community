@@ -3846,6 +3846,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             charging_state = self._state_machine.update_state(charging_context)
 
             # Step 7.5a: Unified EV control via CurrentControlDevice
+            # (#1130) The pack's assist offered this cycle — read later by
+            # the battery clamp and the loads. Reset here too, so a cycle
+            # that skips the charger loop never carries the last one's.
+            self._assist_committed_w_per_cycle = 0.0
             # Evaluate the dual-source phase guard once per cycle before any
             # charger decision can reach an adapter.  The resulting state is
             # cached for every charger and for diagnostics publication.
@@ -6506,6 +6510,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 self._loads_import_window = {}
                 self._loads_car_start = {}
                 self._loads_car_window = {}
+            if not hasattr(self, "_loads_discharge_window"):
+                self._loads_discharge_window = {}
             # FLEET-READ: every charger's grid draw is its own, not the loads'
             ev_live_w = float(getattr(power, "ev_power", 0.0) or 0.0)
             # a car plugged in or out, SEM's offer moving, or the car's draw
@@ -6530,6 +6536,18 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 self._loads_car_window, _now_mono,
                 ev_draw_w=ev_live_w, car_active=car_active,
             )
+            # (#1112) The pack's discharge is the other power the sun did
+            # not make: in a battery home it covers a load the sun no
+            # longer funds and the meter reads 0 W. Held the same two
+            # minutes as the import; a dark battery reading adds nothing.
+            loads_discharge_w = sustained_import(
+                self._loads_discharge_window, _now_mono,
+                grid_import_w=float(
+                    getattr(power, "battery_discharge_power", 0.0) or 0.0),
+                grid_import_known=not bool(
+                    getattr(power, "battery_power_all_unavailable", False)),
+                car_active=car_active,
+            ) or 0.0
             loads_export_w = float(getattr(power, "grid_export_power", 0.0) or 0.0)
             loads_draw_w = self._surplus_controller.active_surplus_draw_w()
             # (#620) Feedback-free SOLAR surplus, physically bounded by the live
@@ -6542,6 +6560,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 solar_w=getattr(power, "solar_power", None),
                 grid_import_w=loads_import_w,
                 ev_draw_w=ev_draw_w,
+                battery_discharge_w=loads_discharge_w,
             )
             # (#1102) …and the reclaim takes off only the import this side
             # could not, so a running load does not pay it twice.
@@ -6601,7 +6620,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # less the chargers' share and the deadband) — "the boiler
                 # stopped when the car started" reads from a dump.
                 "loads_deficit_w": round(loads_import_deficit_w(
-                    loads_import_w, ev_draw_w=ev_draw_w)),
+                    loads_import_w, ev_draw_w=ev_draw_w,
+                    battery_discharge_w=loads_discharge_w)),
             }
             # ONE pipeline, observer or not. Layers 1+2 (management + decision)
             # always run against the live sensors; the ``observer`` flag cuts the
@@ -6622,6 +6642,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 dynamic_floor_pct=(
                     (getattr(self, "_planning_evidence", None) or {})
                     .get("battery_dynamic_floor_pct")),
+                # (#1114) a load above the battery reads the charger's gate
+                reclaim_w=reclaim_w,
             )
             # (#653) Tick the appliance scheduler BEFORE allocation.
             #
@@ -6649,6 +6671,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 battery_buffer_soc=btc.effective_floor_soc,
                 battery_reserve_soc=btc.reserve_soc,
                 battery_assist_budget_w=btc.assist_budget_w,
+                battery_assist_budget_above_w=btc.assist_budget_above_battery_w,
                 observer=self._observer_mode,
                 # (#633) overnight sources are NIGHT sources.
                 is_night=bool(self.time_manager.is_night_mode()),
@@ -7678,31 +7701,55 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
 
         self._vpp_publish = self._vpp_dispatcher.publish_state(decision)
 
-    def _ev_wants_pack(self, power) -> bool:
-        """(03.09) Is any CONNECTED charger in *Solar + battery* mode?
+    def _ev_pack_modes(self, power) -> list:
+        """(#1130) For each CONNECTED charger: does its mode take the pack?
 
-        That mode is the user's consent for the pack to feed the car — the
-        same consent ``_battery_assist_split`` acts on — so the battery-side
-        discharge clamp (``decide_battery``) reads it here instead of
-        requiring the forecast-spending master switch as well. Connection is
-        per charger (#315 class: never the fleet OR for a per-charger
+        A mode is the user's consent for the pack to feed that car — the
+        same consent ``_battery_assist_split`` acts on. Connection is per
+        charger (#315 class: never the fleet OR for a per-charger
         question); a single-charger install falls back to the fleet flag.
+        (#1115) The forecast switch is consent only for Min + Solar — the
+        one other mode the charger side offers the pack under the gate.
+        Solar only never takes it. A mode that cannot be read takes nothing.
         """
         per = getattr(power, "ev_connected_per_charger", None) or {}
+        takers = {"solar_plus_battery"}
+        if self.config.get("forecast_spending_enabled", False):
+            takers.add("min_plus_solar")
+        out = []
         for cfg in (self.config.get("ev_chargers") or []):
             cid = str(cfg.get("id") or "")
             if not cid:
                 continue
+            connected = per.get(cid) if cid in per else getattr(power, "ev_connected", False)
+            if not bool(connected):
+                continue
             try:
                 mode = self._effective_charge_mode_for(cfg)
             except Exception:  # noqa: BLE001 — an unresolvable mode is no consent
-                continue
-            if mode != "solar_plus_battery":
-                continue
-            connected = per.get(cid) if cid in per else getattr(power, "ev_connected", False)
-            if bool(connected):
-                return True
-        return False
+                mode = None
+            out.append(mode in takers)
+        return out
+
+    def _ev_wants_pack(self, power) -> bool:
+        """(03.09) Is any CONNECTED charger in a mode that takes the pack?
+        The battery-side discharge clamp (``decide_battery``) reads it."""
+        return any(self._ev_pack_modes(power))
+
+    def _ev_pack_shared_w(self, power):
+        """(#1130) The pack's output a car may have, when a connected car
+        must NOT have it: the assist the chargers that take the pack were
+        offered this cycle (``ChargerDecision.assist_w``, summed in device
+        order). ``None`` while every connected car takes the pack — then
+        the clamp has nothing to keep apart.
+
+        One pack serves the whole house, so "open" was a yes for every car:
+        a Solar-only car beside a Solar + battery one drew the pack too."""
+        modes = self._ev_pack_modes(power)
+        if not modes or all(modes):
+            return None
+        return max(0.0, float(
+            getattr(self, "_assist_committed_w_per_cycle", 0.0) or 0.0))
 
     def _day_home_w_at(self, now, energy=None):
         """(#820) The house draw a DAY ledger prices its surplus against.
@@ -8891,6 +8938,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # (03.09) the charger-side consent: a connected car whose
                 # mode is Solar + battery — the clamp reads it too.
                 ev_wants_pack=self._ev_wants_pack(power),
+                # (#1130) …and how much of the pack those cars may have
+                # while a connected car may not use it.
+                ev_pack_shared_w=self._ev_pack_shared_w(power),
                 # (#778) The permission axis, resolved from the per-battery
                 # config so a multi-battery install can grant export on one
                 # pack and withhold it on another.
