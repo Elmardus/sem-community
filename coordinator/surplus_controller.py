@@ -1858,7 +1858,10 @@ class SurplusController:
                 elif soc is not None and soc <= self._batt_reserve_soc:
                     reason = "overnight battery force ended (reserve SoC reached)"
             if reason:
-                if await _deactivate_owned(device):
+                # (#1135) the minimum run holds here as on every other stop
+                # pass — this one trusted the device to hold it itself, and a
+                # heat pump's SG-Ready stand-down does not.
+                if device.can_deactivate() and await _deactivate_owned(device):
                     device._offpeak_forced = False
                     device._offpeak_forced_date = None
                     device._batt_overnight_forced = False

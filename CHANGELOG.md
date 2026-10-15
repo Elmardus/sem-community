@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **A Legionella run no longer stops on the first cloud** (#1121). The tank heats on to its target, sun or not.
 - 🐛 **Boiler and heat pump read °F tank sensors right** (#1118). 120 °F was read as 120 °C, so a boiler never started on sun.
 - 🐛 **A boiler or heat pump set to Off or Peak-only stays so after a restart** (#1119). Before, it ran on sun again.
+- 🐛 **A heat pump keeps its minimum run when cheap hours end** (#1135) — thanks @HorizonKane. Set run and pause times on its row in the load list.
 - 🐛 **A charger counter that jumps when a session starts is no longer counted as charging** (#1101) — thanks @RienduPre. SEM had seen the box idle.
 
 # [2.2.0-beta.18] — 14.10.2026
