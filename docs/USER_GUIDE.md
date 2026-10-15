@@ -1296,6 +1296,10 @@ follows the split. The CSV column `energy_source` says which was used:
 Sessions recorded before this version have no charger, cost or source
 stored; they show with those columns empty.
 
+Each session also shows its CO₂: the kg of CO₂ from the grid energy the car
+used. The EV tab shows it per session and in the totals; the CSV has it as
+`co2_kg`.
+
 ---
 
 ## Battery Discharge Protection
@@ -1688,6 +1692,14 @@ Diagnose button shows what the register holds and accepts, what SEM sent, and
 any line another integration logged about that entity, such as a template
 number that dropped the write ("set_value: Already running").
 
+### Grid CO₂
+
+SEM finds your grid CO₂ sensor by its unit (g or kg CO₂ per kWh). If it found
+the wrong one, pick yours under **Configure → Tariff & Advanced → Grid CO₂
+intensity sensor**. For now, CO₂ avoided still uses a fixed 0.128 kg per kWh;
+the live value is off by default. The sensor *CO2 Avoided Today* shows which
+sensor SEM found.
+
 ### PV health
 
 `sensor.sem_pv_health` says whether the plant does what the forecast said.
@@ -1726,7 +1738,7 @@ automation can use it without a phone.
 | A load ran all night | at SEM's morning, when the night's draw was 1.5× the usual (and over 300 W) | "The house used 620 W all night, usually 210 W." |
 | Grid use rose | at SEM's night start, when today's grid use was 1.5× the usual with the same sun | "Grid use rose to 9.1 kWh (usually 4.2) with the same sun." |
 | Power is cheap, car idle | the price turned cheap while a car is plugged in and not charging (dynamic tariff only) | "Power is cheap now. Garage: plugged in and not charging." |
-| Weekly summary | the first night start on a Sunday | "This week: 142 kWh solar · 71 % self-use · 38 kWh from the grid · 24 kWh into the car · 12.40 CHF." |
+| Weekly summary | the first night start on a Sunday | "This week: 142 kWh solar · 71 % self-use · 38 kWh from the grid · 24 kWh into the car · 12.40 CHF." Then "Your solar avoided 18.2 kg of CO₂ this week." when every day of the week has a CO₂ number. |
 
 "Night start" and "morning" are SEM's own night window (sunset and
 sunrise, bounded by the night settings), not fixed hours. The
