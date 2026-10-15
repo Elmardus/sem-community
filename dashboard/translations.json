@@ -1683,7 +1683,13 @@
     "config_role_use_detected": "použít zjištěnou",
     "config_role_legend_lead": "SEM čte tuto nabíječku z jejího zařízení.",
     "config_role_legend_detected": "= nalezeno SEM, sleduje přejmenování.",
-    "config_role_legend_you": "= vaše volba, zůstává."
+    "config_role_legend_you": "= vaše volba, zůstává.",
+    "hint_msg_weekly_co2": "Vaše solární energie tento týden ušetřila {co2} kg CO₂.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Senzor CO₂ sítě",
+    "config_help_grid_co2_entity": "Najde se podle jednotky (g nebo kg CO₂ na kWh). Vyberte jen tehdy, když SEM našel špatný.",
+    "config_outdoor_temperature_entity": "Venkovní teplota",
+    "config_help_outdoor_temperature_entity": "Najde se podle názvu, jinak vaše entita počasí. Vyberte jen tehdy, když SEM zvolil špatně."
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3369,7 +3375,13 @@
     "config_role_use_detected": "brug fundet",
     "config_role_legend_lead": "SEM læser denne lader fra dens enhed.",
     "config_role_legend_detected": "= fundet af SEM, følger omdøbninger.",
-    "config_role_legend_you": "= dit valg, beholdes."
+    "config_role_legend_you": "= dit valg, beholdes.",
+    "hint_msg_weekly_co2": "Din solstrøm undgik {co2} kg CO₂ denne uge.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Nettets CO₂-sensor",
+    "config_help_grid_co2_entity": "Findes via enheden (g eller kg CO₂ pr. kWh). Vælg kun én, hvis SEM fandt den forkerte.",
+    "config_outdoor_temperature_entity": "Udetemperatur",
+    "config_help_outdoor_temperature_entity": "Findes via navnet, ellers din vejr-entitet. Vælg kun én, hvis SEM valgte forkert."
   },
   "de": {
     "% of limit": "% des Limits",
@@ -5055,7 +5067,13 @@
     "config_role_use_detected": "erkannt verwenden",
     "config_role_legend_lead": "SEM liest dieses Ladegerät von seinem Gerät.",
     "config_role_legend_detected": "= von SEM gefunden, folgt Umbenennungen.",
-    "config_role_legend_you": "= deine Wahl, bleibt."
+    "config_role_legend_you": "= deine Wahl, bleibt.",
+    "hint_msg_weekly_co2": "Ihr Solarstrom hat diese Woche {co2} kg CO₂ vermieden.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "CO₂-Sensor des Netzes",
+    "config_help_grid_co2_entity": "Wird über die Einheit gefunden (g oder kg CO₂ pro kWh). Wähle nur einen, wenn SEM den falschen fand.",
+    "config_outdoor_temperature_entity": "Aussentemperatur",
+    "config_help_outdoor_temperature_entity": "Wird über den Namen gefunden, sonst Ihre Wetter-Entität. Nur wählen, wenn SEM das falsche gewählt hat."
   },
   "en": {
     "% of limit": "% of limit",
@@ -6741,7 +6759,13 @@
     "config_role_use_detected": "use detected",
     "config_role_legend_lead": "SEM reads this charger from its device.",
     "config_role_legend_detected": "= found by SEM, follows renames.",
-    "config_role_legend_you": "= your choice, kept."
+    "config_role_legend_you": "= your choice, kept.",
+    "hint_msg_weekly_co2": "Your solar avoided {co2} kg of CO₂ this week.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Grid CO₂ sensor",
+    "config_help_grid_co2_entity": "Found by its unit (g or kg CO₂ per kWh). Pick one only if SEM found the wrong one.",
+    "config_outdoor_temperature_entity": "Outdoor temperature",
+    "config_help_outdoor_temperature_entity": "Found by its name, else your weather entity. Pick one only if SEM chose the wrong one."
   },
   "es": {
     "% of limit": "% del límite",
@@ -8427,7 +8451,13 @@
     "config_role_use_detected": "usar detectado",
     "config_role_legend_lead": "SEM lee este cargador desde su dispositivo.",
     "config_role_legend_detected": "= encontrado por SEM, sigue los cambios de nombre.",
-    "config_role_legend_you": "= tu elección, se mantiene."
+    "config_role_legend_you": "= tu elección, se mantiene.",
+    "hint_msg_weekly_co2": "Tu energía solar evitó {co2} kg de CO₂ esta semana.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Sensor de CO₂ de la red",
+    "config_help_grid_co2_entity": "Se encuentra por su unidad (g o kg de CO₂ por kWh). Elija uno solo si SEM encontró el equivocado.",
+    "config_outdoor_temperature_entity": "Temperatura exterior",
+    "config_help_outdoor_temperature_entity": "Se encuentra por su nombre; si no, tu entidad meteorológica. Elige uno solo si SEM se equivocó."
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -10113,7 +10143,13 @@
     "config_role_use_detected": "käytä löydettyä",
     "config_role_legend_lead": "SEM lukee tämän laturin sen laitteesta.",
     "config_role_legend_detected": "= SEMin löytämä, seuraa nimien muutoksia.",
-    "config_role_legend_you": "= sinun valintasi, säilyy."
+    "config_role_legend_you": "= sinun valintasi, säilyy.",
+    "hint_msg_weekly_co2": "Aurinkosähkösi vältti tällä viikolla {co2} kg CO₂-päästöjä.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Sähköverkon CO₂-anturi",
+    "config_help_grid_co2_entity": "Löytyy yksiköstä (g tai kg CO₂ / kWh). Valitse vain, jos SEM löysi väärän.",
+    "config_outdoor_temperature_entity": "Ulkolämpötila",
+    "config_help_outdoor_temperature_entity": "Löytyy nimen perusteella, muuten sääentiteettisi. Valitse vain, jos SEM valitsi väärin."
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -11799,7 +11835,13 @@
     "config_role_use_detected": "utiliser la détection",
     "config_role_legend_lead": "SEM lit cette borne depuis son appareil.",
     "config_role_legend_detected": "= trouvé par SEM, suit les renommages.",
-    "config_role_legend_you": "= votre choix, conservé."
+    "config_role_legend_you": "= votre choix, conservé.",
+    "hint_msg_weekly_co2": "Votre solaire a évité {co2} kg de CO₂ cette semaine.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Capteur CO₂ du réseau",
+    "config_help_grid_co2_entity": "Trouvé par son unité (g ou kg de CO₂ par kWh). N'en choisissez un que si SEM a trouvé le mauvais.",
+    "config_outdoor_temperature_entity": "Température extérieure",
+    "config_help_outdoor_temperature_entity": "Trouvé par son nom, sinon votre entité météo. Choisissez-en un seulement si SEM s'est trompé."
   },
   "hu": {
     "% of limit": "% a határból",
@@ -13485,7 +13527,13 @@
     "config_role_use_detected": "felismert használata",
     "config_role_legend_lead": "A SEM ezt a töltőt az eszközéből olvassa.",
     "config_role_legend_detected": "= a SEM találta, követi az átnevezést.",
-    "config_role_legend_you": "= a te választásod, megmarad."
+    "config_role_legend_you": "= a te választásod, megmarad.",
+    "hint_msg_weekly_co2": "A napenergiád ezen a héten {co2} kg CO₂-t takarított meg.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "A hálózat CO₂-érzékelője",
+    "config_help_grid_co2_entity": "Az egysége alapján találja meg (g vagy kg CO₂/kWh). Csak akkor válasszon, ha a SEM rosszat talált.",
+    "config_outdoor_temperature_entity": "Külső hőmérséklet",
+    "config_help_outdoor_temperature_entity": "Név alapján találja meg, különben az időjárás-entitást. Csak akkor válasszon, ha a SEM rosszat választott."
   },
   "it": {
     "% of limit": "% del limite",
@@ -15171,7 +15219,13 @@
     "config_role_use_detected": "usa rilevato",
     "config_role_legend_lead": "SEM legge questo caricatore dal suo dispositivo.",
     "config_role_legend_detected": "= trovato da SEM, segue le rinomine.",
-    "config_role_legend_you": "= la tua scelta, mantenuta."
+    "config_role_legend_you": "= la tua scelta, mantenuta.",
+    "hint_msg_weekly_co2": "Il tuo solare ha evitato {co2} kg di CO₂ questa settimana.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Sensore CO₂ della rete",
+    "config_help_grid_co2_entity": "Trovato dalla sua unità (g o kg di CO₂ per kWh). Sceglierne uno solo se SEM ha trovato quello sbagliato.",
+    "config_outdoor_temperature_entity": "Temperatura esterna",
+    "config_help_outdoor_temperature_entity": "Trovato dal nome, altrimenti la tua entità meteo. Sceglilo solo se SEM ha sbagliato."
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -16857,7 +16911,13 @@
     "config_role_use_detected": "gevonden gebruiken",
     "config_role_legend_lead": "SEM leest deze lader van zijn apparaat.",
     "config_role_legend_detected": "= door SEM gevonden, volgt hernoemingen.",
-    "config_role_legend_you": "= jouw keuze, blijft."
+    "config_role_legend_you": "= jouw keuze, blijft.",
+    "hint_msg_weekly_co2": "Je zonnestroom vermeed deze week {co2} kg CO₂.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "CO₂-sensor van het net",
+    "config_help_grid_co2_entity": "Gevonden via de eenheid (g of kg CO₂ per kWh). Kies er alleen een als SEM de verkeerde vond.",
+    "config_outdoor_temperature_entity": "Buitentemperatuur",
+    "config_help_outdoor_temperature_entity": "Gevonden aan de naam, anders je weer-entiteit. Kies er alleen een als SEM de verkeerde koos."
   },
   "no": {
     "% of limit": "% av grense",
@@ -18543,7 +18603,13 @@
     "config_role_use_detected": "bruk funnet",
     "config_role_legend_lead": "SEM leser denne laderen fra enheten.",
     "config_role_legend_detected": "= funnet av SEM, følger nye navn.",
-    "config_role_legend_you": "= ditt valg, beholdes."
+    "config_role_legend_you": "= ditt valg, beholdes.",
+    "hint_msg_weekly_co2": "Solstrømmen din unngikk {co2} kg CO₂ denne uken.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Nettets CO₂-sensor",
+    "config_help_grid_co2_entity": "Finnes via enheten (g eller kg CO₂ per kWh). Velg én bare hvis SEM fant feil.",
+    "config_outdoor_temperature_entity": "Utetemperatur",
+    "config_help_outdoor_temperature_entity": "Finnes ut fra navnet, ellers vær-entiteten din. Velg bare hvis SEM valgte feil."
   },
   "pl": {
     "% of limit": "% limitu",
@@ -20229,7 +20295,13 @@
     "config_role_use_detected": "użyj wykrytej",
     "config_role_legend_lead": "SEM odczytuje tę ładowarkę z jej urządzenia.",
     "config_role_legend_detected": "= znalezione przez SEM, śledzi zmiany nazw.",
-    "config_role_legend_you": "= twój wybór, zostaje."
+    "config_role_legend_you": "= twój wybór, zostaje.",
+    "hint_msg_weekly_co2": "Twoja energia słoneczna pozwoliła w tym tygodniu uniknąć {co2} kg CO₂.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Czujnik CO₂ sieci",
+    "config_help_grid_co2_entity": "Znajdowany po jednostce (g lub kg CO₂ na kWh). Wybierz go tylko, jeśli SEM znalazł zły.",
+    "config_outdoor_temperature_entity": "Temperatura zewnętrzna",
+    "config_help_outdoor_temperature_entity": "Znajdowany po nazwie, w przeciwnym razie encja pogody. Wybierz tylko, jeśli SEM wybrał źle."
   },
   "pt": {
     "% of limit": "% do limite",
@@ -21915,7 +21987,13 @@
     "config_role_use_detected": "usar detetado",
     "config_role_legend_lead": "O SEM lê este carregador a partir do seu dispositivo.",
     "config_role_legend_detected": "= encontrado pelo SEM, segue mudanças de nome.",
-    "config_role_legend_you": "= a sua escolha, mantida."
+    "config_role_legend_you": "= a sua escolha, mantida.",
+    "hint_msg_weekly_co2": "A sua energia solar evitou {co2} kg de CO₂ esta semana.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Sensor de CO₂ da rede",
+    "config_help_grid_co2_entity": "Encontrado pela unidade (g ou kg de CO₂ por kWh). Escolha um só se o SEM encontrou o errado.",
+    "config_outdoor_temperature_entity": "Temperatura exterior",
+    "config_help_outdoor_temperature_entity": "Encontrado pelo nome; senão, a sua entidade meteorológica. Escolha um só se o SEM errou."
   },
   "ro": {
     "% of limit": "% din limită",
@@ -23601,7 +23679,13 @@
     "config_role_use_detected": "folosește detectarea",
     "config_role_legend_lead": "SEM citește acest încărcător de pe dispozitivul lui.",
     "config_role_legend_detected": "= găsit de SEM, urmează redenumirile.",
-    "config_role_legend_you": "= alegerea ta, păstrată."
+    "config_role_legend_you": "= alegerea ta, păstrată.",
+    "hint_msg_weekly_co2": "Energia solară a evitat săptămâna aceasta {co2} kg de CO₂.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Senzorul CO₂ al rețelei",
+    "config_help_grid_co2_entity": "Găsit după unitate (g sau kg CO₂ pe kWh). Alegeți unul doar dacă SEM a găsit unul greșit.",
+    "config_outdoor_temperature_entity": "Temperatura exterioară",
+    "config_help_outdoor_temperature_entity": "Găsit după nume, altfel entitatea meteo. Alegeți doar dacă SEM a ales greșit."
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -25287,7 +25371,13 @@
     "config_role_use_detected": "använd hittad",
     "config_role_legend_lead": "SEM läser den här laddaren från dess enhet.",
     "config_role_legend_detected": "= hittad av SEM, följer namnbyten.",
-    "config_role_legend_you": "= ditt val, behålls."
+    "config_role_legend_you": "= ditt val, behålls.",
+    "hint_msg_weekly_co2": "Din solel undvek {co2} kg CO₂ den här veckan.",
+    "sessions_col_co2": "CO₂ kg",
+    "config_grid_co2_entity": "Nätets CO₂-sensor",
+    "config_help_grid_co2_entity": "Hittas via enheten (g eller kg CO₂ per kWh). Välj en bara om SEM hittade fel.",
+    "config_outdoor_temperature_entity": "Utomhustemperatur",
+    "config_help_outdoor_temperature_entity": "Hittas via namnet, annars din väderentitet. Välj bara om SEM valde fel."
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -26973,6 +27063,12 @@
     "config_role_use_detected": "使用检测结果",
     "config_role_legend_lead": "SEM 从设备读取此充电桩。",
     "config_role_legend_detected": "= 由 SEM 找到，跟随重命名。",
-    "config_role_legend_you": "= 你的选择，保留。"
+    "config_role_legend_you": "= 你的选择，保留。",
+    "hint_msg_weekly_co2": "本周您的太阳能避免了 {co2} 公斤 CO₂ 排放。",
+    "sessions_col_co2": "CO₂ 公斤",
+    "config_grid_co2_entity": "电网 CO₂ 传感器",
+    "config_help_grid_co2_entity": "按单位查找（g 或 kg CO₂/kWh）。仅在 SEM 找错时才手动选择。",
+    "config_outdoor_temperature_entity": "室外温度",
+    "config_help_outdoor_temperature_entity": "按名称查找，否则使用您的天气实体。只有 SEM 选错时才需要选择。"
   }
 }
