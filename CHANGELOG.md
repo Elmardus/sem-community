@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+# [2.2.0-beta.19] — 15.10.2026
+
 - ✨ **SEM finds your grid CO₂ sensor by its unit** (#1088). CO₂ avoided can use its live value, not a fixed average. Off by default.
 - ✨ **One outdoor temperature for all of SEM** (#1082). Found by its name or your weather entity; car taper, snow and battery nights use it.
 - ✨ **The home forecast learns how cold days raise your load** (#1082). The plans use it only when switched on. Off by default.
