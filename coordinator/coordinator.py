@@ -11918,18 +11918,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         ev_device.managed_externally = True
         self._ev_retry_count = 999  # Stop retrying
 
-        # Update sensor reader with discovered entities
-        # Map discovery keys to sensor_reader config keys (they differ!)
-        key_map = {
-            "ev_connected_sensor": "ev_plug_sensor",
-            "ev_charging_sensor": "ev_charging_sensor",
-            "ev_total_energy_sensor": "ev_total_energy_sensor",
-        }
-        for discover_key, reader_key in key_map.items():
-            value = ev_auto.get(discover_key)
-            if value and not getattr(self._sensor_reader.config, reader_key, None):
-                setattr(self._sensor_reader.config, reader_key, value)
-                _LOGGER.info("Set sensor reader %s = %s", reader_key, value)
+        # (#1125) Hand the found sensors to the reader through its own
+        # start-up parse. The key list that stood here had no power sensor,
+        # so the car's draw counted as house load.
+        for reader_key in self._sensor_reader.adopt_late_charger(ev_auto):
+            _LOGGER.info("Set sensor reader %s = %s", reader_key,
+                         getattr(self._sensor_reader.config, reader_key))
 
         _LOGGER.info("EV charger registered via late discovery: service=%s", ev_auto.get("ev_charger_service"))
 
