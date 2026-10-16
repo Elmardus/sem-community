@@ -28,6 +28,9 @@ from homeassistant.helpers import issue_registry as ir
 
 from custom_components.solar_energy_management.charger_refs import REFS_KEY
 from custom_components.solar_energy_management.const import DOMAIN
+from custom_components.solar_energy_management.ha_energy_reader import (
+    EnergyDashboardConfig,
+)
 from custom_components.solar_energy_management.coordinator import (
     repair_issues as ri,
 )
@@ -112,23 +115,43 @@ ARG = {"read": "read_entities", "battery": "battery_entities",
        "device": "device_ids"}
 
 
-def _keyed_raisers() -> set[str]:
+def _keyed_raisers(src: str | None = None) -> set[str]:
     """Every ``raise_*`` whose issue id is built from one of its own
-    parameters other than ``hass`` — a Repair per thing."""
-    tree = ast.parse(REPAIR_ISSUES_PY.read_text())
+    parameters other than ``hass`` — a Repair per thing. The id may be the
+    ``issue_id`` keyword or the third positional argument, and may be built
+    into a local first."""
+    tree = ast.parse(src if src is not None else REPAIR_ISSUES_PY.read_text())
     found = set()
     for node in tree.body:
-        if not (isinstance(node, ast.FunctionDef)
+        if not (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
                 and node.name.startswith("raise_")):
             continue
         params = {a.arg for a in node.args.args + node.args.kwonlyargs}
         params.discard("hass")
-        for kw in ast.walk(node):
-            if isinstance(kw, ast.keyword) and kw.arg == "issue_id":
-                names = {n.id for n in ast.walk(kw.value)
+        local: dict[str, set] = {}
+        for st in ast.walk(node):
+            if isinstance(st, ast.Assign):
+                reads = {n.id for n in ast.walk(st.value)
                          if isinstance(n, ast.Name)}
-                if names & params:
-                    found.add(node.name)
+                for t in st.targets:
+                    if isinstance(t, ast.Name):
+                        local.setdefault(t.id, set()).update(reads)
+
+        def keyed(expr, params=params, local=local):
+            names = {n.id for n in ast.walk(expr) if isinstance(n, ast.Name)}
+            names |= {r for n in list(names) for r in local.get(n, ())}
+            return bool(names & params)
+
+        for call in ast.walk(node):
+            if not isinstance(call, ast.Call):
+                continue
+            fn = getattr(call.func, "attr", None) or getattr(call.func, "id", None)
+            if fn != "async_create_issue":
+                continue
+            ids = [kw.value for kw in call.keywords if kw.arg == "issue_id"]
+            ids += call.args[2:3]
+            if any(keyed(e) for e in ids):
+                found.add(node.name)
     return found
 
 
@@ -141,6 +164,23 @@ def test_every_keyed_repair_says_who_clears_it_when_its_thing_leaves():
         "A Repair keyed on one entity/device changed. Decide in KEYED what "
         "clears it once that entity or device leaves SEM's settings — a "
         "Repair with no answer stays in Settings for good (#1140).")
+
+
+def test_the_detector_sees_each_way_to_key_an_id():
+    """Its twin: positional, built into a local, async, keyword — each one
+    is found; a fixed id is not."""
+    src = textwrap.dedent('''
+        def raise_a(hass, entity_id):
+            ir.async_create_issue(hass, DOMAIN, f"a_{entity_id}")
+        def raise_b(hass, *, device_id):
+            iid = _b_issue_id(device_id)
+            ir.async_create_issue(hass, domain=DOMAIN, issue_id=iid)
+        async def raise_c(hass, slot):
+            ir.async_create_issue(hass, domain=DOMAIN, issue_id=f"c_{slot}")
+        def raise_d(hass, removed):
+            ir.async_create_issue(hass, domain=DOMAIN, issue_id="d")
+    ''')
+    assert _keyed_raisers(src) == {"raise_a", "raise_b", "raise_c"}
 
 
 def test_the_1140_answers_are_the_ones_tested_here():
@@ -242,6 +282,7 @@ def _coordinator(hass, reader, *, config=None, devices=(), chargers=(),
     c.config = dict(config or {})
     c._battery_adapters = {}
     c._ed_resolve_pending = False
+    c._ed_answered = True
     c._surplus_controller = SurplusController(hass)
     for dev in devices:
         c._surplus_controller.register_device(dev)
@@ -373,6 +414,62 @@ async def test_a_thin_window_leaves_the_sensor_repairs_alone(hass):
     assert ri._actuation_issue_id("old_pump") not in left
 
 
+async def test_an_energy_dashboard_sem_could_not_read_leaves_them_alone(hass):
+    """Then SEM reads its fallback keys, not the sensors it normally reads:
+    the window says nothing about those."""
+    ri.raise_sensor_unavailable(hass, "sensor.ed_grid", minutes_unavailable=9)
+    hass.states.async_set("sensor.grid", "100")
+    c = _coordinator(hass, _reader(hass, grid_power_sensor="sensor.grid"))
+    c._ed_answered = False
+    _cycles(c, 31, 0.0)
+    assert ri._sensor_issue_id("sensor.ed_grid") in _ids(hass)
+
+
+async def test_a_found_soc_sensor_that_is_down_keeps_its_repair(hass):
+    """(review) SOC detection reads only a sensor that answers. After a
+    restart with the SOC sensor still down it is never read — but it is
+    still the one SEM reads, so its Repair stays."""
+    hass.states.async_set("sensor.home_battery_power", "-300",
+                          {"unit_of_measurement": "W"})
+    hass.states.async_set("sensor.home_battery_soc", "unavailable")
+    hass.states.async_set("sensor.grid", "100")
+    ri.raise_sensor_unavailable(hass, "sensor.home_battery_soc",
+                                minutes_unavailable=20)
+    r = _reader(hass)
+    r.set_energy_dashboard_config(EnergyDashboardConfig(
+        solar_power="sensor.pv", grid_import_power="sensor.grid",
+        battery_power="sensor.home_battery_power"))
+    c = _coordinator(hass, r)
+    _cycles(c, 31, 0.0)
+    assert ri._sensor_issue_id("sensor.home_battery_soc") in _ids(hass)
+
+
+async def test_a_swept_sensor_read_again_files_a_fresh_repair(hass):
+    """(review) The sweep clears what the reader's memos still point at:
+    a sensor dropped mid-run (a live Energy Dashboard edit) and then put
+    back while still down must be filed again, not trusted to a Repair
+    that is gone."""
+    hass.states.async_set("sensor.x", "unavailable")
+    r = _reader(hass, grid_power_sensor="sensor.x")
+    with patch(MONO, return_value=0.0):
+        r.read_power()
+    with patch(MONO, return_value=400.0):
+        r.read_power()                     # 400 s down: Repair filed
+    assert ri._sensor_issue_id("sensor.x") in _ids(hass)
+
+    r.config.grid_power_sensor = None      # dropped without a reload
+    c = _coordinator(hass, r)
+    r.entities_read()                      # the window starts now
+    _cycles(c, 31, 1000.0)
+    assert ri._sensor_issue_id("sensor.x") not in _ids(hass)
+
+    r.config.grid_power_sensor = "sensor.x"   # back, still down
+    for t in (5000.0, 5400.0):
+        with patch(MONO, return_value=t):
+            r.read_power()
+    assert ri._sensor_issue_id("sensor.x") in _ids(hass)
+
+
 # ── the split-grid pick that is dropped (sibling) ───────────────────────
 
 async def test_a_dropped_split_grid_pick_takes_both_its_repairs(hass):
@@ -395,6 +492,18 @@ async def test_a_dropped_split_grid_pick_takes_both_its_repairs(hass):
     # a pick adopted again starts its own outage clock
     assert "sensor.old_import" not in r._sensor_repair_raised
     assert "sensor.old_import" not in r._sensor_unavailable_since
+
+
+async def test_a_rediscovery_keeps_the_outage_repair_of_its_picks(hass):
+    """(review) A rediscovery mostly picks the same meters again, so it does
+    not clear their "unavailable" Repair or reset its clock."""
+    r = _reader(hass)
+    r._split_grid_discovery["import"] = "sensor.imp"
+    ri.raise_sensor_unavailable(hass, "sensor.imp", minutes_unavailable=9)
+    r._sensor_repair_raised.add("sensor.imp")
+    r.invalidate_split_grid_cache()
+    assert ri._sensor_issue_id("sensor.imp") in _ids(hass)
+    assert "sensor.imp" in r._sensor_repair_raised
 
 
 # ── the call site ───────────────────────────────────────────────────────

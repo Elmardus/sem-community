@@ -6126,12 +6126,19 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             return
         self._orphan_sweep_at = now + self.ORPHAN_REPAIR_PERIOD_S
         read, cycles = self._sensor_reader.entities_read()
+        # Too few reads, or an Energy Dashboard SEM could not read (it then
+        # reads the fallback keys, not the sensors it normally does), say
+        # too little about what SEM reads: leave the sensor Repairs alone.
+        judged = (cycles >= self.ORPHAN_REPAIR_MIN_READS
+                  and getattr(self, "_ed_answered", False))
         _ri.clear_orphan_repairs(
             self.hass,
-            read_entities=read if cycles >= self.ORPHAN_REPAIR_MIN_READS else None,
+            read_entities=read if judged else None,
             battery_entities=self._battery_repair_entities(),
             device_ids=self._driven_device_ids(),
         )
+        if judged:
+            self._sensor_reader.forget_unread(read)
 
     def _battery_repair_entities(self) -> set:
         """(#1140) Every entity a battery Repair may name: the ones the

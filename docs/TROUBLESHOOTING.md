@@ -843,7 +843,8 @@ that needs this value is degraded. **Fix:** check the integration that
 provides the sensor (Settings → Devices & Services) — restart it if it shows
 an error; if you renamed or removed the entity, point SEM at the replacement
 in the Configuration tab. The notice clears itself when the sensor returns —
-or, once you point SEM at another sensor, about five minutes after you save.
+or, once you point SEM at another sensor, about five minutes after you save
+(within the hour when you changed it in the Energy Dashboard).
 
 ## A sensor stopped updating (stale)
 

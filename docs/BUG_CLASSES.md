@@ -3719,15 +3719,20 @@ and #827 battery watches, which an options reload keeps — are swept by
 because only the reader knows what it reads (Energy Dashboard picks are found at run time) and loads
 are found 35 s after setup: the first sweep waits for HA running, the Energy Dashboard sensors found,
 and 300 s of reads, then repeats hourly for an owner that leaves mid-run. The owners: every entity
-`_read_sensor` was asked for in the window (`SensorReader.entities_read`; fewer than 3 reads → the
-sensor kind is left alone); every battery entity the config names or an adapter holds; every device
-registered for control, every saved charger, and the late-found primary. Sibling: a dropped split-grid
-pick now takes its `sensor_unavailable` Repair with it, not only `sensor_stale`
-(`_forget_split_grid_picks`). Guard: `tests/test_1140_orphan_repairs.py` scans every `raise_*` whose
-issue id is built from its own parameter and requires a `KEYED` answer to "what clears it once that
-thing leaves?"; each #1140 answer is filed through its real raiser and must go for an unused owner and
-stay for a used one; a call-site test pins the sweep beside the cycle's first `read_power`, outside any
-`if`. (3) The #845 mode watch
+`_read_sensor` was asked for in the window (`SensorReader.entities_read`), plus a battery SOC sensor
+detection found but could not read (it is the one SEM reads once it answers); every battery entity the
+config names or an adapter holds; every device registered for control, every saved charger, and the
+late-found primary. The sensor kind is left alone when the window had fewer than 3 reads or the Energy
+Dashboard could not be read (SEM then reads its fallback keys). After a sweep the reader drops its
+outage memos for what it cleared (`forget_unread`), so a sensor put back while still down is filed
+again. Sibling: a dropped split-grid pick now takes its `sensor_unavailable` Repair with it, not only
+`sensor_stale` (`_forget_split_grid_picks`); a rediscovery, which mostly picks the same meters, and a
+declared pair that names the guessed meters keep it. Guard: `tests/test_1140_orphan_repairs.py` scans
+every `raise_*` whose issue id is built from its own parameter (keyword or positional, direct or
+through a local, sync or async — a twin pins each form) and requires a `KEYED` answer to "what clears
+it once that thing leaves?"; each #1140 answer is filed through its real raiser and must go for an
+unused owner and stay for a used one; a call-site test pins the sweep beside the cycle's first
+`read_power`, outside any `if`. (3) The #845 mode watch
 is built on the first cycle, before any battery adapter exists, so on an auto-detected platform it
 has no expectation and stays publish-only for its whole life: the #845 Repair is dormant everywhere
 but an explicit `huawei` platform (the #919 shape — a question asked before the thing it asks about
