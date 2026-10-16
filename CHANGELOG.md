@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Zaptec set up in the wizard: "charger online" is no longer read as "car charging"** (#1143). SEM reads Charger mode instead.
+
 # [2.2.0-beta.20] — 16.10.2026
 
 - 🐛 **Zaptec: setup no longer offers the site's "Available current" as charger control** (#1141). Set up in a 2.2 beta? Check your charger's current control.
