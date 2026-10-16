@@ -257,10 +257,10 @@ CHARGERS = [
      "control": "number entity",
      "status": "implemented", "evidence": ""},
     {"brand": "Zaptec", "domain_token": "zaptec",
-     # (#915) the integration also declares `number.available_current`; the
-     # roster proposes it and the near-miss offer wires it (see tools/
-     # zaptec_sim). The service path predates that entity.
-     "control": "service-based / number entity (available_current)",
+     # (#804, #1141) the charger's own `charger_max_current`. The
+     # installation's `available_current` limits every charger on the site
+     # and is the owner's grid guard: SEM never writes it.
+     "control": "number entity (charger_max_current)",
      "status": "implemented",
      "evidence": "disc. 103 (coppe218) reports a Zaptec Go2 under test; no "
                  "entities or values shown yet"},

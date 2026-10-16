@@ -706,7 +706,6 @@
     },
     "zaptec": {
       "ev_current_control": [
-        "available_current",
         "charger_max_current"
       ]
     },

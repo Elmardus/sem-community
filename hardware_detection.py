@@ -3095,8 +3095,11 @@ def _roles_pass(report, registry, brand_units, configured_entities,
         report["near_misses"].append(nm)
 
     # R1 — a device with no power reading of its own, on the same config
-    # entry as a charger near miss, is that charger's companion; its live
-    # current number replaces a charger's stored setting.
+    # entry as a charger near miss, is that charger's companion: it belongs
+    # to the charger and is not unknown hardware. (#1141) Its numbers never
+    # become the charger's control. A companion is the site (Zaptec's
+    # installation): a current it holds limits every charger there, and the
+    # owner sets it as a grid guard (#804). The offer keeps its own controls.
     dev_entry: Dict[Optional[str], Optional[str]] = {}
     dev_entities: Dict[Optional[str], list] = {}
     for ukey, uents in group_entities_by_unit(entries).items():
@@ -3132,11 +3135,6 @@ def _roles_pass(report, registry, brand_units, configured_entities,
                 {"device_id": did, "entities": len(ents),
                  "evidence": [entity_evidence(e) for e in ents]})
             companions.add(did)
-            live = _current_number_role(ents, charger=True)  # a charger's companion
-            sc = n.get("suggested_charger") or {}
-            if (live and not _is_stored_setting(ents, live) and sc
-                    and "ev_current_control_entity" not in sc):
-                sc["ev_current_control_entity"] = live
     report["near_misses"] = [n for n in report["near_misses"]
                              if n.get("device_id") not in companions]
 

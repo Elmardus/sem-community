@@ -18,7 +18,7 @@
  "proposals": [
   {
    "ev_current_control": [
-    "number.abbastova_available_current",
+    "number.zaptec_go2_zap012345_charger_max_current",
     "per_charger"
    ]
   }

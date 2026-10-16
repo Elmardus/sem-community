@@ -536,7 +536,7 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'vehicle_soc': {'platform': 'sensor', 'keys': ('state_of_charge',), 'options': ()},
     },
     'zaptec': {
-        'ev_current_control': {'platform': 'number', 'keys': ('available_current', 'charger_max_current'), 'options': ()},
+        'ev_current_control': {'platform': 'number', 'keys': ('charger_max_current',), 'options': ()},
     },
     'zendure_ha': {
         'grid_power': {'platform': 'sensor', 'keys': ('grid_power',), 'options': ()},

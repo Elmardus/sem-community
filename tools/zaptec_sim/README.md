@@ -42,20 +42,22 @@ A test fixture. It talks to nothing, and every value is local.
 ## The unmapped-charger fixture (#915)
 
 Set **`unmapped_charger`** on the config entry and the simulator publishes a
-site SEM can *describe* but not *map*: the **installation device alone**, with
-a power reading (`total_charge_power`), the grid-guard `available_current` and
-the phase threshold. No cable state, no charging state, no charger-level
-current, no resume button.
+charger SEM can *describe* but not *map*: the charger with its power reading
+(`charge_power`) and its `charger_max_current`, and no cable state, no
+charging state, no resume button. The installation keeps the grid-guard
+`available_current` and the phase threshold.
 
 That is a **near miss with an offer**, and it is the only way to reach one on
 a healthy rig:
 
-* `_discover_zaptec` refuses it — it requires a connected/charging state, and
-  rejects `available_current` as a throttle by name (it constrains every
-  charger on the site);
-* the #915 roster still proposes `ev_current_control → available_current`,
-  because that is what the real Zaptec integration declares;
-* the device has a power sensor, so `charger_from_near_miss` can build a
+* `_discover_zaptec` refuses it — it requires a connected/charging state;
+* the #915 roster proposes `ev_current_control → charger_max_current`, the
+  charger's own number. It never proposes `available_current`: that limits
+  every charger on the site, and the owner sets it as a grid guard (#804,
+  #1141);
+* the installation has no power reading, so it is the charger's companion
+  and is not a second near miss;
+* the charger has a power sensor, so `charger_from_near_miss` can build a
   charger and the card offers **Add this charger** instead of *please report*.
 
 Turn it off and the offer must disappear, because the charger is detected

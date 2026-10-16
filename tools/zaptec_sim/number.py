@@ -15,10 +15,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
     state = hass.data[DOMAIN][entry.entry_id]
     ents = []
     if unmapped_fixture(entry):
-        # (#915) The installation numbers only: the grid guard SEM must never
-        # write, and the phase threshold. Neither is a throttle, which is
-        # what makes the device unmappable.
-        async_add_entities([AvailableCurrent(state, entry),
+        # (#915) The charger's own max current, and the installation's two
+        # numbers: the grid guard SEM must never write and the phase
+        # threshold. (#1141) The installation is then the charger's
+        # companion, and the offer must still take the charger's number.
+        async_add_entities([ChargerMaxCurrent(state, entry),
+                            AvailableCurrent(state, entry),
                             PhaseSwitchCurrent(state, entry)])
         return
     if entry.data.get("expose_charger_current", True):

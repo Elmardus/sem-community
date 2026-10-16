@@ -1076,7 +1076,7 @@ class TestANearMissIsAnOfferNotAChore:
     def test_a_charger_near_miss_comes_with_a_ready_charger(self):
         ents = [
             _ent("number.zap_current", "zaptec", device_id="z1",
-                 unique_id="sim-1_available_current"),
+                 unique_id="sim-1_charger_max_current"),
             _ent("sensor.zap_power", "zaptec", device_id="z1",
                  device_class="power"),
             _ent("binary_sensor.zap_cable", "zaptec", device_id="z1",
@@ -1095,7 +1095,7 @@ class TestANearMissIsAnOfferNotAChore:
         """A charger SEM cannot measure is one it must not steer, so the
         honest line there is still 'please report'."""
         ents = [_ent("number.zap_current", "zaptec", device_id="z1",
-                     unique_id="sim-1_available_current")]
+                     unique_id="sim-1_charger_max_current")]
         proposed = hd.propose_roles_from_roster(ents, "zaptec")
         assert hd.charger_from_near_miss(ents, "zaptec", proposed) == {}
 
@@ -1107,7 +1107,7 @@ class TestANearMissIsAnOfferNotAChore:
     def test_the_report_carries_the_offer(self):
         ents = [
             _ent("number.zap_current", "zaptec", device_id="z1",
-                 unique_id="sim-1_available_current"),
+                 unique_id="sim-1_charger_max_current"),
             _ent("sensor.zap_power", "zaptec", device_id="z1",
                  device_class="power"),
         ]

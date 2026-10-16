@@ -143,10 +143,11 @@ async def test_r1_the_installation_is_the_chargers_companion(hass):
     rep = await _zaptec_mode_off(hass, "zaptec")
     (chg,) = _near(rep, "zaptec")
     assert len(chg["companions"]) == 1
-    # the live current control comes from the installation, not the setting
-    # (#1141 asks whether the offer may pick the site limit at all)
-    assert chg["suggested_charger"]["ev_current_control_entity"].endswith(
-        "_available_current")
+    # (#1141) the installation's available current limits the whole site,
+    # so it is never the charger's control: the offer starts and stops
+    off = chg["suggested_charger"]
+    assert off["ev_start_service"] == "button.press"
+    assert "ev_current_control_entity" not in off
 
 
 # ── R6 services read by their fields ─────────────────────────────────────

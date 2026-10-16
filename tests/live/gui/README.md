@@ -71,11 +71,12 @@ this layer exists to prevent.
 "Add this charger" is unreachable on a healthy rig: every brand present is
 detected, and a near miss for a detected brand is filtered as noise. So
 `tools/zaptec_sim` grows an **`unmapped_charger`** option that publishes the
-installation device alone — a power reading and the site's grid-guard current,
-no cable state, no charging state, no throttle. SEM can describe it and cannot
-map it, which is exactly the near miss the offer answers. The suite turns the
-fixture on, asserts the offer appears and is wired to the entity the *real*
-Zaptec integration declares, **clicks it**, checks the charger that was
+charger with its power reading and its max current — no cable state, no
+charging state, no resume button. The installation keeps the site's
+grid-guard current. SEM can describe the charger and cannot map it, which is
+exactly the near miss the offer answers. The suite turns the fixture on,
+asserts the offer appears, is wired to the charger's own max current and
+never to the site limit (#1141), **clicks it**, checks the charger that was
 created, and turns everything back off.
 
 ## Running order, and the traps between suites

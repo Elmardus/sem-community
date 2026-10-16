@@ -25,10 +25,11 @@ def unmapped_fixture(entry) -> bool:
     vocabulary. On a normal install that state is unreachable on purpose:
     every brand here is detected, and a near miss for a brand whose charger
     is already driven is filtered as noise. So the fixture publishes the
-    INSTALLATION device alone, with a power reading and the site's
-    available-current number — enough to describe, not enough to map
-    (`_discover_zaptec` requires a connected/charging state, and refuses
-    ``available_current`` as a throttle by name).
+    charger with its power reading and its max current, and no cable state,
+    charging state or resume button — enough to describe, not enough to map
+    (`_discover_zaptec` requires a connected/charging state). The
+    installation keeps its two numbers; (#1141) the offer must never take
+    its ``available_current``, which limits every charger on the site.
     """
     return bool(entry.data.get("unmapped_charger", False))
 
