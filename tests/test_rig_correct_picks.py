@@ -75,12 +75,20 @@ async def test_openevse(hass):
     assert o["ev_connected_sensor"] == "binary_sensor.openevse_mock_config_vehicle_connected"
 
 
-async def test_zaptec(hass):
-    rep = await _rep(hass, "zaptec")
-    o = _offer(rep, "zaptec")
-    assert o["ev_current_control_entity"] == "number.abbastova_available_current"
-    assert o["ev_charging_power_sensor"] == "sensor.zaptec_go2_zap012345_total_charge_power"
-    assert o["ev_start_service"] == "button.press"
+@pytest.mark.parametrize("name", ["zaptec", "zaptec_no_limit"])
+async def test_zaptec(hass, name):
+    """#1142: "Charger mode" is the state, never the online sensor; the
+    brand rule maps the Go, so the site limit is never its control."""
+    rep = await _rep(hass, name)
+    m = _charger(rep, "zaptec")
+    mode = "sensor.zaptec_go2_zap012345_charger_operation_mode"
+    assert m["ev_connected_sensor"] == mode
+    assert m["ev_charging_sensor"] == mode
+    assert m["ev_current_control_entity"] == (
+        "number.zaptec_go2_zap012345_charger_max_current")
+    assert m["ev_charging_power_sensor"] == "sensor.zaptec_go2_zap012345_total_charge_power"
+    assert "abbastova" not in str(m)
+    assert not [n for n in rep["near_misses"] if n["platform"] == "zaptec"]
 
 
 async def test_myenergi(hass):
