@@ -324,18 +324,36 @@ class TestASavedPeblarGetsItsStateSensor:
         saved[0]["ev_charging_sensor"] = "binary_sensor.my_car_charging"
         assert _heal(saved, _peblar()) is None
 
-    def test_a_save_from_before_1035_is_left_alone(self):
-        """Before #1035 a Peblar could be saved with one phase as its
-        power and the single-phase switch as start/stop. Seeing the car
-        would put those to work, so the heal does not touch that save."""
+    def test_a_save_from_before_1035_gets_the_entities_detection_finds(self):
+        """(#1134) Before #1035 a Peblar could be saved with one phase as
+        its power and the single-phase switch as start/stop. The save is
+        SEM's own and untouched (no sensors), so each is replaced."""
         for key, wrong in (
                 ("ev_charging_power_sensor",
                  "sensor.peblar_ev_charger_power_phase_3"),
                 ("ev_start_stop_entity",
                  "switch.peblar_ev_charger_force_single_phase")):
             saved = _saved_before_the_fix()
+            right = saved[0][key]
             saved[0][key] = wrong
-            assert _heal(saved, _peblar()) is None, key
+            healed = _heal(saved, _peblar())
+            assert healed[0][key] == right, key
+            assert healed[0]["ev_connected_sensor"] == _STATE
+            assert _heal(healed, _peblar()) is None, key
+
+    def test_a_save_with_a_sensor_keeps_its_wrong_looking_entity(self):
+        """A save with a sensor passed through a form: the user's."""
+        saved = _saved_before_the_fix()
+        saved[0]["ev_start_stop_entity"] = \
+            "switch.peblar_ev_charger_force_single_phase"
+        saved[0]["ev_connected_sensor"] = "binary_sensor.my_car_plugged"
+        assert _heal(saved, _peblar()) is None
+
+    def test_a_save_with_an_own_id_for_another_box_is_left_alone(self):
+        saved = _saved_before_the_fix()
+        saved[0]["ev_start_stop_entity"] = "switch.other_box_switch"
+        saved[0]["id"] = "ev_charger_1"
+        assert _heal(saved, _peblar()) is None
 
     def test_a_control_detection_no_longer_finds_is_left_alone(self):
         saved = _saved_before_the_fix()
