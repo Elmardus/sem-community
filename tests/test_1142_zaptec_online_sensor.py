@@ -114,6 +114,54 @@ async def test_the_session_energy_is_not_the_power(hass):
         "sensor.zaptec_go2_zap012345_total_charge_power_session")
 
 
+def test_a_real_charging_binary_wins_over_charger_mode():
+    """Builds with their own plug and charging binaries (the simulator's
+    layout) keep them; "Charger mode" fills only what is empty."""
+    dev = "zaptec-go"
+    def e(eid, dc=None, key=""):
+        return SimpleNamespace(
+            entity_id=eid, platform="zaptec", device_id=dev,
+            original_device_class=dc, disabled_by=None,
+            original_unit_of_measurement=None, unit_of_measurement=None,
+            translation_key=None, unique_id=f"chg-1_{key}",
+            config_entry_id="entry-1")
+    entities = [
+        e("sensor.go_charger_mode", "enum", "charger_operation_mode"),
+        e("binary_sensor.go_cable_connected", "plug", "cable_connected"),
+        e("binary_sensor.go_charging", "battery_charging", "charging"),
+        e("binary_sensor.go_charger", "connectivity", ""),
+        e("sensor.go_charge_power", "power", "charge_power"),
+        e("number.go_charger_max_current", "current", "charger_max_current"),
+    ]
+    result = hd._discover_zaptec(entities)
+    assert result["ev_connected_sensor"] == "binary_sensor.go_cable_connected"
+    assert result["ev_charging_sensor"] == "binary_sensor.go_charging"
+    # and with the binaries gone, the mode fills both
+    alone = hd._discover_zaptec([x for x in entities if x.entity_id not in (
+        "binary_sensor.go_cable_connected", "binary_sensor.go_charging")])
+    assert alone["ev_connected_sensor"] == "sensor.go_charger_mode"
+    assert alone["ev_charging_sensor"] == "sensor.go_charger_mode"
+
+
+def test_a_session_counter_without_a_class_is_not_the_power():
+    """Builds that set no device class: the unit says kWh is energy."""
+    def e(eid, unit, key):
+        return SimpleNamespace(
+            entity_id=eid, platform="zaptec", device_id="d",
+            original_device_class=None, disabled_by=None,
+            original_unit_of_measurement=unit, unit_of_measurement=unit,
+            translation_key=None, unique_id=f"chg-1_{key}",
+            config_entry_id="entry-1")
+    entities = [
+        e("sensor.go_total_charge_power", "W", "total_charge_power"),
+        e("sensor.go_total_charge_power_session", "kWh",
+          "total_charge_power_session"),
+        e("sensor.go_charger_operation_mode", None, "charger_operation_mode"),
+    ]
+    result = hd._discover_zaptec(entities)
+    assert result["ev_charging_power_sensor"] == "sensor.go_total_charge_power"
+
+
 # ── what the binding is for ──────────────────────────────────────────────
 
 @pytest.mark.parametrize("mode, plugged, charging", [
@@ -195,6 +243,22 @@ def test_no_brand_reads_a_link_sensor_as_the_charge(link_first):
     found = _discover(_every_platform("connectivity", link_first))
     assert len(found) >= 10       # the chargers are still found
     assert _bound_as_charging(found) == set()
+
+
+@pytest.mark.parametrize("link_first", [True, False])
+def test_a_real_charging_sensor_beside_it_is_kept(link_first):
+    """The name rules keep the last match. Skipping the link sensor in the
+    rule, not only dropping it after, keeps the real one in either order."""
+    entries = _every_platform("connectivity", link_first)
+    for platform, _fn in _EV_CHARGER_PLATFORMS:
+        entries.insert(0, _entry("binary_sensor.garage_box_charging", platform,
+                                 f"{platform}-box", "battery_charging"))
+    by_platform = {c.get("_platform"): c.get("ev_charging_sensor")
+                   for c in _discover(entries)}
+    bitten = _bound_as_charging(_discover(_every_platform(None, link_first)))
+    for platform in bitten:
+        assert by_platform.get(platform) == "binary_sensor.garage_box_charging", (
+            platform)
 
 
 class TestTheGuard:
@@ -302,3 +366,26 @@ async def test_the_link_goes_when_detection_finds_no_state(hass):
     assert "ev_connected_sensor" not in healed[0]
     assert healed[0]["ev_current_control_entity"] == (
         saved[0]["ev_current_control_entity"])
+
+
+async def test_the_link_goes_even_when_a_control_does_not_match(hass):
+    """A control that differs from detection keeps the rest of the heal
+    away; the link sensor still goes."""
+    saved = await _saved(hass)
+    saved[0]["ev_start_stop_entity"] = ""
+    healed = _heal(hass, saved)
+    assert "ev_charging_sensor" not in healed[0]
+    assert not healed[0].get("ev_connected_sensor")
+    assert healed[0]["ev_current_control_entity"] == (
+        saved[0]["ev_current_control_entity"])
+
+
+async def test_a_link_save_gets_the_control_detection_finds(hass):
+    """(#1134) An own save's control that differs from detection is
+    replaced in the same step."""
+    saved = await _saved(hass)
+    right = saved[0]["ev_start_stop_entity"]
+    saved[0]["ev_start_stop_entity"] = f"switch.{GO}_permanent_cable_lock"
+    healed = _heal(hass, saved)
+    assert healed[0]["ev_start_stop_entity"] == right
+    assert healed[0]["ev_charging_sensor"] == MODE

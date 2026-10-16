@@ -2254,8 +2254,8 @@ def _fill_state_sensors_of_own_save(hass, chargers):
     (#1142) A save whose only sensor is a link sensor as the charging
     sensor (a Zaptec's "Charger", on while the box is online) counts as
     having none: its charging sensor is replaced by what detection finds,
-    or removed when detection finds none. Returns a new list if anything
-    changed, else ``None``."""
+    or removed when detection finds none or a control does not match.
+    Returns a new list if anything changed, else ``None``."""
     from .hardware_detection import discover_all_ev_chargers_from_registry
     keys = ("ev_connected_sensor", "ev_charging_sensor")
     linked = [c for c in chargers or []
@@ -2271,8 +2271,12 @@ def _fill_state_sensors_of_own_save(hass, chargers):
              if d.get("_found_by") != "roles"}
     healed = []
     filled = []
+    changed = False
     for c in chargers:
         d = found.get(c.get("id")) if any(c is s for s in suspects) else None
+        # (#1142) a link sensor never says a car charges: an own save loses
+        # it even when its controls keep the rest of the heal away
+        link = d is not None and any(c is x for x in linked)
         swap = {}
         if d:
             differ = [k for k in _STATE_HEAL_MUST_MATCH
@@ -2280,13 +2284,13 @@ def _fill_state_sensors_of_own_save(hass, chargers):
             if any(not d.get(k) or not c.get(k) for k in differ):
                 _LOGGER.warning(
                     "Saved EV charger %s has no plug or charging sensor, and "
-                    "a control it cannot match to detection; left as it is. Set "
-                    "the charger up again to fix it (#1126).", c.get("id"))
+                    "a control it cannot match to detection; no sensor is "
+                    "added. Set the charger up again to fix it (#1126).",
+                    c.get("id"))
                 d = None
             else:
                 swap = {k: d[k] for k in differ}
         add = {k: d[k] for k in keys if d and d.get(k)}
-        link = d is not None and any(c is x for x in linked)
         if add or swap or link:
             if swap:
                 _LOGGER.warning(
@@ -2301,13 +2305,16 @@ def _fill_state_sensors_of_own_save(hass, chargers):
             c = {**c, **swap, **add}
             if link and "ev_charging_sensor" not in add:
                 c.pop("ev_charging_sensor", None)
-            filled.append(str(c.get("id")))
+            if add:
+                filled.append(str(c.get("id")))
+            changed = True
         healed.append(c)
-    if not filled:
+    if not changed:
         return None
-    _LOGGER.warning(
-        "Added the plug and charging sensors detection finds to saved EV "
-        "charger(s) %s (#1126).", sorted(filled))
+    if filled:
+        _LOGGER.warning(
+            "Added the plug and charging sensors detection finds to saved EV "
+            "charger(s) %s (#1126).", sorted(filled))
     return healed
 
 

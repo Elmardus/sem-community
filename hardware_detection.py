@@ -4101,7 +4101,8 @@ def _discover_goecharger(entities) -> Dict[str, str]:
         dc = entry.original_device_class
         if eid.startswith("binary_sensor.") and dc == "plug":
             result["ev_connected_sensor"] = eid
-        if eid.startswith("binary_sensor.") and "charg" in name:
+        if (eid.startswith("binary_sensor.") and "charg" in name
+                and not says_a_link(entry)):  # (#1142) "Charger" online
             result["ev_charging_sensor"] = eid
         if eid.startswith("sensor.") and dc == "power":
             result["ev_charging_power_sensor"] = eid
@@ -4122,7 +4123,8 @@ def _discover_wallbox(entities) -> Dict[str, str]:
         dc = entry.original_device_class
         if eid.startswith("binary_sensor.") and "plug" in name:
             result["ev_connected_sensor"] = eid
-        if eid.startswith("binary_sensor.") and "charg" in name:
+        if (eid.startswith("binary_sensor.") and "charg" in name
+                and not says_a_link(entry)):  # (#1142) "Charger" online
             result["ev_charging_sensor"] = eid
         if eid.startswith("sensor.") and dc == "power":
             result["ev_charging_power_sensor"] = eid
@@ -4178,9 +4180,9 @@ def _discover_zaptec(entities) -> Dict[str, str]:
         if (eid.startswith("sensor.") and _is_state_text(entry)
                 and _uid.endswith("charger_operation_mode")):
             mode = eid
-        # (#1142) a sensor HA calls something else is not the power: Zaptec's
-        # session energy is keyed ``total_charge_power_session`` (kWh)
-        if eid.startswith("sensor.") and _declared_dc(entry) in ("", "power") and (
+        # (#1142) a sensor HA or its unit calls something else is not the
+        # power: Zaptec's session energy is ``total_charge_power_session``
+        if eid.startswith("sensor.") and _roles_dc(entry) in ("", "power") and (
             dc == "power" or _uid.endswith("charge_power")
             or ("power" in name and "energy" not in name and "kwh" not in name)
         ):
@@ -4549,6 +4551,10 @@ def _discover_from_hints(entities, hints: List[_ROLE]) -> Dict[str, str]:
             # it — the word hints are what matched it before.
             if dc == REBOOT_DEVICE_CLASS and rule.get("device_class") != dc:
                 continue
+            # (#1142) a link sensor says the box is online, never that a
+            # car charges, whatever its name holds
+            if rule["role"] == "ev_charging_sensor" and says_a_link(entry):
+                continue
             names = rule.get("names")
             if names and not any(_name_hit(name, n) for n in names):
                 continue
@@ -4594,7 +4600,8 @@ def _discover_goecharger_mqtt(entities) -> Dict[str, str]:
         dc = entry.original_device_class
         if eid.startswith("binary_sensor.") and dc == "plug":
             result["ev_connected_sensor"] = eid
-        if eid.startswith("binary_sensor.") and "car" in name:
+        if (eid.startswith("binary_sensor.") and "car" in name
+                and not says_a_link(entry)):  # (#1142)
             result.setdefault("ev_charging_sensor", eid)
         if eid.startswith("sensor.") and dc == "power":
             result["ev_charging_power_sensor"] = eid
@@ -4625,7 +4632,8 @@ def _discover_openwb(entities) -> Dict[str, str]:
         dc = entry.original_device_class
         if eid.startswith("binary_sensor.") and ("plug" in name or "connect" in name):
             result["ev_connected_sensor"] = eid
-        if eid.startswith("binary_sensor.") and "charg" in name:
+        if (eid.startswith("binary_sensor.") and "charg" in name
+                and not says_a_link(entry)):  # (#1142) "Charger" online
             result["ev_charging_sensor"] = eid
         if eid.startswith("sensor.") and dc == "power" and "charg" in name:
             result["ev_charging_power_sensor"] = eid
@@ -4775,7 +4783,8 @@ def _discover_v2c(entities) -> Dict[str, str]:
         dc = entry.original_device_class
         if eid.startswith("binary_sensor.") and "connect" in name:
             result["ev_connected_sensor"] = eid
-        if eid.startswith("binary_sensor.") and "charg" in name:
+        if (eid.startswith("binary_sensor.") and "charg" in name
+                and not says_a_link(entry)):  # (#1142) "Charger" online
             result["ev_charging_sensor"] = eid
         if eid.startswith("sensor.") and dc == "power":
             result["ev_charging_power_sensor"] = eid
