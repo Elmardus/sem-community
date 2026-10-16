@@ -672,13 +672,13 @@ class TestTheReservationOnlySeesRealLoads:
         )
 
     def test_chargers_are_marked_managed_externally_on_registration(self):
-        import inspect
-        from custom_components.solar_energy_management.coordinator.coordinator import (
-            SEMCoordinator,
-        )
-        src = inspect.getsource(SEMCoordinator)
-        i = src.index("self._surplus_controller.register_device(ev_device)")
-        window = src[i:i + 300]
+        # (#1136) Setup is the one builder of a charger; a late find is
+        # saved and built there too, so this is the only registration site.
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent
+        src = (root / "__init__.py").read_text()
+        i = src.index("coordinator._surplus_controller.register_device(ev_device)")
+        window = src[i:i + 800]
         assert "managed_externally = True" in window, (
             "an EV device is registered into the surplus controller without "
             "being marked managed_externally — it will be reserved for as a "

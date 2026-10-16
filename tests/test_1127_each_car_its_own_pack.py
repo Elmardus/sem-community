@@ -166,6 +166,7 @@ class TestTheCoordinatorHandsEachDetectorItsCar:
         c._last_ev_connected_per_charger = {}
         c._predictor = MagicMock()
         c._predictor.predict_ev_consumption_tomorrow = MagicMock(return_value=0.0)
+        c._predictor.predict_car_ev_consumption_tomorrow = MagicMock(return_value=0.0)
         c._read_outdoor_temperature = MagicMock(return_value=15.0)
         c._apply_daily_taper_decay(MagicMock(), SimpleNamespace(ev_connected=False))
         assert keba._energy_since_full == pytest.approx(10.0)
