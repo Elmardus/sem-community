@@ -187,33 +187,81 @@ async def test_with_charger_mode_off_the_link_goes_and_nothing_takes_its_place(
     assert LINK not in _values(entry.options)
 
 
-async def test_setups_own_save_still_gets_both_state_sensors(hass):
-    """The #1142 heal fills setup's own save (no plug, the link as the
-    charge). Made a reference at the same start, that save's plug role is
-    ``cleared`` (the crawler offers one, the card had none); dropping the
-    link un-clears it, so the plug shows through as the heal gave it."""
+def _start(hass, entry):
+    """What setup does, in its order: the refs step, then the state heal on
+    the list it wrote (``__init__``), saved back."""
     from custom_components.solar_energy_management import (
         _fill_state_sensors_of_own_save,
+    )
+    cr.async_reconcile(hass, entry)
+    healed = _fill_state_sensors_of_own_save(
+        hass, entry.options.get(cr.LEGACY_KEY))
+    if healed is not None:
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, cr.LEGACY_KEY: healed})
+    return entry.options[cr.LEGACY_KEY]
+
+
+async def _own_save_entry(hass, **change):
+    """Setup's own save made before #1142 (no plug, the link as the
+    charge), stored as a reference at the first start after it."""
+    from custom_components.solar_energy_management import (
         build_discovered_charger_storage,
     )
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from custom_components.solar_energy_management.const import DOMAIN
     await _zaptec(hass, with_limit=False)
     found = [c for c in hd.discover_all_ev_chargers_from_registry(hass)
              if c.get("_platform") == "zaptec"][0]
     old = dict(found)
     old.pop("ev_connected_sensor")
     old["ev_charging_sensor"] = LINK
-    own = build_discovered_charger_storage({}, {}, old)[2]
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-    from custom_components.solar_energy_management.const import DOMAIN
+    own = build_discovered_charger_storage({}, {}, {**old, **change})[2]
     entry = MockConfigEntry(domain=DOMAIN, data={cr.LEGACY_KEY: own},
                             options={cr.LEGACY_KEY: own})
     entry.add_to_hass(hass)
-    (card,) = cr.async_reconcile(hass, entry)
+    return entry, found
+
+
+async def test_setups_own_save_still_gets_both_state_sensors(hass):
+    """The #1142 heal fills setup's own save. The refs step runs first and
+    leaves that save with neither sensor, so the heal still decides; the
+    next start keeps what it gave."""
+    entry, _found = await _own_save_entry(hass)
+    (card,) = _start(hass, entry)
     assert card["ev_connected_sensor"] == MODE
     assert card["ev_charging_sensor"] == MODE
-    assert _fill_state_sensors_of_own_save(hass, [card]) is None
-    # the next start keeps it
-    (again,) = cr.async_reconcile(hass, entry)
+    (again,) = _start(hass, entry)
+    assert again == card
+    (ref,) = entry.options[cr.REFS_KEY]
+    assert LINK not in _values(ref)
+
+
+async def test_setups_own_save_gets_the_control_detection_finds(hass):
+    """(#1134) A control that differs from detection is replaced in the
+    same step that adds the sensors: SEM never sees the car through a
+    stale control (the cable lock as start/stop)."""
+    lock = f"switch.{GO}_permanent_cable_lock"
+    entry, found = await _own_save_entry(hass, ev_start_stop_entity=lock)
+    (card,) = _start(hass, entry)
+    assert card["ev_start_stop_entity"] == found["ev_start_stop_entity"] != lock
+    assert card["ev_connected_sensor"] == MODE
+    assert card["ev_charging_sensor"] == MODE
+    (again,) = _start(hass, entry)
+    assert again == card
+
+
+async def test_setups_own_save_with_a_control_missing_gets_no_sensor(hass):
+    """(#1126) A control the save lacks and detection has keeps the heal
+    away: the link goes, no sensor comes."""
+    entry, found = await _own_save_entry(hass, ev_start_stop_entity="")
+    assert found["ev_start_stop_entity"], "premise: detection has one"
+    (card,) = _start(hass, entry)
+    assert not card.get("ev_connected_sensor")
+    assert not card.get("ev_charging_sensor")
+    assert not card.get("ev_start_stop_entity")
+    assert LINK not in _values(entry.options)
+    (again,) = _start(hass, entry)
     assert again == card
 
 
@@ -271,22 +319,39 @@ def _link_only(card):
     return ("ev_charging_sensor",) if card.get("ev_charging_sensor") == LINK else ()
 
 
-def test_a_link_drop_un_clears_the_state_roles_only():
+def test_with_a_plug_the_charge_detection_finds_shows_through():
     """The current roles stay cleared: the card's own control is fine."""
     ref = {"id": "z", "device_id": "go", "settings": {},
-           "cleared": ["ev_connected_sensor", "ev_current_control_entity"],
+           "cleared": ["ev_current_control_entity"],
            "overrides": {"ev_charging_sensor": LINK,
+                         "ev_connected_sensor": ONLINE,
                          "ev_start_stop_entity": SWITCH},
            "found": {"ev_charging_power_sensor": POWER,
                      "ev_connected_sensor": MODE, "ev_charging_sensor": MODE,
                      "ev_current_control_entity": CURRENT}}
     (out,) = cr.drop_refused([ref], {}, _link_only)
     assert out["cleared"] == ["ev_current_control_entity"]
-    assert out["overrides"] == {"ev_start_stop_entity": SWITCH}
+    assert out["overrides"] == {"ev_connected_sensor": ONLINE,
+                                "ev_start_stop_entity": SWITCH}
     card = cr.resolve(out)
-    assert card["ev_connected_sensor"] == MODE
     assert card["ev_charging_sensor"] == MODE
     assert "ev_current_control_entity" not in card
+
+
+def test_without_a_plug_nothing_takes_the_links_place():
+    """Setup's own save: the heal decides, with its control check."""
+    ref = {"id": "z", "device_id": "go", "settings": {},
+           "cleared": ["ev_connected_sensor"],
+           "overrides": {"ev_charging_sensor": LINK},
+           "found": {"ev_charging_power_sensor": POWER,
+                     "ev_connected_sensor": MODE, "ev_charging_sensor": MODE,
+                     "ev_current_control_entity": CURRENT}}
+    (out,) = cr.drop_refused([ref], {}, _link_only)
+    assert out["cleared"] == ["ev_charging_sensor", "ev_connected_sensor"]
+    card = cr.resolve(out)
+    assert "ev_connected_sensor" not in card
+    assert "ev_charging_sensor" not in card
+    assert card["ev_current_control_entity"] == CURRENT
 
 
 def test_a_site_limit_drop_leaves_the_state_roles_cleared():

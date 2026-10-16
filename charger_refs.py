@@ -379,11 +379,13 @@ def drop_refused(refs: List[dict], live_by_device: Dict[str, Dict[str, Any]],
 
     (#1143) A link sensor read as the charge goes the same way: a Zaptec's
     "Charger" is on while the box is online (#1142), and the setup wizard
-    prefilled it, so a save the user confirmed holds it as their own. When
-    the card's goes, its state roles are no longer ``cleared``: a card that
-    read the car only through it had no state sensor of its own, so what the
-    crawler finds today shows through. The current roles are un-cleared only
-    when a current control goes."""
+    prefilled it, so a save the user confirmed holds it as their own. A card
+    with a plug sensor (the wizard asks for both) then reads the charge the
+    crawler finds today. A card with none is setup's own save: the charge
+    role is ``cleared``, so the card has neither sensor and the startup heal
+    (``_fill_state_sensors_of_own_save``) decides, with its control check
+    (#1134). The next start folds what it gave. The current roles are
+    un-cleared only when a current control goes."""
     out: List[dict] = []
     for r in refs:
         dev = r.get("device_id")
@@ -403,10 +405,16 @@ def drop_refused(refs: List[dict], live_by_device: Dict[str, Dict[str, Any]],
             out.append(r)
             continue
         _log_refused(f"Charger {r['id']}", gone)
-        for group in (CURRENT_CONTROL_ROLES, STATE_ROLES):
-            if bad & group:
-                new["cleared"] = [k for k in new.get("cleared") or ()
-                                  if k not in group]
+        if bad & CURRENT_CONTROL_ROLES:
+            new["cleared"] = [k for k in new.get("cleared") or ()
+                              if k not in CURRENT_CONTROL_ROLES]
+        if bad & STATE_ROLES and not resolve(new, live).get(
+                "ev_connected_sensor"):
+            # (#1143) no plug sensor: setup's own save (#1142). Nothing takes
+            # the link's place here; the startup heal gives the save both
+            # sensors only when its controls match detection (#1134).
+            new["cleared"] = sorted({*(new.get("cleared") or ()),
+                                     *(bad & STATE_ROLES)})
         if r.get("stored_complete", True):
             new["stored_complete"] = charger_is_complete(resolve(new, live))
         out.append(new)
