@@ -2851,6 +2851,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             ev_charger_service = _cfg("ev_charger_service")
             ev_service_entity = _cfg("ev_charger_service_entity_id")
             ev_current_entity = _cfg("ev_current_control_entity")
+            # (#1144) SEM never writes a whole site's current limit (#804).
+            # The refs take it out of a saved card; this read also falls back
+            # to the primary's old flat keys, so it is asked here once more.
+            from homeassistant.helpers import entity_registry as _er
+            from .hardware_detection import (
+                SERVICE_CONTROL_KEYS,
+                site_limit_controls,
+            )
+            _site = site_limit_controls(
+                {k: _cfg(k) for k in ("ev_current_control_entity",
+                                      *SERVICE_CONTROL_KEYS)},
+                _er.async_get(hass).async_get)
+            if _site:
+                _LOGGER.warning(
+                    "Charger '%s': %s write a whole site's current limit, not "
+                    "this charger's; SEM does not write it (#804, #1144).",
+                    charger_id, {k: _cfg(k) for k in _site})
+                if "ev_current_control_entity" in _site:
+                    ev_current_entity = None
+                if "ev_charger_service" in _site:
+                    ev_charger_service = None
+                if "ev_charger_service_entity_id" in _site:
+                    ev_service_entity = None
             # #604: ``ev_surplus_priority`` is the ONE priority axis (#576).
             # The legacy ``ev_load_priority`` alias is mapped into it by the
             # v15→v16 migration, so the construction-time alias fallback is
@@ -2885,9 +2908,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
                 return v if v is not None else default
 
             from .hardware_detection import charger_is_complete
-            _resolved = {k: _cfg(k) for k in (
-                "ev_charging_power_sensor", "ev_charger_service",
-                "ev_current_control_entity")}
+            _resolved = {"ev_charging_power_sensor": ev_power_entity,
+                         "ev_charger_service": ev_charger_service,
+                         "ev_current_control_entity": ev_current_entity}
             _resolved.update({k: _own(k) for k in _OWN_CARD_CONTROL_KEYS})
             if not charger_is_complete(_resolved):
                 _LOGGER.debug("Charger %s missing power sensor or control method, skipping", charger_id)
