@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+# [2.2.0-beta.20] — 16.10.2026
+
 - 🐛 **Zaptec: setup no longer offers the site's "Available current" as charger control** (#1141). Set up in a 2.2 beta? Check your charger's current control.
 - 🐛 **Zaptec: SEM no longer reads "charger online" as "car charging"** (#1142). Setup now reads Charger mode; Zaptecs SEM saved itself are fixed at startup.
 - 🐛 **A discharge limit the battery did not keep is sent again once** (#1138). The old limit stayed until the new one differed by 100 W.
