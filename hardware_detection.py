@@ -398,6 +398,20 @@ def site_limit_controls(charger, entry_of=lambda eid: None) -> Tuple[str, ...]:
     return tuple(out)
 
 
+def link_as_charging(charger, entry_of=lambda eid: None) -> Tuple[str, ...]:
+    """(#1143) ``("ev_charging_sensor",)`` when a charger config reads a link
+    sensor as "a car charges" — a Zaptec's "Charger", on while the box is
+    online (#1142). It never says a car charges, whoever saved it: setup
+    before #1142, the setup wizard that prefilled it, or a pick by hand.
+    ``entry_of`` finds an entity's registry entry; without one, nothing is
+    said (the class is not in the id)."""
+    if not isinstance(charger, dict):
+        return ()
+    eid = charger.get("ev_charging_sensor")
+    entry = entry_of(str(eid)) if eid else None
+    return ("ev_charging_sensor",) if entry is not None and says_a_link(entry) else ()
+
+
 def _pauses_the_charge(entry) -> bool:
     """(#1042) A switch that pauses the CHARGE — and nothing else: V2C's
     "Pause dynamic control modulation" pauses the box's solar modulation.
