@@ -144,6 +144,7 @@ async def test_r1_the_installation_is_the_chargers_companion(hass):
     (chg,) = _near(rep, "zaptec")
     assert len(chg["companions"]) == 1
     # the live current control comes from the installation, not the setting
+    # (#1141 asks whether the offer may pick the site limit at all)
     assert chg["suggested_charger"]["ev_current_control_entity"].endswith(
         "_available_current")
 
