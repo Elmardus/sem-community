@@ -320,6 +320,16 @@ def _fresh_grid_proof() -> dict:
     }
 
 
+def _note_read(reader, entity_id: str) -> None:
+    """(#1140) ``entity_id`` is one this reader reads — or would read if it
+    answered — so its sensor Repairs are not orphans. A plain function so a
+    probe called on a stand-in reader notes it too."""
+    seen = getattr(reader, "_entities_read", None)
+    if seen is None:
+        seen = reader._entities_read = set()
+    seen.add(entity_id)
+
+
 @dataclass
 class SensorConfig:
     """Configuration for sensor reading."""
@@ -847,14 +857,6 @@ class SensorReader:
         compact default ``PV1`` / ``PV2`` / …"""
         custom = getattr(self, "_pv_string_names", {}).get(slot)
         return custom or f"PV{slot.replace('pv', '')}"
-
-    def _note_read(self, entity_id: str) -> None:
-        """(#1140) ``entity_id`` is one this reader reads — or would read
-        if it answered — so its sensor Repairs are not orphans."""
-        seen = getattr(self, "_entities_read", None)
-        if seen is None:
-            seen = self._entities_read = set()
-        seen.add(entity_id)
 
     def forget_unread(self, read) -> None:
         """(#1140) The orphan sweep has just cleared the sensor Repairs of
@@ -4496,7 +4498,7 @@ class SensorReader:
         """
         if not entity_id:
             return None if allow_none else 0.0
-        self._note_read(entity_id)      # (#1140) its sensor Repairs have an owner
+        _note_read(self, entity_id)      # (#1140) its sensor Repairs have an owner
 
         state = self.hass.states.get(entity_id)
         if not state or state.state in ("unknown", "unavailable", None):
@@ -5788,7 +5790,7 @@ class SensorReader:
             prefix = "_".join(parts[:k])
             for keyword in _SOC_NAME_KEYWORDS:
                 if _present(f"sensor.{prefix}_{keyword}"):
-                    self._note_read(f"sensor.{prefix}_{keyword}")  # (#1140)
+                    _note_read(self, f"sensor.{prefix}_{keyword}")  # (#1140)
                     return True
 
         # Same-device scan, registry-only: an entity that has not published a
@@ -5804,7 +5806,7 @@ class SensorReader:
                         eid_lower = entry.entity_id.lower()
                         if any(kw in eid_lower
                                for kw in _SOC_NAME_KEYWORDS):
-                            self._note_read(entry.entity_id)   # (#1140)
+                            _note_read(self, entry.entity_id)   # (#1140)
                             return True
                         # Looser than detection's signature check on purpose:
                         # the registry may carry no unit for an entity that
@@ -5814,7 +5816,7 @@ class SensorReader:
                         unit = (entry.unit_of_measurement or "").strip()
                         if (entry.original_device_class == "battery"
                                 and unit in ("", "%")):
-                            self._note_read(entry.entity_id)   # (#1140)
+                            _note_read(self, entry.entity_id)   # (#1140)
                             return True
         except Exception as e:  # noqa: BLE001
             _LOGGER.debug("Battery SOC existence probe failed: %s", e)
