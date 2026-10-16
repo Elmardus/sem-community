@@ -3043,6 +3043,30 @@ select lists every value SEM would send (#751 was that mismatch, silent). **Guar
 `tests/test_915_roster_at_runtime.py::TestAPolicySelectorGetsNoButton`. **Sweep question:** for
 every role → config-key mapping, does the key's CONSUMER write — and does every key the role matches
 deserve to be written? Refs #915 #845 #751.
+**Second instance — #1141, a site limit offered as one charger's control.** #804 drew the line for
+Zaptec: the installation's `available_current` limits every charger on the site, and the owner sets
+it to protect the main fuse (3x25 A on the reporting install). SEM never writes it, and the brand rule
+`_discover_zaptec` refused it by name. The role reader did not. Two ways reached it when the brand
+rule could not map a Go (its "Charger mode" sensor turned off): R1 in `_roles_pass` let the
+companion's "live" current number replace the Go's stored setting — a companion is the site device,
+so its current is always the site's — and the `ev_current_control` word list matched
+`^available_current$`, so the roster ranked it FIRST for Zaptec and `charger_from_near_miss` wired it
+on any device that held it (the #915 simulator fixture and its live GUI test pinned exactly that).
+Setup and the add-charger step prefill from discovery, so one confirm saved it. **Closure:** R1 keeps
+folding a companion into its charger and no longer takes any of its numbers; `available_current` moved
+from the word list's `any` to its `not`, and the Zaptec roster row lost the key (regenerated offline:
+that row and the roles baseline are the only change). The hardware matrix, MULTI_CHARGER.md,
+hardware_proof.md and the simulator's unmapped fixture (now the charger's own power and max current,
+the installation as companion) say the same. **Guard:** `tests/test_1141_site_limit_never_control.py`
+— the real Zaptec capture with "Charger mode" off through the report and discovery (no site limit
+anywhere, start/stop offer, same controls with or without the limit); R1 for any brand (the
+installation's number renamed to the plain control word `maximum_current`, under a domain no brand
+knows); an every-capture oracle that no offer names an entity on its own companion; the roster and
+word list; the old and new simulator shapes. Six of seven mutants are killed here; the word list alone
+is also pinned by `test_915_roster_rediscovery`. **Left open:** (1) a charger saved from the old offer
+keeps the site limit (#1144). (2) The near-miss offer still skips the Go's own `charger_max_current`
+(a config-category setting, #1032) while the brand rule drives it (#804); the offer starts and stops
+instead — the two rules are kept apart on purpose until that is decided. Refs #1141 #804 #915 #1032.
 
 ### 72. A gate on the discovery path, bypassed by the button — GUARDED
 **Symptom:** `discover_inverter_from_registry_verbose` refuses a discharge control without an

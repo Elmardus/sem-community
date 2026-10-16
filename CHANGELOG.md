@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Setup no longer offers the Zaptec installation's "Available current" as a charger control** (#1141). It limits every charger on the site.
 - 🐛 **Zaptec: SEM no longer reads "charger online" as "car charging"** (#1142). Setup now reads Charger mode; Zaptecs SEM saved itself are fixed at startup.
 - 🐛 **A discharge limit the battery did not keep is sent again once** (#1138). The old limit stayed until the new one differed by 100 W.
 - 🐛 **The "or:" label on the Configuration tab is now translated** (#1129). It was still English in 13 languages.
