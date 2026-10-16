@@ -320,6 +320,16 @@ def _fresh_grid_proof() -> dict:
     }
 
 
+def _note_read(reader, entity_id: str) -> None:
+    """(#1140) ``entity_id`` is one this reader reads — or would read if it
+    answered — so its sensor Repairs are not orphans. A plain function so a
+    probe called on a stand-in reader notes it too."""
+    seen = getattr(reader, "_entities_read", None)
+    if seen is None:
+        seen = reader._entities_read = set()
+    seen.add(entity_id)
+
+
 @dataclass
 class SensorConfig:
     """Configuration for sensor reading."""
@@ -587,6 +597,12 @@ class SensorReader:
         # ten minutes.
         self._stale_first_report: dict[str, Any] = {}
         self._stale_reconciled: set[str] = set()
+        # (#1140) Every entity ``_read_sensor`` was asked for, and the
+        # ``read_power`` cycles that covers, since the coordinator last asked
+        # (``entities_read``). Only those can own a sensor Repair: one filed
+        # for anything else has nobody left to clear it.
+        self._entities_read: set[str] = set()
+        self._read_cycles = 0
         self._FAST_POWER_NAMES = frozenset(
             {"solar", "grid", "grid_import", "grid_export", "battery"}
         )
@@ -842,6 +858,26 @@ class SensorReader:
         custom = getattr(self, "_pv_string_names", {}).get(slot)
         return custom or f"PV{slot.replace('pv', '')}"
 
+    def forget_unread(self, read) -> None:
+        """(#1140) The orphan sweep has just cleared the sensor Repairs of
+        every entity outside ``read``: drop this reader's outage memos for
+        them too, so a read that comes back while the entity is still down
+        files a fresh Repair instead of trusting one that is gone."""
+        for memo in (self._sensor_repair_raised, self._frozen_sensors):
+            memo.difference_update([e for e in memo if e not in read])
+        for eid in [e for e in self._sensor_unavailable_since if e not in read]:
+            self._sensor_unavailable_since.pop(eid, None)
+
+    def entities_read(self) -> "tuple[frozenset, int]":
+        """(#1140) The entities ``_read_sensor`` was asked for since the last
+        call, and how many ``read_power`` cycles that covers. Both start
+        again, so each call answers for its own window."""
+        ids = frozenset(getattr(self, "_entities_read", None) or ())
+        cycles = int(getattr(self, "_read_cycles", 0) or 0)
+        self._entities_read = set()
+        self._read_cycles = 0
+        return ids, cycles
+
     def set_energy_dashboard_config(self, ed_config) -> None:
         """Set energy dashboard configuration for alternative sensor reading."""
         self._energy_dashboard_config = ed_config
@@ -881,6 +917,7 @@ class SensorReader:
         if self._sign_vote_warmup > 0:
             self._sign_vote_warmup -= 1
 
+        self._read_cycles = getattr(self, "_read_cycles", 0) + 1   # (#1140)
         # Try Energy Dashboard config first, then legacy config
         self._split_pair_seen = set()
         self._battery_power_missing = False   # (#758) per-cycle
@@ -2403,7 +2440,11 @@ class SensorReader:
             self._grid_source_key = f"ed_pair:{ed.grid_power_from}|{ed.grid_power_to}"
             # (#911) an explicit pair ends any guess — and its Repair.
             if self._split_grid_discovery.get("guess_reported"):
-                self._forget_split_grid_picks(self._split_grid_discovery, keep=(None, None))
+                # (#1140) the declared pair is often the meters it guessed:
+                # those are still read, and keep their Repairs
+                self._forget_split_grid_picks(
+                    self._split_grid_discovery,
+                    keep=(ed.grid_power_from, ed.grid_power_to))
                 self._split_grid_discovery["guess_reported"] = None
                 _ri.clear_split_grid_guessed(self.hass)
             self._audit_split_pair(
@@ -2712,6 +2753,10 @@ class SensorReader:
             soc_entity = self._auto_detect_battery_soc(ed.battery_power)
             if soc_entity:
                 soc_val = self._read_sensor(soc_entity, "battery_soc", allow_none=True)
+            else:
+                # (#1140) detection reads only a sensor that answers; one
+                # that is there but down is still ours — and so its Repair
+                self._soc_candidate_exists(ed.battery_power)
 
         self._accept_battery_soc(readings, soc_val)
 
@@ -3781,7 +3826,8 @@ class SensorReader:
         """
         # (#911) A dropped pick takes its ``sensor_stale`` Repair with it,
         # and a guess that is being redone is no longer a guess to report.
-        self._forget_split_grid_picks(self._split_grid_discovery, keep=(None, None))
+        self._forget_split_grid_picks(self._split_grid_discovery,
+                                      keep=(None, None), outage=False)
         _ri.clear_split_grid_guessed(self.hass)
         self._split_grid_discovery = {
             "import": None,
@@ -4090,14 +4136,23 @@ class SensorReader:
         elif disc.get("confidence") == "same-device":
             _ri.clear_split_grid_guessed(self.hass)
 
-    def _forget_split_grid_picks(self, disc: dict, *, keep) -> None:
+    def _forget_split_grid_picks(self, disc: dict, *, keep,
+                                 outage: bool = True) -> None:
         """(#911) Clear the ``sensor_stale`` Repair of any pick that is
         being dropped. The freshness check only runs for entities SEM still
         reads, so a Repair filed against a dropped pick used to live in the
-        issue registry forever."""
+        issue registry forever. (#1140) The ``sensor_unavailable`` one too:
+        a pick is dropped exactly when it went unavailable, so that is the
+        Repair it most likely carries. ``outage=False`` — a rediscovery,
+        which mostly picks the same meters again — leaves that one and its
+        clock alone; the orphan sweep takes it if the pick is not read."""
         for old in (disc.get("import"), disc.get("export")):
             if old and old not in keep:
                 _ri.clear_sensor_stale(self.hass, old)
+                if outage:
+                    _ri.clear_sensor_unavailable(self.hass, old)
+                    self._sensor_repair_raised.discard(old)
+                    self._sensor_unavailable_since.pop(old, None)
 
     def _get_device_for_entity(self, entity_id: str) -> Optional[str]:
         """Get device_id for an entity from the entity registry."""
@@ -4443,6 +4498,7 @@ class SensorReader:
         """
         if not entity_id:
             return None if allow_none else 0.0
+        _note_read(self, entity_id)      # (#1140) its sensor Repairs have an owner
 
         state = self.hass.states.get(entity_id)
         if not state or state.state in ("unknown", "unavailable", None):
@@ -5696,6 +5752,9 @@ class SensorReader:
         exactly the boot case that stamped a night plan on half a fleet on
         TEST), so existence is asked here WITHOUT looking at any value.
 
+        (#1140) The sensor it finds is noted as read: SEM would read it if
+        it answered, so a Repair filed for it is not an orphan.
+
         Deliberately no counterpart to detection's strategy 3 (the global
         last-resort scan): that one only commits when exactly one sensor in
         the whole system is unambiguous, which is a guess, not the identity of
@@ -5731,6 +5790,7 @@ class SensorReader:
             prefix = "_".join(parts[:k])
             for keyword in _SOC_NAME_KEYWORDS:
                 if _present(f"sensor.{prefix}_{keyword}"):
+                    _note_read(self, f"sensor.{prefix}_{keyword}")  # (#1140)
                     return True
 
         # Same-device scan, registry-only: an entity that has not published a
@@ -5746,6 +5806,7 @@ class SensorReader:
                         eid_lower = entry.entity_id.lower()
                         if any(kw in eid_lower
                                for kw in _SOC_NAME_KEYWORDS):
+                            _note_read(self, entry.entity_id)   # (#1140)
                             return True
                         # Looser than detection's signature check on purpose:
                         # the registry may carry no unit for an entity that
@@ -5755,6 +5816,7 @@ class SensorReader:
                         unit = (entry.unit_of_measurement or "").strip()
                         if (entry.original_device_class == "battery"
                                 and unit in ("", "%")):
+                            _note_read(self, entry.entity_id)   # (#1140)
                             return True
         except Exception as e:  # noqa: BLE001
             _LOGGER.debug("Battery SOC existence probe failed: %s", e)

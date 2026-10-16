@@ -513,6 +513,10 @@ def clear_battery_platform_pinned_generic(hass: HomeAssistant) -> None:
         pass
 
 
+def _operating_mode_issue_id(entity_id: str) -> str:
+    return f"battery_operating_mode_unexpected_{entity_id}"
+
+
 def raise_battery_operating_mode_unexpected(hass: HomeAssistant, entity_id: str,
                                             *, mode: str, expected: str) -> None:
     """(#845) The inverter's operating-policy selector is in a mode SEM's
@@ -522,7 +526,7 @@ def raise_battery_operating_mode_unexpected(hass: HomeAssistant, entity_id: str,
     try:
         ir.async_create_issue(
             hass, domain=DOMAIN,
-            issue_id=f"battery_operating_mode_unexpected_{entity_id}",
+            issue_id=_operating_mode_issue_id(entity_id),
             is_fixable=False, is_persistent=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key="battery_operating_mode_unexpected",
@@ -540,10 +544,13 @@ def raise_battery_operating_mode_unexpected(hass: HomeAssistant, entity_id: str,
 
 def clear_battery_operating_mode_unexpected(hass: HomeAssistant, entity_id: str) -> None:
     try:
-        ir.async_delete_issue(
-            hass, DOMAIN, f"battery_operating_mode_unexpected_{entity_id}")
+        ir.async_delete_issue(hass, DOMAIN, _operating_mode_issue_id(entity_id))
     except Exception as e:  # noqa: BLE001
         _LOGGER.debug("issue_registry.delete failed for %s: %s", entity_id, e)
+
+
+def _work_mode_issue_id(entity_id: str) -> str:
+    return f"deye_system_work_mode_invalid_{entity_id}"
 
 
 def raise_deye_system_work_mode_invalid(hass: HomeAssistant, entity_id: str,
@@ -553,7 +560,7 @@ def raise_deye_system_work_mode_invalid(hass: HomeAssistant, entity_id: str,
     try:
         ir.async_create_issue(
             hass, domain=DOMAIN,
-            issue_id=f"deye_system_work_mode_invalid_{entity_id}",
+            issue_id=_work_mode_issue_id(entity_id),
             is_fixable=False, is_persistent=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key="deye_system_work_mode_invalid",
@@ -567,7 +574,7 @@ def raise_deye_system_work_mode_invalid(hass: HomeAssistant, entity_id: str,
 
 def clear_deye_system_work_mode_invalid(hass: HomeAssistant, entity_id: str) -> None:
     try:
-        ir.async_delete_issue(hass, DOMAIN, f"deye_system_work_mode_invalid_{entity_id}")
+        ir.async_delete_issue(hass, DOMAIN, _work_mode_issue_id(entity_id))
     except Exception as e:  # noqa: BLE001
         _LOGGER.debug("issue_registry.delete failed for %s: %s", entity_id, e)
 
@@ -1679,7 +1686,8 @@ def clear_charger_control_entity_broken(
 #: entity they replaced, left its Repair in Settings forever (@OddmarDam:
 #: "entity missing" for a deleted "New charger 1", whose ids HA had renamed
 #: under it). ``charger_actuation_failed`` is not here: load devices driven
-#: by current file it under their own id, and this sweep knows no load ids.
+#: by current file it under their own id, and this sweep knows no load ids —
+#: ``clear_orphan_repairs`` sweeps it once the loads are built (#1140).
 _CHARGER_ONLY_ISSUE_IDS = (
     _failsafe_issue_id,
     _stop_unenforceable_issue_id,
@@ -1726,6 +1734,72 @@ def clear_orphan_charger_repairs(
             cleared += 1
             _LOGGER.info("Cleared orphan charger repair: %s (charger or "
                          "entity no longer in SEM config)", issue_id)
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.debug("issue_registry.delete failed for orphan %s: %s",
+                          issue_id, e)
+    return cleared
+
+
+#: (#1140) The Repairs keyed on a thing SEM reads, writes or drives, by the
+#: kind of owner that names it. Each is cleared only by its own check, and
+#: that check runs only for what SEM still uses: change the grid sensor, and
+#: the old one's "unavailable" Repair stayed in Settings for good.
+#: ``read`` — an entity ``SensorReader._read_sensor`` reads; ``battery`` — a
+#: battery entity named in the config; ``device`` — a device SEM drives by
+#: current (a charger, or a load under its own id).
+_ORPHAN_SWEPT_ISSUE_IDS = {
+    "read": (_sensor_issue_id, _stale_issue_id),
+    "battery": (
+        _battery_write_issue_id,
+        _battery_force_discharge_issue_id,
+        _operating_mode_issue_id,
+        _work_mode_issue_id,
+    ),
+    "device": (_actuation_issue_id,),
+}
+
+
+def clear_orphan_repairs(
+    hass: HomeAssistant,
+    *,
+    read_entities=None,
+    battery_entities=None,
+    device_ids=None,
+) -> int:
+    """(#1140) Delete the Repairs of a sensor, battery entity or device SEM
+    no longer uses.
+
+    Each argument is what one kind of owner uses now — see
+    ``_ORPHAN_SWEPT_ISSUE_IDS``. A Repair of that kind filed under anything
+    else is deleted. ``None`` means "not known": that kind is left alone.
+
+    Returns the count cleared."""
+    keep: set[str] = set()
+    prefixes: list[str] = []
+    for kind, used in (("read", read_entities), ("battery", battery_entities),
+                       ("device", device_ids)):
+        if used is None:
+            continue
+        for build in _ORPHAN_SWEPT_ISSUE_IDS[kind]:
+            prefixes.append(build(""))
+            keep |= {build(str(x)) for x in used if x}
+    if not prefixes:
+        return 0
+    try:
+        registry = ir.async_get(hass)
+        orphans = [issue_id for (domain, issue_id) in list(registry.issues)
+                   if domain == DOMAIN and issue_id.startswith(tuple(prefixes))
+                   and issue_id not in keep]
+    except Exception as e:  # noqa: BLE001 — never fail a cycle over a repair
+        _LOGGER.debug("Orphan repair sweep failed: %s", e)
+        return 0
+    cleared = 0
+    for issue_id in orphans:
+        try:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+            cleared += 1
+            _LOGGER.info("Cleared orphan repair: %s (SEM no longer reads, "
+                         "writes or drives it)", issue_id)
         except Exception as e:  # noqa: BLE001
             _LOGGER.debug("issue_registry.delete failed for orphan %s: %s",
                           issue_id, e)

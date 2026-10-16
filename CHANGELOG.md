@@ -17,8 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **Zaptec: SEM no longer reads "charger online" as "car charging"** (#1142). Setup now reads Charger mode; Zaptecs SEM saved itself are fixed at startup.
 - 🐛 **A discharge limit the battery did not keep is sent again once** (#1138). The old limit stayed until the new one differed by 100 W.
 - 🐛 **The "or:" label on the Configuration tab is now translated** (#1129). It was still English in 13 languages.
-- 🐛 **Repairs of a removed charger now clear when SEM starts** (#1139). They stayed forever. "Not accepting commands" still stays (#1140).
+- 🐛 **Repairs of a removed charger now clear when SEM starts** (#1139). They stayed forever.
 - 🐛 **Chargers SEM saved by itself now get the right power and switch** (#1134). Saves you edited stay as they are.
+- 🐛 **A Repair now clears once its sensor, battery or device leaves your settings** (#1140). Example: the old grid sensor, after you pick a new one.
 
 # [2.2.0-beta.19] — 15.10.2026
 
