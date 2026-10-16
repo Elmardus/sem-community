@@ -104,13 +104,16 @@ async def test_the_roster_proposes_the_chargers_own_number(hass):
     shows) names the Go's max current, never the site limit."""
     await replay(hass, load_capture("zaptec"))
     rep = crawl(hass)
-    assert SITE_LIMIT not in _values(rep.get("proposals"))
+    assert rep["roster_proposals"], "premise: the report proposes roles"
+    assert SITE_LIMIT not in _values(rep["roster_proposals"])
     vocab = hd._roster().ROLE_VOCAB["zaptec"]["ev_current_control"]["keys"]
     assert "available_current" not in vocab
     assert "charger_max_current" in vocab
     # the word list the roster is mined with, so a refresh cannot bring it back
     from custom_components.solar_energy_management.consts import role_lexicon as lex
-    assert lex.role_for("number", "available_current") is None
+    for word in ("available_current", "inst1_available_current",
+                 "ev_available_current"):
+        assert lex.role_for("number", word) is None, word
     assert lex.role_for("number", "charger_max_current") == "ev_current_control"
 
 
@@ -144,23 +147,56 @@ async def test_a_companions_current_is_never_adopted(hass):
     from custom_components.solar_energy_management.hardware_detection import (
         discover_all_ev_chargers_from_registry,
     )
-    for c in discover_all_ev_chargers_from_registry(hass):
+    every = discover_all_ev_chargers_from_registry(hass)
+    assert every, "premise: discovery offers the Go"
+    for c in every:
         assert "number.abbastova_maximum_current" not in _values(c), c
 
 
-@pytest.mark.parametrize("name", capture_names())
-async def test_no_offer_takes_a_control_from_a_companion(hass, name):
-    """Every rig integration: no near-miss offer names an entity that lives
-    on a device the same near miss lists as its companion."""
+def _companion_leaks(hass, rep):
+    """Entities a near-miss offer names that live on its own companion,
+    and how many companions were seen. Entity ids inside JSON values (a
+    button press's ``entity_id``) count too."""
     from homeassistant.helpers import entity_registry as er
-    await replay(hass, load_capture(name))
     reg = er.async_get(hass)
-    for n in crawl(hass)["near_misses"]:
+    leaks, seen = [], 0
+    for n in rep["near_misses"]:
         side = {c["device_id"] for c in n.get("companions") or ()}
+        seen += len(side)
         for v in (n.get("suggested_charger") or {}).values():
-            for eid in ([v] if isinstance(v, str) else []):
+            if not isinstance(v, str):
+                continue
+            try:
+                inner = json.loads(v)
+            except ValueError:
+                inner = None
+            ids = [v] + ([str(x) for x in inner.values()]
+                         if isinstance(inner, dict) else [])
+            for eid in ids:
                 e = reg.async_get(eid) if "." in eid else None
-                assert e is None or e.device_id not in side, (name, eid)
+                if e is not None and e.device_id in side:
+                    leaks.append(eid)
+    return leaks, seen
+
+
+@pytest.mark.parametrize("shape", ["zaptec", "zaptec_no_limit", "shared"])
+async def test_no_offer_takes_a_control_from_its_companion(hass, shape):
+    """The shapes that have a companion: no offer names an entity on it."""
+    cap = _site_with_a_shared_current() if shape == "shared" else _mode_off(shape)
+    await replay(hass, cap)
+    leaks, seen = _companion_leaks(hass, crawl(hass))
+    assert seen, "premise: a companion was seen"
+    assert leaks == []
+
+
+@pytest.mark.parametrize("name", capture_names())
+async def test_no_capture_offers_a_control_from_a_companion(hass, name):
+    """Every rig integration as captured. None has a companion today (the
+    Zaptec Go maps through its brand rule); a new capture that has one is
+    checked here without a new test."""
+    await replay(hass, load_capture(name))
+    leaks, _ = _companion_leaks(hass, crawl(hass))
+    assert leaks == []
 
 
 # ── the shapes the simulator publishes, before and after ─────────────────
@@ -222,6 +258,8 @@ def test_the_simulator_fixture_offers_the_chargers_number():
     rep = hd.build_detection_report(registry=_registry(ents))
     offered = [n for n in rep["near_misses"] if n.get("suggested_charger")]
     assert len(offered) == 1, rep["near_misses"]
+    assert [c["device_id"] for c in offered[0]["companions"]] == ["site"]
+    assert [n["device_id"] for n in rep["near_misses"]] == ["charger"]
     offer = offered[0]["suggested_charger"]
     assert offer["ev_current_control_entity"] == "number.lader_maximale_laadstroom"
     assert offer["ev_charging_power_sensor"] == "sensor.lader_laadvermogen"

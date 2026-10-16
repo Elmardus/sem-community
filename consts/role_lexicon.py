@@ -170,7 +170,7 @@ ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
         "not": (r"phase", r"offline", r"failsafe", r"voltage", r"power",
                 r"\bmin\b", r"_min_", r"minimum", r"energy",
                 r"input", r"^ac\d", r"aes", r"remote_panel", r"bulk",
-                r"absorption", r"grid", r"^available_current"),
+                r"absorption", r"grid", r"(^|_)available_current"),
     },
     "ev_charge_mode": {
         "platform": "select",
