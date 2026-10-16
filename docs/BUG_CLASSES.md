@@ -3065,10 +3065,28 @@ installation's number renamed to the plain control word `maximum_current`, under
 knows); no offer names an entity on its own companion, entity ids inside JSON values included, on
 the three shapes that have one (every capture as captured too, though none has a companion today);
 the roster, the report's proposals and the word list; the old and new simulator shapes. Seven of
-seven mutants (R1 back, word list back, roster back, each alone and together) are killed. **Left open:** (1) a charger saved from the old offer
-keeps the site limit (#1144). (2) The near-miss offer still skips the Go's own `charger_max_current`
+seven mutants (R1 back, word list back, roster back, each alone and together) are killed. **Left open:** the near-miss offer still skips the Go's own `charger_max_current`
 (a config-category setting, #1032) while the brand rule drives it (#804); the offer starts and stops
 instead — the two rules are kept apart on purpose until that is decided. Refs #1141 #804 #915 #1032.
+**Third instance — #1144, the site limit kept in a save.** #1141 fixed the offer, not what it had
+saved. A charger is stored as a device reference, and the reference keeps the crawler's last answer
+(`found`) when a start cannot ask, so a role the crawler stopped giving is never forgotten: every start
+resolved the site limit again. The same number also reached setup as the user's own value (a card
+stored as a reference after #1141, a pick by hand), as the old Zaptec rule's `zaptec.limit_current`
+service (before 25.08), and through the primary's old flat keys, which the builder reads when the card
+has none. **Closure:** one question, `hardware_detection.site_limit_controls` (a number whose key,
+unique id or id says `available_current`, or a service whose current field is `available_current` or
+whose target is such a number — `role_lexicon.SITE_CURRENT_KEY`, the word list's own pattern), asked
+at every layer: `charger_refs.reconcile` drops the keys from the crawler's answer and from every ref
+(`found`, `overrides`, settings) and un-clears the current roles so what the crawler finds today shows
+through; `async_reconcile` drops the flat keys; the charger builder refuses them before its gate;
+`wire_current_entity` refuses the number for any device (a load too); the discovery choke point drops
+them from any offer, and the Zaptec rule's name fallback skips the site limit. **Guard:**
+`tests/test_1144_saved_site_limit.py` — the old offer's save (captured by the crawler at 3989b7eb, before #1141) through the
+real setup step and the real setup on the Zaptec capture; a user's pick, the old service and the flat
+keys; the builder with the refs step down; PROD's and HA-TEST's saved lists untouched. Seven mutants
+(each layer removed) are killed. **Left open:** `found` still never forgets a role the crawler stopped
+giving; each fix that removes a role still needs its own drop (#1146). Refs #1144 #1141 #804 #1054.
 
 ### 72. A gate on the discovery path, bypassed by the button — GUARDED
 **Symptom:** `discover_inverter_from_registry_verbose` refuses a discharge control without an

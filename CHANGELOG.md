@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **Repairs of a removed charger now clear when SEM starts** (#1139). They stayed forever.
 - 🐛 **Chargers SEM saved by itself now get the right power and switch** (#1134). Saves you edited stay as they are.
 - 🐛 **A Repair now clears once its sensor, battery or device leaves your settings** (#1140). Example: the old grid sensor, after you pick a new one.
+- 🐛 **Zaptec: SEM no longer writes your site's "Available current", even from an older setup** (#1144). It uses the charger's own limit or its buttons.
 
 # [2.2.0-beta.19] — 15.10.2026
 
