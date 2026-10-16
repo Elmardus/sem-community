@@ -71,6 +71,14 @@ ROLE_KEYS = frozenset(CHARGER_ENTITY_KEYS | {
 })
 
 DeviceOf = Callable[[str], Optional[str]]
+#: (#1144) a charger dict → the keys SEM must never drive
+Refuse = Callable[[Dict[str, Any]], Iterable[str]]
+#: (#1144) the roles a charger's current is written through
+CURRENT_CONTROL_ROLES = frozenset({
+    "ev_current_control_entity", "ev_charger_service",
+    "ev_service_param_name", "ev_charger_service_data",
+    "ev_charger_service_entity_id",
+})
 
 
 # ── pure ──────────────────────────────────────────────────────────────────
@@ -346,14 +354,56 @@ def problems(refs: List[dict], resolved: List[dict], *,
     return out
 
 
+def drop_refused(refs: List[dict], live_by_device: Dict[str, Dict[str, Any]],
+                 refuse: Refuse) -> List[dict]:
+    """(#1144) Take out of each ref what SEM must never drive.
+
+    A ref keeps the crawler's last answer (``found``) when a start cannot
+    ask, so a role the crawler stopped giving stays there. The old setup
+    offer gave a Zaptec Go its site's "Available current" (#1141), and every
+    start drove it again. Whether the crawler found it or the user set it,
+    it goes: SEM never writes a whole site's current limit (#804). What the
+    crawler finds today then shows through — also where a complete card had
+    ``cleared`` the crawler's current control in favour of the one that
+    goes."""
+    out: List[dict] = []
+    for r in refs:
+        dev = r.get("device_id")
+        card = resolve(r, live_by_device.get(dev) if dev else None)
+        keys = set(refuse(card))
+        if not keys:
+            out.append(r)
+            continue
+        _LOGGER.warning(
+            "Charger %s: %s write a whole site's current limit, not this "
+            "charger's; SEM no longer writes it (#804, #1144).", r["id"],
+            {k: card.get(k) for k in sorted(keys)})
+        out.append({**r, **{part: _without(r.get(part) or {}, keys)
+                            for part in ("found", "overrides", "settings")},
+                    "cleared": [k for k in r.get("cleared") or ()
+                                if k not in CURRENT_CONTROL_ROLES]})
+    return out
+
+
+def _without(d: Dict[str, Any], keys: set) -> Dict[str, Any]:
+    return {k: v for k, v in d.items() if k not in keys}
+
+
 def reconcile(*, data_list: Optional[list], legacy: Optional[list],
               refs: Optional[list], sig: Optional[str],
               device_of: DeviceOf,
               live_by_device: Dict[str, Dict[str, Any]],
               log: Callable[[str], None] = _LOGGER.info,
+              refuse: Optional[Refuse] = None,
               ) -> Optional[Tuple[List[dict], List[dict]]]:
     """The whole setup step, pure. Returns ``(refs, resolved)`` or None when
-    there is nothing to manage (no charger list was ever stored)."""
+    there is nothing to manage (no charger list was ever stored).
+
+    (#1144) ``refuse`` names the keys of a charger SEM must never drive;
+    they leave the crawler's answer and every ref before anything resolves."""
+    if refuse is not None:
+        live_by_device = {dev: _without(roles, set(refuse(roles)))
+                          for dev, roles in live_by_device.items()}
     if refs is None:
         cards = _union_by_id(data_list, legacy)
         if not cards:
@@ -363,6 +413,8 @@ def reconcile(*, data_list: Optional[list], legacy: Optional[list],
     elif legacy is not None and signature(legacy) != sig:
         refs = apply_legacy_edit(refs, legacy, device_of, live_by_device, log)
     refs = refresh_found(refs, live_by_device)
+    if refuse is not None:
+        refs = drop_refused(refs, live_by_device, refuse)
     resolved = [resolve(r, live_by_device.get(r.get("device_id"))
                         if r.get("device_id") else None) for r in refs]
     return refs, resolved
@@ -435,26 +487,46 @@ def async_reconcile(hass, entry) -> Optional[List[dict]]:
         ent = ereg.async_get(eid)
         return getattr(ent, "device_id", None) if ent else None
 
+    from .hardware_detection import site_limit_controls
+
+    def _refuse(card: Dict[str, Any]) -> Tuple[str, ...]:
+        return site_limit_controls(card, ereg.async_get)
+
+    # (#1144) the primary charger's old flat keys are read when its card
+    # has none: a site limit there would come back the moment the card's
+    # is gone
+    flat = {}
+    for name, store in (("data", data), ("options", options)):
+        flat[name] = {k: store.pop(k) for k in _refuse(store)}
+        if flat[name]:
+            _LOGGER.warning(
+                "%s write a whole site's current limit, not a charger's; "
+                "SEM no longer writes it (#804, #1144).", flat[name])
+
     out = reconcile(
         data_list=data.get(LEGACY_KEY), legacy=options.get(LEGACY_KEY),
         refs=options.get(REFS_KEY), sig=options.get(SIG_KEY),
-        device_of=_device_of, live_by_device=live_charger_roles(hass))
-    if out is None:
-        return None
-    refs, resolved = out
-    new_options = {**options, REFS_KEY: refs, LEGACY_KEY: resolved,
-                   SIG_KEY: signature(resolved)}
+        device_of=_device_of, live_by_device=live_charger_roles(hass),
+        refuse=_refuse)
+    refs, resolved = out if out is not None else (None, None)
+    new_options = options if out is None else {
+        **options, REFS_KEY: refs, LEGACY_KEY: resolved,
+        SIG_KEY: signature(resolved)}
     update: Dict[str, Any] = {}
-    if new_options != options:
+    if new_options != dict(entry.options or {}):
         update["options"] = new_options
-    if LEGACY_KEY in data:
+    if out is not None and LEGACY_KEY in data:
         data.pop(LEGACY_KEY)
+        update["data"] = data
+    if flat["data"]:
         update["data"] = data
     if update:
         coordinator = getattr(entry, "runtime_data", None)
         if coordinator is not None and "options" in update:
             coordinator._skip_options_reload = dict(new_options)
         hass.config_entries.async_update_entry(entry, **update)
+    if out is None:
+        return None
 
     _sync_repairs(hass, refs, problems(
         refs, resolved,

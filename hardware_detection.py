@@ -339,6 +339,53 @@ def says_a_link(entry) -> bool:
             and _declared_dc(entry) == "connectivity")
 
 
+def says_a_site_limit(entity_id, entry=None) -> bool:
+    """(#1144) Is this number the current limit of a whole site?
+
+    Zaptec's installation "Available current" is one: every charger on the
+    site shares it, and the owner sets it to protect the main fuse (#804).
+    Read on the integration's own key (the same in every language), its
+    unique id, then the id itself — a Dutch install names it
+    ``…_beschikbare_stroom``, but its key is still ``available_current``."""
+    from .consts.role_lexicon import SITE_CURRENT_KEY
+    eid = str(entity_id or "")
+    if not eid.startswith("number."):
+        return False
+    words = (getattr(entry, "translation_key", None),
+             getattr(entry, "unique_id", None), eid.split(".", 1)[1])
+    return any(isinstance(w, str) and re.search(SITE_CURRENT_KEY, w.lower())
+               for w in words)
+
+
+#: (#1144) What a charger writes its current through, when that is a service.
+SERVICE_CONTROL_KEYS = ("ev_charger_service", "ev_service_param_name",
+                        "ev_charger_service_data", "ev_service_device_id",
+                        "ev_charger_service_entity_id")
+
+
+def site_limit_controls(charger, entry_of=lambda eid: None) -> Tuple[str, ...]:
+    """(#1144) The keys of a charger config that would write a whole site's
+    current limit — the number itself, or a service that sets it (Zaptec's
+    ``limit_current`` takes ``available_current``). SEM never writes one
+    (#804), whoever saved it: an old setup offer (#1141), the old Zaptec
+    rule (before 25.08), or a pick by hand. ``entry_of`` finds an entity's
+    registry entry; without one, only the id is read."""
+    from .consts.role_lexicon import SERVICE_SITE_CURRENT_FIELDS
+    if not isinstance(charger, dict):
+        return ()
+    out: List[str] = []
+    eid = charger.get("ev_current_control_entity")
+    if eid and says_a_site_limit(eid, entry_of(str(eid))):
+        out.append("ev_current_control_entity")
+    target = charger.get("ev_charger_service_entity_id")
+    param = str(charger.get("ev_service_param_name") or "").strip().lower()
+    if charger.get("ev_charger_service") and (
+            param in SERVICE_SITE_CURRENT_FIELDS
+            or (target and says_a_site_limit(target, entry_of(str(target))))):
+        out.extend(k for k in SERVICE_CONTROL_KEYS if charger.get(k))
+    return tuple(out)
+
+
 def _pauses_the_charge(entry) -> bool:
     """(#1042) A switch that pauses the CHARGE — and nothing else: V2C's
     "Pause dynamic control modulation" pauses the box's solar modulation.
@@ -869,6 +916,21 @@ def apply_charger_discovery_guards(result: Dict[str, str], entities) -> None:
     _reject_capability_sensor(result, entities)
     _reject_reboot_control(result, entities)
     _reject_link_as_charging(result, entities)
+    _reject_site_limit_control(result, entities)
+
+
+def _reject_site_limit_control(result: Dict[str, str], entities) -> None:
+    """(#1144, bug class 71) Never take a whole site's current limit as the
+    charger's control. The brand rule for Zaptec refused it by unique id
+    only, so a build with other ids took ``…_available_current`` by its
+    name. Dropped, not swapped: a charger without its own control is
+    offered without one (#804)."""
+    by_eid = {str(getattr(e, "entity_id", "")): e for e in entities or ()}
+    keys = site_limit_controls(result, by_eid.get)
+    if keys:
+        _LOGGER.info("discovery: %s write a whole site's current limit, "
+                     "never one charger's control — dropped (#1144)",
+                     {k: result.pop(k) for k in keys})
 
 
 #: (#1036) The roles only a charger fills: a car that is there, a charge
@@ -4218,7 +4280,7 @@ def _discover_zaptec(entities) -> Dict[str, str]:
                 result["ev_current_control_entity"] = eid
             elif ("ev_current_control_entity" not in result
                     and "current" in name
-                    and "available_current" not in uid
+                    and not says_a_site_limit(eid, entry)
                     and "min_current" not in uid
                     and not uid.endswith("charger_min_current")):
                 # entity-id fallback for integration builds whose unique_ids
@@ -5628,6 +5690,15 @@ def _bare_temperature_inverter_sensor(hass, sibling_sensors, exclude):
 
 
 # ── (#976) OCPP: the charge-control switch is the stop verb ─────────────
+def _registry_entry(hass, entity_id: str):
+    """``entity_id``'s registry entry, or None when there is none to read."""
+    try:
+        from homeassistant.helpers import entity_registry as er
+        return er.async_get(hass).async_get(entity_id)
+    except Exception:  # noqa: BLE001 — a lookup that fails is "unknown"
+        return None
+
+
 def entity_platform(hass, entity_id: str):
     """The integration that owns ``entity_id`` (registry platform), or None."""
     try:
@@ -5790,6 +5861,14 @@ def wire_current_entity(hass, device, charger_id: str, current_entity_id) -> Non
             "the charge. Save %s under Configuration → EV chargers to stop "
             "this message (#1042)", charger_id, saved, twin, twin)
     if not current_entity_id:
+        return
+    # (#1144) a whole site's current limit is never written (#804): the EV
+    # builder refuses it before its gate, a load's control is asked here
+    if says_a_site_limit(current_entity_id, _registry_entry(hass, current_entity_id)):
+        device.current_entity_id = None
+        _LOGGER.warning(
+            "'%s': %s is a whole site's current limit, not this device's; "
+            "SEM does not write it (#804, #1144)", charger_id, current_entity_id)
         return
     platform = entity_platform(hass, current_entity_id)
     device.zero_amps_parks_a_limit = (platform == "ocpp")

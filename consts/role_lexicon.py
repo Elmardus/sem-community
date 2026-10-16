@@ -30,6 +30,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, Final
 
+#: (#1141, #1144) The key of a number that limits a whole site's current:
+#: Zaptec's installation ``available_current`` (and its per-phase twins).
+#: Every charger on the site shares it, and the owner sets it to protect the
+#: main fuse (#804). SEM never writes it — not as an offer, not from a save.
+SITE_CURRENT_KEY: Final[str] = r"(^|_)available_current"
+
+
 #: role -> matching rule. ``platform`` is the HA entity domain the role must
 #: live in; ``any`` is a tuple of regexes of which one must match the declared
 #: key; ``not`` disqualifies. Regexes are matched case-insensitively with
@@ -170,7 +177,7 @@ ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
         "not": (r"phase", r"offline", r"failsafe", r"voltage", r"power",
                 r"\bmin\b", r"_min_", r"minimum", r"energy",
                 r"input", r"^ac\d", r"aes", r"remote_panel", r"bulk",
-                r"absorption", r"grid", r"(^|_)available_current"),
+                r"absorption", r"grid", SITE_CURRENT_KEY),
     },
     "ev_charge_mode": {
         "platform": "select",
