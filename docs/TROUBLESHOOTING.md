@@ -564,6 +564,12 @@ Update to SEM v1.2.0 or newer. This issue does not occur on v1.2.0+.
 
 ---
 
+## Zaptec: which current control SEM uses
+
+SEM never writes your Zaptec installation's "Available current". It limits every charger on your site, not one. A setup that saved it loses it when SEM starts; the log says so. SEM then uses the charger's own "Charger max current", or only its start and stop buttons. Open the charger's settings in SEM's Configuration tab and check its current control.
+
+---
+
 ## Hot water not heating
 
 **Cause:** SEM only heats hot water when solar surplus is available (normal mode) or when a Legionella disinfection cycle is due (forced mode). If neither condition is met, the heater stays idle.
