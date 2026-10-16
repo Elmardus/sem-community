@@ -249,7 +249,6 @@ class TestTheEVCurrentRuleKnowsWhatItIsLookingFor:
 
     @_pytest.mark.parametrize("key,brand", [
         ("charger_max_current", "Zaptec"),
-        ("available_current", "Zaptec"),
         ("maximum_current", "OCPP"),
         ("current_set", "NRGKick"),
         ("charge_current_limit", "SMA EV"),
@@ -266,6 +265,7 @@ class TestTheEVCurrentRuleKnowsWhatItIsLookingFor:
         ("charge_current", "a BATTERY's charge current"),
         ("charger_min_current", "a floor, not the control"),
         ("three_to_one_phase_switch_current", "#804: the phase register"),
+        ("available_current", "#1141: Zaptec's site limit, every charger's"),
         ("energy_limit", "NRGKick: a kWh cap"),
     ])
     def test_a_current_that_is_not_a_charger_control_does_not(self, key, why):

@@ -146,7 +146,7 @@ ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
         "any": (r"^charger_(max_)?current$", r"^charge_current_limit$",
                 r"^charging_current_(set|limit|max)$", r"ac_charger_.*current",
                 r"^(ev|evse)_.*current", r"ev.?charg.*current",
-                r"^maximum_current$", r"^available_current$",
+                r"^maximum_current$",
                 r"^current_set$", r"^set_current$", r"^current_setpoint$",
                 # Wallbox (core) — the key SEM's own discovery has driven
                 # since v1.4; `maximum_icp_current` is the installation's
@@ -163,10 +163,14 @@ ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
         # the general list above.
         "charger_only_any": (r"^amp$", r"^charge_rate$",
                              r"^charging_current$"),
+        # (#1141) ``available_current`` is a whole site's limit: Zaptec's
+        # installation current, which every charger on the site shares and
+        # the owner sets as a grid guard (#804, 3x25 A). It is never one
+        # charger's control, whatever else matches it.
         "not": (r"phase", r"offline", r"failsafe", r"voltage", r"power",
                 r"\bmin\b", r"_min_", r"minimum", r"energy",
                 r"input", r"^ac\d", r"aes", r"remote_panel", r"bulk",
-                r"absorption", r"grid"),
+                r"absorption", r"grid", r"^available_current"),
     },
     "ev_charge_mode": {
         "platform": "select",
