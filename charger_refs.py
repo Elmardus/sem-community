@@ -362,26 +362,44 @@ def drop_refused(refs: List[dict], live_by_device: Dict[str, Dict[str, Any]],
     ask, so a role the crawler stopped giving stays there. The old setup
     offer gave a Zaptec Go its site's "Available current" (#1141), and every
     start drove it again. Whether the crawler found it or the user set it,
-    it goes: SEM never writes a whole site's current limit (#804). What the
-    crawler finds today then shows through — also where a complete card had
-    ``cleared`` the crawler's current control in favour of the one that
-    goes."""
+    it goes: SEM never writes a whole site's current limit (#804).
+
+    Asked of the card the ref resolves to (a service in ``overrides`` and
+    its field in ``found`` make one write), and of ``found`` and
+    ``overrides`` alone (a value a ``cleared`` role hides now would show
+    the day the role is set again). A part keeps a value the card does not
+    use. When the card's own current control goes, its current roles are no
+    longer ``cleared``, so what the crawler finds today shows through: a
+    complete card cleared them only because it had that control. The ref is
+    then complete only if what it resolves to is, so a new card for the same
+    box can replace it (#1054)."""
     out: List[dict] = []
     for r in refs:
         dev = r.get("device_id")
-        card = resolve(r, live_by_device.get(dev) if dev else None)
-        keys = set(refuse(card))
-        if not keys:
+        live = live_by_device.get(dev) if dev else None
+        card = resolve(r, live)
+        bad = set(refuse(card))
+        new = dict(r)
+        gone: Dict[str, Any] = {}
+        for part in ("found", "overrides", "settings"):
+            d = r.get(part) or {}
+            own = set(refuse(d)) if part != "settings" else set()
+            keep = {k: v for k, v in d.items()
+                    if k not in own and not (k in bad and v == card.get(k))}
+            gone.update({k: v for k, v in d.items() if k not in keep})
+            new[part] = keep
+        if not gone:
             out.append(r)
             continue
         _LOGGER.warning(
             "Charger %s: %s write a whole site's current limit, not this "
-            "charger's; SEM no longer writes it (#804, #1144).", r["id"],
-            {k: card.get(k) for k in sorted(keys)})
-        out.append({**r, **{part: _without(r.get(part) or {}, keys)
-                            for part in ("found", "overrides", "settings")},
-                    "cleared": [k for k in r.get("cleared") or ()
-                                if k not in CURRENT_CONTROL_ROLES]})
+            "charger's; SEM no longer writes it (#804, #1144).", r["id"], gone)
+        if bad:
+            new["cleared"] = [k for k in r.get("cleared") or ()
+                              if k not in CURRENT_CONTROL_ROLES]
+        if r.get("stored_complete", True):
+            new["stored_complete"] = charger_is_complete(resolve(new, live))
+        out.append(new)
     return out
 
 
@@ -404,6 +422,14 @@ def reconcile(*, data_list: Optional[list], legacy: Optional[list],
     if refuse is not None:
         live_by_device = {dev: _without(roles, set(refuse(roles)))
                           for dev, roles in live_by_device.items()}
+        # a site limit sits on the site's device: it must not decide which
+        # device a card is (the Go's crawler answer would never show)
+        _device_of = device_of
+
+        def device_of(eid: str) -> Optional[str]:
+            if refuse({"ev_current_control_entity": eid}):
+                return None
+            return _device_of(eid)
     if refs is None:
         cards = _union_by_id(data_list, legacy)
         if not cards:

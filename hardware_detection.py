@@ -357,6 +357,9 @@ def says_a_site_limit(entity_id, entry=None) -> bool:
                for w in words)
 
 
+#: (#1144) Services that write an entity's value, not a named field.
+_ENTITY_SERVICE_DOMAINS = ("number", "input_number", "select")
+
 #: (#1144) What a charger writes its current through, when that is a service.
 SERVICE_CONTROL_KEYS = ("ev_charger_service", "ev_service_param_name",
                         "ev_charger_service_data", "ev_service_device_id",
@@ -377,12 +380,21 @@ def site_limit_controls(charger, entry_of=lambda eid: None) -> Tuple[str, ...]:
     eid = charger.get("ev_current_control_entity")
     if eid and says_a_site_limit(eid, entry_of(str(eid))):
         out.append("ev_current_control_entity")
+    service = str(charger.get("ev_charger_service") or "")
     target = charger.get("ev_charger_service_entity_id")
     param = str(charger.get("ev_service_param_name") or "").strip().lower()
-    if charger.get("ev_charger_service") and (
-            param in SERVICE_SITE_CURRENT_FIELDS
-            or (target and says_a_site_limit(target, entry_of(str(target))))):
-        out.extend(k for k in SERVICE_CONTROL_KEYS if charger.get(k))
+    # an entity platform's service writes its target; its field name is
+    # not read (number.set_value takes "value")
+    by_field = service.split(".", 1)[0] not in _ENTITY_SERVICE_DOMAINS
+    if service and ((by_field and param in SERVICE_SITE_CURRENT_FIELDS)
+                    or (target and says_a_site_limit(target,
+                                                     entry_of(str(target))))):
+        # the start and stop services name the box by the same device id
+        keep = (("ev_service_device_id",)
+                if charger.get("ev_start_service") or charger.get("ev_stop_service")
+                else ())
+        out.extend(k for k in SERVICE_CONTROL_KEYS
+                   if charger.get(k) and k not in keep)
     return tuple(out)
 
 
@@ -923,14 +935,12 @@ def _reject_site_limit_control(result: Dict[str, str], entities) -> None:
     """(#1144, bug class 71) Never take a whole site's current limit as the
     charger's control. The brand rule for Zaptec refused it by unique id
     only, so a build with other ids took ``…_available_current`` by its
-    name. Dropped, not swapped: a charger without its own control is
-    offered without one (#804)."""
+    name. Dropped, not swapped (#804)."""
     by_eid = {str(getattr(e, "entity_id", "")): e for e in entities or ()}
-    keys = site_limit_controls(result, by_eid.get)
-    if keys:
+    gone = {k: result.pop(k) for k in site_limit_controls(result, by_eid.get)}
+    if gone:
         _LOGGER.info("discovery: %s write a whole site's current limit, "
-                     "never one charger's control — dropped (#1144)",
-                     {k: result.pop(k) for k in keys})
+                     "never one charger's control — dropped (#1144)", gone)
 
 
 #: (#1036) The roles only a charger fills: a car that is there, a charge

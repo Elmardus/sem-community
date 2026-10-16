@@ -197,15 +197,15 @@ async def test_the_primarys_old_flat_keys_go(hass):
     assert entry.data["solar_power_sensor"] == "sensor.pv"
 
 
-async def test_a_charger_with_its_own_control_is_left_alone(hass):
-    """The same box saved with its own number: nothing changes, nothing is
-    written, no warning."""
+async def test_a_charger_with_its_own_control_is_left_alone(hass, caplog):
+    """The same box saved with its own number keeps it, with no warning."""
     await replay(hass, load_capture("zaptec"))
     own = {**CARD, "ev_current_control_entity": OWN_CURRENT}
     entry = _entry(hass, {cr.LEGACY_KEY: [own]})
-    (card,) = cr.async_reconcile(hass, entry)
-    assert card["ev_current_control_entity"] == OWN_CURRENT
-    assert hd.site_limit_controls(card, _registry(hass).async_get) == ()
+    with caplog.at_level(logging.WARNING):
+        (card,) = cr.async_reconcile(hass, entry)
+    assert card == own
+    assert "#1144" not in caplog.text
 
 
 # ── the builder: SEM never writes it, whatever reaches setup ─────────────
@@ -251,6 +251,24 @@ async def test_setup_builds_the_old_save_without_the_site_limit(sem_real_hass):
         assert dev.current_entity_id is None
         assert dev.start_service == "button.press"
         assert dev.stop_service == "button.press"
+        # what a start and a stop send: the Go's buttons, never the site
+        from custom_components.solar_energy_management.coordinator.charger_adapters import (
+            adapter_for,
+        )
+        sent = []
+
+        async def _record(domain, service, data=None, *, why=""):
+            sent.append((domain, service, dict(data or {})))
+            return True
+
+        with patch.object(dev, "send", side_effect=_record):
+            adapter = adapter_for(dev)
+            await adapter.command_current(16)
+            await adapter.command_idle()
+        assert ("button", "press", {"entity_id": RESUME}) in sent, sent
+        assert ("button", "press", {"entity_id": STOP}) in sent, sent
+        assert SITE_LIMIT not in _values(sent)
+        assert not [c for c in sent if c[0] in ("number", "zaptec")], sent
     finally:
         await _unload(hass, entry)
 
@@ -419,3 +437,133 @@ def test_the_real_saved_option_sets_are_untouched():
         assert opts["ev_chargers"], name
         for c in opts["ev_chargers"]:
             assert hd.site_limit_controls(c, MagicMock(return_value=None)) == (), c
+
+
+# ── review, 16.10: the refs step, every shape ────────────────────────────
+
+def _id_only(card):
+    return hd.site_limit_controls(card)
+
+
+def test_a_stale_value_behind_a_clear_never_shows_through():
+    """A pre-25.08 service save that became a ref while the old offer was
+    live: its card was complete, so the crawler's site limit went to
+    ``found`` and the control role to ``cleared``. Dropping the service
+    must not un-clear that stale value."""
+    old = {"id": "z", "ev_charging_power_sensor": POWER,
+           "ev_charger_service": "zaptec.limit_current",
+           "ev_service_param_name": "available_current"}
+    refs, resolved = cr.reconcile(
+        data_list=None, legacy=[old], refs=None, sig=None,
+        device_of=lambda eid: "go", live_by_device={"go": OLD_LIVE})
+    assert refs[0]["found"]["ev_current_control_entity"] == SITE_LIMIT
+    assert "ev_current_control_entity" in refs[0]["cleared"], "premise"
+    for live in ({"go": {"ev_charging_power_sensor": POWER}},
+                 {"go": {"ev_charging_power_sensor": POWER,
+                         "ev_current_control_entity": OWN_CURRENT}}):
+        r1, out = cr.reconcile(
+            data_list=None, legacy=resolved, refs=refs,
+            sig=cr.signature(resolved), device_of=lambda eid: "go",
+            live_by_device=live, refuse=_id_only)
+        assert SITE_LIMIT not in _values(r1) and SITE_LIMIT not in _values(out)
+        assert "limit_current" not in _values(out)
+        # what the crawler finds today shows through
+        assert out[0].get("ev_current_control_entity") == live["go"].get(
+            "ev_current_control_entity")
+        # and the next start has nothing left to take out
+        r2, again = cr.reconcile(
+            data_list=None, legacy=out, refs=r1, sig=cr.signature(out),
+            device_of=lambda eid: "go", live_by_device=live, refuse=_id_only)
+        assert (r2, again) == (r1, out)
+
+
+def test_a_part_keeps_a_value_the_card_does_not_use():
+    """The user's own number wins over a stale site limit in ``found``:
+    the stale value goes, the user's stays."""
+    ref = {"id": "z", "device_id": "go", "cleared": [], "settings": {},
+           "found": {"ev_charging_power_sensor": POWER,
+                     "ev_current_control_entity": SITE_LIMIT},
+           "overrides": {"ev_current_control_entity": OWN_CURRENT}}
+    (out,) = cr.drop_refused([ref], {}, _id_only)
+    assert out["overrides"] == {"ev_current_control_entity": OWN_CURRENT}
+    assert out["found"] == {"ev_charging_power_sensor": POWER}
+
+
+def test_a_ref_the_drop_left_half_can_be_replaced():
+    """Power and the site limit only: after the drop it is a half card, so
+    a new complete card for the same box replaces it (#1054), and is not
+    turned away as a copy."""
+    half = {"id": "z", "ev_charging_power_sensor": POWER,
+            "ev_current_control_entity": SITE_LIMIT}
+    refs, resolved = cr.reconcile(
+        data_list=None, legacy=[half], refs=None, sig=None,
+        device_of=lambda eid: "go", live_by_device={}, refuse=_id_only)
+    assert refs[0]["stored_complete"] is False
+    assert not hd.charger_is_complete(resolved[0])
+    fresh = {"id": "z2", "ev_charging_power_sensor": POWER,
+             "ev_start_service": "button.press",
+             "ev_start_service_data": json.dumps({"entity_id": RESUME})}
+    _r, out = cr.reconcile(
+        data_list=None, legacy=resolved + [fresh], refs=refs,
+        sig=cr.signature(resolved), device_of=lambda eid: "go",
+        live_by_device={}, refuse=_id_only)
+    assert [c["id"] for c in out] == ["z2"]
+    assert out[0]["ev_start_service"] == "button.press"
+
+
+def test_a_site_limit_does_not_say_which_device_a_card_is():
+    """The site limit sits on the site's device. With one vote each, the
+    site could win the tie, and the Go's crawler answer never show."""
+    card = {"id": "z", "ev_charging_power_sensor": POWER,
+            "ev_current_control_entity": SITE_LIMIT,
+            "ev_start_service": "button.press"}
+    dev_of = {POWER: "b_go", SITE_LIMIT: "a_site"}.get
+    refs, out = cr.reconcile(
+        data_list=None, legacy=[card], refs=None, sig=None,
+        device_of=dev_of,
+        live_by_device={"b_go": {"ev_charging_power_sensor": POWER,
+                                 "ev_current_control_entity": OWN_CURRENT}},
+        refuse=_id_only)
+    assert refs[0]["device_id"] == "b_go"
+    assert out[0]["ev_current_control_entity"] == OWN_CURRENT
+
+
+def test_the_zaptec_rule_skips_the_site_limit_and_takes_the_next():
+    """The brand rule alone, without the choke point: an id fallback that
+    took the site limit first never reached the charger's own number."""
+    def ent(eid, dc=None, uid=""):
+        return SimpleNamespace(entity_id=eid, platform="zaptec",
+                               device_id="go", unique_id=uid,
+                               original_device_class=dc,
+                               translation_key=None, original_name=None,
+                               has_entity_name=False, disabled_by=None,
+                               unit_of_measurement=None,
+                               capabilities=None, entity_category=None)
+    found = hd._discover_zaptec([
+        ent("binary_sensor.zaptec_garage_cable_connected"),
+        ent("number.zaptec_garage_available_current", "current"),
+        ent("number.zaptec_garage_charging_current", "current"),
+        ent("sensor.zaptec_garage_total_charge_power", "power"),
+    ])
+    assert found["ev_current_control_entity"] == (
+        "number.zaptec_garage_charging_current")
+
+
+def test_start_and_stop_keep_the_device_id_they_share():
+    """The start and stop services name the box by the same device id; only
+    the current service goes."""
+    keys = hd.site_limit_controls({
+        "ev_charger_service": "zaptec.limit_current",
+        "ev_service_param_name": "available_current",
+        "ev_service_device_id": "dev",
+        "ev_start_service": "zaptec.resume_charging"})
+    assert set(keys) == {"ev_charger_service", "ev_service_param_name"}
+
+
+def test_an_entity_service_is_judged_by_its_target_not_a_field_name():
+    """``number.set_value`` writes its target and reads no field name, so a
+    stray ``available_current`` field (an old flat key) says nothing."""
+    assert hd.site_limit_controls({
+        "ev_charger_service": "number.set_value",
+        "ev_charger_service_entity_id": OWN_CURRENT,
+        "ev_service_param_name": "available_current"}) == ()
