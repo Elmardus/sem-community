@@ -485,8 +485,8 @@ class TestAReadRoleKeepsTheWholeIdAnswer:
         entities = [
             _entry("sensor.carport_charger_total_power", "zaptec", "inst",
                    "power", "W"),
-            _entry("binary_sensor.carport_charger_online", "zaptec", "inst",
-                   "connectivity"),
+            # no class: a ``connectivity`` sensor is never the charge (#1142)
+            _entry("binary_sensor.carport_charger_led", "zaptec", "inst"),
             _entry("number.carport_charger_available_current", "zaptec", "inst",
                    "current", "A",
                    unique_id="inst_available_current"),

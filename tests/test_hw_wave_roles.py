@@ -19,6 +19,19 @@ async def _report(hass, *names):
     return crawl(hass)
 
 
+async def _zaptec_mode_off(hass, name):
+    """(#1142) A Zaptec capture with its "Charger mode" sensor switched off.
+    The brand rule maps a Go by that sensor; without it the Go is a near
+    miss, and the near-miss offer is what the pins below are about."""
+    cap = json.loads(json.dumps(load_capture(name)))
+    off = [e for e in cap["entities"] if e["entity_id"].startswith("sensor.")
+           and e["unique_id"].endswith("_charger_operation_mode")]
+    assert len(off) == 1
+    off[0]["disabled_by"] = "user"
+    await replay(hass, cap)
+    return crawl(hass)
+
+
 def _near(rep, platform):
     return [n for n in rep["near_misses"] if n["platform"] == platform]
 
@@ -107,7 +120,7 @@ async def test_r5_a_water_heater_diverter_is_not_a_charger(hass):
 # ── R1 companion + R2 start/stop pair ────────────────────────────────────
 
 async def test_r2_the_start_and_stop_buttons_are_the_control(hass):
-    rep = await _report(hass, "zaptec_no_limit")
+    rep = await _zaptec_mode_off(hass, "zaptec_no_limit")
     offers = [n["suggested_charger"] for n in _near(rep, "zaptec")
               if n["suggested_charger"]]
     (off,) = offers
@@ -127,10 +140,11 @@ async def test_r2_a_stop_button_alone_is_not_a_control(hass):
 
 
 async def test_r1_the_installation_is_the_chargers_companion(hass):
-    rep = await _report(hass, "zaptec")
+    rep = await _zaptec_mode_off(hass, "zaptec")
     (chg,) = _near(rep, "zaptec")
     assert len(chg["companions"]) == 1
     # the live current control comes from the installation, not the setting
+    # (#1141 asks whether the offer may pick the site limit at all)
     assert chg["suggested_charger"]["ev_current_control_entity"].endswith(
         "_available_current")
 
@@ -146,7 +160,7 @@ def test_r6_a_per_phase_service_is_named():
 
 
 async def test_r6_a_site_current_service_is_report_data_only(hass):
-    rep = await _report(hass, "zaptec_no_limit")
+    rep = await _zaptec_mode_off(hass, "zaptec_no_limit")
     (chg,) = _near(rep, "zaptec")
     assert "site_service" in chg["charger_roles"]
     assert "ev_charger_service" not in chg["suggested_charger"]

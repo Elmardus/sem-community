@@ -326,6 +326,19 @@ def _is_state_text(entry) -> bool:
     return _declared_dc(entry) in ("", "enum")
 
 
+def says_a_link(entry) -> bool:
+    """(#1142) Is this a binary sensor of class ``connectivity``?
+
+    Home Assistant's class for "a link is up": the box is online, its cloud
+    answers. It never says a car charges. Zaptec's main "Charger" sensor is
+    one, and "charg" in its name made SEM read it as the charge, so the car
+    looked like it charged whenever the box was online. The class is the
+    same in every language; the name is not. It is no test for a plug: a
+    car's own "charge cable" sensor (Tesla) uses this class too."""
+    return (str(getattr(entry, "entity_id", "")).startswith("binary_sensor.")
+            and _declared_dc(entry) == "connectivity")
+
+
 def _pauses_the_charge(entry) -> bool:
     """(#1042) A switch that pauses the CHARGE — and nothing else: V2C's
     "Pause dynamic control modulation" pauses the box's solar modulation.
@@ -792,6 +805,27 @@ _CONTROL_ROLES = (
 )
 
 
+def _reject_link_as_charging(result: Dict[str, str], entities) -> None:
+    """(#1142, bug class 42) Never read a link sensor as "a car charges".
+
+    The brand rules bind the charging sensor by a word in its name, and
+    "charg" is in "Charger" too. A ``connectivity`` binary sensor named
+    "Charger" is on while the box is online, so SEM saw a charge all day.
+    Dropped, not swapped: with no charging sensor SEM reads the charge
+    from the power, which is what it did for a charger without one.
+    """
+    eid = str(result.get("ev_charging_sensor") or "")
+    if not eid:
+        return
+    entry = next((e for e in entities or ()
+                  if str(getattr(e, "entity_id", "")) == eid), None)
+    if entry is not None and says_a_link(entry):
+        _LOGGER.info(
+            "discovery: %s says the box is online, not that a car charges — "
+            "not adopting it as ev_charging_sensor (#1142)", eid)
+        result.pop("ev_charging_sensor", None)
+
+
 def _reject_reboot_control(result: Dict[str, str], entities=None) -> None:
     """(#804) Drop a device-RESTART entity from any control role.
 
@@ -834,6 +868,7 @@ def apply_charger_discovery_guards(result: Dict[str, str], entities) -> None:
     _reject_range_end_current_control(result, entities)
     _reject_capability_sensor(result, entities)
     _reject_reboot_control(result, entities)
+    _reject_link_as_charging(result, entities)
 
 
 #: (#1036) The roles only a charger fills: a car that is there, a charge
@@ -4066,7 +4101,8 @@ def _discover_goecharger(entities) -> Dict[str, str]:
         dc = entry.original_device_class
         if eid.startswith("binary_sensor.") and dc == "plug":
             result["ev_connected_sensor"] = eid
-        if eid.startswith("binary_sensor.") and "charg" in name:
+        if (eid.startswith("binary_sensor.") and "charg" in name
+                and not says_a_link(entry)):  # (#1142) "Charger" online
             result["ev_charging_sensor"] = eid
         if eid.startswith("sensor.") and dc == "power":
             result["ev_charging_power_sensor"] = eid
@@ -4087,7 +4123,8 @@ def _discover_wallbox(entities) -> Dict[str, str]:
         dc = entry.original_device_class
         if eid.startswith("binary_sensor.") and "plug" in name:
             result["ev_connected_sensor"] = eid
-        if eid.startswith("binary_sensor.") and "charg" in name:
+        if (eid.startswith("binary_sensor.") and "charg" in name
+                and not says_a_link(entry)):  # (#1142) "Charger" online
             result["ev_charging_sensor"] = eid
         if eid.startswith("sensor.") and dc == "power":
             result["ev_charging_power_sensor"] = eid
@@ -4111,6 +4148,7 @@ def _discover_zaptec(entities) -> Dict[str, str]:
     """
     result: Dict[str, str] = {}
     device_id = None
+    mode = None
     own = _own_names(entities)
     for entry in entities:
         eid = entry.entity_id
@@ -4129,11 +4167,22 @@ def _discover_zaptec(entities) -> Dict[str, str]:
             or "cable" in name or "connect" in name
         ):
             result["ev_connected_sensor"] = eid
+        # (#1142) never the main "Charger" sensor: it is ``connectivity``,
+        # on while the box is online
         if eid.startswith("binary_sensor.") and (
             _uid.endswith("_charging") or "charg" in name
-        ):
+        ) and not says_a_link(entry):
             result["ev_charging_sensor"] = eid
-        if eid.startswith("sensor.") and (
+        # (#1142) "Charger mode" is the charger's state: disconnected,
+        # connected_requesting, connected_charging, connected_finished. Read
+        # by its unique-id key, the same in every language. The switch of
+        # the same key is the start/stop, not a state.
+        if (eid.startswith("sensor.") and _is_state_text(entry)
+                and _uid.endswith("charger_operation_mode")):
+            mode = eid
+        # (#1142) a sensor HA or its unit calls something else is not the
+        # power: Zaptec's session energy is ``total_charge_power_session``
+        if eid.startswith("sensor.") and _roles_dc(entry) in ("", "power") and (
             dc == "power" or _uid.endswith("charge_power")
             or ("power" in name and "energy" not in name and "kwh" not in name)
         ):
@@ -4181,6 +4230,9 @@ def _discover_zaptec(entities) -> Dict[str, str]:
             "resume" in name or uid.endswith("resume_charging")
         ):
             result["ev_start_stop_entity"] = eid
+    if mode:
+        result.setdefault("ev_connected_sensor", mode)
+        result.setdefault("ev_charging_sensor", mode)
 
     # Site/installation aggregates commonly contain only power/energy. A real
     # charger must expose at least one charger-identity/control entity — and
@@ -4499,6 +4551,10 @@ def _discover_from_hints(entities, hints: List[_ROLE]) -> Dict[str, str]:
             # it — the word hints are what matched it before.
             if dc == REBOOT_DEVICE_CLASS and rule.get("device_class") != dc:
                 continue
+            # (#1142) a link sensor says the box is online, never that a
+            # car charges, whatever its name holds
+            if rule["role"] == "ev_charging_sensor" and says_a_link(entry):
+                continue
             names = rule.get("names")
             if names and not any(_name_hit(name, n) for n in names):
                 continue
@@ -4544,7 +4600,8 @@ def _discover_goecharger_mqtt(entities) -> Dict[str, str]:
         dc = entry.original_device_class
         if eid.startswith("binary_sensor.") and dc == "plug":
             result["ev_connected_sensor"] = eid
-        if eid.startswith("binary_sensor.") and "car" in name:
+        if (eid.startswith("binary_sensor.") and "car" in name
+                and not says_a_link(entry)):  # (#1142)
             result.setdefault("ev_charging_sensor", eid)
         if eid.startswith("sensor.") and dc == "power":
             result["ev_charging_power_sensor"] = eid
@@ -4575,7 +4632,8 @@ def _discover_openwb(entities) -> Dict[str, str]:
         dc = entry.original_device_class
         if eid.startswith("binary_sensor.") and ("plug" in name or "connect" in name):
             result["ev_connected_sensor"] = eid
-        if eid.startswith("binary_sensor.") and "charg" in name:
+        if (eid.startswith("binary_sensor.") and "charg" in name
+                and not says_a_link(entry)):  # (#1142) "Charger" online
             result["ev_charging_sensor"] = eid
         if eid.startswith("sensor.") and dc == "power" and "charg" in name:
             result["ev_charging_power_sensor"] = eid
@@ -4725,7 +4783,8 @@ def _discover_v2c(entities) -> Dict[str, str]:
         dc = entry.original_device_class
         if eid.startswith("binary_sensor.") and "connect" in name:
             result["ev_connected_sensor"] = eid
-        if eid.startswith("binary_sensor.") and "charg" in name:
+        if (eid.startswith("binary_sensor.") and "charg" in name
+                and not says_a_link(entry)):  # (#1142) "Charger" online
             result["ev_charging_sensor"] = eid
         if eid.startswith("sensor.") and dc == "power":
             result["ev_charging_power_sensor"] = eid

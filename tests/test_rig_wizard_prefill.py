@@ -67,11 +67,18 @@ EXPECTED = {
             "sensor.test_zappi_1_myenergi_test_zappi_1_power_ct_internal_load",
         "ev_charge_mode_entity": "select.test_zappi_1_myenergi_test_zappi_1_charge_mode",
     },
+    # (#1142) the brand rule maps the Go by its "Charger mode" sensor, so
+    # the control is the charger's own max current, never the site limit
     "zaptec": {
+        "ev_connected_sensor": "sensor.zaptec_go2_zap012345_charger_operation_mode",
+        "ev_charging_sensor": "sensor.zaptec_go2_zap012345_charger_operation_mode",
         "ev_charging_power_sensor": "sensor.zaptec_go2_zap012345_total_charge_power",
-        "ev_current_control_entity": "number.abbastova_available_current",
+        "ev_current_control_entity": "number.zaptec_go2_zap012345_charger_max_current",
+        "ev_start_stop_entity": "button.zaptec_go2_zap012345_resume_charging",
         "ev_session_energy_sensor":
-            "sensor.zaptec_go2_zap012345_completed_session_energy",
+            "sensor.zaptec_go2_zap012345_total_charge_power_session",
+        "ev_total_energy_sensor":
+            "sensor.zaptec_go2_zap012345_signed_meter_value_kwh",
     },
     "goecharger": {
         "ev_connected_sensor": "sensor.goecharger_wallbox_go_e_car_status",
