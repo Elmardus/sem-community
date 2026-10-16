@@ -71,7 +71,8 @@ ROLE_KEYS = frozenset(CHARGER_ENTITY_KEYS | {
 })
 
 DeviceOf = Callable[[str], Optional[str]]
-#: (#1144) a charger dict → the keys SEM must never drive
+#: (#1144) a charger dict → the keys SEM must never drive, or (#1143) read
+#: as the charge
 Refuse = Callable[[Dict[str, Any]], Iterable[str]]
 #: (#1144) the roles a charger's current is written through
 CURRENT_CONTROL_ROLES = frozenset({
@@ -79,6 +80,8 @@ CURRENT_CONTROL_ROLES = frozenset({
     "ev_service_param_name", "ev_charger_service_data",
     "ev_charger_service_entity_id",
 })
+#: (#1143) the roles a charger's car is read through
+STATE_ROLES = frozenset({"ev_connected_sensor", "ev_charging_sensor"})
 
 
 # ── pure ──────────────────────────────────────────────────────────────────
@@ -372,7 +375,17 @@ def drop_refused(refs: List[dict], live_by_device: Dict[str, Dict[str, Any]],
     longer ``cleared``, so what the crawler finds today shows through: a
     complete card cleared them only because it had that control. The ref is
     then complete only if what it resolves to is, so a new card for the same
-    box can replace it (#1054)."""
+    box can replace it (#1054).
+
+    (#1143) A link sensor read as the charge goes the same way: a Zaptec's
+    "Charger" is on while the box is online (#1142), and the setup wizard
+    prefilled it, so a save the user confirmed holds it as their own. A card
+    with a plug sensor (the wizard asks for both) then reads the charge the
+    crawler finds today. A card with none is setup's own save: the charge
+    role is ``cleared``, so the card has neither sensor and the startup heal
+    (``_fill_state_sensors_of_own_save``) decides, with its control check
+    (#1134). The next start folds what it gave. The current roles are
+    un-cleared only when a current control goes."""
     out: List[dict] = []
     for r in refs:
         dev = r.get("device_id")
@@ -391,16 +404,36 @@ def drop_refused(refs: List[dict], live_by_device: Dict[str, Dict[str, Any]],
         if not gone:
             out.append(r)
             continue
-        _LOGGER.warning(
-            "Charger %s: %s write a whole site's current limit, not this "
-            "charger's; SEM no longer writes it (#804, #1144).", r["id"], gone)
-        if bad:
-            new["cleared"] = [k for k in r.get("cleared") or ()
+        _log_refused(f"Charger {r['id']}", gone)
+        if bad & CURRENT_CONTROL_ROLES:
+            new["cleared"] = [k for k in new.get("cleared") or ()
                               if k not in CURRENT_CONTROL_ROLES]
+        if bad & STATE_ROLES and not resolve(new, live).get(
+                "ev_connected_sensor"):
+            # (#1143) no plug sensor: setup's own save (#1142). Nothing takes
+            # the link's place here; the startup heal gives the save both
+            # sensors only when its controls match detection (#1134).
+            new["cleared"] = sorted({*(new.get("cleared") or ()),
+                                     *(bad & STATE_ROLES)})
         if r.get("stored_complete", True):
             new["stored_complete"] = charger_is_complete(resolve(new, live))
         out.append(new)
     return out
+
+
+def _log_refused(where: str, gone: Dict[str, Any]) -> None:
+    """Say what a start took out of a save, and why. Only the link rule
+    (#1143) refuses a state role; every other refused key is a site limit."""
+    link = {k: v for k, v in gone.items() if k in STATE_ROLES}
+    site = {k: v for k, v in gone.items() if k not in STATE_ROLES}
+    if site:
+        _LOGGER.warning(
+            "%s: %s write a whole site's current limit, not this charger's; "
+            "SEM no longer writes it (#804, #1144).", where, site)
+    if link:
+        _LOGGER.warning(
+            "%s: %s says the charger is online, not that a car charges; SEM "
+            "no longer reads it as charging (#1142, #1143).", where, link)
 
 
 def _without(d: Dict[str, Any], keys: set) -> Dict[str, Any]:
@@ -417,8 +450,9 @@ def reconcile(*, data_list: Optional[list], legacy: Optional[list],
     """The whole setup step, pure. Returns ``(refs, resolved)`` or None when
     there is nothing to manage (no charger list was ever stored).
 
-    (#1144) ``refuse`` names the keys of a charger SEM must never drive;
-    they leave the crawler's answer and every ref before anything resolves."""
+    (#1144) ``refuse`` names the keys of a charger SEM must never drive —
+    or (#1143) read as the charge; they leave the crawler's answer and every
+    ref before anything resolves."""
     if refuse is not None:
         live_by_device = {dev: _without(roles, set(refuse(roles)))
                           for dev, roles in live_by_device.items()}
@@ -513,21 +547,21 @@ def async_reconcile(hass, entry) -> Optional[List[dict]]:
         ent = ereg.async_get(eid)
         return getattr(ent, "device_id", None) if ent else None
 
-    from .hardware_detection import site_limit_controls
+    from .hardware_detection import link_as_charging, site_limit_controls
 
     def _refuse(card: Dict[str, Any]) -> Tuple[str, ...]:
-        return site_limit_controls(card, ereg.async_get)
+        return (site_limit_controls(card, ereg.async_get)
+                + link_as_charging(card, ereg.async_get))
 
     # (#1144) the primary charger's old flat keys are read when its card
     # has none: a site limit there would come back the moment the card's
-    # is gone
+    # is gone. (#1143) The setup wizard saved them too, the online sensor
+    # as the charge among them, and the reader reads the flat one.
     flat = {}
     for name, store in (("data", data), ("options", options)):
         flat[name] = {k: store.pop(k) for k in _refuse(store)}
         if flat[name]:
-            _LOGGER.warning(
-                "%s write a whole site's current limit, not a charger's; "
-                "SEM no longer writes it (#804, #1144).", flat[name])
+            _log_refused(f"Saved setting ({name})", flat[name])
 
     out = reconcile(
         data_list=data.get(LEGACY_KEY), legacy=options.get(LEGACY_KEY),
