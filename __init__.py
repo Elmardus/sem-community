@@ -2232,9 +2232,10 @@ def _fill_state_sensors_of_own_save(hass, chargers):
 
     Only SEM's own save — the id setup gives that box, from a brand path
     (setup never saves a charger only the roles found, #1032) — with
-    NEITHER sensor is touched, and only when its power reading and its
-    controls are what detection finds today. Then only those two empty
-    keys are filled. The forms require both sensors, so a charger the user
+    NEITHER sensor is touched. Its power reading and controls that differ
+    from what detection finds today are replaced (#1134) — never dropped:
+    when either side is empty for a key, the save is left. Then the two
+    empty sensor keys are filled. The forms require both sensors, so a charger the user
     set up is never a suspect. Returns a new list if anything changed,
     else ``None``."""
     from .hardware_detection import discover_all_ev_chargers_from_registry
@@ -2251,17 +2252,26 @@ def _fill_state_sensors_of_own_save(hass, chargers):
     filled = []
     for c in chargers:
         d = found.get(c.get("id")) if any(c is s for s in suspects) else None
-        if d and any((c.get(k) or None) != (d.get(k) or None)
-                     for k in _STATE_HEAL_MUST_MATCH):
-            _LOGGER.warning(
-                "Saved EV charger %s has no plug or charging sensor, and its "
-                "power or control is not what detection finds now; left as "
-                "it is. Set the charger up again to fix it (#1126).",
-                c.get("id"))
-            d = None
+        swap = {}
+        if d:
+            differ = [k for k in _STATE_HEAL_MUST_MATCH
+                      if (c.get(k) or None) != (d.get(k) or None)]
+            if any(not d.get(k) or not c.get(k) for k in differ):
+                _LOGGER.warning(
+                    "Saved EV charger %s has no plug or charging sensor, and "
+                    "a control it cannot match to detection; left as it is. Set "
+                    "the charger up again to fix it (#1126).", c.get("id"))
+                d = None
+            else:
+                swap = {k: d[k] for k in differ}
         add = {k: d[k] for k in keys if d and d.get(k)}
-        if add:
-            c = {**c, **add}
+        if add or swap:
+            if swap:
+                _LOGGER.warning(
+                    "Saved EV charger %s: replaced %s with what detection "
+                    "finds now (#1134).", c.get("id"),
+                    {k: c.get(k) for k in swap})
+            c = {**c, **swap, **add}
             filled.append(str(c.get("id")))
         healed.append(c)
     if not filled:
