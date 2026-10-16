@@ -2967,7 +2967,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             # charging?" signal (cloud power lags ~90 s) and to detect
             # app-lock (Eco-Smart / Scheduled / Power-Sharing) so SEM can
             # surface "can't stop" instead of silently failing OFF mode.
-            ev_device.charging_status_entity = str(_cfg("ev_charging_sensor", "") or "")
+            # (#1143) Only THIS card's on a second charger: the flat key is
+            # the primary's, and a card with none (a link sensor taken out)
+            # would read the first charger's car.
+            ev_device.charging_status_entity = str(_own("ev_charging_sensor", "") or "")
             # Per-integration charger profile (#82)
             if _cfg("ev_service_param_name"):
                 ev_device.service_param_name = _cfg("ev_service_param_name")

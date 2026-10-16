@@ -322,3 +322,31 @@ def test_what_is_a_link_as_the_charge():
     # without the registry, nothing is said
     assert hd.link_as_charging({"ev_charging_sensor": LINK}) == ()
     assert hd.link_as_charging(None) == ()
+
+
+# ── a second charger reads its own car ───────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_a_second_charger_without_a_state_sensor_reads_none(
+        sem_real_hass, sem_multi_wallbox_config_entry):
+    """With its link sensor taken out (and "Charger mode" off) a card has no
+    charging sensor. The builder fell back to the flat key — the primary's —
+    so the second charger read the first charger's car."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from .test_services_real import _seed_sem_input_sensors, _setup_sem
+    hass = sem_real_hass
+    _seed_sem_input_sensors(hass)
+    base = sem_multi_wallbox_config_entry
+    data = json.loads(json.dumps(dict(base.data)))
+    data["ev_chargers"][1].pop("ev_charging_sensor")
+    entry = MockConfigEntry(domain=base.domain, version=base.version,
+                            minor_version=base.minor_version, data=data,
+                            options=dict(base.options))
+    await _setup_sem(hass, entry)
+    try:
+        devs = entry.runtime_data._ev_devices
+        assert devs["ev_charger"].charging_status_entity == (
+            "sensor.test_wb_left_status")
+        assert devs["ev_charger_1"].charging_status_entity == ""
+    finally:
+        await _unload(hass, entry)
