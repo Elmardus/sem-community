@@ -567,3 +567,21 @@ def test_an_entity_service_is_judged_by_its_target_not_a_field_name():
         "ev_charger_service": "number.set_value",
         "ev_charger_service_entity_id": OWN_CURRENT,
         "ev_service_param_name": "available_current"}) == ()
+
+
+def test_a_clear_stays_when_the_cards_own_control_is_fine():
+    """A card that starts and stops only, with the current role cleared: a
+    stale site limit leaves ``found`` and the clear stays, so a number the
+    crawler offers later is not let in by the drop."""
+    ref = {"id": "z", "device_id": "go", "overrides": {},
+           "cleared": ["ev_current_control_entity"],
+           "found": {"ev_charging_power_sensor": POWER,
+                     "ev_current_control_entity": SITE_LIMIT},
+           "settings": {"ev_start_service": "button.press"}}
+    (out,) = cr.drop_refused(
+        [ref], {"go": {"ev_charging_power_sensor": POWER}}, _id_only)
+    assert out["found"] == {"ev_charging_power_sensor": POWER}
+    assert out["cleared"] == ["ev_current_control_entity"]
+    later = {"ev_charging_power_sensor": POWER,
+             "ev_current_control_entity": OWN_CURRENT}
+    assert "ev_current_control_entity" not in cr.resolve(out, later)
