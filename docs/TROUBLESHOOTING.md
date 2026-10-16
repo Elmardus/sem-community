@@ -570,6 +570,12 @@ SEM never writes your Zaptec installation's "Available current". It limits every
 
 ---
 
+## Zaptec: SEM shows the car charging all day
+
+SEM reads whether your car charges from the "Charger mode" sensor. The "Charger" sensor only says the box is online, so SEM no longer reads it as charging. A setup that saved it is fixed when SEM starts.
+
+---
+
 ## Hot water not heating
 
 **Cause:** SEM only heats hot water when solar surplus is available (normal mode) or when a Legionella disinfection cycle is due (forced mode). If neither condition is met, the heater stays idle.
