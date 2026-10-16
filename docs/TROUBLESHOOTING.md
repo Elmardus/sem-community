@@ -842,7 +842,8 @@ SEM reads a sensor you named during setup and Home Assistant reports it
 that needs this value is degraded. **Fix:** check the integration that
 provides the sensor (Settings → Devices & Services) — restart it if it shows
 an error; if you renamed or removed the entity, point SEM at the replacement
-in the Configuration tab. The notice clears itself when the sensor returns.
+in the Configuration tab. The notice clears itself when the sensor returns —
+or, once you point SEM at another sensor, about five minutes after you save.
 
 ## A sensor stopped updating (stale)
 

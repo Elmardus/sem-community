@@ -84,6 +84,11 @@ DECLARED: dict[str, str] = {
         "the mode watch's first expected reading is a clear edge "
         "(BatteryModeWatch._settled, #933); a restart drops the "
         "non-persistent Repair, an options reload does not",
+    "coordinator/coordinator.py::SEMCoordinator._sweep_orphan_repairs":
+        "the memo is the sweep's clock, never a 'raised' flag: it starts at "
+        "None, so a fresh coordinator sweeps once its first window is up "
+        "(#1140); the sweep IS the answer for a Repair whose owner is gone, "
+        "and an owner still here clears its own on its first verdict (#933)",
     "coordinator/coordinator.py::SEMCoordinator._update_analytics_phases":
         "the relay and hot-water Repairs raise or clear on the current state "
         "every cycle; the memo only gates the once-per-lifetime orphan sweep",

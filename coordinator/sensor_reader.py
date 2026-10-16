@@ -587,6 +587,12 @@ class SensorReader:
         # ten minutes.
         self._stale_first_report: dict[str, Any] = {}
         self._stale_reconciled: set[str] = set()
+        # (#1140) Every entity ``_read_sensor`` was asked for, and the
+        # ``read_power`` cycles that covers, since the coordinator last asked
+        # (``entities_read``). Only those can own a sensor Repair: one filed
+        # for anything else has nobody left to clear it.
+        self._entities_read: set[str] = set()
+        self._read_cycles = 0
         self._FAST_POWER_NAMES = frozenset(
             {"solar", "grid", "grid_import", "grid_export", "battery"}
         )
@@ -842,6 +848,16 @@ class SensorReader:
         custom = getattr(self, "_pv_string_names", {}).get(slot)
         return custom or f"PV{slot.replace('pv', '')}"
 
+    def entities_read(self) -> "tuple[frozenset, int]":
+        """(#1140) The entities ``_read_sensor`` was asked for since the last
+        call, and how many ``read_power`` cycles that covers. Both start
+        again, so each call answers for its own window."""
+        ids = frozenset(getattr(self, "_entities_read", None) or ())
+        cycles = int(getattr(self, "_read_cycles", 0) or 0)
+        self._entities_read = set()
+        self._read_cycles = 0
+        return ids, cycles
+
     def set_energy_dashboard_config(self, ed_config) -> None:
         """Set energy dashboard configuration for alternative sensor reading."""
         self._energy_dashboard_config = ed_config
@@ -881,6 +897,7 @@ class SensorReader:
         if self._sign_vote_warmup > 0:
             self._sign_vote_warmup -= 1
 
+        self._read_cycles = getattr(self, "_read_cycles", 0) + 1   # (#1140)
         # Try Energy Dashboard config first, then legacy config
         self._split_pair_seen = set()
         self._battery_power_missing = False   # (#758) per-cycle
@@ -4094,10 +4111,15 @@ class SensorReader:
         """(#911) Clear the ``sensor_stale`` Repair of any pick that is
         being dropped. The freshness check only runs for entities SEM still
         reads, so a Repair filed against a dropped pick used to live in the
-        issue registry forever."""
+        issue registry forever. (#1140) The ``sensor_unavailable`` one too:
+        a pick is dropped exactly when it went unavailable, so that is the
+        Repair it most likely carries."""
         for old in (disc.get("import"), disc.get("export")):
             if old and old not in keep:
                 _ri.clear_sensor_stale(self.hass, old)
+                _ri.clear_sensor_unavailable(self.hass, old)
+                self._sensor_repair_raised.discard(old)
+                self._sensor_unavailable_since.pop(old, None)
 
     def _get_device_for_entity(self, entity_id: str) -> Optional[str]:
         """Get device_id for an entity from the entity registry."""
@@ -4443,6 +4465,11 @@ class SensorReader:
         """
         if not entity_id:
             return None if allow_none else 0.0
+        # (#1140) this entity is read: its sensor Repairs have an owner
+        _read = getattr(self, "_entities_read", None)
+        if _read is None:
+            _read = self._entities_read = set()
+        _read.add(entity_id)
 
         state = self.hass.states.get(entity_id)
         if not state or state.state in ("unknown", "unavailable", None):

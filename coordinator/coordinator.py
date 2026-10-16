@@ -3575,6 +3575,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 if flipped:
                     power = self._sensor_reader.read_power()
 
+            # (#1140) …and this cycle's reads are in: a sensor, battery entity
+            # or device SEM no longer uses has nobody left to clear its Repair.
+            try:
+                self._sweep_orphan_repairs()
+            except Exception:  # noqa: BLE001 — a Repair never costs a cycle
+                _LOGGER.debug("orphan repair sweep failed", exc_info=True)
+
             # (#638) One plug answer for the whole cycle. Runs on the
             # cycle's own reading, before any consumer — the state machine,
             # decide(), the plan tick, session tracking, the entities.
@@ -6069,6 +6076,104 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         live = getattr(self, "_live_battery_ids", None)
         return [(bid, ad) for bid, ad in list(adapters.items())
                 if live is None or bid in live]
+
+    #: (#1140) The sweep repeats this often once the first one has run.
+    ORPHAN_REPAIR_PERIOD_S: float = 3600.0
+    #: (#1140) Fewer reads than this in a window say too little about what
+    #: SEM reads: the sensor Repairs are left alone that time.
+    ORPHAN_REPAIR_MIN_READS: int = 3
+    #: (#1140) The config keys that name a battery entity a battery Repair
+    #: can be filed under — written (#915, #840), or watched (#845, #827).
+    _BATTERY_REPAIR_ENTITY_KEYS = (
+        "battery_force_discharge_control_entity",
+        "battery_force_discharge_entities",
+        "battery_discharge_control_entity",
+        "battery_discharge_control_entities",
+        "battery_strategy_control_entity",
+        "battery_strategy_entities",
+        "battery_operating_mode_entity",
+        "deye_system_work_mode_entity",
+    )
+
+    def _sweep_orphan_repairs(self) -> None:
+        """(#1140) Clear the Repairs of a sensor, battery entity or device SEM
+        no longer uses.
+
+        Each of them is cleared only by the check that raised it, and that
+        check runs only for what SEM still reads, writes or drives. Change the
+        grid sensor, and the old one's "unavailable" Repair stayed for good.
+
+        The first sweep waits until HA runs, the Energy Dashboard sensors are
+        found, and ``UNAVAILABLE_REPAIR_THRESHOLD_S`` has passed — the wait a
+        late entity gets everywhere else — so every read has been asked once.
+        Then it repeats every ``ORPHAN_REPAIR_PERIOD_S``, for an owner that
+        leaves while SEM runs (a load gone from the Energy Dashboard). A
+        Repair wrongly cleared costs little: its check files it again if the
+        fault is still there."""
+        import time as _time
+        from homeassistant.core import CoreState
+        from . import repair_issues as _ri
+        if (getattr(self.hass, "state", None) is not CoreState.running
+                or getattr(self, "_ed_resolve_pending", False)):
+            self._orphan_sweep_at = None        # not ready: wait again
+            return
+        now = _time.monotonic()
+        due = getattr(self, "_orphan_sweep_at", None)
+        if due is None:
+            self._orphan_sweep_at = now + _ri.UNAVAILABLE_REPAIR_THRESHOLD_S
+            return
+        if now < due:
+            return
+        self._orphan_sweep_at = now + self.ORPHAN_REPAIR_PERIOD_S
+        read, cycles = self._sensor_reader.entities_read()
+        _ri.clear_orphan_repairs(
+            self.hass,
+            read_entities=read if cycles >= self.ORPHAN_REPAIR_MIN_READS else None,
+            battery_entities=self._battery_repair_entities(),
+            device_ids=self._driven_device_ids(),
+        )
+
+    def _battery_repair_entities(self) -> set:
+        """(#1140) Every entity a battery Repair may name: the ones the
+        config names, and the ones the built adapters hold."""
+        found = set()
+        for key in self._BATTERY_REPAIR_ENTITY_KEYS:
+            val = self.config.get(key)
+            for v in (val if isinstance(val, (list, tuple)) else [val]):
+                if isinstance(v, str) and v:
+                    found.add(v)
+        for ad in list((getattr(self, "_battery_adapters", None) or {}).values()):
+            for attr in ("_force_discharge_entity", "_discharge_control_entity",
+                         "_strategy_entity", "_system_work_mode_entity"):
+                v = getattr(ad, attr, None)
+                if isinstance(v, str) and v:
+                    found.add(v)
+        return found
+
+    def _driven_device_ids(self) -> set:
+        """(#1140) Every id a ``charger_actuation_failed`` Repair may name:
+        the devices registered for control now (chargers, and loads driven by
+        current under their own id), every saved charger (a parked one comes
+        back without a reload), and the primary charger the start-up retry
+        may still find (#1139's rule)."""
+        from ..charger_refs import REFS_KEY
+        ids = set()
+        sc = getattr(self, "_surplus_controller", None)
+        evs = getattr(self, "_ev_devices", None) or {}
+        for reg in (getattr(sc, "_devices", None) or {}, evs):
+            for did, dev in list(reg.items()):
+                ids.add(str(did))
+                ids.add(str(getattr(dev, "device_id", did)))
+        ev = getattr(self, "_ev_device", None)
+        if ev is not None and getattr(ev, "device_id", None):
+            ids.add(str(ev.device_id))
+        for c in self.config.get("ev_chargers") or []:
+            if isinstance(c, dict) and c.get("id"):
+                ids.add(str(c["id"]))
+        entry = getattr(self, "config_entry", None)
+        if not evs and REFS_KEY not in (getattr(entry, "options", None) or {}):
+            ids.add("ev_charger")
+        return ids
 
     def _raise_or_clear_battery_write_repair(self, adapter, verdict) -> None:
         """(#915) Turn the adapter's read-back verdict into a Repair, once,

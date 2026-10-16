@@ -89,7 +89,8 @@ NOT_SWEPT = {
     "raise_charger_actuation_failed": (
         "shared — devices/base.py raises it for every CurrentControlDevice, "
         "and features/device_registry.py builds those for loads too, under "
-        "the load's id; the sweep knows no load ids (#1140)"),
+        "the load's id; the sweep knows no load ids. The cycle's orphan "
+        "sweep clears it once the loads are built (#1140)"),
 }
 
 
