@@ -2484,6 +2484,32 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             self.config_entry,
             data={**(self.config_entry.data or {}), "ev_chargers": pruned})
 
+    def _without_flat_wiring_of_removed_first(self, new_options: dict) -> dict:
+        """(#1154) A first charger removed in this dialog takes its flat keys
+        along. The setup wizard copied its wiring there and the builder lets
+        the first charger fill a gap from them, so the next charger — first
+        now — read the removed box's power and set its current. Cleared in
+        ``entry.data`` too: the options merge would show its copy."""
+        if getattr(self, "hass", None) is None:
+            return new_options
+        saved = {**(self.config_entry.data or {}), **(self.config_entry.options or {})}
+        from .charger_refs import first_card
+        was = first_card(saved.get("ev_chargers"))
+        now = first_card(new_options.get("ev_chargers"))
+        if was is None or (now is not None and now.get("id") == was.get("id")):
+            return new_options
+        from . import _drop_flat_wiring_of_a_removed_first
+        flat = _drop_flat_wiring_of_a_removed_first(
+            self.hass, self.config_entry, new_options.get("ev_chargers"),
+            options=new_options,
+            why=f"Removed charger '{was.get('id')}'")
+        if flat is None:
+            return new_options
+        if flat["data"] != dict(self.config_entry.data or {}):
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=flat["data"])
+        return flat["options"]
+
     async def async_step_ev_charger_remove(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -4307,7 +4333,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # restores it from there on the next reload.
                 self._prune_removed_chargers_from_data()
                 return self.async_create_entry(
-                    data={**carried, **unshown, **self._data})
+                    data=self._without_flat_wiring_of_removed_first(
+                        {**carried, **unshown, **self._data}))
 
         current_config = {**self.config_entry.data, **self.config_entry.options}
         _c = lambda key, fb: self._cfg(current_config, key, fb)

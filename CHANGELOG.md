@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **A second charger no longer uses the first charger's current control or power sensor** (#1149). SEM set the first charger's current for the second.
 - 🐛 **A start/stop-only charger no longer logs an error at every start** (#1148). Load management no longer keeps its old current control.
 - 🐛 **A charger's daily energy now resets at midnight, like the fleet total** (#1146). It reset at Charge-by time and then read 0.
+- 🐛 **Removing the first charger no longer leaves its sensor and controls to the next one** (#1154). The next charger set the removed one's current.
 
 # [2.2.0-beta.20] — 16.10.2026
 
