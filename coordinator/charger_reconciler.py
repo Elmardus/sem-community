@@ -1362,7 +1362,12 @@ def observe(adapter, power) -> ObservedState:
         setpoint_a=setpoint,
         self_charging=adapter.is_self_charging(power),
         power_w=float(getattr(power, "power_w", 0.0) or 0.0),
-        connected=bool(getattr(power, "connected", True)),
+        # (#1153) A car that is not KNOWN to be gone is "a charger that
+        # cannot say" — the default above. A charger with no plug sensor
+        # reads not-connected whenever it stops drawing; parking it off on
+        # that left it off for good.
+        connected=(bool(getattr(power, "connected", True))
+                   or not bool(getattr(power, "plug_known", True))),
         enabled=enabled,
         enable_controllable=controllable,
         stop_controllable=stop_ok,

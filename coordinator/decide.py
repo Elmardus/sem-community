@@ -665,7 +665,11 @@ class AlwaysMaxMode(ModeStrategy):
     """Charge at hardware max. Grid backfill expected."""
 
     def decide(self, view: ChargerView) -> ChargerDecision:
-        if not view.power.connected:
+        # (#1153) Every mode idles on a car that is ABSENT, not on one that
+        # is merely not known: a charger with no plug sensor shows a car
+        # only while it draws, so "disconnected" there would never start it
+        # again. The offers it gets are bounded by ChargeStability.
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=view.power.charger_id,
                 mode="always_max",
@@ -704,7 +708,7 @@ class SolarOnlyMode(ModeStrategy):
         f = view.fleet
         cid = view.power.charger_id
 
-        if not view.power.connected:
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=cid, mode="solar_only",
                 intent=ChargerIntent.IDLE,
@@ -956,7 +960,7 @@ class MinPlusSolarMode(ModeStrategy):
         f = view.fleet
         cid = view.power.charger_id
 
-        if not view.power.connected:
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=cid, mode="min_plus_solar",
                 intent=ChargerIntent.IDLE,
@@ -985,7 +989,7 @@ class MinPlusSolarMode(ModeStrategy):
         drift class is exactly two copies of this arithmetic."""
         f = view.fleet
         cid = view.power.charger_id
-        if not view.power.connected:
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=cid, mode=mode_name,
                 intent=ChargerIntent.IDLE,
@@ -1150,7 +1154,7 @@ class SolarPlusBatteryMode(ModeStrategy):
         f = view.fleet
         cid = view.power.charger_id
 
-        if not view.power.connected:
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=cid, mode="solar_plus_battery",
                 intent=ChargerIntent.IDLE,
@@ -1189,7 +1193,7 @@ class SolarPlusCheapMode(ModeStrategy):
         f = view.fleet
         cid = view.power.charger_id
 
-        if not view.power.connected:
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=cid, mode="solar_plus_cheap",
                 intent=ChargerIntent.IDLE,
@@ -1404,7 +1408,7 @@ def decide(view: ChargerView) -> ChargerDecision:
     if view.mode == "off":
         return _OFF.decide(view)
 
-    if view.soc_ceiling_reached and view.power.connected:
+    if view.soc_ceiling_reached and not view.power.car_absent:
         # Max SOC/target is a STRUCTURAL stop — never bridge it.
         return ChargerDecision(
             charger_id=view.power.charger_id, mode=view.mode,

@@ -66,14 +66,26 @@ def plan_connectivity(cid, charger_cfg, full_config, power):
     pc_map = getattr(power, "ev_connected_per_charger", None) or {}
     if cid in pc_map:
         return bool(pc_map[cid])
-    has_sensor = bool(
+    if has_plug_sensor(charger_cfg, full_config):
+        return bool(getattr(power, "ev_connected", False))
+    return None
+
+
+def has_plug_sensor(charger_cfg, full_config) -> bool:
+    """Can SEM ask this charger whether a car is plugged in? (#1153)
+
+    This charger's nested ``ev_connected_sensor``, or the legacy flat
+    keys. Without one the car shows only through the charger's draw
+    (the physics defence, #285+1), so "not connected" is no answer:
+    ``plan_connectivity`` reads it as ``None`` and ``build_charger_view``
+    as ``plug_known=False``. One test for both, so the plan and the
+    control loop cannot disagree about which chargers can say.
+    """
+    return bool(
         (charger_cfg or {}).get("ev_connected_sensor")
         or (full_config or {}).get("ev_connected_sensor")
         or (full_config or {}).get("ev_plug_sensor")
     )
-    if has_sensor:
-        return bool(getattr(power, "ev_connected", False))
-    return None
 
 
 def plan_car_fullness(detector, drawing_w=None, handshake_w=500.0):

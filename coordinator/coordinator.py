@@ -3792,7 +3792,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     if cid in pc_chg_map:
                         power.ev_charging = bool(pc_chg_map[cid])
                     was_connected_this_cid = self._last_ev_connected
-                    self._update_session_tracking(power, charger_flows)
+                    # (#1153) a sensor-less charger's "no car" is no unplug
+                    from .ev_availability import has_plug_sensor
+                    self._update_session_tracking(
+                        power, charger_flows,
+                        plug_known=(bool(power.ev_connected)
+                                    or has_plug_sensor(charger_cfg, self.config)),
+                    )
                     self._reset_per_charger_estimate_state(cid, was_connected_this_cid)
                     # Save back per-charger state
                     self._session_data_per_charger[cid] = self._session_data

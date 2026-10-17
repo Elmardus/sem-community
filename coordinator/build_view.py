@@ -19,6 +19,7 @@ from .charger_types import (
     FleetContext,
     FleetCycleState,
 )
+from .ev_availability import has_plug_sensor
 from .plan_verdict import NO_OPINION, PlanVerdict
 
 if TYPE_CHECKING:  # pragma: no cover — type-only
@@ -165,11 +166,18 @@ def build_charger_view(
     else:
         charging = bool(getattr(power_reading, "ev_charging", False))
 
+    # (#1153) A charger with no plug sensor shows a car only while it
+    # draws (the physics defence); once the draw stops its "not
+    # connected" is no answer. Unknown is not gone: decide, the
+    # stability layer and the reconciler read ``car_absent``.
+    plug_known = connected or has_plug_sensor(charger_cfg, config)
+
     cp = ChargerPower(
         charger_id=charger_id,
         power_w=this_charger_w,
         connected=connected,
         charging=charging,
+        plug_known=plug_known,
     )
 
     ce = ChargerEnergy(charger_id=charger_id, day_kwh=daily_ev_kwh)
