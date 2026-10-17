@@ -42,13 +42,45 @@ export function isOutdoorTemperatureCandidate(stateObj) {
     return a.device_class === 'temperature' || unit === '°c' || unit === '°f';
 }
 
-/** The label of a near-miss row: a complete offer is a charger SEM found
- *  and can add, not "no role matched". */
-export function detectRowLabelKey(miss) {
+/** (#1137) A charger whose roles matched — power, plug, charging — but that
+ *  has no control SEM can drive (a Tesla Wall Connector with no car
+ *  integration). It is not "no role matched" and not a report: SEM found
+ *  it and can only read it. */
+export function isWatchOnlyCharger(miss) {
+    const offer = miss && miss.suggested_charger;
+    if (offer && offer.id) return false;
+    const missing = (miss && miss.missing) || [];
+    const roles = (miss && miss.charger_roles) || [];
+    return missing.length === 1 && missing[0] === 'control' && roles.length > 0;
+}
+
+/** What a near-miss row offers: ``add`` a complete charger, ``watch`` one
+ *  that has nothing SEM can drive, or ``report`` a device where no role
+ *  matched. */
+export function nearMissAction(miss) {
     const offer = miss && miss.suggested_charger;
     const missing = (miss && miss.missing) || [];
-    return (offer && offer.id && missing.length === 0)
-        ? 'config_detect_offer' : 'config_detect_near_miss';
+    if (offer && offer.id && missing.length === 0) return 'add';
+    return isWatchOnlyCharger(miss) ? 'watch' : 'report';
+}
+
+/** The label of a near-miss row: a complete offer is a charger SEM found
+ *  and can add, not "no role matched"; (#1137) a charger with no control
+ *  says what was found. */
+export function detectRowLabelKey(miss) {
+    return {
+        add: 'config_detect_offer',
+        watch: 'config_detect_watch_only',
+        report: 'config_detect_near_miss',
+    }[nearMissAction(miss)];
+}
+
+/** (#1137) The help line under a watch-only row: two cars with their own
+ *  charge control are a choice SEM does not make; otherwise one car
+ *  integration would let SEM drive the charger through the car. */
+export function watchOnlyHelpKey(miss) {
+    return ((miss && miss.choose_vehicle) || []).length
+        ? 'config_detect_choose_vehicle_help' : 'config_detect_watch_only_help';
 }
 
 /** What a click on "create this charger entry" does. A charger whose id
