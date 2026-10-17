@@ -116,6 +116,10 @@ looks for these roles:
   and charge switch (Tesla Fleet, Teslemetry, Tessie).
 - **A charger that only reports** — driven through the one car that has
   those controls (a Tesla Wall Connector with one Tesla).
+  With no such car, the report shows it as a charger found with no control
+  SEM can drive: SEM can read it but not start, stop or set its current.
+  With two such cars SEM does not guess; you add it by hand with that car's
+  controls.
 - **A companion device** — an installation or site device next to a
   charger belongs to it and is not reported as unknown hardware.
 

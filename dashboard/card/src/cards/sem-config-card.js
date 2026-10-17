@@ -21,7 +21,7 @@
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semTheme, semDefineCard, semCardSurfaceCSS } from '../base/sem-shared.js';
 import { priceLevelKey } from '../util/price-level.js';
-import { chargerAddPlan, detectRowLabelKey, isCo2IntensityEntity, isOutdoorTemperatureCandidate, isPowerEntity } from '../util/detect-rows.js';
+import { chargerAddPlan, detectRowLabelKey, isCo2IntensityEntity, isOutdoorTemperatureCandidate, isPowerEntity, nearMissAction, watchOnlyHelpKey } from '../util/detect-rows.js';
 import { roleSource, showsRoleLegend } from '../util/role-source.js';
 
 // Section index — order = visual order in the rendered tab. Each entry
@@ -1298,7 +1298,7 @@ class SEMConfigCard extends SEMLitBase {
             ${misses.map((m) => html`
                 <div class="row" style="color:${T.warn || '#ffb74d'}">
                     <span class="lbl">⚠ ${m.roster?.name || m.platform}</span>
-                    <span>${this._t(detectRowLabelKey(m))}</span>
+                    <span>${fill(detectRowLabelKey(m), { roles: (m.charger_roles || []).join(', ') })}</span>
                 </div>
                 <div class="setting-help-text" style="margin:-2px 0 8px">
                     ${(m.entities || []).map((e) => e.entity).join(', ')}
@@ -1312,6 +1312,9 @@ class SEMConfigCard extends SEMLitBase {
                                 ${this._t('config_near_miss_add')}
                             </button>
                         </span>
+                    </div>` : nearMissAction(m) === 'watch' ? html`
+                    <div class="setting-help-text" style="margin:-2px 0 8px">
+                        ${this._t(watchOnlyHelpKey(m))}
                     </div>` : html`
                     <div class="row" style="margin:-2px 0 8px">
                         <span class="lbl"></span>
@@ -1829,8 +1832,10 @@ class SEMConfigCard extends SEMLitBase {
     // (#915) When SEM has nothing to offer, make the ask one click instead of
     // a sentence. A prefilled issue carries the platform and the entity list,
     // which is exactly what a detection row needs and exactly what a user
-    // should not have to assemble by hand.
+    // should not have to assemble by hand. (#1137) Only for a device where
+    // no role matched: a charger SEM found but cannot drive is not a report.
     _reportNearMissUrl(m) {
+        if (nearMissAction(m) !== 'report') return '';
         const ents = (m.entities || []).map(e => `- \`${e.entity}\` (${e.domain}${e.device_class ? '/' + e.device_class : ''})`).join('\n');
         const name = m.roster?.name ? `${m.roster.name} (\`${m.platform}\`)` : `\`${m.platform}\``;
         const body = [
