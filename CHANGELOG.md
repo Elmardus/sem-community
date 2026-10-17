@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 # [Unreleased]
 
 - 🐛 **Zaptec set up in the wizard: "charger online" is no longer read as "car charging"** (#1143). SEM reads Charger mode instead.
+- 🐛 **A charger that read no car gets a plug sensor only when its controls match what detection finds** (#1151). Otherwise the startup check decides first.
 
 # [2.2.0-beta.20] — 16.10.2026
 
