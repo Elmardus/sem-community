@@ -2912,7 +2912,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
                          "ev_current_control_entity": ev_current_entity}
             _resolved.update({k: _cfg(k) for k in _OWN_CARD_CONTROL_KEYS})
             if not charger_is_complete(_resolved):
-                _LOGGER.debug("Charger %s missing power sensor or control method, skipping", charger_id)
+                # (#1149) Say so when the first charger's keys used to fill
+                # the gap: that card ran before, on the first charger's box.
+                if idx > 0 and charger_is_complete(
+                        {k: v or full_config.get(k) for k, v in _resolved.items()}):
+                    _LOGGER.warning(
+                        "Charger '%s' has no power sensor or control of its "
+                        "own, so SEM does not run it. It used to borrow the "
+                        "first charger's and drive that charger (#1149).",
+                        charger_id)
+                else:
+                    _LOGGER.debug("Charger %s missing power sensor or control method, skipping", charger_id)
                 continue
 
             # #462 follow-up (generalized in #485 K1): an entity-platform

@@ -62,6 +62,9 @@ GO = {"id": "ev_charger_1", "name": "Go",
       "ev_charging_power_sensor": GO_POWER,
       "ev_start_stop_entity": GO_SWITCH}
 
+#: What the setup log says when a card stops running on the first charger's.
+BORROWED = "used to borrow the first charger's"
+
 #: What the config card's "Add charger" saves (sem-config-card.js).
 NEW_FROM_CARD = {"id": "ev_charger_1", "name": "New charger 2",
                  "ev_min_current": 6, "ev_surplus_priority": 4}
@@ -87,7 +90,7 @@ def _entry(hass, second, first=None, **flat):
                         dict(second)],
     }
     return MockConfigEntry(domain=DOMAIN, version=12, minor_version=1,
-                           data=data, options={}, title="SEM #1149")
+                           data=data, options={}, title="SEM two chargers")
 
 
 async def _set_up(hass, entry):
@@ -178,14 +181,31 @@ async def test_driving_the_second_charger_sends_nothing_to_the_first(
 
 
 @pytest.mark.asyncio
-async def test_the_config_cards_new_charger_stays_inert(sem_real_hass):
+async def test_the_config_cards_new_charger_stays_inert(sem_real_hass, caplog):
     """It has no power sensor and no control of its own, so SEM does not
-    run it — before, it was built on the first charger's and wrote it."""
+    run it — before, it was built on the first charger's and wrote it. The
+    log says why it stopped running."""
     hass = sem_real_hass
     entry = _entry(hass, NEW_FROM_CARD)
     devs = await _set_up(hass, entry)
     try:
         assert set(devs) == {"ev_charger"}
+        said = [r for r in caplog.records if BORROWED in r.getMessage()]
+        assert [r.levelname for r in said] == ["WARNING"]
+        assert "ev_charger_1" in said[0].getMessage()
+    finally:
+        await _unload(hass, entry)
+
+
+@pytest.mark.asyncio
+async def test_a_card_that_never_ran_is_skipped_quietly(sem_real_hass, caplog):
+    """No flat keys to borrow: nothing changed for it, nothing to say."""
+    hass = sem_real_hass
+    entry = _entry(hass, NEW_FROM_CARD, **{k: None for k in PRIMARY})
+    devs = await _set_up(hass, entry)
+    try:
+        assert set(devs) == {"ev_charger"}
+        assert BORROWED not in caplog.text
     finally:
         await _unload(hass, entry)
 
@@ -284,6 +304,8 @@ def test_every_key_the_builder_reads_is_wiring_or_a_setting():
     assert keys - hd.CHARGER_WIRING_KEYS - SETTINGS == set()
     assert SETTINGS <= keys, SETTINGS - keys       # no stale setting
     assert not SETTINGS & hd.CHARGER_WIRING_KEYS
+    # ``resolve_max_current(_cfg)`` reads its keys out of the walk's sight
+    assert not {"ev_max_current", "max_charging_current"} & hd.CHARGER_WIRING_KEYS
 
 
 def test_the_wiring_covers_every_entity_and_service_key():
