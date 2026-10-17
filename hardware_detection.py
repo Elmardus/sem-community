@@ -1577,6 +1577,14 @@ _CONFIGURED_ROW_KEYS = CHARGER_ENTITY_KEYS | frozenset({
     "ev_charge_mode_start", "ev_charge_mode_stop", "ev_phase_switch_entity",
 })
 
+#: (#1149) Every per-charger key that names the box or how SEM talks to it:
+#: the report row's keys plus the device id a current service is sent to.
+#: The flat top-level keys hold the FIRST charger's (the setup wizard mirrors
+#: its card there), so a second charger reads these from its own card only —
+#: a card without one read, and drove, the first charger. Limits, phases and
+#: priority are settings and still fall back to the flat keys.
+CHARGER_WIRING_KEYS = _CONFIGURED_ROW_KEYS | frozenset(SERVICE_CONTROL_KEYS)
+
 
 def charger_is_complete(charger: Any) -> bool:
     """(#1054 round 3) A charger card SEM can run. A card an older detection
