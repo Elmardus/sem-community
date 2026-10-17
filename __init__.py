@@ -23,7 +23,7 @@ import logging
 import math
 import os
 import re
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
@@ -2209,6 +2209,45 @@ def _drop_meters_saved_as_chargers(hass, chargers):
     return [c for c in chargers if not any(c is d for d in dropped)]
 
 
+def _drop_flat_wiring_of_a_removed_first(hass, entry, cards=None, *,
+                                         data=None, options=None,
+                                         why: str = "") -> Optional[Dict[str, Any]]:
+    """(#1154, bug class 147) Clear the flat charger keys that no longer
+    belong to the first charger.
+
+    The setup wizard copied the first charger's power sensor, current
+    control, current service and start/stop switch to the flat top-level
+    keys, and the builder lets the first charger take a key its card lacks
+    from there. When the first charger goes, the next one becomes first and
+    would read — and drive — the removed box. So every path that removes it
+    asks this: the config card's ✕ (``remove_charger``), the Configure
+    dialog's remove, and setup, which runs after the starts' repairs (the
+    refs folding a half card, #1036's meter drop) and also clears a save
+    made before this fix.
+
+    ``data``/``options`` are the stores about to be written (default: the
+    entry's) and ``cards`` the charger list they hold. Returns
+    ``{"data": …, "options": …}`` with the stale keys removed from both (a
+    key left in one store shows through the merge), or None when nothing is
+    stale."""
+    from .charger_refs import (
+        LEGACY_KEY, registry_device_of, stale_flat_wiring, without_flat_wiring,
+    )
+    data = dict(entry.data or {}) if data is None else dict(data)
+    options = dict(entry.options or {}) if options is None else dict(options)
+    if cards is None:
+        cards = options[LEGACY_KEY] if LEGACY_KEY in options else data.get(LEGACY_KEY)
+    stale = stale_flat_wiring(data, options, cards, registry_device_of(hass))
+    if not stale:
+        return None
+    _LOGGER.warning(
+        "%sThe saved charger keys %s belong to a charger that is no longer "
+        "the first one; cleared so the first charger does not read or drive "
+        "that box (#1154).", f"{why}: " if why else "", sorted(stale))
+    return {"data": without_flat_wiring(data) or data,
+            "options": without_flat_wiring(options) or options}
+
+
 #: (#1126) What a saved charger reads its power from and drives. The heal
 #: below fills the state sensors only when each of these is what detection
 #: finds today. The charger refs ask the same list before they add one
@@ -2541,6 +2580,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
     except Exception as exc:  # noqa: BLE001 — a heal must never block setup
         _LOGGER.debug("State-sensor heal skipped: %s", exc)
 
+    # (#1154) After every repair above that can drop a charger: the flat
+    # keys follow the first charger, or they go. Before ``full_config``, so
+    # every reader of the flat keys (the builder, the sensor reader, the
+    # energy counters) sees the same answer.
+    try:
+        _flat = _drop_flat_wiring_of_a_removed_first(hass, entry, why="Setup")
+        if _flat is not None:
+            hass.config_entries.async_update_entry(entry, **_flat)
+    except Exception as exc:  # noqa: BLE001 — a heal must never block setup
+        _LOGGER.debug("Flat charger keys check skipped: %s", exc)
+
     # Remove orphaned per-charger set-default button entities — the
     # button itself was retired in v1.7.0-beta.11 (#355 follow-up).
     # Idempotent; only fires on installs that still have the registry
@@ -2806,6 +2856,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
         # "ev_charger_1"). Surface both shapes loudly — they are config
         # corruption, not normal states.
         _seen_charger_ids: set[str] = set()
+        # (#1154) Setup clears flat keys left by a removed first charger;
+        # asked again here so the builder never reads them if that failed.
+        from .charger_refs import first_card as _first_card
+        from .charger_refs import flat_wiring_is_of, registry_device_of
+        _flat_is_first = flat_wiring_is_of(
+            _first_card(ev_chargers_config), full_config,
+            registry_device_of(hass))
         for idx, charger_cfg in enumerate(ev_chargers_config):
             if not charger_cfg.get("id"):
                 _LOGGER.warning(
@@ -2842,13 +2899,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             # the first charger's, so a card without one (the config card's
             # new charger, a Zaptec Go with start/stop only) was given the
             # first charger's, and SEM set the first charger's current for it.
+            # (#1154) The first charger takes them only while they are its
+            # own: once the charger before it was removed they name that box.
             from .hardware_detection import CHARGER_WIRING_KEYS
 
             def _cfg(key, default=None, _this=charger_cfg, _idx=idx):
                 v = _this.get(key)
                 if v is not None:
                     return v
-                if _idx > 0 and key in CHARGER_WIRING_KEYS:
+                if key in CHARGER_WIRING_KEYS and (_idx > 0 or not _flat_is_first):
                     return default
                 v = full_config.get(key)
                 return v if v is not None else default
@@ -6296,11 +6355,21 @@ async def _async_register_phase_services(
             (target_entry.data or {}).get("ev_chargers"), None, charger_id)
         new_options = {**(target_entry.options or {}), "ev_chargers": kept}
         coordinator = getattr(target_entry, "runtime_data", None)
-        if coordinator is not None:
-            coordinator._skip_options_reload = dict(new_options)
         update: dict = {"options": new_options}
         if new_data_list is not (target_entry.data or {}).get("ev_chargers"):
             update["data"] = {**(target_entry.data or {}), "ev_chargers": new_data_list}
+        # (#1154) The first charger's flat keys go with it: the next charger
+        # becomes first and would read its power and set its current.
+        if dicts and dicts[0].get("id") == charger_id:
+            _flat = _drop_flat_wiring_of_a_removed_first(
+                hass, target_entry, kept,
+                data=update.get("data", target_entry.data),
+                options=new_options, why=f"Removed charger '{charger_id}'")
+            if _flat is not None:
+                update = _flat
+                new_options = _flat["options"]
+        if coordinator is not None:
+            coordinator._skip_options_reload = dict(new_options)
         hass.config_entries.async_update_entry(target_entry, **update)
         await hass.config_entries.async_reload(target_entry.entry_id)
         _LOGGER.info("Removed EV charger '%s' (%d remain)", charger_id, len(kept))

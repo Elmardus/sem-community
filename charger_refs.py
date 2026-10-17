@@ -56,6 +56,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from .hardware_detection import (
     CHARGER_ENTITY_KEYS,
+    CHARGER_WIRING_KEYS,
     _offer_missing,
     charger_is_complete,
 )
@@ -512,6 +513,89 @@ def hold_new_state(refs: List[dict], ran: Dict[str, dict],
 
 def _without(d: Dict[str, Any], keys: set) -> Dict[str, Any]:
     return {k: v for k, v in d.items() if k not in keys}
+
+
+# ── (#1154) the flat keys follow the first charger ───────────────────────
+
+#: The flat values that name ONE box: its entities and the device a current
+#: service is sent to. A service name or a field name can be the same on two
+#: boxes of one brand, so it says nothing about whose the flat keys are.
+_FLAT_IDENTITY_KEYS = CHARGER_ENTITY_KEYS | {"ev_service_device_id"}
+
+
+def first_card(cards: Any) -> Optional[dict]:
+    """The first charger of a stored list, or None."""
+    for c in cards or ():
+        if isinstance(c, dict):
+            return c
+    return None
+
+
+def flat_wiring(store: Any) -> Dict[str, Any]:
+    """The flat top-level charger wiring a store holds (set values only)."""
+    if not isinstance(store, dict):
+        return {}
+    return {k: store[k] for k in CHARGER_WIRING_KEYS
+            if store.get(k) not in (None, "")}
+
+
+def flat_wiring_is_of(card: Optional[dict], flat: Any,
+                      device_of: Optional[DeviceOf] = None) -> bool:
+    """(#1154) Do the flat charger keys belong to ``card``?
+
+    The setup wizard and the v2→v3 migration wrote the FIRST charger's wiring
+    there and its card holds a copy, so they share an entity. A card that
+    became first because the one before it was removed shares none: the
+    flat keys still name the removed box. Two cards on one HA device are one
+    box, whatever entities each names. Nothing flat to take is always fine;
+    no card owns anything."""
+    wiring = flat_wiring(flat)
+    if not wiring:
+        return True
+    if not isinstance(card, dict):
+        return False
+    if device_of is not None:
+        mine = device_of_card(card, device_of)
+        theirs = device_of_card(wiring, device_of)
+        if mine and theirs:
+            return mine == theirs
+    return any(card.get(k) == v for k, v in wiring.items()
+               if k in _FLAT_IDENTITY_KEYS)
+
+
+def without_flat_wiring(store: Any) -> Optional[Dict[str, Any]]:
+    """``store`` without any flat charger wiring key, or None when it holds
+    none (nothing to write)."""
+    if not isinstance(store, dict) or not any(k in store for k in CHARGER_WIRING_KEYS):
+        return None
+    return {k: v for k, v in store.items() if k not in CHARGER_WIRING_KEYS}
+
+
+def stale_flat_wiring(data: Any, options: Any, cards: Any,
+                      device_of: Optional[DeviceOf] = None) -> Dict[str, Any]:
+    """(#1154) The flat charger wiring of ``{**data, **options}`` that does
+    not belong to the first of ``cards`` — empty when it does, or when there
+    is none. With no card the flat keys ARE the charger on an install that
+    never kept charger refs (a pre-migration save: setup builds its charger
+    from them), so they stay; once refs exist, an empty list is the user
+    having removed every charger."""
+    if not cards and REFS_KEY not in (options or {}):
+        return {}
+    merged = {**(data or {}), **(options or {})}
+    if flat_wiring_is_of(first_card(cards), merged, device_of):
+        return {}
+    return flat_wiring(merged)
+
+
+def registry_device_of(hass) -> DeviceOf:
+    """An entity id → its HA device id, through the entity registry."""
+    from homeassistant.helpers import entity_registry as er
+    ereg = er.async_get(hass)
+
+    def _device_of(eid: str) -> Optional[str]:
+        ent = ereg.async_get(eid)
+        return getattr(ent, "device_id", None) if ent else None
+    return _device_of
 
 
 def reconcile(*, data_list: Optional[list], legacy: Optional[list],
