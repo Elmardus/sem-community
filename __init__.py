@@ -2211,14 +2211,9 @@ def _drop_meters_saved_as_chargers(hass, chargers):
 
 #: (#1126) What a saved charger reads its power from and drives. The heal
 #: below fills the state sensors only when each of these is what detection
-#: finds today: a Peblar saved before #1035 can hold one phase as its power
-#: and the single-phase switch as start/stop, and seeing the car would put
-#: those to work.
-_STATE_HEAL_MUST_MATCH = (
-    "ev_charging_power_sensor", "ev_current_control_entity",
-    "ev_start_stop_entity", "ev_charge_mode_entity",
-    "ev_charger_service", "ev_start_service", "ev_stop_service",
-)
+#: finds today. The charger refs ask the same list before they add one
+#: (#1151).
+from .charger_refs import STATE_MUST_MATCH as _STATE_HEAL_MUST_MATCH  # noqa: E402
 
 
 def _holds_a_link_as_charging(hass, charger) -> bool:
@@ -7007,10 +7002,13 @@ async def _async_register_phase_services(
                             "role_source": {
                                 role: ("you" if role in (r.get("overrides") or {})
                                        else "cleared" if role in (r.get("cleared") or ())
+                                       # (#1151) kept back for the control check
+                                       else "held" if role in (r.get("held") or ())
                                        else "crawler")
                                 for role in sorted(ROLE_KEYS)
                                 if role in (r.get("overrides") or {})
                                 or role in (r.get("cleared") or ())
+                                or role in (r.get("held") or ())
                                 or role in (r.get("found") or {})
                             },
                             "crawler_now": live.get(r.get("device_id")) or {},

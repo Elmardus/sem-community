@@ -15,6 +15,8 @@ device a charger is, what the user set by hand, and the user's settings::
      "overrides": {role: value},   # roles the user set; device-less: all
      "cleared": [role, …],         # roles the crawler offers, the user has not
      "found": {role: value},       # the crawler's last answer for the device
+     "held": [role, …],            # (#1151) state roles kept back until the
+                                   # card's controls are the crawler's
      "settings": {…}}              # name, mode, priority, targets, …
 
 Every start resolves each ref into today's charger dict — the crawler's live
@@ -82,6 +84,17 @@ CURRENT_CONTROL_ROLES = frozenset({
 })
 #: (#1143) the roles a charger's car is read through
 STATE_ROLES = frozenset({"ev_connected_sensor", "ev_charging_sensor"})
+#: (#1126, #1134) What a charger reads its power from and drives. Seeing the
+#: car puts these to work, so a charger that read no car gets a state sensor
+#: only when each is what detection finds today — in the startup heal
+#: (``_fill_state_sensors_of_own_save``) and in a ref (#1151). A Peblar saved
+#: before #1035 can hold one phase as its power and the single-phase switch
+#: as start/stop.
+STATE_MUST_MATCH = (
+    "ev_charging_power_sensor", "ev_current_control_entity",
+    "ev_start_stop_entity", "ev_charge_mode_entity",
+    "ev_charger_service", "ev_start_service", "ev_stop_service",
+)
 
 
 # ── pure ──────────────────────────────────────────────────────────────────
@@ -134,7 +147,7 @@ def resolve(ref: dict, live: Optional[Dict[str, Any]] = None) -> dict:
     """A ref → today's charger dict: the crawler's answer, then the user's."""
     found = {**(ref.get("found") or {}), **(live or {})}
     card = {"id": ref["id"], **(ref.get("settings") or {})}
-    cleared = set(ref.get("cleared") or ())
+    cleared = set(ref.get("cleared") or ()) | set(ref.get("held") or ())
     for role in ROLE_KEYS:
         if role in cleared:
             continue
@@ -408,7 +421,9 @@ def drop_refused(refs: List[dict], live_by_device: Dict[str, Dict[str, Any]],
         if bad & CURRENT_CONTROL_ROLES:
             new["cleared"] = [k for k in new.get("cleared") or ()
                               if k not in CURRENT_CONTROL_ROLES]
-        if bad & STATE_ROLES and not resolve(new, live).get(
+        # (#1151) a held plug is still the card's: a hold is asked again
+        # every start, a clear would last
+        if bad & STATE_ROLES and not resolve(_without(new, {"held"}), live).get(
                 "ev_connected_sensor"):
             # (#1143) no plug sensor: setup's own save (#1142). Nothing takes
             # the link's place here; the startup heal gives the save both
@@ -434,6 +449,65 @@ def _log_refused(where: str, gone: Dict[str, Any]) -> None:
         _LOGGER.warning(
             "%s: %s says the charger is online, not that a car charges; SEM "
             "no longer reads it as charging (#1142, #1143).", where, link)
+
+
+def hold_new_state(refs: List[dict], ran: Dict[str, dict],
+                   live_by_device: Dict[str, Dict[str, Any]],
+                   refuse: Optional[Refuse] = None,
+                   log: Callable[[str], None] = _LOGGER.info) -> List[dict]:
+    """(#1151) A charger that read no car gets a plug or charging sensor from
+    the crawler only when each control its card drives is what it finds
+    today.
+
+    The crawler fills a ref's roles, so when it learns to read a plug (a
+    Peblar's ``enum`` state, #1126; a Zaptec's "Charger mode", #1142) a save
+    that read none gets one at the next start, and seeing the car puts the
+    card's controls to work. The startup heal gives setup's own save its
+    sensors only when its controls are what detection finds (#1134); a save
+    with a plug skips that heal. So a stale control in ``overrides`` (a
+    Peblar's single-phase switch as start/stop) was driven.
+
+    ``ran`` is the card each charger ran on before this start. When it read
+    no car (no state sensor, or only one ``refuse`` takes: a link as the
+    charge, #1143) and the card has a state sensor, it shows only when every
+    ``STATE_MUST_MATCH`` key of the card equals today's answer (``live``).
+    The crawler's last answer (``found``) does not count: it keeps a control
+    the crawler stopped giving. A start or stop service is never in the
+    crawler's answer, so a card with one does not pass. Otherwise the state
+    roles are ``held``: the card reads no car, and the heal decides with its
+    check. When it fills them, the next start folds them in as any edit,
+    and the card then read the car. ``held`` is worked out again at every
+    start, so a start that saw only part of the device, or a control the
+    user set right, lets them show once the controls match. A charger that
+    already read the car (the wizard asks for both sensors) has had its
+    controls in use; nothing of it is held."""
+    out: List[dict] = []
+    for r in refs:
+        dev = r.get("device_id")
+        before = ran.get(r["id"])
+        if dev is None or before is None:
+            out.append(r)
+            continue
+        free = {k: v for k, v in r.items() if k != "held"}
+        not_read = set(refuse(before)) if refuse is not None else set()
+        if any(before.get(k) and k not in not_read for k in STATE_ROLES):
+            out.append(free if "held" in r else r)
+            continue
+        live = live_by_device.get(dev) or {}
+        card = resolve(free, live)
+        new = sorted(k for k in STATE_ROLES if card.get(k))
+        differ = [k for k in STATE_MUST_MATCH
+                  if (card.get(k) or None) != (live.get(k) or None)]
+        if not new or not differ:
+            out.append(free if "held" in r else r)
+            continue
+        if new != list(r.get("held") or ()):
+            stale = {k: card.get(k) for k in differ}
+            log(f"charger {r['id']}: detection now finds {new}, but {stale} "
+                "differ from what it finds; the startup check decides "
+                "(#1151)")
+        out.append({**free, "held": new})
+    return out
 
 
 def _without(d: Dict[str, Any], keys: set) -> Dict[str, Any]:
@@ -464,17 +538,21 @@ def reconcile(*, data_list: Optional[list], legacy: Optional[list],
             if refuse({"ev_current_control_entity": eid}):
                 return None
             return _device_of(eid)
+    # (#1151) what each charger ran on before this start: the stored list
+    ran = {c["id"]: c for c in _union_by_id(data_list, legacy)}
     if refs is None:
-        cards = _union_by_id(data_list, legacy)
+        cards = list(ran.values())
         if not cards:
             return None
         refs = refs_from_cards(cards, device_of, live_by_device, log)
         log(f"chargers stored as device references: {[r['id'] for r in refs]}")
     elif legacy is not None and signature(legacy) != sig:
         refs = apply_legacy_edit(refs, legacy, device_of, live_by_device, log)
+    ran = {r["id"]: ran.get(r["id"]) or resolve(r) for r in refs}
     refs = refresh_found(refs, live_by_device)
     if refuse is not None:
         refs = drop_refused(refs, live_by_device, refuse)
+    refs = hold_new_state(refs, ran, live_by_device, refuse, log)
     resolved = [resolve(r, live_by_device.get(r.get("device_id"))
                         if r.get("device_id") else None) for r in refs]
     return refs, resolved
