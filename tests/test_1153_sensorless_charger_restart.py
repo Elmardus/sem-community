@@ -294,6 +294,8 @@ class TestTheSessionIsNotEndedOnAnUnknown:
         assert h._storage.update_lifetime_ev_stats.called
 
     def test_the_coordinator_passes_the_plug_test(self):
-        import inspect
-        src = inspect.getsource(SEMCoordinator._async_update_data)
-        assert "has_plug_sensor(charger_cfg, self.config)" in src
+        from .ast_contracts import call_kwargs, calls
+        loop = SEMCoordinator._async_update_data
+        assert calls(loop, "has_plug_sensor")
+        per_charger = [kw for kw in call_kwargs(loop, "_update_session_tracking") if kw]
+        assert per_charger and all("plug_known" in kw for kw in per_charger)

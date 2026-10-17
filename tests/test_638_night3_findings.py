@@ -77,16 +77,14 @@ class TestPlanConnectivity:
         """(#1153) "Is there a sensor to ask?" lives in ONE helper, shared
         with ``build_charger_view``'s ``plug_known`` — the plan and the
         control loop must not disagree about which chargers can say."""
-        import inspect
-
         from custom_components.solar_energy_management.coordinator import (
             build_view,
             ev_availability,
         )
-        assert "has_plug_sensor(" in inspect.getsource(
-            ev_availability.plan_connectivity)
-        assert "has_plug_sensor(" in inspect.getsource(
-            build_view.build_charger_view)
+
+        from .ast_contracts import calls
+        assert calls(ev_availability.plan_connectivity, "has_plug_sensor")
+        assert calls(build_view.build_charger_view, "has_plug_sensor")
         for cfg, full in (({}, {}), ({"ev_connected_sensor": "b.p"}, {}),
                           ({}, {"ev_plug_sensor": "b.p"}),
                           ({}, {"ev_connected_sensor": "b.p"})):
