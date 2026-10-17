@@ -17,6 +17,7 @@ device a charger is, what the user set by hand, and the user's settings::
      "found": {role: value},       # the crawler's last answer for the device
      "held": [role, …],            # (#1151) state roles kept back until the
                                    # card's controls are the crawler's
+     "plug_checked": True,         # (#1152) its plug went through the check
      "settings": {…}}              # name, mode, priority, targets, …
 
 Every start resolves each ref into today's charger dict — the crawler's live
@@ -66,6 +67,8 @@ _LOGGER = logging.getLogger(__name__)
 REFS_KEY = "ev_charger_refs"
 LEGACY_KEY = "ev_chargers"
 SIG_KEY = "ev_charger_refs_sig"
+#: (#1152) a ref whose plug sensor went through the control check once
+PLUG_CHECKED = "plug_checked"
 
 #: What the crawler answers for a device. Everything else on a charger is a
 #: setting the user chose.
@@ -342,6 +345,106 @@ def refresh_found(refs: List[dict],
     return out
 
 
+def forget_stale(refs: List[dict], live_by_device: Dict[str, Dict[str, Any]],
+                 sure: Iterable[str],
+                 log: Callable[[str], None] = _LOGGER.info) -> List[dict]:
+    """(#1147) Forget a role the crawler stopped giving — only when it saw
+    the whole device.
+
+    ``refresh_found`` only adds: a start that cannot ask keeps the last
+    answer. So a role a detection fix took away stayed in ``found``, and
+    every start used it again (a Zaptec Go saved before #1142 kept the
+    online sensor as its charge; #1144 needed its own drop for the site
+    limit). Replacing ``found`` whole at every start would make roles come
+    and go: a start during Home Assistant's boot reads no states, and an
+    integration that is still loading shows part of its device.
+
+    ``sure`` names the devices whose answer is whole (``sure_devices``: Home
+    Assistant runs, every integration of the device is loaded, each of its
+    entities has a state). For those, a role of ``found`` that today's
+    answer (``live``) does not hold goes. A device the crawler did not see
+    keeps its ``found``. ``overrides`` (what the user set) and ``cleared``
+    are never touched."""
+    sure = set(sure or ())
+    out: List[dict] = []
+    for r in refs:
+        dev = r.get("device_id")
+        live = live_by_device.get(dev) if dev in sure else None
+        found = r.get("found") or {}
+        gone = {k: v for k, v in found.items() if live and k not in live}
+        if not gone:
+            out.append(r)
+            continue
+        log(f"charger {r['id']}: detection no longer finds {gone} on its "
+            "device; forgotten (#1147)")
+        new = {**r, "found": {k: v for k, v in found.items()
+                              if k not in gone}}
+        if r.get("stored_complete", True):
+            # as in ``drop_refused``: a ref left half can be replaced (#1054)
+            new["stored_complete"] = charger_is_complete(resolve(new, live))
+        out.append(new)
+    return out
+
+
+def check_saved_plugs(refs: List[dict], ran: Dict[str, dict],
+                      live_by_device: Dict[str, Dict[str, Any]], *,
+                      sure: Iterable[str], own: Iterable[str], fresh: Iterable[str],
+                      refuse: Optional[Refuse] = None,
+                      log: Callable[[str], None] = _LOGGER.info,
+                      ) -> Tuple[List[dict], Dict[str, dict]]:
+    """(#1152) Put a plug a start before #1151 added through the control
+    check, once.
+
+    2.2.0-beta.20 merged the crawler's answer into every ref with no check,
+    so setup's own Zaptec save got "Charger mode" as its plug (#1142). The
+    #1151 check asks only a charger that read no car before the start; this
+    one reads one now, so its controls (a switch from before 2.2.0-beta.5,
+    #1134) were never asked.
+
+    The store does not say where a plug came from. So the check is asked of
+    a ref only when it is setup's own save (its id is in ``own``: the id
+    setup gives that box, the startup heal's own rule) and every state
+    sensor its card read came from the crawler (none in ``overrides``) and
+    is what the crawler finds today. For such a ref the card it ran on
+    counts as one that read no car, so ``hold_new_state`` holds the sensors
+    unless its controls are today's, and the startup heal decides — as for
+    a save that never had a plug. A card the user set up (its own id) is
+    never asked.
+
+    Each ref is marked ``plug_checked`` once it was asked, or is not setup's
+    own save on a device seen whole (``sure``), or was made at this start
+    (``fresh``: the #1151 check covers it). An unmarked ref is asked again
+    at the next start. Once held, the #1151 check asks every start."""
+    sure, own, fresh = set(sure or ()), set(own or ()), set(fresh or ())
+    ran = dict(ran)
+    out: List[dict] = []
+    for r in refs:
+        dev = r.get("device_id")
+        if r.get(PLUG_CHECKED) or dev is None:
+            out.append(r)
+            continue
+        live = live_by_device.get(dev) or {}
+        before = ran.get(r["id"])
+        if r["id"] in fresh or (dev in sure and r["id"] not in own):
+            out.append({**r, PLUG_CHECKED: True})
+            continue
+        if r["id"] not in own or not live:
+            out.append(r)
+            continue
+        if before is not None:
+            not_read = set(refuse(before)) if refuse is not None else set()
+            reads = [k for k in STATE_ROLES
+                     if before.get(k) and k not in not_read]
+            mine = r.get("overrides") or {}
+            if reads and all(k not in mine and before[k] == live.get(k)
+                             for k in reads):
+                log(f"charger {r['id']}: its {reads} came from detection "
+                    "with no control check; checked once now (#1152)")
+                ran[r["id"]] = _without(before, set(STATE_ROLES))
+        out.append({**r, PLUG_CHECKED: True})
+    return out, ran
+
+
 def problems(refs: List[dict], resolved: List[dict], *,
              device_exists: Callable[[str], bool],
              entity_exists: Callable[[str], bool]) -> List[dict]:
@@ -615,13 +718,22 @@ def reconcile(*, data_list: Optional[list], legacy: Optional[list],
               live_by_device: Dict[str, Dict[str, Any]],
               log: Callable[[str], None] = _LOGGER.info,
               refuse: Optional[Refuse] = None,
+              sure: Optional[Iterable[str]] = None,
+              own: Optional[Iterable[str]] = None,
               ) -> Optional[Tuple[List[dict], List[dict]]]:
     """The whole setup step, pure. Returns ``(refs, resolved)`` or None when
     there is nothing to manage (no charger list was ever stored).
 
     (#1144) ``refuse`` names the keys of a charger SEM must never drive —
     or (#1143) read as the charge; they leave the crawler's answer and every
-    ref before anything resolves."""
+    ref before anything resolves.
+
+    (#1147, #1152) ``sure`` names the devices the crawler saw whole, and
+    ``own`` the ids setup gives the boxes it finds. Given ``sure`` (the
+    setup step always gives it, maybe empty), a role the crawler stopped
+    giving on such a device is forgotten; given ``own`` too, a plug an
+    older start added to setup's own save is checked once. Left out, the
+    step does not run."""
     if refuse is not None:
         live_by_device = {dev: _without(roles, set(refuse(roles)))
                           for dev, roles in live_by_device.items()}
@@ -635,6 +747,7 @@ def reconcile(*, data_list: Optional[list], legacy: Optional[list],
             return _device_of(eid)
     # (#1151) what each charger ran on before this start: the stored list
     ran = {c["id"]: c for c in _union_by_id(data_list, legacy)}
+    stored = {r.get("id") for r in refs or () if isinstance(r, dict)}
     if refs is None:
         cards = list(ran.values())
         if not cards:
@@ -647,6 +760,13 @@ def reconcile(*, data_list: Optional[list], legacy: Optional[list],
     refs = refresh_found(refs, live_by_device)
     if refuse is not None:
         refs = drop_refused(refs, live_by_device, refuse)
+    if sure is not None:
+        refs = forget_stale(refs, live_by_device, sure, log)
+    if sure is not None and own is not None:
+        refs, ran = check_saved_plugs(
+            refs, ran, live_by_device, sure=sure, own=own,
+            fresh=[r["id"] for r in refs if r["id"] not in stored],
+            refuse=refuse, log=log)
     refs = hold_new_state(refs, ran, live_by_device, refuse, log)
     resolved = [resolve(r, live_by_device.get(r.get("device_id"))
                         if r.get("device_id") else None) for r in refs]
@@ -702,6 +822,52 @@ def live_charger_roles(hass) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def sure_devices(hass, devices: Iterable[str]) -> set:
+    """(#1147) The devices whose crawler answer is whole.
+
+    Home Assistant has finished starting (``CoreState.running``: before
+    that the crawler may read no states, a select's options or a status
+    sensor's words), every integration the device belongs to is loaded,
+    and each of its enabled entities has a state (an integration still
+    adding them shows part of the device). Any doubt: not sure, and the
+    device keeps what was found before."""
+    from homeassistant.core import CoreState
+    # ``is_running`` is true while Home Assistant is still starting too
+    if hass is None or getattr(hass, "state", None) is not CoreState.running:
+        return set()
+    from homeassistant.config_entries import ConfigEntryState
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+
+    dreg, ereg = dr.async_get(hass), er.async_get(hass)
+    out = set()
+    for dev in devices or ():
+        device = dreg.async_get(dev)
+        if device is None or not device.config_entries:
+            continue
+        loaded = [hass.config_entries.async_get_entry(eid)
+                  for eid in device.config_entries]
+        if any(e is None or e.state is not ConfigEntryState.LOADED
+               for e in loaded):
+            continue
+        ents = er.async_entries_for_device(ereg, dev)
+        if not ents or any(hass.states.get(e.entity_id) is None for e in ents):
+            continue
+        out.add(dev)
+    return out
+
+
+def own_save_ids(hass) -> Optional[set]:
+    """(#1152) The ids setup gives the boxes the crawler finds — the startup
+    heal's rule for "SEM saved this itself". None when it cannot ask."""
+    from . import _own_saves
+    try:
+        return set(_own_saves(hass))
+    except Exception:  # noqa: BLE001 — no answer: nothing is checked or marked
+        _LOGGER.debug("own charger saves unavailable", exc_info=True)
+        return None
+
+
 def async_reconcile(hass, entry) -> Optional[List[dict]]:
     """Setup step: refs ← (first start) the old stores, or (a writer changed
     the legacy list) that change. Writes the refs, the resolved legacy copy
@@ -736,11 +902,18 @@ def async_reconcile(hass, entry) -> Optional[List[dict]]:
         if flat[name]:
             _log_refused(f"Saved setting ({name})", flat[name])
 
+    live = live_charger_roles(hass)
+    stored = options.get(REFS_KEY)
+    # (#1152) only an older ref can hold a plug no check asked about
+    unchecked = isinstance(stored, list) and any(
+        isinstance(r, dict) and r.get("device_id") and not r.get(PLUG_CHECKED)
+        for r in stored)
     out = reconcile(
         data_list=data.get(LEGACY_KEY), legacy=options.get(LEGACY_KEY),
-        refs=options.get(REFS_KEY), sig=options.get(SIG_KEY),
-        device_of=_device_of, live_by_device=live_charger_roles(hass),
-        refuse=_refuse)
+        refs=stored, sig=options.get(SIG_KEY),
+        device_of=_device_of, live_by_device=live,
+        refuse=_refuse, sure=sure_devices(hass, live),
+        own=own_save_ids(hass) if unchecked else ())
     refs, resolved = out if out is not None else (None, None)
     new_options = options if out is None else {
         **options, REFS_KEY: refs, LEGACY_KEY: resolved,

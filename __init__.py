@@ -2268,6 +2268,17 @@ def _holds_a_link_as_charging(hass, charger) -> bool:
     return entry is not None and says_a_link(entry)
 
 
+def _own_saves(hass) -> Dict[str, Dict[str, Any]]:
+    """What setup saves for each box detection finds, by the id it gives
+    it (a brand path; setup never saves a charger only the roles found,
+    #1032). A saved charger with one of these ids is SEM's own save. The
+    heal below and the charger refs' plug check (#1152) read this one rule."""
+    from .hardware_detection import discover_all_ev_chargers_from_registry
+    return {stable_discovered_charger_id(d): d
+            for d in discover_all_ev_chargers_from_registry(hass)
+            if d.get("_found_by") != "roles"}
+
+
 def _fill_state_sensors_of_own_save(hass, chargers):
     """(#1126, bug class 145) Give a charger SEM saved itself the plug and
     charging sensors detection now finds.
@@ -2290,7 +2301,6 @@ def _fill_state_sensors_of_own_save(hass, chargers):
     having none: its charging sensor is replaced by what detection finds,
     or removed when detection finds none or a control does not match.
     Returns a new list if anything changed, else ``None``."""
-    from .hardware_detection import discover_all_ev_chargers_from_registry
     keys = ("ev_connected_sensor", "ev_charging_sensor")
     linked = [c for c in chargers or []
               if isinstance(c, dict) and c.get("id")
@@ -2300,9 +2310,7 @@ def _fill_state_sensors_of_own_save(hass, chargers):
                 and not any(c.get(k) for k in keys)] + linked
     if not suspects:
         return None
-    found = {stable_discovered_charger_id(d): d
-             for d in discover_all_ev_chargers_from_registry(hass)
-             if d.get("_found_by") != "roles"}
+    found = _own_saves(hass)
     healed = []
     filled = []
     changed = False
