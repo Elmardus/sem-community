@@ -562,9 +562,16 @@ class ChargeStability:
         # Out of scope → transparent. DISABLE (user off / self-resume
         # guard) and disconnects also clear all state: the next
         # session starts a fresh window with a cold history.
+        # (#1153) An ABSENT car, not an unknown one: a charger with no plug
+        # sensor reads "not connected" whenever it is not drawing, and
+        # resetting on that would re-open a fresh start ladder every cycle.
+        # Kept, the give-up streak and the #610 backoff bound the offers to
+        # a possibly empty charger: a few short ladders, then one per
+        # backoff period, ended at once by a real draw.
+        car_absent = view.power.car_absent
         if (
             (view.mode not in SURPLUS_DAY_MODES and not peak)
-            or not view.power.connected
+            or car_absent
             or decision.intent is ChargerIntent.DISABLE
             or decision.intent is ChargerIntent.RELEASE   # (#898) hands-off
         ):
@@ -580,7 +587,7 @@ class ChargeStability:
             # (#975) A new PLUG-IN is a new interruption budget — and only a
             # plug-in. A mode change or a user OFF does not reset the
             # charger's own session counter, so it must not reset ours.
-            if not view.power.connected:
+            if car_absent:
                 self._session_stops.pop(cid, None)
             return decision
 
@@ -1067,7 +1074,10 @@ class ChargeStability:
             # (#975) …and spend one of this plug-in's interruptions. The count
             # is what widens the delays above on the next pass, so a charger
             # SEM keeps interrupting gets bridged instead of cycled.
-            self._session_stops[cid] = self._session_stops.get(cid, 0) + 1
+            # (#1153) Not on a charger whose car is not known: a stop of an
+            # offer nobody drew is no interruption of a session.
+            if getattr(view.power, "plug_known", True):
+                self._session_stops[cid] = self._session_stops.get(cid, 0) + 1
             # #552 — SEM ended this session; ownership ends WITH it. Without
             # this, a stability stop that lands while the car blips 0 W never
             # reaches the adapter (reconciler sees idle+no-draw → no-op), the

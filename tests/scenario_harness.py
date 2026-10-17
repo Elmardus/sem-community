@@ -297,6 +297,11 @@ def _build_coordinator(scenario: Dict[str, Any]):
         "ev_voltage": 230,
         "daily_ev_target": 7.0,
         "update_interval": int(scenario.get("cycle_seconds", 30)),
+        # (#1153) The timeline's ``ev_connected`` is a plug sensor's
+        # answer, so the install has one. Without it the charger's car is
+        # unknown unless it draws, and "unplugged" is no answer. A scenario
+        # about a charger with no plug sensor sets this to "".
+        "ev_plug_sensor": "binary_sensor.scenario_plug",
         **cfg,
     }
     coord._flow_calculator = FlowCalculator()

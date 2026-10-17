@@ -916,17 +916,19 @@ class EVControlMixin:
                    "policing only (#740)",
             bridgeable=False,
         )
+        # (#1150) build_view's resolution for the car too: in a fleet, a
+        # charger with no sensor of its own never takes the fleet OR.
+        # (#1153) …and an unknown plug is not a departure the reconciler
+        # parks on.
+        from .ev_availability import charger_state, has_plug_sensor
+        _config = getattr(self, "config", {}) or {}
+        _connected = charger_state(cid, power, _config, "connected")
         cp = ChargerPower(
             charger_id=cid,
             power_w=this_w,
-            connected=bool(
-                (getattr(power, "ev_connected_per_charger", None) or {})
-                .get(cid, getattr(power, "ev_connected", False)),
-            ),
-            charging=bool(
-                (getattr(power, "ev_charging_per_charger", None) or {})
-                .get(cid, getattr(power, "ev_charging", False)),
-            ),
+            connected=_connected,
+            charging=charger_state(cid, power, _config, "charging"),
+            plug_known=_connected or has_plug_sensor(charger_cfg, _config),
         )
         await actuate(
             decision, adapter, cp, reconciler,
@@ -1256,7 +1258,8 @@ class EVControlMixin:
             power.ev_connected_per_charger = confirmed_map
         power.ev_connected = fleet or any(confirmed_map.values())
 
-    def _update_session_tracking(self, power: PowerReadings, power_flows: PowerFlows) -> None:
+    def _update_session_tracking(self, power: PowerReadings, power_flows: PowerFlows,
+                                 plug_known: bool = True) -> None:
         """Track per-session energy, cost, and source attribution.
 
         Runs every cycle. Detects session start (ev_power > 50W), accumulates
@@ -1266,6 +1269,9 @@ class EVControlMixin:
         Args:
             power: Current sensor readings (ev_power, ev_connected).
             power_flows: Instantaneous power flow distribution (solar/grid/battery to EV).
+            plug_known: (#1153) False for a charger with no plug sensor of
+                its own: its "no car" only means its draw stopped, so the
+                session is not ended on it.
         """
         update_interval = self.config.get("update_interval", DEFAULT_UPDATE_INTERVAL)
         hours = update_interval / 3600.0
@@ -1279,7 +1285,10 @@ class EVControlMixin:
         # absorbing the KEBA UDP blip family #35/#595). Debouncing again
         # here would cost a real unplug six cycles and split the cycle's one
         # answer back in two, which is the bug that moved it to the source.
-        if self._last_ev_connected and not power.ev_connected:
+        # (#1153) Unknown is not gone: a charger with no plug sensor reads
+        # "no car" three cycles after its draw stops, which is a pause, not
+        # an unplug. Its session is not ended on it.
+        if self._last_ev_connected and not power.ev_connected and plug_known:
             # Session ended — update lifetime stats and keep data for display
             if self._session_data.active and self._session_data.energy_kwh > 0.1:
                 if self._storage:

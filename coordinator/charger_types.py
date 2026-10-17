@@ -128,6 +128,17 @@ class ChargerPower:
     real draw by ~5 s (#289); consumers should prefer
     ``power_w > 500`` for the "actually charging" decision and
     treat ``charging`` as informational."""
+    plug_known: bool = True
+    """(#1153) Whether ``connected`` is an answer. False for a charger
+    with no plug sensor of its own that is not drawing: it shows a car
+    only through its draw, so "not connected" there means "not known",
+    not "no car". Defaults True: every reader keeps today's meaning."""
+
+    @property
+    def car_absent(self) -> bool:
+        """(#1153) "No car" as an answer, never as a missing one —
+        unknown is not gone."""
+        return not self.connected and self.plug_known
 
 
 # ─────────────────────────────────────────────────────────────────

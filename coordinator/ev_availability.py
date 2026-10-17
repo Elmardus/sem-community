@@ -66,14 +66,66 @@ def plan_connectivity(cid, charger_cfg, full_config, power):
     pc_map = getattr(power, "ev_connected_per_charger", None) or {}
     if cid in pc_map:
         return bool(pc_map[cid])
-    has_sensor = bool(
-        (charger_cfg or {}).get("ev_connected_sensor")
-        or (full_config or {}).get("ev_connected_sensor")
-        or (full_config or {}).get("ev_plug_sensor")
-    )
-    if has_sensor:
+    if has_plug_sensor(charger_cfg, full_config):
         return bool(getattr(power, "ev_connected", False))
     return None
+
+
+def has_plug_sensor(charger_cfg, full_config) -> bool:
+    """Can SEM ask this charger whether a car is plugged in? (#1153)
+
+    This charger's nested ``ev_connected_sensor``, or the legacy flat
+    keys. Without one the car shows only through the charger's draw
+    (the physics defence, #285+1), so "not connected" is no answer:
+    ``plan_connectivity`` reads it as ``None`` and ``build_charger_view``
+    as ``plug_known=False``. One test for both, so the plan and the
+    control loop cannot disagree about which chargers can say.
+
+    (#1150) The flat keys count only with one charger: with more they
+    answer for the fleet, not for this charger (class 147).
+    """
+    if (charger_cfg or {}).get("ev_connected_sensor"):
+        return True
+    if not fleet_flag_is_own(full_config):
+        return False
+    return bool(
+        (full_config or {}).get("ev_connected_sensor")
+        or (full_config or {}).get("ev_plug_sensor")
+    )
+
+
+def fleet_flag_is_own(full_config) -> bool:
+    """Is the fleet ``ev_connected`` / ``ev_charging`` this charger's? (#1150)
+
+    Only with one charger. With more, the fleet flag is true when ANY
+    charger has a car or charges, so a charger without its own sensor
+    would read its sibling's car.
+    """
+    return len((full_config or {}).get("ev_chargers") or []) <= 1
+
+
+def charger_state(cid, power, full_config, field: str) -> bool:
+    """One charger's ``connected`` or ``charging`` (#584, #1150).
+
+    Its own entry in the reader's per-charger map first. Without one, the
+    fleet flag — but only when the fleet is this one charger. In a fleet,
+    a charger with no sensor of its own answers from its own draw only
+    (over the 500 W floor — the physics defence the reader applies to
+    every mapped charger); its car is then unknown at rest (#1153), and
+    a sibling's car or charge is never its own.
+    """
+    pc_map = getattr(power, f"ev_{field}_per_charger", None) or {}
+    if cid in pc_map:
+        return bool(pc_map[cid])
+    if fleet_flag_is_own(full_config):
+        return bool(getattr(power, f"ev_{field}", False))
+    from .sensor_reader import EV_ACTIVE_CHARGE_FLOOR_W
+
+    own_w = (getattr(power, "ev_power_per_charger", None) or {}).get(cid)
+    try:
+        return own_w is not None and float(own_w) > EV_ACTIVE_CHARGE_FLOOR_W
+    except (TypeError, ValueError):
+        return False
 
 
 def plan_car_fullness(detector, drawing_w=None, handshake_w=500.0):

@@ -163,6 +163,31 @@ class TestOneCycleOneAnswer:
         assert operational_ev_connected(c._ev_devices, gone.ev_connected) is False
         assert _view(gone, "keba").power.connected is False
 
+    def test_a_confirmed_no_from_no_sensor_is_unknown_not_gone(self):
+        """(#1153) The same three-cycle confirmation on a charger with no
+        plug sensor: its car showed only through its draw, so the
+        confirmed "no" says the draw stopped, not that the car left. The
+        view keeps ``connected`` False (nothing claims a car) and marks the
+        plug unknown; a charger with a plug sensor reads the car absent."""
+        c = _coord()
+        c._confirm_ev_connection(_power(fleet=True, per_charger=None))
+        for _ in range(3):
+            gone = _power(fleet=False, per_charger=None)
+            c._confirm_ev_connection(gone)
+        assert gone.ev_connected is False
+        sensorless = _view(gone, "keba").power
+        assert sensorless.connected is False
+        assert sensorless.plug_known is False
+        assert sensorless.car_absent is False
+        state = FleetCycleState(power=gone, config={}, is_night=False)
+        with_sensor = build_charger_view(
+            state, charger_id="keba",
+            charger_cfg={"id": "keba", "ev_connected_sensor": "binary_sensor.keba_plug"},
+            mode="solar_only", daily_ev_kwh=0.0,
+        ).power
+        assert with_sensor.plug_known is True
+        assert with_sensor.car_absent is True
+
     def test_a_connect_is_visible_the_same_cycle(self):
         """#638 night 3's proof — connect 00:07:32, stamp the same second —
         must survive: only the NO is second-guessed."""

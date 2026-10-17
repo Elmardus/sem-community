@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **Removing the first charger no longer leaves its sensor and controls to the next one** (#1154). The next charger set the removed one's current.
 - 🐛 **A saved charger forgets a sensor or switch detection no longer finds** (#1147). Only when SEM reloads, not while Home Assistant starts.
 - 🐛 **A charger given a plug sensor on 2.2.0-beta.20 has its switch checked once** (#1152). Your own charger setups stay as they are.
+- 🐛 **A charger with no plug sensor is started again after it stops charging** (#1153). SEM had switched it off for good.
+- 🐛 **With several chargers, one without its own car sensor no longer counts as charging when another charges** (#1150). It now goes by its own power.
 
 # [2.2.0-beta.20] — 16.10.2026
 
