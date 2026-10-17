@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **A charger that read no car gets a plug sensor only when its controls match what detection finds** (#1151). Otherwise the startup check decides first.
 - 🐛 **A second charger no longer uses the first charger's current control or power sensor** (#1149). SEM set the first charger's current for the second.
 - 🐛 **A charger with no plug sensor is started again after it stops charging** (#1153). SEM had switched it off for good.
+- 🐛 **With several chargers, one without its own car sensor no longer counts as charging when another charges** (#1150). It now goes by its own power.
 
 # [2.2.0-beta.20] — 16.10.2026
 
