@@ -3080,6 +3080,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
                     # duplicate row). Reuse the device's already-resolved values.
                     start_stop_entity=ev_device.start_stop_entity,
                     status_entity=(ev_device.charging_status_entity or None),
+                    # (#1148) a charger SEM only starts and stops gets its row
+                    # too — with no current control, so a stale one is cleared.
+                    start_stop_service=(
+                        getattr(ev_device, "start_service", None)
+                        or getattr(ev_device, "stop_service", None)),
+                    charge_mode_entity=(
+                        getattr(ev_device, "charge_mode_entity", None) or None),
                 )
 
         # Backward compat: _ev_device points to primary (first) charger

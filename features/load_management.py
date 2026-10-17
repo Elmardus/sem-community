@@ -452,6 +452,8 @@ class LoadManagementCoordinator:
         charger_name: str = "EV Charger",
         start_stop_entity: str = None,
         status_entity: str = None,
+        start_stop_service: str = None,
+        charge_mode_entity: str = None,
     ):
         """Register EV charger as a load management device.
 
@@ -473,6 +475,16 @@ class LoadManagementCoordinator:
             charger_name: Per-charger friendly name from
                 ``ev_chargers[i].name`` (#436). Falls back to the
                 control entity's friendly_name if unset.
+            start_stop_service: (#1148) the charger's start or stop service,
+                when it is started and stopped by service.
+            charge_mode_entity: (#1148) the charge-mode select SEM starts and
+                stops it with, if any.
+
+        (#1148) A charger with no current control — SEM only starts and stops
+        it, by switch, button, service or charge mode — is registered too, with
+        ``control_type`` ``"start_stop"`` and no current control on its row.
+        Before, it was refused with an ERROR at every start, and a row saved
+        earlier kept its old control (e.g. a Zaptec site limit, #1144).
         """
         try:
             # #436: key on per-charger id. Pre-fix used a hardcoded
@@ -482,9 +494,21 @@ class LoadManagementCoordinator:
             # shedding throttled the wrong charger.
             device_id = f"load_device_{charger_id}"
 
-            # Need at least one control method
-            if not current_control_entity and not charger_service:
-                _LOGGER.error("EV charger registration requires either current_control_entity or charger_service")
+            # (#1148) A current control is one way to act, not the only one.
+            # A charger SEM only starts and stops (switch, button, service or
+            # charge mode) passes the builder's gate (``charger_is_complete``,
+            # #1095) and must get its row too: refusing it logged an ERROR at
+            # every start and left a row saved earlier with its OLD control —
+            # the Zaptec site limit (#1144). Its row is written below with no
+            # current control, so a stale one is cleared.
+            has_current_control = bool(current_control_entity or charger_service)
+            has_start_stop = bool(
+                start_stop_entity or start_stop_service or charge_mode_entity)
+            if not has_current_control and not has_start_stop:
+                _LOGGER.warning(
+                    "EV charger %s has no current control and no start/stop "
+                    "control; not registered for load management", charger_id,
+                )
                 return False
 
             # (#991) An absence read HERE is not an answer. Registration runs
@@ -551,12 +575,20 @@ class LoadManagementCoordinator:
             max_power = 22000.0
 
             # Register as load management device
+            # (#1148) The WHOLE row is replaced, never merged: a start/stop
+            # charger's row carries no current control, so a control saved
+            # under this id before (the site limit, #1144) goes with it.
+            control_type = "current" if has_current_control else "start_stop"
             self._devices[device_id] = {
                 "switch_entity": current_control_entity,  # Number entity (may be None)
                 "charger_service": charger_service,  # Service-based control (e.g., "keba.set_current")
                 "power_entity": power_entity,
                 "device_type": "ev_charger",
-                "description": f"EV Charger (Current Control) — {charger_id}",
+                "description": (
+                    f"EV Charger (Current Control) — {charger_id}"
+                    if has_current_control
+                    else f"EV Charger (Start/Stop) — {charger_id}"
+                ),
                 "friendly_name": friendly_name,
                 "power_rating": max_power,
                 "is_available": True,
@@ -567,7 +599,10 @@ class LoadManagementCoordinator:
                 "has_control_handle": True,
                 "user_hands_off": False,
                 "is_controllable": True,  # LEGACY-WRITE (#780) — derived
-                "control_type": "current",  # Special flag: use current control instead of switch
+                # "current": current control instead of a switch. (#1148)
+                # "start_stop": no current control at all — nothing may write
+                # a current for this row.
+                "control_type": control_type,
                 "charger_id": charger_id,  # #436: lets callers / card map back to ev_chargers[i].id
                 # (#748) the charger's stop switch / status sensor. Stored so
                 # pattern discovery can EXCLUDE them: a switch already claimed
@@ -581,7 +616,11 @@ class LoadManagementCoordinator:
             # Save configuration
             await self._save_device_configuration()
 
-            control_method = current_control_entity if current_control_entity else charger_service
+            control_method = (
+                current_control_entity or charger_service
+                or "start/stop: "
+                f"{start_stop_entity or start_stop_service or charge_mode_entity}"
+            )
             _LOGGER.info(
                 "Registered EV charger for load management: %s "
                 "(control: %s, power: %s, priority: %s, max: %skW)",
@@ -1902,7 +1941,16 @@ class LoadManagementCoordinator:
 
             else:
                 # Legacy fallback: use switch_entity directly or control_type
-                if device_info.get("control_type") == "current":
+                if device_info.get("control_type") == "start_stop":
+                    # (#1148) A start/stop-only charger has no current to
+                    # write, and its start/stop is decide()'s (#461-peak) —
+                    # never thrown from here, even past the guard above.
+                    _LOGGER.debug(
+                        "Not shedding %s: start/stop-only charger row (#1148)",
+                        device_id,
+                    )
+                    success = False
+                elif device_info.get("control_type") == "current":
                     current_entity = device_info.get("switch_entity")
                     charger_service = device_info.get("charger_service")
 
@@ -2083,8 +2131,9 @@ class LoadManagementCoordinator:
 
             else:
                 # Legacy fallback
-                if device_info.get("control_type") == "current":
-                    # For EV charger, just mark as restored
+                if device_info.get("control_type") in ("current", "start_stop"):
+                    # For EV charger, just mark as restored (#1148: a
+                    # start/stop-only one too — nothing is written)
                     success = True
                 else:
                     was_on = device_info.get("_pre_shed_was_on")
