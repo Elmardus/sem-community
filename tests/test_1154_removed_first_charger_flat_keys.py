@@ -13,8 +13,8 @@ Now every removal path clears the flat wiring
 (``hardware_detection.CHARGER_WIRING_KEYS``) when the first charger goes,
 setup clears what a save made before the fix still holds, and the builder
 lets the first charger take a flat key only while the flat keys are its
-own (``charger_refs.flat_wiring_is_of``: one of its entities, or its HA
-device). These pins run the real setup.
+own (``charger_refs.flat_wiring_is_of``: one of its entities or its HA
+device, and no role naming another entity). These pins run the real setup.
 """
 from __future__ import annotations
 
@@ -112,9 +112,27 @@ class TestFlatWiringIsOf:
         other = {**same, card["ev_charging_power_sensor"]: "dev2"}
         assert cr.flat_wiring_is_of(card, PRIMARY, same.get)
         assert not cr.flat_wiring_is_of(card, PRIMARY, other.get)
+        # the device only says yes: a site limit sits on the site's device
+        # (#1144) and the builder must still see it to refuse it
+        site = {"ev_current_control_entity": "number.site_available_current"}
+        go_dev = {GO_POWER: "go", GO_SWITCH: "go",
+                  site["ev_current_control_entity"]: "site"}
+        assert cr.flat_wiring_is_of(GO, site, go_dev.get)
         # devices unknown (a KEBA, a template sensor): the entities decide
         assert cr.flat_wiring_is_of(FIRST, PRIMARY, lambda e: None)
         assert not cr.flat_wiring_is_of(GO, PRIMARY, lambda e: None)
+
+    def test_an_old_save_split_between_card_and_flat_keys_is_the_cards(self):
+        """The card names the power, the flat keys only the switch (the
+        #1095 pins): nothing differs, so the primary still runs on it."""
+        card = {"id": "primary", "ev_charging_power_sensor": "sensor.box_power"}
+        assert cr.flat_wiring_is_of(card, {"ev_start_stop_entity": "switch.box"})
+
+    def test_a_card_without_a_power_sensor_takes_none_from_another_box(self):
+        """The wizard always saved one: shared nothing, it is another box's."""
+        mode_only = {"id": "m", "ev_charge_mode_entity": "select.m_mode"}
+        assert not cr.flat_wiring_is_of(mode_only, PRIMARY | {
+            "ev_charge_mode_entity": None})
 
     def test_no_flat_wiring_is_nothing_to_borrow(self):
         assert cr.flat_wiring_is_of(GO, {"ev_min_current": 8})

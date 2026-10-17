@@ -544,23 +544,34 @@ def flat_wiring_is_of(card: Optional[dict], flat: Any,
     """(#1154) Do the flat charger keys belong to ``card``?
 
     The setup wizard and the v2→v3 migration wrote the FIRST charger's wiring
-    there and its card holds a copy, so they share an entity. A card that
-    became first because the one before it was removed shares none: the
-    flat keys still name the removed box. Two cards on one HA device are one
-    box, whatever entities each names. Nothing flat to take is always fine;
-    no card owns anything."""
+    there and its card holds a copy, so they share an entity — or they sit
+    on one HA device. A card that became first because the one before it
+    was removed names its own box: where both name, say, a power sensor,
+    they name different ones, and the flat keys still name the removed box.
+    The wizard always saved a power sensor, so a card without one does not
+    take the flat one from a box it shares nothing with; a card that names
+    no entity at all (the config card's new charger) owns nothing. What is
+    left is an old save that split one box between the card and the flat
+    keys, each naming different roles: those are the card's. The device
+    only ever says yes: a site limit sits on the site's device (#1144), and
+    the builder must still see it to refuse it."""
     wiring = flat_wiring(flat)
     if not wiring:
         return True
     if not isinstance(card, dict):
         return False
+    ident = {k: v for k, v in wiring.items() if k in _FLAT_IDENTITY_KEYS}
+    if any(card.get(k) == v for k, v in ident.items()):
+        return True
     if device_of is not None:
         mine = device_of_card(card, device_of)
-        theirs = device_of_card(wiring, device_of)
-        if mine and theirs:
-            return mine == theirs
-    return any(card.get(k) == v for k, v in wiring.items()
-               if k in _FLAT_IDENTITY_KEYS)
+        if mine and mine == device_of_card(wiring, device_of):
+            return True
+    if any(card.get(k) not in (None, "") for k in ident):
+        return False      # both name this role, each a different entity
+    if not any(card.get(k) not in (None, "") for k in _FLAT_IDENTITY_KEYS):
+        return False      # the card names no box
+    return "ev_charging_power_sensor" not in wiring
 
 
 def without_flat_wiring(store: Any) -> Optional[Dict[str, Any]]:
