@@ -118,6 +118,32 @@ class TestPhysicsDefence:
             "KEBA standby is ~50W; anything past 100W is real charging."
         )
 
+    def test_without_a_plug_sensor_the_car_shows_only_through_its_draw(self):
+        """(#1153) No plug sensor: the reader publishes "no car" at rest and
+        the physics defence turns it on while the charger draws. The view
+        then calls the car known while it draws and unknown at rest — never
+        absent."""
+        from custom_components.solar_energy_management.coordinator.build_view import (
+            build_charger_view,
+        )
+        from custom_components.solar_energy_management.coordinator.charger_types import (
+            FleetCycleState,
+        )
+        for watts, connected in ((0, False), (4200, True)):
+            reader = _build_reader(charging_power_w=watts)
+            reader.config.ev_plug_sensor = None
+            reader.config.ev_charging_sensor = None
+            readings = reader._read_from_legacy_config()
+            assert readings.ev_connected is connected
+            view = build_charger_view(
+                FleetCycleState(power=readings, config={}, is_night=False),
+                charger_id="ev_charger", charger_cfg={"id": "ev_charger"},
+                mode="solar_only", daily_ev_kwh=0.0,
+            )
+            assert view.power.connected is connected
+            assert view.power.plug_known is connected
+            assert view.power.car_absent is False
+
     def test_standby_draw_under_100w_does_not_trigger_override(self):
         """KEBA's own standby consumption (~50 W) must NOT trigger the
         physics override — otherwise an unplugged-but-powered KEBA would

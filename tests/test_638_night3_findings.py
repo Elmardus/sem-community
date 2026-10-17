@@ -73,6 +73,27 @@ class TestPlanConnectivity:
     def test_no_power_readings_is_unknown(self):
         assert plan_connectivity("keba", {}, {}, None) is None
 
+    def test_the_plug_test_is_the_one_the_control_loop_uses(self):
+        """(#1153) "Is there a sensor to ask?" lives in ONE helper, shared
+        with ``build_charger_view``'s ``plug_known`` — the plan and the
+        control loop must not disagree about which chargers can say."""
+        import inspect
+
+        from custom_components.solar_energy_management.coordinator import (
+            build_view,
+            ev_availability,
+        )
+        assert "has_plug_sensor(" in inspect.getsource(
+            ev_availability.plan_connectivity)
+        assert "has_plug_sensor(" in inspect.getsource(
+            build_view.build_charger_view)
+        for cfg, full in (({}, {}), ({"ev_connected_sensor": "b.p"}, {}),
+                          ({}, {"ev_plug_sensor": "b.p"}),
+                          ({}, {"ev_connected_sensor": "b.p"})):
+            power = SimpleNamespace(ev_connected=False)
+            assert (plan_connectivity("keba", cfg, full, power) is None) is (
+                not ev_availability.has_plug_sensor(cfg, full))
+
 
 def _freeze(monkeypatch, hour, minute=0, day=8):
     fixed = datetime(2026, 8, day, hour, minute,

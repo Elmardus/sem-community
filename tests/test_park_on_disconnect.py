@@ -114,6 +114,44 @@ class TestItDoesNotParkWhenItShouldCharge:
             assert ActionKind.PARK_OFF not in _kinds(r)
 
 
+class TestAnUnknownPlugIsNotADeparture:
+    """#1153 — a charger with no plug sensor reads "not connected" whenever
+    it stops drawing. Parking it off on that left it off for good: every
+    mode then answered "EV disconnected" and nothing started it again."""
+
+    class _Adapter:
+        _device = None
+
+        def actual_charging(self, power):
+            return power.power_w > 500.0
+
+        def is_self_charging(self, power):
+            return False
+
+    def _observed(self, *, connected, plug_known):
+        from custom_components.solar_energy_management.coordinator.charger_reconciler import (
+            observe,
+        )
+        from custom_components.solar_energy_management.coordinator.charger_types import (
+            ChargerPower,
+        )
+        return observe(self._Adapter(), ChargerPower(
+            charger_id="ev_charger", power_w=0.0, connected=connected,
+            plug_known=plug_known))
+
+    def test_observe_reads_an_unknown_plug_as_a_charger_that_cannot_say(self):
+        assert self._observed(connected=False, plug_known=False).connected is True
+        assert self._observed(connected=False, plug_known=True).connected is False
+
+    def test_a_sensorless_charger_is_never_parked_after_its_draw_stops(self):
+        rec = _rec()
+        rec.reconcile(DesiredState.CHARGE, 16,
+                      _obs(connected=True, charging=True, power=4140.0), now=0.0)
+        obs = self._observed(connected=False, plug_known=False)
+        rounds = _run(rec, obs, n=50, start=10.0)
+        assert all(ActionKind.PARK_OFF not in _kinds(r) for r in rounds)
+
+
 class TestTheTonightScenario:
     def test_finish_then_unplug_leaves_the_box_parked_before_the_replug(self):
         """The exact PROD sequence: charge → car full → unplug. The box must
