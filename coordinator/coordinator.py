@@ -3779,18 +3779,20 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     # ``_confirm_ev_connection`` (#638) — re-reading the plug
                     # entity here smuggled the raw answer back in behind the
                     # debounce, so a missed UDP poll ended the session.
-                    pc_conn_map = getattr(power, "ev_connected_per_charger", None) or {}
-                    if cid in pc_conn_map:
-                        power.ev_connected = bool(pc_conn_map[cid])
+                    # (#1150) …and in a fleet, a charger with no plug sensor
+                    # of its own answers from its own draw, never from the
+                    # fleet OR (a sibling's car is not its session).
+                    from .ev_availability import charger_state
+                    power.ev_connected = charger_state(
+                        cid, power, self.config, "connected")
                     # ev_charging for this charger: the reader's per-charger
                     # answer, from the shared status words. (#1038) This used
                     # to re-read the sensor as ``== "on"``, so an Ohme at
                     # ``charging`` read as not charging. Nothing in session
                     # tracking reads it today; it is set so a future reader
                     # gets this charger's answer, not the fleet's.
-                    pc_chg_map = getattr(power, "ev_charging_per_charger", None) or {}
-                    if cid in pc_chg_map:
-                        power.ev_charging = bool(pc_chg_map[cid])
+                    power.ev_charging = charger_state(
+                        cid, power, self.config, "charging")
                     was_connected_this_cid = self._last_ev_connected
                     # (#1153) a sensor-less charger's "no car" is no unplug
                     from .ev_availability import has_plug_sensor
@@ -7830,7 +7832,6 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         one other mode the charger side offers the pack under the gate.
         Solar only never takes it. A mode that cannot be read takes nothing.
         """
-        per = getattr(power, "ev_connected_per_charger", None) or {}
         takers = {"solar_plus_battery"}
         if self.config.get("forecast_spending_enabled", False):
             takers.add("min_plus_solar")
@@ -7839,7 +7840,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             cid = str(cfg.get("id") or "")
             if not cid:
                 continue
-            connected = per.get(cid) if cid in per else getattr(power, "ev_connected", False)
+            # (#1150) the fleet flag only for the one charger
+            from .ev_availability import charger_state
+            connected = charger_state(cid, power, self.config, "connected")
             if not bool(connected):
                 continue
             try:
@@ -11725,12 +11728,15 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         if per_charger_states:
             # (#584) Don't push charging notifications for a charger with no car
             # connected. A charger with its own plug sensor uses its real state;
-            # one without falls back to the fleet ``ev_connected`` (unchanged) —
-            # so RienduPre's car-less "Laadpaal Links" stops firing a false
+            # one without falls back to the fleet ``ev_connected`` on a
+            # single-charger install (see below for a fleet) — so RienduPre's car-less "Laadpaal Links" stops firing a false
             # "solar charging started" whenever the OTHER charger has a car.
-            conn_map = getattr(power, "ev_connected_per_charger", None) or {}
+            # (#1150) In a fleet the fallback is the charger's own draw, not
+            # the fleet flag: a sensor-less charger offered current while a
+            # sibling charges has no car SEM can vouch for (#1153).
+            from .ev_availability import charger_state
             for cid, (eff_state, name) in per_charger_states.items():
-                if not conn_map.get(cid, power.ev_connected):
+                if not charger_state(cid, power, self.config, "connected"):
                     continue
                 await self._notification_manager.notify_state_change(
                     eff_state, common_data, charger_id=cid, charger_name=name,

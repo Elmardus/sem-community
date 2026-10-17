@@ -19,7 +19,7 @@ from .charger_types import (
     FleetContext,
     FleetCycleState,
 )
-from .ev_availability import has_plug_sensor
+from .ev_availability import charger_state, has_plug_sensor
 from .plan_verdict import NO_OPINION, PlanVerdict
 
 if TYPE_CHECKING:  # pragma: no cover — type-only
@@ -151,20 +151,13 @@ def build_charger_view(
         # charger's draw (W). Multi-charger always has a per-charger entry above.
         this_charger_w = float(getattr(power_reading, "ev_power", 0.0) or 0.0)
 
-    # Per-charger connected state — when no per-charger sensor is
-    # configured, fall back to the fleet OR (the legacy behaviour).
-    # Step 6 makes this per-charger native.
-    connected_per_charger = getattr(power_reading, "ev_connected_per_charger", None) or {}
-    if charger_id in connected_per_charger:
-        connected = bool(connected_per_charger[charger_id])
-    else:
-        connected = bool(getattr(power_reading, "ev_connected", False))
-
-    charging_per_charger = getattr(power_reading, "ev_charging_per_charger", None) or {}
-    if charger_id in charging_per_charger:
-        charging = bool(charging_per_charger[charger_id])
-    else:
-        charging = bool(getattr(power_reading, "ev_charging", False))
+    # Per-charger connected / charging state: this charger's own sensor
+    # first. Without one, the fleet flag is its own only when it is the
+    # one charger; in a fleet the flag is true when ANY charger has a car
+    # or charges, so a charger with no sensor answers from its own draw
+    # (#1150) — its car is then unknown at rest (#1153, below).
+    connected = charger_state(charger_id, power_reading, config, "connected")
+    charging = charger_state(charger_id, power_reading, config, "charging")
 
     # (#1153) A charger with no plug sensor shows a car only while it
     # draws (the physics defence); once the draw stops its "not

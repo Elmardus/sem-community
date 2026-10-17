@@ -916,17 +916,19 @@ class EVControlMixin:
                    "policing only (#740)",
             bridgeable=False,
         )
+        # (#1150) build_view's resolution for the car too: in a fleet, a
+        # charger with no sensor of its own never takes the fleet OR.
+        # (#1153) …and an unknown plug is not a departure the reconciler
+        # parks on.
+        from .ev_availability import charger_state, has_plug_sensor
+        _config = getattr(self, "config", {}) or {}
+        _connected = charger_state(cid, power, _config, "connected")
         cp = ChargerPower(
             charger_id=cid,
             power_w=this_w,
-            connected=bool(
-                (getattr(power, "ev_connected_per_charger", None) or {})
-                .get(cid, getattr(power, "ev_connected", False)),
-            ),
-            charging=bool(
-                (getattr(power, "ev_charging_per_charger", None) or {})
-                .get(cid, getattr(power, "ev_charging", False)),
-            ),
+            connected=_connected,
+            charging=charger_state(cid, power, _config, "charging"),
+            plug_known=_connected or has_plug_sensor(charger_cfg, _config),
         )
         await actuate(
             decision, adapter, cp, reconciler,
