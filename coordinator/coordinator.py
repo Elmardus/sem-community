@@ -721,6 +721,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # short summer nights happened between sunrise ~05:30 and night_end
         # 07:00, causing SEM to re-fire night charging and double-bill the user).
         self._daily_ev_per_charger_date: Dict[str, str] = {}
+        # (#1146) The same kWh by the calendar day, for the per-charger
+        # daily-energy sensors: per charger id, the local date and the offset
+        # that turns the EV-day bucket into today's kWh. The bucket above
+        # rolls at the charger's Charge-by time (#280), which is right for
+        # night-charging decisions and wrong for a "daily" row, which must
+        # roll at midnight like the fleet's ``daily_ev``.
+        self._daily_ev_per_charger_cal: Dict[str, Dict[str, Any]] = {}
         # Warn-once guards so per-cycle surfacing (#259) doesn't spam the log.
         self._tariff_rate_warned: bool = False
         self._tariff_pause_warned: bool = False  # #274/L1 one-time provider-error warn
@@ -1570,12 +1577,118 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         for cid in stale:
             self._daily_ev_per_charger.pop(cid, None)
             self._daily_ev_per_charger_date.pop(cid, None)
+            (getattr(self, "_daily_ev_per_charger_cal", {}) or {}).pop(cid, None)
             (getattr(self, "_ev_taper_detectors", {}) or {}).pop(cid, None)
         if stale:
             _LOGGER.info(
                 "Removed the stored state of %d charger(s) that are no longer "
                 "configured: %s", len(stale), ", ".join(stale))
         return stale
+
+    def _per_charger_daily_blob(self) -> Dict[str, Any]:
+        """The per-charger daily kWh as the daily store keeps them: the
+        EV-day buckets, their dates, and (#1146) the calendar-day slots."""
+        return {
+            "date": dict(self._daily_ev_per_charger_date),
+            "values": dict(self._daily_ev_per_charger),
+            "calendar": {
+                cid: dict(slot) for cid, slot in
+                SEMCoordinator._charger_calendar_slots(self).items()
+            },
+        }
+
+    def _restore_per_charger_daily(self, pcd: Any) -> None:
+        """Restore what ``_per_charger_daily_blob`` stored.
+
+        It was in-memory only, so it reset to 0 on every restart while the
+        global daily_ev persisted — desyncing the per-charger daily sensor
+        AND (worse) the per-charger night-charge remaining, which would let
+        a charger re-charge its full target after a restart in a
+        multi-charger setup.
+        """
+        if not (isinstance(pcd, dict) and isinstance(pcd.get("values"), dict)):
+            return
+        self._daily_ev_per_charger = dict(pcd["values"])
+        # Per-charger date is a dict[cid → iso-date] since #280. Legacy
+        # stores hold a single string (global sunrise reset) — promote it so
+        # every charger inherits the last reset cleanly. First cycle after
+        # restore re-evaluates against each charger's own deadline, so any
+        # drift self-heals within one update tick.
+        raw_date = pcd.get("date")
+        if isinstance(raw_date, dict):
+            self._daily_ev_per_charger_date = dict(raw_date)
+        elif isinstance(raw_date, str):
+            self._daily_ev_per_charger_date = {
+                cid: raw_date for cid in self._daily_ev_per_charger
+            }
+        else:
+            self._daily_ev_per_charger_date = {}
+        # (#1146) The calendar-day slots. A store from before has none: the
+        # first cycle then keeps the bucket as today's. A slot dated before
+        # today rolls on the first cycle, like a midnight SEM was up for.
+        raw_cal = pcd.get("calendar")
+        self._daily_ev_per_charger_cal = {
+            str(cid): {"date": slot["date"],
+                       "offset": float(slot.get("offset") or 0.0)}
+            for cid, slot in (raw_cal if isinstance(raw_cal, dict) else {}).items()
+            if isinstance(slot, dict) and isinstance(slot.get("date"), str)
+        }
+
+    def _charger_calendar_slots(self) -> Dict[str, Dict[str, Any]]:
+        """(#1146) The calendar-day slots, created on a coordinator built
+        without them."""
+        cal = getattr(self, "_daily_ev_per_charger_cal", None)
+        if not isinstance(cal, dict):
+            cal = {}
+            self._daily_ev_per_charger_cal = cal
+        return cal
+
+    def _charger_calendar_day_roll(self, cid: str, today: str) -> None:
+        """(#1146) Start this charger's calendar day at local midnight.
+
+        Runs before the EV-day check, on the bucket as it stood at the end
+        of yesterday: from here on only what the bucket gains counts as
+        today's. No date yet (first cycle, a store from before this field):
+        the bucket is taken as today's, the reading it showed until now.
+        """
+        slot = SEMCoordinator._charger_calendar_slots(self).setdefault(cid, {})
+        if slot.get("date") == today:
+            return
+        if slot.get("date") is None:
+            slot["offset"] = 0.0
+        else:
+            slot["offset"] = -float(self._daily_ev_per_charger.get(cid, 0.0) or 0.0)
+        slot["date"] = today
+
+    def _charger_calendar_day_carry(self, cid: str) -> None:
+        """(#1146) The EV-day bucket is about to roll to 0 at the Charge-by
+        time: carry today's kWh so far into the offset, so the calendar day
+        keeps them. Without it the row fell to 0 at 08:00 and stayed there
+        although the car had charged 35 kWh since midnight."""
+        slot = SEMCoordinator._charger_calendar_slots(self).get(cid)
+        if not slot:
+            return
+        slot["offset"] = max(
+            0.0,
+            float(self._daily_ev_per_charger.get(cid, 0.0) or 0.0)
+            + float(slot.get("offset", 0.0) or 0.0),
+        )
+
+    def _per_charger_daily_calendar(self) -> Dict[str, float]:
+        """(#1146) Each charger's kWh since local midnight.
+
+        Derived from the EV-day bucket, so the counter follow-up and the
+        restore that bucket gets carry over unchanged. A charger with no
+        calendar slot yet reports its bucket."""
+        cal = getattr(self, "_daily_ev_per_charger_cal", None)
+        if not isinstance(cal, dict):
+            cal = {}
+        out: Dict[str, float] = {}
+        for cid, kwh in dict(self._daily_ev_per_charger).items():
+            slot = cal.get(cid) or {}
+            out[cid] = max(
+                0.0, float(kwh or 0.0) + float(slot.get("offset", 0.0) or 0.0))
+        return out
 
     def _per_charger_daily_report(self, energy) -> Dict[str, float]:
         """Per-charger daily EV energy for the sensors.
@@ -1586,8 +1699,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         charger the two are the same quantity by definition, so report the global daily_ev
         to keep them consistent. Multiple chargers report their own (persisted) accumulators,
         which sum to the global.
+
+        (#1146) …by the calendar day, like the global: the accumulators
+        themselves roll at each charger's Charge-by time, so they are read
+        through ``_per_charger_daily_calendar``. Decisions keep reading the
+        EV-day bucket (``_charger_daily_kwh``).
         """
-        pcd = dict(self._daily_ev_per_charger)
+        pcd = SEMCoordinator._per_charger_daily_calendar(self)
         chargers = self.config.get("ev_chargers") or []
         if len(chargers) == 1 and isinstance(chargers[0], dict):
             # Same id fallback as registration (#485 H1) — an id-less
@@ -3459,23 +3577,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # which would let a charger re-charge its full target after a restart in a
             # multi-charger setup. Persisting it keeps each charger's start/stop on its
             # own delivered+target.
-            pcd = self._storage._daily_data.get("per_charger_daily", {})
-            if isinstance(pcd, dict) and isinstance(pcd.get("values"), dict):
-                self._daily_ev_per_charger = dict(pcd["values"])
-                # Per-charger date is a dict[cid → iso-date] since #280. Legacy
-                # stores hold a single string (global sunrise reset) — promote
-                # it so every charger inherits the last reset cleanly. First
-                # cycle after restore re-evaluates against each charger's own
-                # deadline, so any drift self-heals within one update tick.
-                raw_date = pcd.get("date")
-                if isinstance(raw_date, dict):
-                    self._daily_ev_per_charger_date = dict(raw_date)
-                elif isinstance(raw_date, str):
-                    self._daily_ev_per_charger_date = {
-                        cid: raw_date for cid in self._daily_ev_per_charger
-                    }
-                else:
-                    self._daily_ev_per_charger_date = {}
+            self._restore_per_charger_daily(
+                self._storage._daily_data.get("per_charger_daily", {}))
 
             # Restore daily flow accumulators (#282) — survives HA restart so
             # the new time-integrated flow_*_to_*_energy sensors don't rewind
@@ -4976,7 +5079,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # one whose stale bucket is inflating the sum.
                 energy=energy,
                 energy_flows=energy_flows,
-                per_charger_daily=dict(self._daily_ev_per_charger),
+                # (#1146) by the calendar day, the fleet row's own day
+                per_charger_daily=self._per_charger_daily_calendar(),
                 live_charger_ids=[
                     str(c.get("id"))
                     for c in (self.config.get("ev_chargers") or [])
@@ -5052,10 +5156,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     self._storage.set_per_charger_intelligence_state(_cid, _det.get_state())
                 # Persist per-charger daily EV energy so it survives restarts (so the
                 # per-charger night-charge remaining + daily sensor stay correct).
-                self._storage._daily_data["per_charger_daily"] = {
-                    "date": self._daily_ev_per_charger_date,
-                    "values": dict(self._daily_ev_per_charger),
-                }
+                self._storage._daily_data["per_charger_daily"] = (
+                    self._per_charger_daily_blob())
                 # Persist daily flow accumulators (#282) — without this, an HA
                 # restart mid-day rewinds flow_*_to_*_energy sensors to 0 and
                 # users see broken Sankey totals for the rest of the day.
@@ -13972,6 +14074,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 ev_day = self.time_manager.get_current_meter_day_offset_based(
                     target_time
                 ).isoformat()
+                # (#1146) The sensors' day is the calendar day: it starts
+                # at local midnight, before the EV-day check below.
+                self._charger_calendar_day_roll(
+                    cid, dt_util.now().date().isoformat())
                 if self._daily_ev_per_charger_date.get(cid) != ev_day:
                     # (#1132) The bucket closing is this car's own EV day:
                     # learn it, so its away-day estimate drops by its own
@@ -13980,6 +14086,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                         self._predictor.observe_car_ev(
                             dt_util.now() - timedelta(days=1), cid,
                             self._daily_ev_per_charger.get(cid, 0.0))
+                    # (#1146) …and today's kWh stay on the calendar day.
+                    self._charger_calendar_day_carry(cid)
                     # Per-charger reset (Car A at 07:00, Car B at 08:00 don't
                     # disturb each other) — only this cid's bucket rolls over.
                     self._daily_ev_per_charger[cid] = 0.0
