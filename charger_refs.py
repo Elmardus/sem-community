@@ -341,6 +341,47 @@ def refresh_found(refs: List[dict],
     return out
 
 
+def forget_stale(refs: List[dict], live_by_device: Dict[str, Dict[str, Any]],
+                 sure: Iterable[str],
+                 log: Callable[[str], None] = _LOGGER.info) -> List[dict]:
+    """(#1147) Forget a role the crawler stopped giving — only when it saw
+    the whole device.
+
+    ``refresh_found`` only adds: a start that cannot ask keeps the last
+    answer. So a role a detection fix took away stayed in ``found``, and
+    every start used it again (a Zaptec Go saved before #1142 kept the
+    online sensor as its charge; #1144 needed its own drop for the site
+    limit). Replacing ``found`` whole at every start would make roles come
+    and go: a start during Home Assistant's boot reads no states, and an
+    integration that is still loading shows part of its device.
+
+    ``sure`` names the devices whose answer is whole (``sure_devices``: Home
+    Assistant runs, every integration of the device is loaded, each of its
+    entities has a state). For those, a role of ``found`` that today's
+    answer (``live``) does not hold goes. A device the crawler did not see
+    keeps its ``found``. ``overrides`` (what the user set) and ``cleared``
+    are never touched."""
+    sure = set(sure or ())
+    out: List[dict] = []
+    for r in refs:
+        dev = r.get("device_id")
+        live = live_by_device.get(dev) if dev in sure else None
+        found = r.get("found") or {}
+        gone = {k: v for k, v in found.items() if live and k not in live}
+        if not gone:
+            out.append(r)
+            continue
+        log(f"charger {r['id']}: detection no longer finds {gone} on its "
+            "device; forgotten (#1147)")
+        new = {**r, "found": {k: v for k, v in found.items()
+                              if k not in gone}}
+        if r.get("stored_complete", True):
+            # as in ``drop_refused``: a ref left half can be replaced (#1054)
+            new["stored_complete"] = charger_is_complete(resolve(new, live))
+        out.append(new)
+    return out
+
+
 def problems(refs: List[dict], resolved: List[dict], *,
              device_exists: Callable[[str], bool],
              entity_exists: Callable[[str], bool]) -> List[dict]:
@@ -520,13 +561,18 @@ def reconcile(*, data_list: Optional[list], legacy: Optional[list],
               live_by_device: Dict[str, Dict[str, Any]],
               log: Callable[[str], None] = _LOGGER.info,
               refuse: Optional[Refuse] = None,
+              sure: Optional[Iterable[str]] = None,
               ) -> Optional[Tuple[List[dict], List[dict]]]:
     """The whole setup step, pure. Returns ``(refs, resolved)`` or None when
     there is nothing to manage (no charger list was ever stored).
 
     (#1144) ``refuse`` names the keys of a charger SEM must never drive —
     or (#1143) read as the charge; they leave the crawler's answer and every
-    ref before anything resolves."""
+    ref before anything resolves.
+
+    (#1147) ``sure`` names the devices the crawler saw whole. Given it
+    (the setup step always gives it, maybe empty), a role the crawler
+    stopped giving on such a device is forgotten. Left out, it is kept."""
     if refuse is not None:
         live_by_device = {dev: _without(roles, set(refuse(roles)))
                           for dev, roles in live_by_device.items()}
@@ -552,6 +598,8 @@ def reconcile(*, data_list: Optional[list], legacy: Optional[list],
     refs = refresh_found(refs, live_by_device)
     if refuse is not None:
         refs = drop_refused(refs, live_by_device, refuse)
+    if sure is not None:
+        refs = forget_stale(refs, live_by_device, sure, log)
     refs = hold_new_state(refs, ran, live_by_device, refuse, log)
     resolved = [resolve(r, live_by_device.get(r.get("device_id"))
                         if r.get("device_id") else None) for r in refs]
@@ -607,6 +655,41 @@ def live_charger_roles(hass) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def sure_devices(hass, devices: Iterable[str]) -> set:
+    """(#1147) The devices whose crawler answer is whole.
+
+    Home Assistant has finished starting (``CoreState.running``: before
+    that the crawler may read no states, a select's options or a status
+    sensor's words), every integration the device belongs to is loaded,
+    and each of its enabled entities has a state (an integration still
+    adding them shows part of the device). Any doubt: not sure, and the
+    device keeps what was found before."""
+    from homeassistant.core import CoreState
+    # ``is_running`` is true while Home Assistant is still starting too
+    if hass is None or getattr(hass, "state", None) is not CoreState.running:
+        return set()
+    from homeassistant.config_entries import ConfigEntryState
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+
+    dreg, ereg = dr.async_get(hass), er.async_get(hass)
+    out = set()
+    for dev in devices or ():
+        device = dreg.async_get(dev)
+        if device is None or not device.config_entries:
+            continue
+        loaded = [hass.config_entries.async_get_entry(eid)
+                  for eid in device.config_entries]
+        if any(e is None or e.state is not ConfigEntryState.LOADED
+               for e in loaded):
+            continue
+        ents = er.async_entries_for_device(ereg, dev)
+        if not ents or any(hass.states.get(e.entity_id) is None for e in ents):
+            continue
+        out.add(dev)
+    return out
+
+
 def async_reconcile(hass, entry) -> Optional[List[dict]]:
     """Setup step: refs ← (first start) the old stores, or (a writer changed
     the legacy list) that change. Writes the refs, the resolved legacy copy
@@ -641,11 +724,12 @@ def async_reconcile(hass, entry) -> Optional[List[dict]]:
         if flat[name]:
             _log_refused(f"Saved setting ({name})", flat[name])
 
+    live = live_charger_roles(hass)
     out = reconcile(
         data_list=data.get(LEGACY_KEY), legacy=options.get(LEGACY_KEY),
         refs=options.get(REFS_KEY), sig=options.get(SIG_KEY),
-        device_of=_device_of, live_by_device=live_charger_roles(hass),
-        refuse=_refuse)
+        device_of=_device_of, live_by_device=live,
+        refuse=_refuse, sure=sure_devices(hass, live))
     refs, resolved = out if out is not None else (None, None)
     new_options = options if out is None else {
         **options, REFS_KEY: refs, LEGACY_KEY: resolved,
