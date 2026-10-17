@@ -14,7 +14,6 @@ fleet value IS its own and nothing changes.
 """
 from __future__ import annotations
 
-import inspect
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -39,6 +38,8 @@ from custom_components.solar_energy_management.coordinator.ev_availability impor
     has_plug_sensor,
     plan_connectivity,
 )
+
+from .ast_contracts import call_kwargs, calls, reads_attribute
 
 LEFT = {"id": "left", "ev_connected_sensor": "binary_sensor.left_plug",
         "ev_charging_sensor": "binary_sensor.left_charging",
@@ -140,15 +141,14 @@ class TestTheConsumersTheIssueNames:
                 grid_import_w=REDIRECT_IMPORT_TOLERANCE_W + 500.0,
                 charging=right.charging)
         assert strikes == 0
-        src = inspect.getsource(SEMCoordinator._async_update_data)
-        assert "charging=bool(view.power.charging)" in src
+        assert all("charging" in kw for kw in call_kwargs(
+            SEMCoordinator._async_update_data, "note_redirect_outcome"))
 
     def test_the_phase_sequencer_reads_the_views_charging(self):
         from custom_components.solar_energy_management.coordinator.ev_control import (
             EVControlMixin,
         )
-        src = inspect.getsource(EVControlMixin)
-        assert "charging=cp.charging" in src
+        assert reads_attribute(EVControlMixin._phase_switch_tick, "cp", "charging")
 
 
 @pytest.mark.unit
@@ -194,13 +194,13 @@ class TestTheSiblingReadsAreSwept:
         from custom_components.solar_energy_management.coordinator.ev_control import (
             EVControlMixin,
         )
-        loop = inspect.getsource(SEMCoordinator._async_update_data)
-        assert 'charger_state(\n                        cid, power, self.config, "connected")' in loop
-        gate = inspect.getsource(EVControlMixin._police_opted_out_charger)
-        assert "charger_state(cid, power, _config, \"connected\")" in gate
-        assert "plug_known=" in gate
-        packs = inspect.getsource(SEMCoordinator._ev_pack_modes)
-        assert "charger_state(" in packs
+        for fn in (SEMCoordinator._async_update_data,
+                   SEMCoordinator._send_notifications,
+                   SEMCoordinator._ev_pack_modes,
+                   EVControlMixin._police_opted_out_charger):
+            assert calls(fn, "charger_state"), fn.__name__
+        assert all("plug_known" in kw for kw in call_kwargs(
+            EVControlMixin._police_opted_out_charger, "ChargerPower"))
 
     def test_the_pack_modes_ask_each_chargers_own_car(self):
         """(#1130) A sensorless charger in solar_plus_battery does not
