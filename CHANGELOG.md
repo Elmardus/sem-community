@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔧 **SEM can tag each finished day: sunny, grey, car, cheap prices or a data gap** (#1083). Off by default; diagnostics show the last seven.
 - ✨ **Simulation: swipe the days on a phone, pick the newest with a slider, try batteries up to 150 kWh** (#1083). A car pack fits.
 - 🐛 **The SEM dashboard is built from the SEM entry that runs** (#1083). An ignored or disabled second entry could hide the Simulation tab.
+- 🐛 **Simulation: a counter jump on a day with a missing hour no longer buys energy from the grid** (#1083). One day showed +26.
+- 🐛 **Simulation: a bigger battery no longer buys a bigger night charge** (#1083). A negative price charges only in its own hours.
+- ✨ **Simulation runs one period: last 30/90/365 days, a month or the newest days** (#1083). The battery carries its charge; short gaps are bridged.
+- ✨ **Simulation results: net incl. stored energy, per month, energy totals; tap a day for why it differs** (#1083). Day types filter the result.
+- ✨ **Simulation: try battery power, more solar, no battery for the car, or a one-tap scenario** (#1083). The Excel file has the per-day energy.
 
 # [2.2.0-beta.21] — 17.10.2026
 

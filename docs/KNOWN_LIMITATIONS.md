@@ -465,3 +465,13 @@ The Simulation tab gives estimates, not measurements:
 - **One changed decision changes the rest.** Once the simulated battery
   does something different from the real one, every hour after it is an
   estimate (marked est.).
+- **The night plan knows the day.** A day without a stored forecast (one
+  read back from history) plans its night with its own solar: a perfect
+  forecast. The night charge is never more than the day needs, which can
+  be a little better than live SEM, whose plan rests on a learned house use.
+- **A short gap is bridged with your real battery's change.** Over one or
+  two missing days the simulated battery moves as your real one did; what
+  a bigger battery would have done on those days is not known.
+- **More solar keeps your house and car as recorded.** Only the solar hours
+  grow; nothing moves to use the extra sun, except what the car's charge
+  mode does on its own.
