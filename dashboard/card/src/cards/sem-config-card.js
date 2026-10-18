@@ -23,6 +23,7 @@ import { semTheme, semDefineCard, semCardSurfaceCSS } from '../base/sem-shared.j
 import { priceLevelKey } from '../util/price-level.js';
 import { chargerAddPlan, detectRowLabelKey, isCo2IntensityEntity, isOutdoorTemperatureCandidate, isPowerEntity, nearMissAction, watchOnlyHelpKey } from '../util/detect-rows.js';
 import { roleSource, showsRoleLegend } from '../util/role-source.js';
+import { getAllSettings, setAllSettings, VIEW_MODE_EVENT } from '../util/view-mode.js';
 
 // Section index — order = visual order in the rendered tab. Each entry
 // carries a colour-accent that matches the section icon, mirroring the
@@ -33,9 +34,9 @@ import { roleSource, showsRoleLegend } from '../util/role-source.js';
 // options and stops using it — it is just too much." The Config tab renders
 // about ninety controls; making SEM work needs about eight.
 //
-// The default view is NAMELESS on purpose. Nobody is labelled a beginner —
-// there is simply the configuration, and an "advanced" switch for people who
-// want the rest. Advanced hides nothing: everything is one toggle away.
+// Two views, one switch: "Everyday" (this list) and "All settings" (every
+// row). Nobody is labelled by the view they use. All settings hides
+// nothing: everything is one tap away.
 //
 // This list is deliberately tiny and is pinned by a shrink-only test. Adding
 // to it has to be argued for, because a default view is only useful while it
@@ -89,7 +90,28 @@ const ESSENTIAL_IN_MODE = {
     electricity_off_peak_rate: 'calendar',
 };
 
-const ADV_KEY = 'sem_config_advanced_v1';
+// Per charger, Everyday keeps what wires it to SEM: the power it reads and
+// the control it drives. The charger's name is its block title. Set-once car
+// values (capacity, min/max current, kWh/100 km, phases), the plug and car
+// sensors, and the extra wiring (start/stop, phase switch, charge mode) are
+// in All settings. Pinned by the same shrink-only test as the lists above.
+const ESSENTIAL_CHARGER_CONTROLS = new Set([
+    'ev_charging_power_sensor',
+    'ev_current_control_entity',
+]);
+
+// The tab in three groups. Fine-tuning folds to one line in Everyday unless
+// one of its sections needs attention (unsaved edits, an error, or the user
+// routed there).
+const SECTION_GROUPS = [
+    { id: 'basics', titleKey: 'config_group_basics',
+      sections: ['overview', 'tariff', 'ev_chargers', 'battery_zones', 'sensor_sources'] },
+    { id: 'devices', titleKey: 'config_group_devices',
+      sections: ['heat_pump', 'hot_water', 'load_management', 'pv_strings', 'detected_hardware'] },
+    { id: 'finetuning', titleKey: 'config_group_finetuning', folds: true,
+      sections: ['battery_scheduler', 'battery_intelligence', 'forecast', 'notifications', 'advanced'] },
+];
+
 // (#1040) `_secOf` id of a structural edit waiting in `_pending`.
 const PENDING_ID = 'pending:';
 
@@ -356,11 +378,17 @@ class SEMConfigCard extends SEMLitBase {
         this._showHelp = false;
         // (#830) A VIEW preference, so it lives per browser like the
         // onboarding banner's dismissal — not in the config entry, which
-        // would make one person's choice everyone's.
-        this._advanced = (() => {
-            try { return localStorage.getItem(ADV_KEY) === '1'; }
-            catch (e) { return false; }
-        })();
+        // would make one person's choice everyone's. `_advanced` is the
+        // "All settings" view; the key is shared with the other cards
+        // (util/view-mode.js), so one switch sets every tab.
+        this._advanced = getAllSettings();
+        this._onViewMode = (e) => {
+            const all = e && e.detail && typeof e.detail.all === 'boolean'
+                ? e.detail.all : getAllSettings();
+            if (all !== this._advanced) this._advanced = all;
+        };
+        // Rows the section being rendered showed / hid (Everyday footer).
+        this._rows = null;
         this._lmAdvancedOpen = false;  // (#717) warning/emergency ladder disclosure
         this._entryId = '';
         this._saveStatus = {};  // { fieldKey: 'saving' | 'ok' | error-msg }
@@ -387,6 +415,7 @@ class SEMConfigCard extends SEMLitBase {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        window.removeEventListener(VIEW_MODE_EVENT, this._onViewMode);
         // Cancel pending save-status clears — they hold `this` alive and
         // fire requestUpdate() on a detached element when the dashboard
         // is switched away mid-save (#476).
@@ -500,6 +529,9 @@ class SEMConfigCard extends SEMLitBase {
 
     connectedCallback() {
         super.connectedCallback();
+        // Another card (or another SEM tab) flipped the view switch.
+        window.addEventListener(VIEW_MODE_EVENT, this._onViewMode);
+        this._advanced = getAllSettings();
         // Defer until hass arrives. If hass is already set, fire now.
         if (this._hass) {
             this._ensureEntryId().then(() => this._refreshOptions());
@@ -521,10 +553,12 @@ class SEMConfigCard extends SEMLitBase {
 
     _toggleHelp() { this._showHelp = !this._showHelp; }
 
-    _toggleAdvanced() {
-        this._advanced = !this._advanced;
-        try { localStorage.setItem(ADV_KEY, this._advanced ? '1' : '0'); }
-        catch (e) { /* private window / blocked storage — session only */ }
+    // "Everyday" (false) or "All settings" (true). Stored per browser and
+    // announced to the other cards by the shared helper.
+    _setView(all) {
+        const on = !!all;
+        this._advanced = on;
+        setAllSettings(on);
     }
 
     /** Should this control appear in the current view? */
@@ -543,6 +577,28 @@ class SEMConfigCard extends SEMLitBase {
         if (ESSENTIAL_WHEN_SET[k]) return !!(this._options || {})[ESSENTIAL_WHEN_SET[k]];
         if (!ESSENTIAL_CONTROLS.has(k)) return false;
         return !ESSENTIAL_IN_MODE[k] || ESSENTIAL_IN_MODE[k] === this._tariffMode();
+    }
+    /** The same question for a row inside one charger's block. */
+    _showsChargerControl(key) {
+        if (this._advanced) return true;
+        return ESSENTIAL_CHARGER_CONTROLS.has(String(key || ''));
+    }
+    // The one door every row-rendering helper goes through: answers whether
+    // the row shows and counts it for the section's "N more" line. A helper
+    // that renders a setting row without asking here leaks into Everyday
+    // (pinned by test_830_default_view_ratchet.py).
+    _gate(key) { return this._countRow(this._showsControl(key)); }
+    _gateCharger(key) { return this._countRow(this._showsChargerControl(key)); }
+    _countRow(shown) {
+        if (this._rows) {
+            if (shown) this._rows.shown += 1; else this._rows.hidden += 1;
+        }
+        return shown;
+    }
+    // Rows a disclosure hides without rendering them: counted, not shown.
+    _hideRows(n) {
+        if (this._rows) this._rows.hidden += n;
+        return nothing;
     }
     // (#1040) The tariff mode the page shows: the picked one, before Apply.
     // Picking Calendar shows its fields at once, so one Apply sets it up.
@@ -722,16 +778,15 @@ class SEMConfigCard extends SEMLitBase {
     // delegates to ``_renderZoneKnob`` so all sections (tariff, heat pump,
     // hot water, advanced, per-charger) restyle uniformly with one change.
     _renderStepper(entityId, labelKey, T, helpKey) {
-        // (#830) One choke point for the default view: a control not on
-        // the essential list is simply not rendered until advanced is on.
-        if (!this._showsControl(entityId)) return nothing;
-
+        // (#830) The Everyday check lives in _renderZoneKnob, which the
+        // battery section also calls directly.
         return this._renderZoneKnob(entityId, labelKey, T, helpKey);
     }
 
     _renderToggle(entityId, labelKey, T, helpKey) {
         const entity = this._hass?.states[entityId];
         if (!entity) return nothing;
+        if (!this._gate(entityId)) return nothing;
         this._reg(entityId);
         const dirty = this._isDirty(entityId);
         const cur = String(this._stagedVal(entityId, entity.state));
@@ -753,6 +808,7 @@ class SEMConfigCard extends SEMLitBase {
     _renderSelect(entityId, labelKey, T, helpKey) {
         const entity = this._hass?.states[entityId];
         if (!entity) return nothing;
+        if (!this._gate(entityId)) return nothing;
         this._reg(entityId);
         const dirty = this._isDirty(entityId);
         const cur = String(this._stagedVal(entityId, entity.state));
@@ -1068,6 +1124,9 @@ class SEMConfigCard extends SEMLitBase {
     _renderZoneKnob(entityId, labelKey, T, helpKey) {
         const e = this._hass?.states[entityId];
         if (!e) return nothing;
+        // (#830) Everyday shows the essential list only. The battery floors
+        // are tuned on the Battery tab; here they are in All settings.
+        if (!this._gate(entityId)) return nothing;
         this._reg(entityId);
         const live = parseFloat(e.state) || 0;
         // #605 — render the STAGED value; changes stage, Apply commits.
@@ -1446,6 +1505,7 @@ class SEMConfigCard extends SEMLitBase {
     // non-Sessy select needs mapped. Same _saveOption path and status
     // chrome as every other row; Enter or blur saves.
     _renderTextOption(key, labelKey, opts, helpKey, placeholder) {
+        if (!this._gate(key)) return nothing;
         const val = opts[key] ?? '';
         const status = this._saveStatus[key];
         return html`
@@ -1537,9 +1597,12 @@ class SEMConfigCard extends SEMLitBase {
                 'sensor', 'power', opts, 'config_help_grid_export_entity')}
             ${/* #592 solar power override → Sensor sources section (#628). */ ''}
             ${this._hasBattery() ? html`
+                ${/* Every row under this heading is an All-settings row, so
+                      the heading shows with them, not alone in Everyday. */ ''}
+                ${this._showsControl('battery_setpoint_model') ? html`
                 <div class="readonly-row" style="margin-top:6px;border-top:1px solid ${T.surfaceBorder};padding-top:8px">
                     <span class="ctrl-label" style="font-weight:600">${this._t('config_battery_control')}</span>
-                </div>
+                </div>` : nothing}
                 ${(() => {
                     // #523 battery control entities — needed for force_charge /
                     // per-battery modes AND arbitrage, so they live here (not
@@ -1915,6 +1978,7 @@ class SEMConfigCard extends SEMLitBase {
     // class of bug that idled PROD 2026-06-06. The runtime trusts the
     // saved config; the GUI is the only gatekeeper.
     _renderTargetTypeSelectNested(chargerIndex, cid, charger, opts) {
+        if (!this._gateCharger('ev_target_type')) return nothing;
         const cur = charger.ev_target_type || 'kwh';
         const hasSensor = !!charger.vehicle_soc_entity;
         const statusKey = `ev_chargers.${chargerIndex}.ev_target_type`;
@@ -1949,6 +2013,7 @@ class SEMConfigCard extends SEMLitBase {
     // positions in the switch entity's own vocabulary. Same nested write
     // path + status chrome as the pickers; Enter or blur saves.
     _renderTextNested(chargerIndex, cid, chargerKey, labelKey, opts, helpKey, placeholder) {
+        if (!this._gateCharger(chargerKey)) return nothing;
         const chargers = opts.ev_chargers || [];
         const cur = chargers[chargerIndex]?.[chargerKey] ?? '';
         const statusKey = `ev_chargers.${chargerIndex}.${chargerKey}`;
@@ -1978,6 +2043,7 @@ class SEMConfigCard extends SEMLitBase {
     // shipped with no UI at all. Saves through the same per-charger field
     // path as the text/picker rows.
     _renderToggleNested(chargerIndex, cid, chargerKey, labelKey, opts, helpKey) {
+        if (!this._gateCharger(chargerKey)) return nothing;
         const chargers = opts.ev_chargers || [];
         const cur = !!(chargers[chargerIndex]?.[chargerKey]);
         const statusKey = `ev_chargers.${chargerIndex}.${chargerKey}`;
@@ -2023,6 +2089,7 @@ class SEMConfigCard extends SEMLitBase {
     }
 
     _renderPickerNested(chargerIndex, cid, chargerKey, labelKey, domain, deviceClass, opts, helpKey) {
+        if (!this._gateCharger(chargerKey)) return nothing;
         const chargers = opts.ev_chargers || [];
         const cur = chargers[chargerIndex]?.[chargerKey] || '';
         const statusKey = `ev_chargers.${chargerIndex}.${chargerKey}`;
@@ -2084,6 +2151,7 @@ class SEMConfigCard extends SEMLitBase {
     // (``battery_discharge_control_entities``, #1089). Battery ``idx`` is
     // the Energy-Dashboard battery order, shown as B<idx+1>.
     _renderBatteryListPicker(listKey, labelKey, domains, idx, count, opts, helpKey) {
+        if (!this._gate(listKey)) return nothing;
         const lst = Array.isArray(opts[listKey]) ? opts[listKey] : [];
         const cur = lst[idx] || '';
         const fieldKey = `${listKey}.${idx}`;
@@ -2121,9 +2189,9 @@ class SEMConfigCard extends SEMLitBase {
     // Entity picker bound to an entry.options key. Auto-saves via WebSocket
     // on change → SEM update_listener reloads → registered=on within ~1s.
     _renderPicker(optionKey, labelKey, domain, deviceClass, opts, helpKey) {
-        // (#830) One choke point for the default view: a control not on
-        // the essential list is simply not rendered until advanced is on.
-        if (!this._showsControl(optionKey)) return nothing;
+        // (#830) A control not on the essential list is not rendered in
+        // Everyday; All settings shows it.
+        if (!this._gate(optionKey)) return nothing;
 
         const status = this._saveStatus[optionKey];
         // #528: structural (entity-wiring) keys reload the entry — stage the
@@ -2370,9 +2438,9 @@ class SEMConfigCard extends SEMLitBase {
     // ``switch.sem_*`` entity exists for the option.
     // Native <select> bound to an entry.options key.
     _renderOptionSelect(optionKey, labelKey, options, opts, helpKey, defaultVal, onPick) {
-        // (#830) One choke point for the default view: a control not on
-        // the essential list is simply not rendered until advanced is on.
-        if (!this._showsControl(optionKey)) return nothing;
+        // (#830) A control not on the essential list is not rendered in
+        // Everyday; All settings shows it.
+        if (!this._gate(optionKey)) return nothing;
 
         const sid = 'opt:' + optionKey;
         this._reg(sid);
@@ -2406,9 +2474,9 @@ class SEMConfigCard extends SEMLitBase {
     // doesn't fire its own reload and discard a sibling picker's staged edit.
     // Non-structural toggles keep saving live on click (unchanged).
     _renderOptionToggle(optionKey, labelKey, opts, helpKey, defaultVal) {
-        // (#830) One choke point for the default view: a control not on
-        // the essential list is simply not rendered until advanced is on.
-        if (!this._showsControl(optionKey)) return nothing;
+        // (#830) A control not on the essential list is not rendered in
+        // Everyday; All settings shows it.
+        if (!this._gate(optionKey)) return nothing;
 
         const structural = STRUCTURAL_KEYS.has(optionKey);
         const sid = 'opt:' + optionKey;
@@ -2447,9 +2515,9 @@ class SEMConfigCard extends SEMLitBase {
     // need hundreds of clicks; typing the number is faster. Commits on
     // blur and Enter to avoid one save per keystroke.
     _renderOptionNumberInput(optionKey, labelKey, cfg, opts, helpKey) {
-        // (#830) One choke point for the default view: a control not on
-        // the essential list is simply not rendered until advanced is on.
-        if (!this._showsControl(optionKey)) return nothing;
+        // (#830) A control not on the essential list is not rendered in
+        // Everyday; All settings shows it.
+        if (!this._gate(optionKey)) return nothing;
 
         const sid = 'opt:' + optionKey;
         this._reg(sid);
@@ -2487,7 +2555,7 @@ class SEMConfigCard extends SEMLitBase {
     // as bit strings) — never guessable, so they are typed beside the entity,
     // the same shape as the charger phase-switch and charge-mode values.
     _renderOptionTextInput(optionKey, labelKey, opts, helpKey, placeholder) {
-        if (!this._showsControl(optionKey)) return nothing;
+        if (!this._gate(optionKey)) return nothing;
 
         const sid = 'opt:' + optionKey;
         this._reg(sid);
@@ -2516,9 +2584,9 @@ class SEMConfigCard extends SEMLitBase {
     // #528: option-key slider in the same colorful accent style as the
     // entity knob (saves an entry.option live via _saveOption).
     _renderOptionSlider(optionKey, labelKey, cfg, opts, helpKey) {
-        // (#830) One choke point for the default view: a control not on
-        // the essential list is simply not rendered until advanced is on.
-        if (!this._showsControl(optionKey)) return nothing;
+        // (#830) A control not on the essential list is not rendered in
+        // Everyday; All settings shows it.
+        if (!this._gate(optionKey)) return nothing;
 
         const sid = 'opt:' + optionKey;
         this._reg(sid);
@@ -2650,6 +2718,7 @@ class SEMConfigCard extends SEMLitBase {
                 ${this._renderOptionNumberInput('target_peak_limit', 'config_lm_target_peak',
                     { min: 1.0, max: 80.0, step: 0.1, unit: 'kW', default: 5.0 }, opts, 'config_help_lm_target_peak')}
                 ${this._renderOperatorRelay(opts)}
+                ${!this._showsControl('warning_peak_level') ? this._hideRows(2) : html`
                 <div class="advanced-toggle-row" @click=${() => { this._lmAdvancedOpen = !this._lmAdvancedOpen; }}>
                     <ha-icon class="chevron" icon="mdi:chevron-down"
                              style="--mdc-icon-size:16px;transform:${this._lmAdvancedOpen ? 'rotate(0deg)' : 'rotate(-90deg)'}"></ha-icon>
@@ -2660,7 +2729,7 @@ class SEMConfigCard extends SEMLitBase {
                         { min: 1.0, max: 80.0, step: 0.1, unit: 'kW', default: 4.5 }, opts, 'config_help_lm_warning_peak')}
                     ${this._renderOptionNumberInput('emergency_peak_level', 'config_lm_emergency_peak',
                         { min: 1.0, max: 80.0, step: 0.1, unit: 'kW', default: 6.0 }, opts, 'config_help_lm_emergency_peak')}
-                ` : nothing}
+                ` : nothing}`}
             `}
         `;
     }
@@ -2670,7 +2739,7 @@ class SEMConfigCard extends SEMLitBase {
     // own peak limit is off. The limit row appears once a relay is picked.
     _renderOperatorRelay(opts) {
         const relay = opts.shed_signal_entity || '';
-        if (!this._showsControl('shed_signal_entity')) return nothing;
+        if (!this._showsControl('shed_signal_entity')) return this._hideRows(relay ? 2 : 1);
         return html`
             <div class="operator-relay">
                 <div class="operator-relay-head">${this._t('config_shed_signal_heading')}</div>
@@ -2856,6 +2925,7 @@ class SEMConfigCard extends SEMLitBase {
     }
 
     _renderPvStrings(T) {
+        if (!this._gate('pv_string_names')) return nothing;
         const strings = this._pvStrings();
         const saved = this._options?.pv_string_names || {};
         const edits = this._pvNameEdits || {};
@@ -2967,13 +3037,13 @@ class SEMConfigCard extends SEMLitBase {
                 { min: 0, max: 14, step: 1,
                   unit: ' ' + this._t('config_retention_unit_days'), default: 0 },
                 opts, 'config_help_retention')}
-            <div class="action-row">
+            ${this._gate('status_retention_cleanup') ? html`<div class="action-row">
                 <button class="action-btn" ?disabled=${this._retentionBusy}
                         @click=${() => this._purgeStatusHistory()}>
                     ${this._t('config_retention_cleanup')}
                 </button>
                 <span class="readonly-value">${this._retentionMsg || ''}</span>
-            </div>
+            </div>` : nothing}
         `;
     }
 
@@ -2996,6 +3066,7 @@ class SEMConfigCard extends SEMLitBase {
     // swapped/mis-mapped convention shows inverted import/export and the
     // user can correct it here without Developer Tools → Actions.
     _renderGridSignFix(T) {
+        if (!this._gate('grid_sign_fix')) return nothing;
         const gridSign = this._valLabel('diag_grid_sign') || '—';
         const battSign = this._valLabel('diag_battery_sign') || '—';
         return html`
@@ -3219,7 +3290,12 @@ class SEMConfigCard extends SEMLitBase {
         // renderers call _reg() while _sec is set), so the footer knows which
         // staged edits belong here.
         this._sec = section.id;
+        // (#830) Count the rows Everyday shows and hides while the body
+        // renders (every row helper goes through _gate).
+        this._rows = { shown: 0, hidden: 0 };
         const body = contentFn(T);
+        const rows = this._rows;
+        this._rows = null;
         this._sec = null;
         const dirty = this._sectionUnsaved(section.id);
         const busy = this._secApplying === section.id || this._applying;
@@ -3242,11 +3318,61 @@ class SEMConfigCard extends SEMLitBase {
                 <div class="section-content ${collapsed ? '' : 'expanded'}">
                     <div class="section-body">
                         ${body}
+                        ${this._renderEverydayMore(rows)}
                         ${footer}
                     </div>
                 </div>
             </div>
         `;
+    }
+
+    // (#830) Everyday: what this section keeps in All settings, one tap
+    // away. A section with nothing to show says so in one line.
+    _renderEverydayMore(rows) {
+        if (this._advanced || !rows || !rows.hidden) return nothing;
+        return html`
+            <div class="everyday-more">
+                ${rows.shown ? nothing : html`
+                    <span class="everyday-summary">${this._t('config_everyday_nothing_here')}</span>`}
+                <button class="everyday-more-btn" @click=${() => this._setView(true)}>
+                    ${this._t('config_more_in_all').replace(/\{n\}/g, String(rows.hidden))}
+                </button>
+            </div>`;
+    }
+
+    // Does a Fine-tuning section need to be seen even in Everyday? Unsaved
+    // edits or an error waiting there, or the user routed to it.
+    _sectionNeedsAttention(id) {
+        return !!(this._sectionUnsaved(id) || this._saveStatus['_sec_' + id]
+                  || this._revealed.has(id));
+    }
+
+    // The sections in their three groups, filtered for the current view.
+    _renderGroups(renderers, T) {
+        const byId = Object.fromEntries(SECTIONS.map(s => [s.id, s]));
+        return SECTION_GROUPS.map((g) => {
+            const all = g.sections.map(id => byId[id]).filter(Boolean)
+                .filter(s => s.id !== 'pv_strings' || this._pvStrings().length >= 2);
+            const shown = g.folds
+                ? all.filter(s => this._advanced || this._sectionNeedsAttention(s.id))
+                // (#830) Everyday shows what SEM needs to work. A subsystem
+                // the user has already configured stays visible either way —
+                // hiding something someone set up is not simplification, it
+                // is losing their work.
+                : all.filter(s => this._advanced || ESSENTIAL_SECTIONS.has(s.id)
+                                  || this._sectionConfigured(s.id)
+                                  || this._revealed.has(s.id));
+            const folded = all.length - shown.length;
+            if (!shown.length && !(g.folds && folded)) return nothing;
+            return html`
+                <div class="group-heading">${this._t(g.titleKey)}</div>
+                ${shown.map(s => this._renderSection(s, renderers[s.id], T))}
+                ${g.folds && folded ? html`
+                    <button class="group-folded" @click=${() => this._setView(true)}>
+                        ${this._t('config_finetuning_folded').replace(/\{n\}/g, String(folded))}
+                    </button>` : nothing}
+            `;
+        });
     }
 
     render() {
@@ -3285,8 +3411,54 @@ class SEMConfigCard extends SEMLitBase {
                     color: var(--primary-text-color, ${T.text});
                 }
                 .card-help-bar {
-                    display: flex; justify-content: flex-end;
+                    display: flex; justify-content: space-between;
+                    align-items: center; gap: 8px; flex-wrap: wrap;
                     margin: -4px 0 6px;
+                }
+                /* (#830) Everyday | All settings — one switch, two states. */
+                .view-switch {
+                    display: inline-flex; padding: 2px; gap: 2px;
+                    border-radius: 16px; border: 1px solid ${T.surfaceBorder};
+                    background: ${T.surface};
+                }
+                .view-opt {
+                    border: none; background: transparent; cursor: pointer;
+                    padding: 4px 12px; border-radius: 14px;
+                    font-size: 12px; font-family: inherit;
+                    color: ${T.textDim || 'rgba(150,160,175,0.9)'};
+                    transition: background 0.15s, color 0.15s;
+                }
+                .view-opt:hover { color: ${accent}; }
+                .view-opt.on {
+                    background: color-mix(in srgb, ${accent} 18%, transparent);
+                    color: ${accent}; font-weight: 600;
+                }
+                .group-heading {
+                    margin: 14px 2px 6px; font-size: 11px; font-weight: 700;
+                    text-transform: uppercase; letter-spacing: 0.08em;
+                    color: var(--secondary-text-color, ${T.textSec});
+                }
+                .group-folded, .everyday-more-btn {
+                    border: 1px dashed ${T.surfaceBorder}; background: transparent;
+                    color: var(--secondary-text-color, ${T.textSec});
+                    font-size: 12.5px; font-family: inherit; cursor: pointer;
+                    border-radius: 10px; transition: color 0.15s, border-color 0.15s;
+                }
+                .group-folded {
+                    display: block; width: 100%; text-align: left;
+                    padding: 10px 14px; margin-bottom: 12px;
+                }
+                .everyday-more {
+                    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+                    margin-top: 8px;
+                }
+                .everyday-summary {
+                    flex: 1; font-size: 12.5px;
+                    color: var(--secondary-text-color, ${T.textSec});
+                }
+                .everyday-more-btn { padding: 5px 12px; }
+                .group-folded:hover, .everyday-more-btn:hover {
+                    color: ${accent}; border-color: ${accent};
                 }
                 .help-toggle {
                     cursor: pointer;
@@ -3884,6 +4056,18 @@ class SEMConfigCard extends SEMLitBase {
                         the global help toggle carries a visible
                         label now. */ ''}
                     <div class="card-help-bar">
+                        ${/* (#830) The view switch sits beside the help switch
+                            because it is the same kind of thing: a view
+                            preference, not a setting. Two named states,
+                            neither of which labels the person using it. */ ''}
+                        <div class="view-switch" role="group">
+                            <button class="view-opt ${this._advanced ? '' : 'on'}"
+                                    aria-pressed=${this._advanced ? 'false' : 'true'}
+                                    @click=${() => this._setView(false)}>${this._t('config_view_everyday')}</button>
+                            <button class="view-opt ${this._advanced ? 'on' : ''}"
+                                    aria-pressed=${this._advanced ? 'true' : 'false'}
+                                    @click=${() => this._setView(true)}>${this._t('config_advanced_label')}</button>
+                        </div>
                         <span class="help-toggle-labeled ${this._showHelp ? 'on' : ''}"
                               @click=${() => this._toggleHelp()}>
                             <ha-icon
@@ -3892,30 +4076,9 @@ class SEMConfigCard extends SEMLitBase {
                             ></ha-icon>
                             <span>${this._t('config_help_label')}</span>
                         </span>
-                        ${/* (#830) The advanced switch sits beside the help
-                            switch because it is the same kind of thing: a view
-                            preference, not a setting. The default view has no
-                            name — nobody is told they are a beginner. */ ''}
-                        <span class="help-toggle-labeled ${this._advanced ? 'on' : ''}"
-                              @click=${() => this._toggleAdvanced()}>
-                            <ha-icon
-                                icon="${this._advanced ? 'mdi:tune-variant' : 'mdi:tune'}"
-                                style="--mdc-icon-size:16px"
-                            ></ha-icon>
-                            <span>${this._t('config_advanced_label')}</span>
-                        </span>
                     </div>
                     ${this._renderApplyBar()}
-                    ${SECTIONS
-                        .filter(s => s.id !== 'pv_strings' || this._pvStrings().length >= 2)
-                        // (#830) The default view shows what SEM needs to work.
-                        // A subsystem the user has already configured stays
-                        // visible either way — hiding something someone set up
-                        // is not simplification, it is losing their work.
-                        .filter(s => this._advanced || ESSENTIAL_SECTIONS.has(s.id)
-                                     || this._sectionConfigured(s.id)
-                                     || this._revealed.has(s.id))
-                        .map(s => this._renderSection(s, renderers[s.id], T))}
+                    ${this._renderGroups(renderers, T)}
                 </div>
             </ha-card>
         `;

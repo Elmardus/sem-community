@@ -1892,7 +1892,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM 正在核对两个猜测的电网电表",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **配置**, and switch on **高级** at the top. Then set **电网功率** in section **传感器来源**. If your meter has one sensor for import and one for export, set **电网购电传感器** and **电网馈电传感器** in section **电价与费率** instead."
+      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **配置**, and pick **全部设置** at the top. Then set **电网功率** in section **传感器来源**. If your meter has one sensor for import and one for export, set **电网购电传感器** and **电网馈电传感器** in section **电价与费率** instead."
     },
     "battery_control_write_not_taken": {
       "title": "电池控制写入未生效：{entity_id}",
@@ -1912,7 +1912,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM 未能找到您的电网功率电表",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **配置**, and switch on **高级** at the top. Then set **电网功率** in section **传感器来源**. If your meter has one sensor for import and one for export, set **电网购电传感器** and **电网馈电传感器** in section **电价与费率** instead."
+      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **配置**, and pick **全部设置** at the top. Then set **电网功率** in section **传感器来源**. If your meter has one sensor for import and one for export, set **电网购电传感器** and **电网馈电传感器** in section **电价与费率** instead."
     },
     "charger_device_gone": {
       "title": "充电桩 {name}：设备已不存在",

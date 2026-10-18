@@ -3,8 +3,9 @@
 Rule: *"if a user is starting with SEM he is overwhelmed with so many options
 and stops using it — it is just too much."* And on naming: *"we do not name it
 beginner. It's just nameless and advanced view."* Nobody is labelled a
-beginner; there is the configuration, and an **Advanced** switch for whoever
-wants the rest.
+beginner; there is the configuration, and a switch for whoever wants the
+rest. The switch has two named states, **Everyday** (the default view) and
+**All settings**, and neither labels the person using it.
 
 A default view is only useful while it stays small. Every control on it arrived
 for a good reason, which is exactly how ninety happened in the first place — so
@@ -107,14 +108,99 @@ def test_the_configured_check_reuses_the_setup_overview():
         "done-signals")
 
 
+VIEW_MODE = CARD.parent.parent / "util" / "view-mode.js"
+
+
 def test_the_view_preference_is_per_browser_not_per_install():
     """A view preference is not a setting. Storing it in the config entry would
-    make one person's choice everyone's."""
-    src = CARD.read_text(encoding="utf-8")
-    assert "localStorage.setItem(ADV_KEY" in src
-    assert "catch (e)" in src, (
+    make one person's choice everyone's. The store moved to a helper every card
+    shares (one switch for every tab); the key stayed, so a choice made before
+    the move is kept."""
+    helper = VIEW_MODE.read_text(encoding="utf-8")
+    assert 'VIEW_MODE_KEY = "sem_config_advanced_v1"' in helper, (
+        "the key changed — every existing choice would be lost")
+    assert "localStorage.setItem(VIEW_MODE_KEY" in helper
+    assert helper.count("catch (_e)") == 2, (
         "storage access is not guarded — a private window or blocked site data "
         "would throw and take the card with it")
+    src = CARD.read_text(encoding="utf-8")
+    assert "from '../util/view-mode.js'" in src
+    assert "this._advanced = getAllSettings();" in src
+    assert "setAllSettings(on);" in src
+    assert "sem_config_advanced_v1" not in src, (
+        "the card spells the key itself again — use util/view-mode.js")
+
+
+#: Rows inside one charger's block that Everyday keeps: what wires it to SEM.
+#: Before this list existed every per-charger row (nine on a plain charger)
+#: showed in the default view, because the nested helpers never asked.
+MAX_CHARGER_CONTROLS = 2
+
+
+def test_a_charger_shows_at_most_two_rows_in_everyday():
+    got = _set("ESSENTIAL_CHARGER_CONTROLS")
+    assert len(got) <= MAX_CHARGER_CONTROLS, (
+        f"Everyday grew to {len(got)} rows per charger: {sorted(got)}. "
+        f"Set-once car values and extra wiring belong in All settings.")
+    assert {"ev_charging_power_sensor", "ev_current_control_entity"} <= got, (
+        "a charger in Everyday must still show the power it reads and the "
+        "control it drives")
+
+
+#: What a template must contain to be a setting row (picker, stepper, knob,
+#: free-text input). The JS test counts rendered rows by the same marks.
+_ROW_MARKS = ('class="picker-cell', 'class="stepper-cell', 'class="zone-knob',
+              'class="txt-opt', 'class="pv-name-input')
+
+
+def _methods(src):
+    """Each class method of the card as (name, body), by indentation."""
+    return [(m.group(1), m.group(2)) for m in re.finditer(
+        r"^    (_[A-Za-z]\w*)\([^\n]*\) \{\n(.*?)^    \}$", src, re.M | re.S)]
+
+
+def test_every_row_helper_asks_the_everyday_gate():
+    """The leak this closes: only some helpers asked whether a row belongs in
+    Everyday. The battery knobs, entity toggles and selects, every per-charger
+    row and the free-text rows did not, so the default view showed twenty rows
+    on a home with a battery and one charger. Any method that draws a setting
+    row now goes through ``_gate`` (or ``_gateCharger`` inside a charger)."""
+    src = CARD.read_text(encoding="utf-8")
+    drawing = [(n, b) for n, b in _methods(src) if any(k in b for k in _ROW_MARKS)]
+    assert len(drawing) >= 15, [n for n, _ in drawing]
+    leaks = [n for n, b in drawing
+             if "this._gate(" not in b and "this._gateCharger(" not in b]
+    assert not leaks, (
+        f"these helpers draw a setting row without asking the Everyday gate: "
+        f"{leaks}")
+
+
+def test_the_gate_is_the_one_filter():
+    """``_gate`` answers with ``_showsControl`` (and the charger list), so the
+    lists the caps above count are the only way into Everyday."""
+    src = CARD.read_text(encoding="utf-8")
+    assert "_gate(key) { return this._countRow(this._showsControl(key)); }" in src
+    assert "return ESSENTIAL_CHARGER_CONTROLS.has(String(key || ''));" in src
+    m = re.search(r"_showsChargerControl\(key\) \{(.*?)\n    \}", src, re.S)
+    assert m and "if (this._advanced) return true;" in m.group(1), (
+        "All settings no longer shows every charger row")
+
+
+def test_the_switch_reads_everyday_and_all_settings():
+    import json
+    tr = json.loads((Path(__file__).resolve().parent.parent / "dashboard"
+                     / "translations.json").read_text(encoding="utf-8"))
+    assert tr["en"]["config_view_everyday"] == "Everyday"
+    assert tr["en"]["config_advanced_label"] == "All settings"
+    for lang, table in tr.items():
+        for key in ("config_view_everyday", "config_advanced_label",
+                    "config_group_basics", "config_group_devices",
+                    "config_group_finetuning", "config_finetuning_folded",
+                    "config_more_in_all", "config_everyday_nothing_here"):
+            assert table.get(key), f"{lang}.{key} missing"
+        if lang != "en":
+            assert table["config_advanced_label"] != "All settings", lang
+            assert table["config_view_everyday"] != "Everyday", lang
 
 
 def test_nothing_is_called_beginner():
