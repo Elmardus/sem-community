@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.13/3.14, Home Assistant recorder (`coordinator/recorder_history.py` is the one reader), pytest + `tests/scenario_harness.py`, SEM storage (`coordinator/storage.py`, `homeassistant.helpers.storage.Store`).
 
-**Origin:** @RienduPre's #1083 ("replay the last 30–90 days with different settings"). Guido, 13.10: build the engine first as our test tool; tag days by weather and events; "we can integrate this in our testing pipeline instead of the compressed sun simulation."
+**Origin:** @RienduPre's #1083 ("replay the last 30–90 days with different settings"). The maintainer, 13.10: build the engine first as our test tool; tag days by weather and events; "we can integrate this in our testing pipeline instead of the compressed sun simulation."
 
 ---
 
@@ -136,17 +136,17 @@ Starting set (each: name, exact/modelled, rule):
 - [ ] Full suite once (4 GB box: wait for any other run), ruff, CI both rungs.
 - [ ] ruflo review (`~/claude-jobs/challenge-feature-1083-replay.md`), claims: "replay runs the real cycle with the real forecast and tariff; no write path; one day in memory; the report cannot pass a failed exact invariant; the corpus holds no personal data".
 - [ ] Replay #1104's and #1105's branches against the pinned days — the first real use.
-- [ ] Day tags soak on PROD (flag on) one week; compare tags with Guido's own memory of those days.
+- [ ] Day tags soak on PROD (flag on) one week; compare tags with the maintainer's own memory of those days.
 
 ### Task 9 (LATER, separate stop): the user what-if
 
-- [ ] **Mockup first, stop for Guido's OK**: a card section "What if…" — pick a change (battery size, a tariff, a mode) and a day type; shows € and kWh per day type over the last 30–90 days, with *modelled* clearly marked.
+- [ ] **Mockup first, stop for the maintainer's OK**: a card section "What if…" — pick a change (battery size, a tariff, a mode) and a day type; shows € and kWh per day type over the last 30–90 days, with *modelled* clearly marked.
 - [ ] Settings in the GUI; option surface only shrinks — what-if inputs are a one-off form, not stored options.
 - [ ] Soak on PROD before develop.
 
 ---
 
-## Open decisions for Guido (my default in brackets)
+## Open decisions for the maintainer (my default in brackets)
 
 1. **Where replay code lives** — in the repo but out of the HACS zip (`replay/`, `scripts/`) so CI can run fixture days. [yes]
 2. **Day tags on PROD**: record nightly behind a soak flag, no GUI control (it only records). [yes]

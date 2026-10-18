@@ -2,9 +2,9 @@
 
 ## Context
 
-@RienduPre asked (#1083) for a what-if: replay the last 30–90 days with other settings and see the € difference. Branch C (`feature/1083-replay`, CI green, reviewed) built the first half: day tags and a developer replay tool. That tool lives in `tools/`, never ships, and replays only two pieces of SEM (home-power hold, solar forecast). Guido now wants the user-facing half: **an extra dashboard tab "Simulation"**, switched on by the user, where they pick recorded days by tag, change a few parameters, run the replay in the background on their own Home Assistant, and get € per day and per day type — every simulated number marked as estimated.
+@RienduPre asked (#1083) for a what-if: replay the last 30–90 days with other settings and see the € difference. Branch C (`feature/1083-replay`, CI green, reviewed) built the first half: day tags and a developer replay tool. That tool lives in `tools/`, never ships, and replays only two pieces of SEM (home-power hold, solar forecast). the maintainer now wants the user-facing half: **an extra dashboard tab "Simulation"**, switched on by the user, where they pick recorded days by tag, change a few parameters, run the replay in the background on their own Home Assistant, and get € per day and per day type — every simulated number marked as estimated.
 
-Decisions already made by Guido (14.10.2026): the mockup (`~/claude-jobs/mockups/1083-simulation-tab.png`) is approved as shown; history comes from **hourly long-term statistics, 90 days**; the simulated battery **runs SEM's real battery decisions**; downloads are **xlsx, for the simulation and for the EV session history** (no CSV); **build with Opus** after approval.
+Decisions already made by the maintainer (14.10.2026): the mockup (`~/claude-jobs/mockups/1083-simulation-tab.png`) is approved as shown; history comes from **hourly long-term statistics, 90 days**; the simulated battery **runs SEM's real battery decisions**; downloads are **xlsx, for the simulation and for the EV session history** (no CSV); **build with Opus** after approval.
 
 Branch: `feature/1083-simulation-tab` on top of `feature/1083-replay` (worktree `/home/sem/sem-1083` → new worktree `/home/sem/sem-sim`). Lands asleep (switch off by default), soaks on PROD before develop.
 
@@ -56,8 +56,8 @@ Build with **Opus** agents (`model: opus`), one fresh agent per task, a review b
 
 - Unit: the tests above; `tests/test_830_option_surface_ratchet.py` with the new baseline; `tests/test_card_registry_metadata.py`.
 - `.175` (observer on): switch on → tab appears after reload; 90-day run finishes; HA memory stable; no recorder-busy warnings; stop mid-run; switch off → tab gone; xlsx opens in LibreOffice with a `;` locale with typed numbers.
-- PROD soak (switch on, Guido's own days): the baseline € per day equals the Costs tab for the same days; a what-if run completes; no SEM errors; tags match Guido's memory of sunny/grey days.
-- Merge to develop only after the soak and Guido's word (`SEM_FEAT_OK`).
+- PROD soak (switch on, the maintainer's own days): the baseline € per day equals the Costs tab for the same days; a what-if run completes; no SEM errors; tags match the maintainer's memory of sunny/grey days.
+- Merge to develop only after the soak and the maintainer's word (`SEM_FEAT_OK`).
 
 ## Risks
 
