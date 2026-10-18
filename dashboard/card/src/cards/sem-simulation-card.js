@@ -25,6 +25,7 @@ import {
     chipDate, rowDate, money, formatDelta, needsEst, visibleRows, tagTiles, totalLine,
     initialForm, isChanged, buildParams, canRun, minutesLeft, progressShare, fill,
     monthsOf, pickMonth, calibration, BATTERY_MODES, EV_MODES,
+    recentMax, pickRecent, recentCount, SIM_CAPACITY_MAX_KWH,
 } from '../util/simulation-rows.js';
 
 const WS = 'solar_energy_management/simulation';
@@ -232,6 +233,10 @@ class SEMSimulationCard extends SEMLitBase {
         this._selected = new Set(pickMonth(this._days?.days || [], month));
     }
 
+    _pickRecent(n) {
+        this._selected = new Set(pickRecent(this._days?.days || [], n));
+    }
+
     _toggle(day) {
         this._selected = toggleDay(this._selected, day);
     }
@@ -292,6 +297,7 @@ class SEMSimulationCard extends SEMLitBase {
                             ${monthsOf(days).map((m) => html`<option value="${m}">${m}</option>`)}
                         </select>
                     </div>
+                    ${this._renderRecentSlider(days)}
                     <div class="grid">
                         ${days.map((d) => {
                             const ok = isSelectable(d);
@@ -306,14 +312,34 @@ class SEMSimulationCard extends SEMLitBase {
             </div></ha-card>`;
     }
 
-    _renderNumberRow(field, label, unit, current) {
+    // A slider over the newest days: one drag on a phone instead of a tap per
+    // day chip. It shows where it stands only while the selection is exactly
+    // the newest N days; a chip or quick pick leaves it at rest.
+    _renderRecentSlider(days) {
+        const max = recentMax(days);
+        if (max < 2) return nothing;
+        const at = recentCount(days, this._selected);
+        const n = at ?? 0;
+        const picked = n ? pickRecent(days, n) : [];
+        const span = picked.length ? `${chipDate(picked[0])} – ${chipDate(picked[picked.length - 1])}` : '';
+        return html`
+            <div class="recent">
+                <label for="sim-recent">${n ? fill(this._t('sim_recent_n'), { n }) : this._t('sim_recent_label')}</label>
+                <input id="sim-recent" type="range" min="0" max="${max}" step="1" .value=${String(n)}
+                    aria-valuetext="${n ? fill(this._t('sim_recent_n'), { n }) : this._t('sim_recent_label')}"
+                    @input=${(e) => this._pickRecent(e.target.value)}>
+                <small>${span}</small>
+            </div>`;
+    }
+
+    _renderNumberRow(field, label, unit, current, max = null) {
         const f = this._form || {};
         const changed = isChanged(field, f, this._defaults);
         return html`
             <div class="ct-row">
                 <span class="lbl">${this._t(label)}</span>
                 <span class="cur">${current}</span><span class="arrow">→</span>
-                <span class="inp ${changed ? 'changed' : ''}"><input type="number" min="0" step="any"
+                <span class="inp ${changed ? 'changed' : ''}"><input type="number" min="0" max="${max ?? nothing}" step="any"
                     .value=${String(f[field] ?? '')}
                     @change=${(e) => this._setForm({ [field]: e.target.value })}><small>${unit}</small></span>
             </div>`;
@@ -362,7 +388,7 @@ class SEMSimulationCard extends SEMLitBase {
             <ha-card><div class="wrap">
                 <div class="ct-title"><ha-icon icon="mdi:tune-variant"></ha-icon>${this._t('sim_what_if')}</div>
                 <div class="group">
-                    ${this._renderNumberRow('capacity_kwh', 'sim_battery_size', 'kWh', `${d.capacity_kwh ?? '—'} kWh`)}
+                    ${this._renderNumberRow('capacity_kwh', 'sim_battery_size', 'kWh', `${d.capacity_kwh ?? '—'} kWh`, SIM_CAPACITY_MAX_KWH)}
                     ${this._renderNumberRow('reserve_pct', 'sim_battery_reserve', '%', `${d.reserve_pct ?? '—'} %`)}
                     ${this._renderNumberRow('peak_limit_kw', 'sim_peak_limit', 'kW', peak)}
                     ${this._renderRateRow('import', 'sim_import_price')}
@@ -543,6 +569,10 @@ class SEMSimulationCard extends SEMLitBase {
             .chip.on { background: #8353d122; border-color: #8353d1; color: #8353d1; font-weight: 700; }
             .picks { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 10px; }
             .grid { display: flex; flex-wrap: wrap; gap: 4px; }
+            .recent { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; margin: 0 0 10px; font-size: 12px; }
+            .recent label { font-weight: 600; }
+            .recent small { color: var(--secondary-text-color); font-variant-numeric: tabular-nums; }
+            .recent input { grid-column: 1 / -1; width: 100%; min-height: 36px; accent-color: #8353d1; }
             .day {
                 display: inline-flex; flex-direction: column; align-items: center; width: 58px; padding: 3px 0 2px;
                 border: 1px solid var(--divider-color); border-radius: 8px; font-size: 10px; line-height: 1.25;

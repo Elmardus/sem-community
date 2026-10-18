@@ -40,6 +40,33 @@ export const PICK_GLYPH = {
 
 const LAST_N = { last30: 30, last90: 90, last365: 365 };
 
+/** The largest battery a what-if may try, in kWh: a car pack (up to ~150 kWh)
+ * as home storage. Above the setup's 100 kWh on purpose; the backend
+ * (`simulation_ws.SIM_CAPACITY`) holds the same number. */
+export const SIM_CAPACITY_MAX_KWH = 150;
+
+/** How many days the "most recent days" slider can pick: every selectable day. */
+export function recentMax(days) {
+    return (days || []).filter(isSelectable).length;
+}
+
+/** The newest `n` selectable days, oldest first. A slider instead of a tap
+ * per day chip, which is slow on a phone. */
+export function pickRecent(days, n) {
+    const ok = (days || []).filter(isSelectable).map(d => d.date).sort();
+    const k = Math.max(0, Math.min(ok.length, Math.round(Number(n) || 0)));
+    return k ? ok.slice(ok.length - k) : [];
+}
+
+/** Where the slider stands: `n` when the selection is exactly the newest `n`
+ * selectable days, else null (the selection came from chips or a quick pick). */
+export function recentCount(days, selected) {
+    const sel = [...(selected || [])].sort();
+    if (!sel.length) return 0;
+    const want = pickRecent(days, sel.length);
+    return want.length === sel.length && want.every((d, i) => d === sel[i]) ? sel.length : null;
+}
+
 /** The months the stored days cover, newest first ('YYYY-MM'). */
 export function monthsOf(days) {
     const out = new Set((days || []).map(d => String(d.date || '').slice(0, 7)).filter(Boolean));

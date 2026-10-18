@@ -18,7 +18,7 @@ from .analytics.simulation.ev_retime import EV_MODE_CHOICES, RECORDED
 from .consts.battery_modes import BATTERY_MODES
 from .analytics.simulation.summary import SUMMARY_TAGS
 from .const import DOMAIN
-from .consts.bounds import BOUNDS
+from .consts.bounds import BOUNDS, Range
 from .coordinator.simulation_job import SimulationError
 from .utils.xlsx import write_workbook
 
@@ -43,7 +43,12 @@ def _number(value):
 
 _NUMBER = _number
 _RATE = vol.Any("recorded", _number)
-_CAP = BOUNDS["battery_capacity_kwh"]
+# A what-if may try a bigger pack than the setup allows (100 kWh): a car
+# battery used as home storage reaches ~150 kWh. Same step and floor as the
+# setup row; the Simulation card holds the same maximum.
+SIM_CAPACITY = Range(BOUNDS["battery_capacity_kwh"].min, 150,
+                     step=BOUNDS["battery_capacity_kwh"].step, unit="kWh")
+_CAP = SIM_CAPACITY
 EST = " (est.)"
 
 

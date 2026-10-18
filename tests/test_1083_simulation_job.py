@@ -598,7 +598,7 @@ async def test_bad_params_are_invalid_and_cancel_answers():
 async def test_bounds_and_booleans():
     job, _, _ = _job()
     hass = _ws_hass(job)
-    for key, val in (("capacity_kwh", 0.5), ("capacity_kwh", 101),
+    for key, val in (("capacity_kwh", 0.5), ("capacity_kwh", 150.5),
                      ("reserve_pct", -1), ("reserve_pct", 101),
                      ("peak_limit_kw", -1)):
         bad = {**START, "params": {**START["params"], key: val}}
@@ -613,7 +613,8 @@ async def test_bounds_and_booleans():
                 "params": {"capacity_kwh": 5, "reserve_pct": 5,
                            "import_rate": False}})
     # the edges are allowed
-    edge = {**START, "params": {**START["params"], "capacity_kwh": 100,
+    # (a what-if may try a car pack: up to 150 kWh, above the setup's 100)
+    edge = {**START, "params": {**START["params"], "capacity_kwh": 150,
                                 "reserve_pct": 100, "peak_limit_kw": 0}}
     _result(_call(ws.ws_start, hass, **edge))
     await _finish(job)

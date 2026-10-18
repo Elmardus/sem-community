@@ -1755,7 +1755,8 @@ those days would have cost. Every simulated number is an estimate.
 
 ### Switch it on
 
-**Configuration tab → Advanced → Simulation tab**, then reload the page.
+**Configuration tab → All settings → Advanced → Simulation tab**, then
+reload the page.
 The tab is off by default. Turning it on also tags each day and reads the
 last 90 days from Home Assistant's history once, in the background.
 
@@ -1773,13 +1774,15 @@ Each day carries tags:
 | ⚠️ | data gap — you cannot pick this day |
 
 Tap a day to pick it, or use a quick pick: all sunny, all grey, days with
-a car, last 30 days. At most 90 days per run.
+a car, last 30 days. On a phone, drag the **Most recent days** slider: it
+picks the newest days in one move. At most 90 days per run.
 
 ### What if
 
 Five fields. Each shows your setting now and the value to try:
 
-- **Battery size** (kWh)
+- **Battery size** (kWh) — up to 150 kWh, so you can try a car battery as
+  home storage
 - **Battery reserve** (%)
 - **Peak limit** (kW)
 - **Import price** — as recorded, or one flat price

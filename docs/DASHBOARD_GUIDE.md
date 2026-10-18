@@ -634,7 +634,8 @@ charging periods on one axis.
 
 **SEM Simulation Card** · *Simulation tab*
 
-Pick recorded days, change battery size, reserve, peak limit or price, and
+Pick recorded days (tap them, or drag the *Most recent days* slider), change
+battery size (up to 150 kWh), reserve, peak limit or price, and
 replay them on your own Home Assistant. Simulated costs are marked *est.*:
 numbers after a changed decision are estimated, not measured.
 The tab appears when the Simulation tab switch is on and you reload the page.

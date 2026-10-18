@@ -253,3 +253,37 @@ test('calibration: a run the own settings could not reproduce shows no what-if',
     assert.deepEqual(calibration({}), { ok: true, pct: null });
     assert.deepEqual(calibration(null), { ok: true, pct: null });
 });
+
+// ── The "most recent days" slider (a phone needs one drag, not 90 taps) ──
+import { recentMax, pickRecent, recentCount, SIM_CAPACITY_MAX_KWH } from '../src/util/simulation-rows.js';
+
+const RECENT = [
+    { date: '2026-10-14', tags: ['sunny'] },
+    { date: '2026-10-15', tags: ['gap'] },
+    { date: '2026-10-16', tags: ['grey'] },
+    { date: '2026-10-12', tags: ['car'] },
+    { date: '2026-10-17', tags: ['mixed'] },
+];
+
+test('the slider reaches every selectable day, gaps left out', () => {
+    assert.equal(recentMax(RECENT), 4);
+    assert.equal(recentMax([]), 0);
+});
+
+test('the slider picks the newest n selectable days, oldest first', () => {
+    assert.deepEqual(pickRecent(RECENT, 2), ['2026-10-16', '2026-10-17']);
+    assert.deepEqual(pickRecent(RECENT, 3), ['2026-10-14', '2026-10-16', '2026-10-17']);
+    assert.deepEqual(pickRecent(RECENT, 0), []);
+    assert.deepEqual(pickRecent(RECENT, 99).length, 4);
+    assert.deepEqual(pickRecent(RECENT, '2'), ['2026-10-16', '2026-10-17']);
+});
+
+test('the slider shows where it stands only for a newest-n selection', () => {
+    assert.equal(recentCount(RECENT, new Set()), 0);
+    assert.equal(recentCount(RECENT, new Set(['2026-10-16', '2026-10-17'])), 2);
+    assert.equal(recentCount(RECENT, new Set(['2026-10-14', '2026-10-17'])), null);
+});
+
+test('a what-if battery may be a car pack, up to 150 kWh', () => {
+    assert.equal(SIM_CAPACITY_MAX_KWH, 150);
+});

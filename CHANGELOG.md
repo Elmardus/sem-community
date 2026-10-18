@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ **Simulation tab: replay your recorded days with another battery, reserve, peak limit or price** (#1083). Estimated cost per day type. Off by default.
 - 🔧 **You now download Simulation results and EV sessions as Excel files (.xlsx)** (#1083). A CSV did not open right in every country.
 - 🔧 **SEM can tag each finished day: sunny, grey, car, cheap prices or a data gap** (#1083). Off by default; diagnostics show the last seven.
+- ✨ **Simulation: pick the newest days with one slider, and try batteries up to 150 kWh** (#1083). Easier on a phone; a car pack fits.
 
 # [2.2.0-beta.21] — 17.10.2026
 
