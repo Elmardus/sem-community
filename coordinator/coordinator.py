@@ -13721,22 +13721,27 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # Reset idle counter when power is active
         self._battery_session_idle_count = 0
 
-        # Start new session
-        if not session.active:
-            self._battery_session = BatterySessionData(
-                active=True,
-                session_type=current_type,
-                start_time=dt_util.now().isoformat(),
-            )
-            session = self._battery_session
-            _LOGGER.debug("Battery session started: %s", current_type)
-
         # Accumulate energy. Use the actual update interval (the
         # DataUpdateCoordinator base may throttle this under HA load —
         # config["update_interval"] is the REQUESTED interval, not the
         # observed one). #351 L1.
         interval_s = self.update_interval.total_seconds()
         hours = interval_s / 3600.0
+
+        # Start new session. (#1155) This cycle books one whole interval of
+        # energy, so the session starts one interval back: the duration
+        # then spans the same time as the energy. Started at now(), the
+        # first average divided a full interval of kWh by a few
+        # microseconds (548 MW on a 5.5 kW battery), and every later one
+        # was (n+1)/n too high.
+        if not session.active:
+            self._battery_session = BatterySessionData(
+                active=True,
+                session_type=current_type,
+                start_time=(dt_util.now() - timedelta(seconds=interval_s)).isoformat(),
+            )
+            session = self._battery_session
+            _LOGGER.debug("Battery session started: %s", current_type)
 
         if session.session_type == "charge":
             total_increment = (power.battery_charge_power * hours) / 1000.0

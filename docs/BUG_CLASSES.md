@@ -6145,3 +6145,13 @@ Refs #1146 #280 #1049 #1054 #771 #1132.
 **Sweep question:** where a card turns a report into words, does each state the backend can produce get its own words — or does "not the good case" fall into the worst one?
 **Left open:** the diagnostics download keeps the brand walk's note "entities present, no role matched" for every brand near miss, roles or not; the card does not show it.
 Refs #1137 #915 #1032 #1054.
+
+### 156. An average whose energy runs one interval ahead of its time — GUARDED
+**Symptom:** `sensor.sem_battery_session_avg_power` read 548,700,000 W on the first update of every battery session on a ~5.5 kW GoodWe, then 11000, 8250, 7340 … — exactly P × (n+1)/n (#1155). As a `measurement` sensor every spike went into the recorder's long-term statistics.
+**Root shape:** a session started at `now()`, and the same cycle booked a whole update interval of energy. The duration (`now() − start`) was microseconds on the first update and n intervals on the n-th, while the energy covered n+1; the average divided the one by the other.
+**Where it lives:** `coordinator/coordinator.py` `_update_battery_session_tracking` (**fixed**: the session starts one update interval back, so duration and energy span the same time).
+**Closure:** a session that books the cycle's interval of energy on its first cycle starts that interval earlier; average = energy over a duration that covers exactly the booked intervals.
+**Guard:** `tests/test_1155_battery_session_avg_power.py` — the reporter's session at 10 s and at 30 s cycles: the first and every later average equal the battery power within 1 %, one minute holds 0.1 kWh at 6 kW, the start sits one interval before the first update and stays put. All seven fail on the old code.
+**Sweep question:** where an average is energy over elapsed wall-clock time, does the elapsed time start where the first booked energy starts?
+**Left open:** the EV session average (`coordinator/ev_control.py` `_update_session_tracking`) derives its duration the same way; its energy comes from the charger's meter and its duration is rounded to 0.1 min, so it shows no first-update spike, but it was not reworked here.
+Refs #1155 #351.
