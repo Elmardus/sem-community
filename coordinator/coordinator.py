@@ -8110,6 +8110,15 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         except Exception:  # noqa: BLE001 — no frame, no horizon
             return None
 
+    def _pacing_day_start(self):
+        """(#820) Sunrise today as a datetime — where the day's charging
+        window, and so the headroom's share of it, begins."""
+        try:
+            h, m = (int(x) for x in self.time_manager.get_sunrise_time().split(":"))
+            return dt_util.now().replace(hour=h, minute=m, second=0, microsecond=0)
+        except Exception:  # noqa: BLE001 — no frame, no fixed window
+            return None
+
     def _today_pacing_ledger(self) -> list:
         """(#820) Today's remaining-day slots, or [] outside daylight /
         without a forecast. Same sun frame and home-draw fallback the
@@ -8554,6 +8563,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     "inverter_ac_limit_w", 0.0) or 0.0),
                 hw_max_charge_w=float(self.config.get(
                     "battery_max_charge_power_w", 5000.0) or 5000.0),
+                # (#820) the window the headroom is a share of: fixed for
+                # the day, so a re-plan cannot slide the finish to sunset.
+                # A rig-shaped stand-in without it keeps the cap margin.
+                day_start=(_day_start() if callable(_day_start := getattr(
+                    self, "_pacing_day_start", None)) else None),
             )
         cap = decision.cap_w if (decision and enabled) else None
         code = (decision.code if decision else
@@ -8615,6 +8629,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # (#820) the two numbers a short evening is argued with
             "drain_kwh": getattr(decision, "drain_kwh", None) if decision else None,
             "headroom_pct": getattr(decision, "headroom_pct", None) if decision else None,
+            "finish_by": getattr(decision, "finish_by", None) if decision else None,
             "fill_kwh_at_max": getattr(decision, "fill_kwh", None) if decision else None,
             "hw_max_charge_w": float(self.config.get(
                 "battery_max_charge_power_w", 5000.0) or 5000.0),

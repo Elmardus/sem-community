@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Charge pacing keeps its 10 % headroom on every re-plan** (#820). The pack is now planned full before the last sunny hour.
 - 🐛 **Battery session average power no longer spikes to megawatts when a session starts** (#1155). It now reads the real power from the first update.
 
 # [2.2.0-beta.21] — 17.10.2026
