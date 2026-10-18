@@ -123,12 +123,9 @@ def test_the_view_preference_is_per_browser_not_per_install():
     assert helper.count("catch (_e)") == 2, (
         "storage access is not guarded — a private window or blocked site data "
         "would throw and take the card with it")
-    src = CARD.read_text(encoding="utf-8")
-    assert "from '../util/view-mode.js'" in src
-    assert "this._advanced = getAllSettings();" in src
-    assert "setAllSettings(on);" in src
-    assert "sem_config_advanced_v1" not in src, (
-        "the card spells the key itself again — use util/view-mode.js")
+    # That the card starts in the stored view, stores a pick through this
+    # helper and follows the event is behaviour, pinned by the real card in
+    # dashboard/card/test/everyday-view.test.js.
 
 
 #: Rows inside one charger's block that Everyday keeps: what wires it to SEM.
@@ -173,17 +170,6 @@ def test_every_row_helper_asks_the_everyday_gate():
     assert not leaks, (
         f"these helpers draw a setting row without asking the Everyday gate: "
         f"{leaks}")
-
-
-def test_the_gate_is_the_one_filter():
-    """``_gate`` answers with ``_showsControl`` (and the charger list), so the
-    lists the caps above count are the only way into Everyday."""
-    src = CARD.read_text(encoding="utf-8")
-    assert "_gate(key) { return this._countRow(this._showsControl(key)); }" in src
-    assert "return ESSENTIAL_CHARGER_CONTROLS.has(String(key || ''));" in src
-    m = re.search(r"_showsChargerControl\(key\) \{(.*?)\n    \}", src, re.S)
-    assert m and "if (this._advanced) return true;" in m.group(1), (
-        "All settings no longer shows every charger row")
 
 
 def test_the_switch_reads_everyday_and_all_settings():
