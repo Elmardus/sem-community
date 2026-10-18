@@ -2,8 +2,10 @@
  * (#1083) The Simulation tab's card, as pure helpers.
  *
  * Days come from `solar_energy_management/simulation/days` as ISO dates
- * ('YYYY-MM-DD', the install's own calendar). Every simulated number is
- * modelled, not measured: the card marks each one "est." (ESTIMATED).
+ * ('YYYY-MM-DD', the install's own calendar). A run takes one period
+ * (from … to); day types filter the result afterwards. Every simulated
+ * number is modelled, not measured: the card marks each one "est."
+ * (ESTIMATED).
  */
 
 /** One glyph per tag. `negative` prices share the cheap glyph. */
@@ -23,20 +25,20 @@ export function tagGlyphs(tags) {
     return out.join('');
 }
 
-/** A gap day cannot be picked. */
+/** A gap day has no full data: it never counts as a day of the period. */
 export function isSelectable(day) {
     if (!day) return false;
     if (day.selectable === false) return false;
     return !(day.tags || []).includes('gap');
 }
 
-/** The quick picks, in the order the card shows them. */
-export const QUICK_PICKS = ['sunny', 'grey', 'car', 'last30', 'last90', 'last365', 'clear'];
-
-/** The glyph a quick pick shows in front of its label. */
-export const PICK_GLYPH = {
-    sunny: '☀️', grey: '☁️', car: '🚗', last30: '', last90: '', last365: '', clear: '',
-};
+/**
+ * A run is one continuous period: a battery carries its charge from one day
+ * to the next, so single days cannot be replayed on their own. The quick
+ * periods, in the order the card shows them; a month and the "most recent
+ * days" slider pick a period too.
+ */
+export const PERIOD_PICKS = ['last30', 'last90', 'last365'];
 
 const LAST_N = { last30: 30, last90: 90, last365: 365 };
 
@@ -45,26 +47,35 @@ const LAST_N = { last30: 30, last90: 90, last365: 365 };
  * (`simulation_ws.SIM_CAPACITY`) holds the same number. */
 export const SIM_CAPACITY_MAX_KWH = 150;
 
-/** How many days the "most recent days" slider can pick: every selectable day. */
+const stored = (days) => (days || []).filter(isSelectable).map(d => String(d.date)).sort();
+
+/** `{from, to}` spanning the stored days of `dates` (sorted), or null. */
+function spanOf(dates) {
+    return dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null;
+}
+
+/** How far the "most recent days" slider reaches: every stored day. */
 export function recentMax(days) {
-    return (days || []).filter(isSelectable).length;
+    return stored(days).length;
 }
 
-/** The newest `n` selectable days, oldest first. A slider instead of a tap
- * per day chip, which is slow on a phone. */
-export function pickRecent(days, n) {
-    const ok = (days || []).filter(isSelectable).map(d => d.date).sort();
+/** The period from the `n`-th newest stored day to the newest, or null. One
+ * drag on a phone instead of a tap per day. */
+export function recentPeriod(days, n) {
+    const ok = stored(days);
     const k = Math.max(0, Math.min(ok.length, Math.round(Number(n) || 0)));
-    return k ? ok.slice(ok.length - k) : [];
+    return k ? spanOf(ok.slice(ok.length - k)) : null;
 }
 
-/** Where the slider stands: `n` when the selection is exactly the newest `n`
- * selectable days, else null (the selection came from chips or a quick pick). */
-export function recentCount(days, selected) {
-    const sel = [...(selected || [])].sort();
-    if (!sel.length) return 0;
-    const want = pickRecent(days, sel.length);
-    return want.length === sel.length && want.every((d, i) => d === sel[i]) ? sel.length : null;
+/** Where the slider stands: `n` when the period is exactly the newest `n`
+ * stored days, else null (a quick period or a month picked it). */
+export function recentAt(days, period) {
+    if (!period) return 0;
+    const ok = stored(days);
+    const inside = ok.filter(d => d >= period.from && d <= period.to);
+    if (!inside.length || inside[inside.length - 1] !== ok[ok.length - 1]) return null;
+    const want = recentPeriod(days, inside.length);
+    return want && want.from === period.from && want.to === period.to ? inside.length : null;
 }
 
 /** The months the stored days cover, newest first ('YYYY-MM'). */
@@ -73,10 +84,9 @@ export function monthsOf(days) {
     return [...out].sort().reverse();
 }
 
-/** Every selectable day of one month ('YYYY-MM'), oldest first. */
-export function pickMonth(days, month) {
-    return (days || []).filter(isSelectable)
-        .filter(d => String(d.date).slice(0, 7) === month).map(d => d.date);
+/** The period of one month ('YYYY-MM'): its first to its last stored day. */
+export function monthPeriod(days, month) {
+    return spanOf(stored(days).filter(d => d.slice(0, 7) === month));
 }
 
 function isoMinusDays(today, n) {
@@ -85,48 +95,29 @@ function isoMinusDays(today, n) {
     return d.toISOString().slice(0, 10);
 }
 
-function isoOf(today) {
-    return isoMinusDays(today, 0);
+/** A quick period: the stored days of the last N days before today. */
+export function periodOf(days, pick, today = new Date()) {
+    const n = LAST_N[pick];
+    if (!n) return null;
+    const from = isoMinusDays(today, n);
+    const to = isoMinusDays(today, 0);
+    return spanOf(stored(days).filter(d => d >= from && d < to));
 }
 
-/** The dates a quick pick selects, oldest first. Gap days never. */
-export function pickDays(days, pick, today = new Date()) {
-    const ok = (days || []).filter(isSelectable);
-    switch (pick) {
-    case 'sunny':
-    case 'grey':
-    case 'car':
-        return ok.filter(d => (d.tags || []).includes(pick)).map(d => d.date);
-    case 'last30':
-    case 'last90':
-    case 'last365': {
-        const from = isoMinusDays(today, LAST_N[pick]);
-        const to = isoOf(today);
-        return ok.filter(d => d.date >= from && d.date < to).map(d => d.date);
-    }
-    default:
-        return [];
-    }
-}
-
-/** The quick pick the selection equals, or null. `clear` = nothing picked. */
-export function activePick(days, selected, today = new Date()) {
-    const sel = [...(selected || [])].sort();
-    if (!sel.length) return null;
-    for (const pick of QUICK_PICKS) {
-        if (pick === 'clear') continue;
-        const want = pickDays(days, pick, today).slice().sort();
-        if (want.length === sel.length && want.every((d, i) => d === sel[i])) return pick;
+/** The quick period the period equals, or null. */
+export function activePeriod(days, period, today = new Date()) {
+    if (!period) return null;
+    for (const pick of PERIOD_PICKS) {
+        const p = periodOf(days, pick, today);
+        if (p && p.from === period.from && p.to === period.to) return pick;
     }
     return null;
 }
 
-/** Flip one date in the selection; a gap day stays out. Returns a new Set. */
-export function toggleDay(selected, day) {
-    const out = new Set(selected || []);
-    if (!isSelectable(day)) return out;
-    if (out.has(day.date)) out.delete(day.date); else out.add(day.date);
-    return out;
+/** How many stored days the period holds (gap days are left out). */
+export function periodDays(days, period) {
+    if (!period) return 0;
+    return stored(days).filter(d => d >= period.from && d <= period.to).length;
 }
 
 /** '2026-10-13' → '13.10' */
@@ -193,7 +184,6 @@ export const ESTIMATED = ['simulated', 'delta'];
 export function needsEst(column) {
     return ESTIMATED.includes(column);
 }
-
 /** Result rows newest first; the first `limit` shown unless expanded. */
 export function visibleRows(days, expanded = false, limit = 8) {
     const rows = [...(days || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -201,11 +191,22 @@ export function visibleRows(days, expanded = false, limit = 8) {
     return { rows: rows.slice(0, limit), more: rows.length - limit };
 }
 
-/** The day-type tiles: the three skies and the car always, cheap when it ran. */
-export function tagTiles(perTag, total) {
+/** The day types a result can be filtered by. A filter never changes what
+ * was simulated: it shows the days of that type and their totals. */
+export const FILTERS = ['sunny', 'mixed', 'grey', 'car', 'cheap'];
+
+/** The result's days of one type (`null` = every day). */
+export function filterRows(days, tag) {
+    const all = days || [];
+    return tag ? all.filter(d => (d.tags || []).includes(tag)) : all;
+}
+
+/** The day-type tiles — the filter buttons: the three skies and the car
+ * always, cheap when it ran. `active` marks the one that filters. */
+export function tagTiles(perTag, total, active = null) {
     const all = Number(total?.days) || 0;
     const tiles = [];
-    for (const tag of ['sunny', 'mixed', 'grey', 'car', 'cheap']) {
+    for (const tag of FILTERS) {
         const t = perTag?.[tag] || {};
         const n = Number(t.days) || 0;
         if (tag === 'cheap' && n === 0) continue;
@@ -218,23 +219,86 @@ export function tagTiles(perTag, total) {
             delta: n ? formatDelta(t.delta) : null,
             actual: n ? Number(t.actual) || 0 : null,
             simulated: n ? Number(t.simulated) || 0 : null,
+            on: active === tag,
         });
     }
     return tiles;
 }
 
-/** The total line's numbers. */
+/** The totals one filter shows: a day type's, or the whole run's. */
+export function totalFor(result, tag) {
+    if (!tag) return result?.total || {};
+    return result?.per_tag?.[tag] || { days: 0 };
+}
+
+/** The total line's numbers. `net` is the difference with the stored energy
+ * counted — what the what-if saves once the pack's leftover is valued. */
 export function totalLine(total) {
     const t = total || {};
+    const net = t.net_delta ?? null;
     return {
         days: Number(t.days) || 0,
         actual: money(t.actual),
         simulated: money(t.simulated),
         delta: formatDelta(t.delta),
+        net: net === null ? null : formatDelta(net),
         pct: formatPct(t.delta, t.actual),
         kwhOverLimit: Number(t.kwh_over_limit) || 0,
         indicativeDays: Number(t.indicative_days) || 0,
     };
+}
+
+const kwh = (v) => {
+    const n = Number(v);
+    return v === null || v === undefined || !Number.isFinite(n) ? '—' : n.toFixed(1);
+};
+
+/** What a tapped day row opens: grid in and out, battery in and out and the
+ * pack's level at the day's end, actual → simulated, and why. */
+export function dayDetail(row) {
+    const r = row || {};
+    const pair = (key) => ({ actual: kwh(r[`actual_${key}_kwh`]), simulated: kwh(r[`simulated_${key}_kwh`]) });
+    return {
+        lines: [
+            { key: 'sim_grid_in', ...pair('grid_import') },
+            { key: 'sim_grid_out', ...pair('grid_export') },
+            { key: 'sim_batt_in', ...pair('battery_charge') },
+            { key: 'sim_batt_out', ...pair('battery_discharge') },
+            { key: 'sim_pack_end', actual: kwh(r.actual_end_kwh), simulated: kwh(r.simulated_end_kwh) },
+        ],
+        net: r.net_delta === undefined || r.net_delta === null ? null : formatDelta(r.net_delta),
+        story: [...(r.story || [])],
+    };
+}
+
+/** The difference per month, oldest first, and the months where the what-if
+ * helps (its difference with the pack's gain counted is below 0). */
+export function monthRows(months) {
+    const rows = (months || []).map(m => ({
+        month: String(m.month || ''),
+        days: Number(m.days) || 0,
+        delta: formatDelta(m.net_delta ?? m.delta),
+        value: Number(m.net_delta ?? m.delta) || 0,
+    }));
+    const peak = Math.max(0, ...rows.map(r => Math.abs(r.value)));
+    for (const r of rows) r.share = peak > 0 ? Math.abs(r.value) / peak : 0;
+    const helps = rows.filter(r => Math.round(r.value * 100) < 0).map(r => r.month);
+    return { rows, helps };
+}
+
+/** Energy, actual → simulated: the lines the result shows under the total. */
+export function energyRows(energy) {
+    const a = energy?.actual || {};
+    const s = energy?.simulated || {};
+    if (!energy?.actual && !energy?.simulated) return [];
+    const pct = (v) => (v === null || v === undefined ? '—' : `${Number(v).toFixed(1)} %`);
+    const num = (v) => (v === null || v === undefined ? '—' : Number(v).toFixed(1));
+    return [
+        { key: 'sim_grid_in', actual: kwh(a.grid_import_kwh), simulated: kwh(s.grid_import_kwh), unit: 'kWh' },
+        { key: 'sim_grid_out', actual: kwh(a.grid_export_kwh), simulated: kwh(s.grid_export_kwh), unit: 'kWh' },
+        { key: 'sim_self_use', actual: pct(a.self_consumption_pct), simulated: pct(s.self_consumption_pct), unit: '' },
+        { key: 'sim_cycles', actual: num(a.cycles), simulated: num(s.cycles), unit: '' },
+    ];
 }
 
 /** The form a fresh card starts with: the install as configured. */
@@ -250,6 +314,13 @@ export function initialForm(defaults) {
         export_rate: d.export_rate ?? '',
         battery_mode: d.battery_mode ?? 'auto',
         ev_mode: 'recorded',
+        max_charge_w: d.max_charge_w ?? '',
+        max_discharge_w: d.max_discharge_w ?? '',
+        // extra kWp needs the install's size; without it the form asks a factor
+        pv_mode: d.system_size_kwp ? 'kwp' : 'factor',
+        pv_extra_kwp: '',
+        pv_factor: 1,
+        battery_to_ev: d.battery_to_ev !== false,
     };
 }
 
@@ -272,6 +343,11 @@ export function isChanged(field, form, defaults) {
     if (field === 'export_rate') return f.export_mode === 'flat';
     if (field === 'battery_mode') return (f.battery_mode || 'auto') !== (d.battery_mode || 'auto');
     if (field === 'ev_mode') return (f.ev_mode || 'recorded') !== 'recorded';
+    if (field === 'battery_to_ev') return (f.battery_to_ev !== false) !== (d.battery_to_ev !== false);
+    if (field === 'pv') {
+        return f.pv_mode === 'kwp' ? (numOrNull(f.pv_extra_kwp) || 0) !== 0
+            : (numOrNull(f.pv_factor) ?? 1) !== 1;
+    }
     const now = numOrNull(d[field]);
     const want = numOrNull(f[field]);
     return now !== want;
@@ -292,15 +368,78 @@ export function buildParams(form) {
     }
     if (f.battery_mode) out.battery_mode = f.battery_mode;
     out.ev_mode = f.ev_mode || 'recorded';
+    for (const key of ['max_charge_w', 'max_discharge_w']) {
+        const w = numOrNull(f[key]);
+        if (w !== null) out[key] = w;
+    }
+    if (f.pv_mode === 'kwp') {
+        const extra = numOrNull(f.pv_extra_kwp);
+        if (extra) out.pv_extra_kwp = extra;
+    } else {
+        const factor = numOrNull(f.pv_factor);
+        if (factor !== null && factor !== 1) out.pv_factor = factor;
+    }
+    if (f.battery_to_ev === false) out.battery_to_ev = false;
     return out;
 }
 
-/** Can a run start? Days picked, sizes set, nothing running. */
-export function canRun(selected, form, status) {
+/** The scenarios: one tap fills the fields; the person can still edit them. */
+export const PRESETS = ['plus_battery', 'plus_pv', 'cheap_chargers', 'no_battery_ev'];
+
+/**
+ * The form with a scenario laid over it. `plus_battery` doubles the size and
+ * the power (a second pack of the same kind); `plus_pv` takes `extra` kWp (or,
+ * without a known PV size, a factor); `cheap_chargers` puts the car on
+ * Solar + cheap; `no_battery_ev` keeps the pack away from the car.
+ */
+export function applyPreset(form, defaults, preset, extra = null) {
+    const f = { ...(form || initialForm(defaults)) };
+    const d = defaults || {};
+    const twice = (v, base) => {
+        const n = numOrNull(v) ?? numOrNull(base);
+        return n === null ? v : Math.round(n * 2 * 10) / 10;
+    };
+    switch (preset) {
+    case 'plus_battery':
+        f.capacity_kwh = twice(f.capacity_kwh, d.capacity_kwh);
+        f.max_charge_w = twice(f.max_charge_w, d.max_charge_w);
+        f.max_discharge_w = twice(f.max_discharge_w, d.max_discharge_w);
+        break;
+    case 'plus_pv': {
+        const x = numOrNull(extra);
+        if (x === null) break;
+        if (d.system_size_kwp) {
+            f.pv_mode = 'kwp';
+            f.pv_extra_kwp = x;
+        } else {
+            f.pv_mode = 'factor';
+            f.pv_factor = x;
+        }
+        break;
+    }
+    case 'cheap_chargers':
+        f.ev_mode = 'solar_plus_cheap';
+        break;
+    case 'no_battery_ev':
+        f.battery_to_ev = false;
+        break;
+    default:
+        break;
+    }
+    return f;
+}
+
+/** Can a run start? A period picked, sizes set, nothing running. */
+export function canRun(period, form, status) {
     if (status?.running) return false;
-    if (!selected || ![...selected].length) return false;
+    if (!period?.from || !period?.to) return false;
     const p = buildParams(form);
     return p.capacity_kwh !== null && p.capacity_kwh > 0 && p.reserve_pct !== null;
+}
+
+/** The `start` command's message: the period and the form. */
+export function buildStart(period, form) {
+    return { from: period.from, to: period.to, params: buildParams(form) };
 }
 
 /** Minutes left (rounded up, at least 1), or null before the first day ends. */

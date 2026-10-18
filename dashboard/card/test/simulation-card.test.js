@@ -133,15 +133,18 @@ test('leaving the tab stops polling; coming back starts it again', async () => {
     leave(el);
 });
 
-test('start sends the picked days and the form; then polls', async () => {
+test('start sends the period and the form; then polls', async () => {
     const run = { running: true, status: 'running', done: 0, total: 1, run_id: 'r1' };
     const hass = fakeHass({ statuses: [{ running: false, status: 'idle' }, run] });
     const el = await mount(hass);
-    el._pick('sunny');
+    el._pickMonth('2026-10');
     el._setForm({ capacity_kwh: '20', export_mode: 'flat', export_rate: '0.08' });
     await el._start();
     const start = hass.calls.find((c) => c.cmd === 'start').msg;
-    assert.deepEqual(start.days, ['2026-10-01']);
+    // one continuous period, never a list of days
+    assert.equal(start.days, undefined);
+    assert.equal(start.from, '2026-10-01');
+    assert.equal(start.to, '2026-10-01');
     assert.deepEqual(start.params, {
         capacity_kwh: 20, reserve_pct: 20, peak_limit_kw: null, import_rate: 'recorded', export_rate: 0.08,
         battery_mode: 'auto', ev_mode: 'recorded',
@@ -150,7 +153,34 @@ test('start sends the picked days and the form; then polls', async () => {
     leave(el);
 });
 
-test('no days picked: start sends nothing', async () => {
+test('a scenario fills the form and the run sends it', async () => {
+    const hass = fakeHass({ statuses: [{ running: false, status: 'idle' }, { running: true, status: 'running' }] });
+    const el = await mount(hass);
+    el._pickMonth('2026-10');
+    el._preset('plus_battery');
+    el._preset('no_battery_ev');
+    assert.equal(el._form.capacity_kwh, 30);
+    await el._start();
+    const start = hass.calls.find((c) => c.cmd === 'start').msg;
+    assert.equal(start.params.capacity_kwh, 30);
+    assert.equal(start.params.battery_to_ev, false);
+    leave(el);
+});
+
+test('a day type filters the result; it never starts a run', async () => {
+    const el = await mount(fakeHass());
+    el._setFilter('grey');
+    assert.equal(el._filter, 'grey');
+    el._setFilter('grey');
+    assert.equal(el._filter, null);
+    el._toggleDay('2026-10-01');
+    assert.equal(el._openDay, '2026-10-01');
+    el._toggleDay('2026-10-01');
+    assert.equal(el._openDay, null);
+    leave(el);
+});
+
+test('no period picked: start sends nothing', async () => {
     const hass = fakeHass();
     const el = await mount(hass);
     await el._start();
@@ -162,7 +192,7 @@ test('busy: a short line, and the other run is followed', async () => {
     const run = { running: true, status: 'running', done: 1, total: 5, run_id: 'other' };
     const hass = fakeHass({ statuses: [{ running: false, status: 'idle' }, run], startError: { code: 'busy', message: 'busy' } });
     const el = await mount(hass);
-    el._pick('sunny');
+    el._pickMonth('2026-10');
     await el._start();
     await settle();
     assert.deepEqual(el._error, { kind: 'busy' });
@@ -201,18 +231,24 @@ test('own settings off by more than 5 %: no what-if numbers, the reason instead'
     assert.ok(!asked.includes('sim_col_actual'));
     asked.length = 0;
     el._result = { ...el._result, calibrated: true, calibration: { calibrated: true, error_pct: 1.0 },
-        stored_energy: { kwh: 2.5, value: 0.8 }, ev: { moved_kwh: 4, not_delivered_kwh: 1 } };
+        stored_energy: { kwh: 2.5, value: 0.8 }, ev: { moved_kwh: 4, not_delivered_kwh: 1 },
+        total: { days: 3, delta: -1, net_delta: -1.8 },
+        months: [{ month: '2026-09', days: 1, net_delta: 0.2 }, { month: '2026-10', days: 2, net_delta: -2 }],
+        energy: { actual: { grid_import_kwh: 10 }, simulated: { grid_import_kwh: 8 } } };
     el._renderResults();
     assert.ok(asked.includes('sim_col_actual'));
-    assert.ok(asked.includes('sim_stored_end') && asked.includes('sim_ev_moved'));
+    assert.ok(asked.includes('sim_stored_sum') && asked.includes('sim_ev_moved'));
+    assert.ok(asked.includes('sim_net_total'), 'no headline with the stored energy counted');
+    assert.ok(asked.includes('sim_months') && asked.includes('sim_months_helps'));
+    assert.ok(asked.includes('sim_energy'));
     leave(el);
 });
 
-test('a month picks its days', async () => {
+test('a month picks its period', async () => {
     const el = await mount(fakeHass());
     el._pickMonth('2026-10');
-    assert.deepEqual([...el._selected], ['2026-10-01']);
+    assert.deepEqual(el._period, { from: '2026-10-01', to: '2026-10-01' });
     el._pickMonth('');
-    assert.deepEqual([...el._selected], ['2026-10-01']);
+    assert.deepEqual(el._period, { from: '2026-10-01', to: '2026-10-01' });
     leave(el);
 });

@@ -1,12 +1,15 @@
 /**
  * SEM Simulation Card (#1083)
  *
- * The Simulation tab: pick recorded days by tag, change a few values
- * (battery size, reserve, peak limit, prices, battery mode, the car's charge
- * mode), replay the days on your own
- * Home Assistant and see the cost per day and per day type. Every simulated
- * number is marked "est.": after a changed decision the flows come from
- * the energy balance, not from a meter.
+ * The Simulation tab: pick a period (the last 30 / 90 / 365 days, a month,
+ * or the most recent days), change a few values (battery size, power and
+ * reserve, peak limit, prices, solar size, battery mode, the car's charge
+ * mode and whether the battery may help the car) or tap a scenario, replay
+ * the period on your own Home Assistant and see the cost per day, per day
+ * type and per month. A battery carries its charge from one day to the
+ * next, so a run is always one continuous period; the day types filter the
+ * result afterwards. Every simulated number is marked "est.": after a
+ * changed decision the flows come from the energy balance, not from a meter.
  *
  * Talks only over the websocket commands
  * `solar_energy_management/simulation/{days,defaults,start,status,cancel,result,xlsx}`.
@@ -21,11 +24,11 @@ import { SEMLitBase, semGlassCss, html, css, nothing } from '../base/sem-lit-bas
 import { semGetCurrency, semDefineCard } from '../base/sem-shared.js';
 import { downloadBase64 } from '../util/download.js';
 import {
-    tagGlyphs, isSelectable, QUICK_PICKS, PICK_GLYPH, pickDays, activePick, toggleDay,
-    chipDate, rowDate, money, formatDelta, needsEst, visibleRows, tagTiles, totalLine,
-    initialForm, isChanged, buildParams, canRun, minutesLeft, progressShare, fill,
-    monthsOf, pickMonth, calibration, BATTERY_MODES, EV_MODES,
-    recentMax, pickRecent, recentCount, SIM_CAPACITY_MAX_KWH,
+    tagGlyphs, PERIOD_PICKS, periodOf, activePeriod, periodDays, monthsOf, monthPeriod,
+    recentMax, recentPeriod, recentAt, chipDate, rowDate, money, formatDelta, needsEst,
+    visibleRows, filterRows, tagTiles, totalFor, totalLine, dayDetail, monthRows, energyRows,
+    initialForm, isChanged, canRun, buildStart, PRESETS, applyPreset, minutesLeft,
+    progressShare, fill, calibration, BATTERY_MODES, EV_MODES, SIM_CAPACITY_MAX_KWH,
 } from '../util/simulation-rows.js';
 
 const WS = 'solar_energy_management/simulation';
@@ -37,10 +40,9 @@ const TAG_WORD = {
     cheap: 'sim_tag_cheap', negative: 'sim_tag_cheap', gap: 'sim_tag_gap',
 };
 const PICK_WORD = {
-    sunny: 'sim_pick_sunny', grey: 'sim_pick_grey', car: 'sim_pick_car',
     last30: 'sim_pick_last30', last90: 'sim_pick_last90', last365: 'sim_pick_last365',
-    clear: 'sim_pick_clear',
 };
+const PRESET_WORD = (p) => `sim_preset_${p}`;
 // SEM's own words for its modes (the battery and charger selects)
 const BATTERY_MODE_WORD = (m) => `battery_mode_${m}`;
 const EV_MODE_WORD = (m) => (m === 'recorded' ? 'sim_as_recorded_opt' : `charge_mode_${m}`);
@@ -56,10 +58,12 @@ class SEMSimulationCard extends SEMLitBase {
             _days: { state: true },
             _defaults: { state: true },
             _form: { state: true },
-            _selected: { state: true },
+            _period: { state: true },
             _status: { state: true },
             _result: { state: true },
             _expanded: { state: true },
+            _filter: { state: true },
+            _openDay: { state: true },
             _error: { state: true },
         };
     }
@@ -69,10 +73,12 @@ class SEMSimulationCard extends SEMLitBase {
         this._days = null;          // the `days` answer
         this._defaults = null;      // the `defaults` answer
         this._form = null;          // the what-if values
-        this._selected = new Set(); // picked ISO dates
+        this._period = null;        // { from, to } — the period to replay
         this._status = null;        // the `status` answer
         this._result = null;        // the `result` answer
         this._expanded = false;
+        this._filter = null;        // a day type the result shows, or null
+        this._openDay = null;       // the result row whose details are open
         this._error = null;         // { kind: 'busy'|'failed'|'invalid'|'download', text }
         this._pollTimer = null;
         this._loading = false;
@@ -170,17 +176,19 @@ class SEMSimulationCard extends SEMLitBase {
             const res = await this._ws('result', runId ? { run_id: runId } : {});
             this._result = res || null;
             this._expanded = false;
+            this._filter = null;
+            this._openDay = null;
         } catch (_err) {
             // no stored run yet: nothing to show
         }
     }
 
     async _start() {
-        if (!canRun(this._selected, this._form, this._status)) return;
-        const days = [...this._selected].sort();
+        if (!canRun(this._period, this._form, this._status)) return;
+        const msg = buildStart(this._period, this._form);
         this._error = null;
         try {
-            await this._ws('start', { days, params: buildParams(this._form) });
+            await this._ws('start', msg);
         } catch (err) {
             const code = err?.code || '';
             this._error = code === 'busy'
@@ -190,8 +198,8 @@ class SEMSimulationCard extends SEMLitBase {
             if (code === 'busy') this._poll();
             return;
         }
-        this._status = { running: true, status: 'running', done: 0, total: days.length,
-            started_at: new Date().toISOString() };
+        this._status = { running: true, status: 'running', done: 0,
+            total: periodDays(this._days?.days, this._period), started_at: new Date().toISOString() };
         this._schedulePoll();
     }
 
@@ -223,22 +231,39 @@ class SEMSimulationCard extends SEMLitBase {
         this._form = { ...(this._form || initialForm(this._defaults)), ...patch };
     }
 
-    _pick(pick) {
-        const days = this._days?.days || [];
-        this._selected = new Set(pickDays(days, pick));
+    _pickPeriod(pick) {
+        this._period = periodOf(this._days?.days || [], pick);
     }
 
     _pickMonth(month) {
         if (!month) return;
-        this._selected = new Set(pickMonth(this._days?.days || [], month));
+        this._period = monthPeriod(this._days?.days || [], month);
     }
 
     _pickRecent(n) {
-        this._selected = new Set(pickRecent(this._days?.days || [], n));
+        this._period = recentPeriod(this._days?.days || [], n);
     }
 
-    _toggle(day) {
-        this._selected = toggleDay(this._selected, day);
+    _preset(preset) {
+        let extra = null;
+        if (preset === 'plus_pv') {
+            const kwp = !!this._defaults?.system_size_kwp;
+            const answer = globalThis.prompt?.(this._t(kwp ? 'sim_preset_pv_ask_kwp' : 'sim_preset_pv_ask_factor'));
+            if (answer === null || answer === undefined || String(answer).trim() === '') return;
+            extra = Number(String(answer).replace(',', '.'));
+            if (!Number.isFinite(extra)) return;
+        }
+        this._form = applyPreset(this._form, this._defaults, preset, extra);
+    }
+
+    _setFilter(tag) {
+        this._filter = this._filter === tag ? null : tag;
+        this._expanded = false;
+        this._openDay = null;
+    }
+
+    _toggleDay(date) {
+        this._openDay = this._openDay === date ? null : date;
     }
 
     _currency() {
@@ -269,40 +294,26 @@ class SEMSimulationCard extends SEMLitBase {
                 </div>
                 <div class="stats">
                     <div class="stat"><div class="stat-value">${d.stored ?? '—'}</div><div class="stat-label">${this._t('sim_days_stored')}</div></div>
-                    <div class="stat"><div class="stat-value">${this._selected.size}</div><div class="stat-label">${this._t('sim_selected')}</div></div>
+                    <div class="stat"><div class="stat-value">${periodDays(d.days, this._period)}</div><div class="stat-label">${this._t('sim_in_period')}</div></div>
                     <div class="stat"><div class="stat-value">${d.gaps ?? '—'}</div><div class="stat-label">${this._t('sim_data_gaps')}</div></div>
                 </div>
             </div></ha-card>`;
     }
 
-    // On a phone the day chips are one row you swipe; it opens at the newest
-    // day, once per load, so the strip never jumps under the person's finger.
-    updated(changed) {
-        super.updated?.(changed);
-        if (!changed.has('_days') || !this._days?.days?.length) return;
-        const grid = this.renderRoot?.querySelector('.grid');
-        if (!grid || grid.scrollWidth <= grid.clientWidth) return;
-        const newest = [...this._days.days].map((d) => d.date).sort().pop();
-        const chip = grid.querySelector(`.day[data-date="${newest}"]`);
-        if (chip) grid.scrollLeft = chip.offsetLeft - grid.offsetLeft - grid.clientWidth + chip.offsetWidth + 8;
-    }
-
-    _renderDays() {
+    // One continuous period: a battery carries its charge from day to day,
+    // so a run never takes single days.
+    _renderPeriod() {
         const days = this._days?.days || [];
-        const active = activePick(days, this._selected);
-        const legend = ['sunny', 'mixed', 'grey', 'car', 'cheap', 'gap']
-            .map((t) => `${tagGlyphs([t])} ${this._t(TAG_WORD[t])}`).join(' · ');
+        const active = activePeriod(days, this._period);
+        const p = this._period;
+        const n = periodDays(days, p);
         return html`
             <ha-card><div class="wrap">
-                <div class="ct-title"><ha-icon icon="mdi:calendar-month"></ha-icon>${this._t('sim_days')}</div>
+                <div class="ct-title"><ha-icon icon="mdi:calendar-range"></ha-icon>${this._t('sim_period')}</div>
                 ${days.length ? html`
                     <div class="picks">
-                        ${QUICK_PICKS.map((p) => {
-                            const n = p === 'clear' ? 0 : pickDays(days, p).length;
-                            const count = p === 'sunny' || p === 'grey' || p === 'car' ? ` · ${n}` : '';
-                            return html`<span class="chip ${active === p ? 'on' : ''}" role="button" tabindex="0"
-                                @click=${() => this._pick(p)}>${PICK_GLYPH[p] ? PICK_GLYPH[p] + ' ' : ''}${this._t(PICK_WORD[p])}${count}</span>`;
-                        })}
+                        ${PERIOD_PICKS.map((pick) => html`<span class="chip ${active === pick ? 'on' : ''}" role="button" tabindex="0"
+                            @click=${() => this._pickPeriod(pick)}>${this._t(PICK_WORD[pick])}</span>`)}
                         <select class="sel-ctl" aria-label="${this._t('sim_pick_month')}"
                             @change=${(e) => { this._pickMonth(e.target.value); e.target.value = ''; }}>
                             <option value="">${this._t('sim_pick_month')}</option>
@@ -310,31 +321,21 @@ class SEMSimulationCard extends SEMLitBase {
                         </select>
                     </div>
                     ${this._renderRecentSlider(days)}
-                    <div class="grid" aria-label="${this._t('sim_days')}">
-                        ${days.map((d) => {
-                            const ok = isSelectable(d);
-                            const sel = ok && this._selected.has(d.date);
-                            return html`<span class="day ${sel ? 'sel' : ''} ${ok ? '' : 'gap'}"
-                                data-date="${d.date}"
-                                title="${d.date} · ${this._tagTitle(d.tags)}"
-                                @click=${() => this._toggle(d)}><b>${chipDate(d.date)}</b><span>${tagGlyphs(d.tags)}</span></span>`;
-                        })}
-                    </div>
-                    <div class="legend">${legend}</div>` : html`
+                    <div class="span">${p ? fill(this._t('sim_period_span'), { from: rowDate(p.from, this._hass?.language || 'en'), to: rowDate(p.to, this._hass?.language || 'en'), n }) : this._t('sim_pick_period_hint')}</div>
+                    <div class="legend">${this._t('sim_period_note')}</div>` : html`
                     <div class="legend">${this._days ? this._t('sim_no_days') : this._t('sim_loading')}</div>`}
             </div></ha-card>`;
     }
 
-    // A slider over the newest days: one drag on a phone instead of a tap per
-    // day chip. It shows where it stands only while the selection is exactly
-    // the newest N days; a chip or quick pick leaves it at rest.
+    // A slider over the newest days: one drag on a phone. It shows where it
+    // stands only while the period is exactly the newest N stored days.
     _renderRecentSlider(days) {
         const max = recentMax(days);
         if (max < 2) return nothing;
-        const at = recentCount(days, this._selected);
+        const at = recentAt(days, this._period);
         const n = at ?? 0;
-        const picked = n ? pickRecent(days, n) : [];
-        const span = picked.length ? `${chipDate(picked[0])} – ${chipDate(picked[picked.length - 1])}` : '';
+        const p = n ? recentPeriod(days, n) : null;
+        const span = p ? `${chipDate(p.from)} – ${chipDate(p.to)}` : '';
         return html`
             <div class="recent">
                 <label for="sim-recent">${n ? fill(this._t('sim_recent_n'), { n }) : this._t('sim_recent_label')}</label>
@@ -393,21 +394,70 @@ class SEMSimulationCard extends SEMLitBase {
             </div>`;
     }
 
+    // More panels: extra kWp over the install's size, or a factor when the
+    // size is not known (the backend turns kWp into the same factor).
+    _renderPvRow() {
+        const f = this._form || {};
+        const d = this._defaults || {};
+        const kwp = f.pv_mode === 'kwp' && d.system_size_kwp;
+        const changed = isChanged('pv', f, d);
+        return html`
+            <div class="ct-row">
+                <span class="lbl">${this._t('sim_pv')}</span>
+                <span class="cur">${d.system_size_kwp ? `${d.system_size_kwp} kWp` : this._t('sim_as_recorded')}</span><span class="arrow">→</span>
+                ${d.system_size_kwp ? html`<select class="sel-ctl" .value=${f.pv_mode || 'kwp'}
+                    @change=${(e) => this._setForm({ pv_mode: e.target.value })}>
+                    <option value="kwp" ?selected=${f.pv_mode === 'kwp'}>${this._t('sim_pv_kwp')}</option>
+                    <option value="factor" ?selected=${f.pv_mode !== 'kwp'}>${this._t('sim_pv_factor')}</option>
+                </select>` : nothing}
+                <span class="inp ${changed ? 'changed' : ''}"><input type="number" min="0" step="any"
+                    .value=${String((kwp ? f.pv_extra_kwp : f.pv_factor) ?? '')}
+                    @change=${(e) => this._setForm(kwp ? { pv_extra_kwp: e.target.value } : { pv_factor: e.target.value })}><small>${kwp ? 'kWp' : '×'}</small></span>
+            </div>`;
+    }
+
+    _renderEvAssistRow() {
+        const f = this._form || {};
+        const d = this._defaults || {};
+        const val = f.battery_to_ev === false ? 'no' : 'yes';
+        const changed = isChanged('battery_to_ev', f, d);
+        return html`
+            <div class="ct-row">
+                <span class="lbl">${this._t('sim_battery_to_ev')}</span>
+                <span class="cur">${this._t(d.battery_to_ev === false ? 'sim_no' : 'sim_yes')}</span><span class="arrow">→</span>
+                <select class="sel-ctl ${changed ? 'changed' : ''}" .value=${val}
+                    @change=${(e) => this._setForm({ battery_to_ev: e.target.value !== 'no' })}>
+                    <option value="yes" ?selected=${val === 'yes'}>${this._t('sim_yes')}</option>
+                    <option value="no" ?selected=${val === 'no'}>${this._t('sim_no')}</option>
+                </select>
+            </div>`;
+    }
+
     _renderWhatIf() {
         const d = this._defaults;
         if (!d) return nothing;
         const peak = d.peak_limit_kw ? `${d.peak_limit_kw} kW` : this._t('sim_none');
+        const watts = (w) => (w ? `${w} W` : '—');
         return html`
             <ha-card><div class="wrap">
                 <div class="ct-title"><ha-icon icon="mdi:tune-variant"></ha-icon>${this._t('sim_what_if')}</div>
+                <div class="picks" aria-label="${this._t('sim_presets')}">
+                    <span class="lbl-small">${this._t('sim_presets')}</span>
+                    ${PRESETS.map((p) => html`<span class="chip" role="button" tabindex="0"
+                        @click=${() => this._preset(p)}>${this._t(PRESET_WORD(p))}</span>`)}
+                </div>
                 <div class="group">
                     ${this._renderNumberRow('capacity_kwh', 'sim_battery_size', 'kWh', `${d.capacity_kwh ?? '—'} kWh`, SIM_CAPACITY_MAX_KWH)}
+                    ${this._renderNumberRow('max_charge_w', 'sim_charge_power', 'W', watts(d.max_charge_w))}
+                    ${this._renderNumberRow('max_discharge_w', 'sim_discharge_power', 'W', watts(d.max_discharge_w))}
                     ${this._renderNumberRow('reserve_pct', 'sim_battery_reserve', '%', `${d.reserve_pct ?? '—'} %`)}
                     ${this._renderNumberRow('peak_limit_kw', 'sim_peak_limit', 'kW', peak)}
+                    ${this._renderPvRow()}
                     ${this._renderRateRow('import', 'sim_import_price')}
                     ${this._renderRateRow('export', 'sim_export_value')}
                     ${this._renderModeRow('battery_mode', 'sim_battery_mode', BATTERY_MODES, BATTERY_MODE_WORD, d.battery_mode || 'auto')}
                     ${this._renderModeRow('ev_mode', 'sim_ev_mode', EV_MODES, EV_MODE_WORD, 'recorded')}
+                    ${this._renderEvAssistRow()}
                 </div>
             </div></ha-card>`;
     }
@@ -415,8 +465,9 @@ class SEMSimulationCard extends SEMLitBase {
     _renderRun() {
         const st = this._status || {};
         const running = !!st.running;
-        const can = canRun(this._selected, this._form, st);
+        const can = canRun(this._period, this._form, st);
         const left = running ? minutesLeft(st) : null;
+        const n = periodDays(this._days?.days, this._period);
         let line = '';
         if (running) {
             line = fill(this._t('sim_running'), { x: Math.min((st.done || 0) + 1, st.total || 0), y: st.total || 0 });
@@ -437,7 +488,7 @@ class SEMSimulationCard extends SEMLitBase {
                         ${running ? html`
                             <div class="bar"><i style="width:${Math.round(progressShare(st) * 100)}%"></i></div>
                             <small>${line}</small>` : html`
-                            <small>${this._selected.size ? fill(this._t('sim_n_days'), { n: this._selected.size }) : this._t('sim_pick_hint')}</small>`}
+                            <small>${n ? fill(this._t('sim_n_days'), { n }) : this._t('sim_pick_period_hint')}</small>`}
                     </div>
                     ${running ? html`<button class="btn sec" @click=${() => this._cancel()}>
                         <ha-icon icon="mdi:stop"></ha-icon>${this._t('sim_stop')}</button>` : nothing}
@@ -446,18 +497,55 @@ class SEMSimulationCard extends SEMLitBase {
             </div></ha-card>`;
     }
 
+    _renderDetail(r) {
+        const d = dayDetail(r);
+        return html`
+            <div class="detail">
+                ${d.lines.map((l) => html`<div class="dl"><span>${this._t(l.key)}</span>
+                    <span class="num">${l.actual} → ${l.simulated} kWh ${this._est()}</span></div>`)}
+                ${d.net ? html`<div class="dl"><span>${fill(this._t('sim_day_net'), { d: '' })}</span>
+                    <span class="num delta ${d.net.cls}">${d.net.text}</span></div>` : nothing}
+                ${d.story.length ? html`<div class="why">${d.story.join(' · ')}</div>` : nothing}
+            </div>`;
+    }
+
     _renderRow(r, lang) {
         const delta = formatDelta(r.delta);
         const reasons = (r.reasons || []).join(' · ');
+        const open = this._openDay === r.date;
         return html`
-            <div class="trow">
+            <div class="trow tap ${open ? 'open' : ''}" role="button" tabindex="0" aria-expanded="${open ? 'true' : 'false'}"
+                @click=${() => this._toggleDay(r.date)}>
                 <span class="c1">${rowDate(r.date, lang)}${r.indicative ? html` <span class="warn"
                     title="${this._t('sim_indicative')}${reasons ? ': ' + reasons : ''}">⚠️</span>` : nothing}</span>
                 <span class="c2" title="${this._tagTitle(r.tags)}">${tagGlyphs(r.tags)}</span>
                 <span class="num">${money(r.actual_cost)}${needsEst('actual') ? this._est() : nothing}</span>
                 <span class="num">${money(r.simulated_cost)} ${needsEst('simulated') ? this._est() : nothing}</span>
                 <span class="num delta ${delta.cls}">${delta.text} ${needsEst('delta') ? this._est() : nothing}</span>
-            </div>`;
+            </div>
+            ${open ? this._renderDetail(r) : nothing}`;
+    }
+
+    _renderMonths(res) {
+        const { rows, helps } = monthRows(res.months);
+        if (rows.length < 2) return nothing;
+        return html`
+            <div class="ct-title sub"><ha-icon icon="mdi:calendar-month"></ha-icon>${this._t('sim_months')}</div>
+            ${rows.map((m) => html`
+                <div class="mrow"><span>${m.month}</span>
+                    <span class="mbar"><i class="${m.delta.cls}" style="width:${Math.round(m.share * 100)}%"></i></span>
+                    <span class="num delta ${m.delta.cls}">${m.delta.text}</span></div>`)}
+            <div class="legend">${helps.length ? fill(this._t('sim_months_helps'), { months: helps.join(', ') }) : this._t('sim_months_none')} ${this._est()}</div>`;
+    }
+
+    _renderEnergy(res) {
+        const rows = energyRows(res.energy);
+        if (!rows.length) return nothing;
+        return html`
+            <div class="ct-title sub"><ha-icon icon="mdi:lightning-bolt"></ha-icon>${this._t('sim_energy')}
+                <span class="right muted">${this._t('sim_actual_word')} → ${this._t('sim_simulated_word')}</span></div>
+            ${rows.map((r) => html`<div class="dl"><span>${this._t(r.key)}</span>
+                <span class="num">${r.actual} → ${r.simulated}${r.unit ? ' ' + r.unit : ''} ${this._est()}</span></div>`)}`;
     }
 
     _renderResults() {
@@ -465,15 +553,17 @@ class SEMSimulationCard extends SEMLitBase {
         if (!res) return nothing;
         const lang = this._hass?.language || 'en';
         const cur = this._currency();
-        const { rows, more } = visibleRows(res.days, this._expanded);
-        const tiles = tagTiles(res.per_tag, res.total);
-        const tot = totalLine(res.total);
+        const tag = this._filter;
+        const { rows, more } = visibleRows(filterRows(res.days, tag), this._expanded);
+        const tiles = tagTiles(res.per_tag, res.total, tag);
+        const tot = totalLine(totalFor(res, tag));
+        const all = totalLine(res.total);
         const skipped = res.skipped || [];
         const calib = calibration(res);
         if (!calib.ok) {
             return html`
             <ha-card><div class="wrap">
-                <div class="ct-title"><ha-icon icon="mdi:chart-box-outline"></ha-icon>${this._t('sim_results')} · ${fill(this._t('sim_last_run'), { n: tot.days })}</div>
+                <div class="ct-title"><ha-icon icon="mdi:chart-box-outline"></ha-icon>${this._t('sim_results')} · ${fill(this._t('sim_last_run'), { n: all.days })}</div>
                 <div class="err">${fill(this._t('sim_cant_simulate'), { pct: calib.pct === null ? '?' : calib.pct })}</div>
                 <div class="legend">${this._t('sim_limits')}</div>
             </div></ha-card>`;
@@ -482,11 +572,31 @@ class SEMSimulationCard extends SEMLitBase {
         const ev = res.ev || null;
         return html`
             <ha-card><div class="wrap">
-                <div class="ct-title"><ha-icon icon="mdi:chart-box-outline"></ha-icon>${this._t('sim_results')} · ${fill(this._t('sim_last_run'), { n: tot.days })}
+                <div class="ct-title"><ha-icon icon="mdi:chart-box-outline"></ha-icon>${this._t('sim_results')} · ${fill(this._t('sim_last_run'), { n: all.days })}
                     <span class="right" role="button" tabindex="0" @click=${() => this._download()}>
                         <ha-icon icon="mdi:download"></ha-icon>${this._t('sessions_xlsx')}</span></div>
                 ${res.cancelled ? html`<div class="note">${this._t('sim_cancelled')}</div>` : nothing}
                 ${this._error?.kind === 'download' ? html`<div class="err">${this._t('sessions_download_failed')}</div>` : nothing}
+                ${all.net ? html`<div class="headline">
+                    <span>${this._t('sim_net_total')}</span>
+                    <b class="delta ${all.net.cls}">${all.net.text} ${cur} ${this._est()}</b>
+                    <small>${this._t('sim_col_diff')} ${all.delta.text} ${cur}</small></div>` : nothing}
+                <div class="tiles">
+                    <div class="tile tap ${tag ? '' : 'on'}" role="button" tabindex="0" @click=${() => this._setFilter(null)}>
+                        <div class="v ${all.delta.cls}">${all.delta.text}</div>
+                        <div class="l">${this._t('sim_filter_all')} · ${fill(this._t('sim_n_days'), { n: all.days })}</div>
+                    </div>
+                    ${tiles.map((t) => html`
+                        <div class="tile tap ${t.on ? 'on' : ''} ${t.days ? '' : 'empty'}" role="button" tabindex="0"
+                            @click=${() => t.days && this._setFilter(t.tag)}>
+                            <div class="v ${t.delta ? t.delta.cls : 'none'}">${t.delta ? t.delta.text : '—'}</div>
+                            <div class="l">${t.glyph} ${this._t(TILE_WORD[t.tag])} · ${!t.days
+                                ? this._t('sim_none_in_period')
+                                : t.of === null ? fill(this._t('sim_n_days'), { n: t.days })
+                                    : fill(this._t('sim_n_of'), { n: t.days, m: t.of })}</div>
+                        </div>`)}
+                </div>
+                <div class="legend">${this._t('sim_filter_hint')}</div>
                 <div class="thead"><span>${this._t('sim_col_day')}</span><span>${this._t('sim_col_tags')}</span>
                     <span class="num">${this._t('sim_col_actual')} ${cur}</span>
                     <span class="num">${this._t('sim_col_simulated')} ${cur}</span>
@@ -494,25 +604,18 @@ class SEMSimulationCard extends SEMLitBase {
                 ${rows.map((r) => this._renderRow(r, lang))}
                 ${more > 0 ? html`<div class="more" role="button" tabindex="0"
                     @click=${() => { this._expanded = true; }}>${fill(this._t('sim_more_days'), { n: more })} ▾</div>` : nothing}
-                ${this._expanded && (res.days || []).length > 8 ? html`<div class="more" role="button" tabindex="0"
+                ${this._expanded && filterRows(res.days, tag).length > 8 ? html`<div class="more" role="button" tabindex="0"
                     @click=${() => { this._expanded = false; }}>${this._t('sim_fewer')} ▴</div>` : nothing}
-                <div class="tiles">
-                    ${tiles.map((t) => html`
-                        <div class="tile">
-                            <div class="v ${t.delta ? t.delta.cls : 'none'}">${t.delta ? t.delta.text : '—'}</div>
-                            <div class="l">${t.glyph} ${this._t(TILE_WORD[t.tag])} · ${!t.days
-                                ? this._t('sim_not_selected')
-                                : t.of === null ? fill(this._t('sim_n_days'), { n: t.days })
-                                    : fill(this._t('sim_n_of'), { n: t.days, m: t.of })}</div>
-                        </div>`)}
-                </div>
                 <div class="total">
-                    <span>${fill(this._t('sim_n_days'), { n: tot.days })} · ${this._t('sim_actual_word')} <b>${tot.actual}</b> → ${this._t('sim_simulated_word')} <b>${tot.simulated} ${this._est()}</b> ${cur}</span>
+                    <span>${tag ? html`${TILE_WORD[tag] ? this._t(TILE_WORD[tag]) : tag} · ` : nothing}${fill(this._t('sim_n_days'), { n: tot.days })} · ${this._t('sim_actual_word')} <b>${tot.actual}</b> → ${this._t('sim_simulated_word')} <b>${tot.simulated} ${this._est()}</b> ${cur}</span>
                     <span class="delta ${tot.delta.cls}">${tot.delta.text} ${cur}${tot.pct ? ' · ' + tot.pct : ''}</span>
                 </div>
-                ${stored && Math.abs(Number(stored.kwh) || 0) >= 0.05 ? html`<div class="legend">${fill(this._t('sim_stored_end'), { kwh: (Number(stored.kwh) >= 0 ? '+' : '') + Number(stored.kwh).toFixed(1), value: money(stored.value) + ' ' + cur })} ${this._est()}</div>` : nothing}
+                ${tag && tot.net ? html`<div class="legend">${fill(this._t('sim_day_net'), { d: tot.net.text + ' ' + cur })} ${this._est()}</div>` : nothing}
+                ${stored && Math.abs(Number(stored.kwh) || 0) >= 0.05 ? html`<div class="legend">${fill(this._t('sim_stored_sum'), { kwh: (Number(stored.kwh) >= 0 ? '+' : '') + Number(stored.kwh).toFixed(1), value: money(stored.value) + ' ' + cur })} ${this._est()}</div>` : nothing}
+                ${this._renderMonths(res)}
+                ${this._renderEnergy(res)}
                 ${ev && ((Number(ev.moved_kwh) || 0) > 0 || (Number(ev.not_delivered_kwh) || 0) > 0) ? html`<div class="legend">${fill(this._t('sim_ev_moved'), { moved: Number(ev.moved_kwh).toFixed(1), short: Number(ev.not_delivered_kwh).toFixed(1) })} ${this._est()}</div>` : nothing}
-                ${tot.kwhOverLimit > 0 ? html`<div class="legend">${fill(this._t('sim_over_limit'), { n: tot.kwhOverLimit.toFixed(1) })} ${this._est()}</div>` : nothing}
+                ${all.kwhOverLimit > 0 ? html`<div class="legend">${fill(this._t('sim_over_limit'), { n: all.kwhOverLimit.toFixed(1) })} ${this._est()}</div>` : nothing}
                 ${skipped.length ? html`<div class="legend" title="${skipped.map((s) => `${s.date}: ${s.reason}`).join('\n')}">${fill(this._t('sim_skipped'), { n: skipped.length })}</div>` : nothing}
                 <div class="legend">${this._est()} ${this._t('sim_est_legend')}</div>
                 <div class="legend">${this._t('sim_limits')}</div>
@@ -523,12 +626,13 @@ class SEMSimulationCard extends SEMLitBase {
         return html`
             <div class="sim">
                 ${this._renderHeader()}
-                ${this._renderDays()}
+                ${this._renderPeriod()}
                 ${this._renderWhatIf()}
                 ${this._renderRun()}
                 ${this._renderResults()}
             </div>`;
     }
+
 
     getCardSize() {
         return 12;
@@ -581,21 +685,12 @@ class SEMSimulationCard extends SEMLitBase {
             }
             .chip.on { background: #8353d122; border-color: #8353d1; color: #8353d1; font-weight: 700; }
             .picks { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 10px; }
-            .grid { display: flex; flex-wrap: wrap; gap: 4px; }
             .recent { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; margin: 0 0 10px; font-size: 12px; }
             .recent label { font-weight: 600; }
             .recent small { color: var(--secondary-text-color); font-variant-numeric: tabular-nums; }
             .recent input { grid-column: 1 / -1; width: 100%; min-height: 36px; accent-color: #8353d1; }
-            .day {
-                display: inline-flex; flex-direction: column; align-items: center; width: 58px; padding: 3px 0 2px;
-                border: 1px solid var(--divider-color); border-radius: 8px; font-size: 10px; line-height: 1.25;
-                background: var(--secondary-background-color); font-variant-numeric: tabular-nums; cursor: pointer;
-                user-select: none;
-            }
-            .day b { font-weight: 600; }
-            .day span { font-size: 11px; min-height: 14px; }
-            .day.sel { border-color: #8353d1; background: #8353d11c; }
-            .day.gap { opacity: .38; border-style: dashed; cursor: not-allowed; }
+            .span { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+            .lbl-small { font-size: 11px; color: var(--secondary-text-color); align-self: center; }
             .legend { font-size: 11px; color: var(--secondary-text-color); margin-top: 8px; }
             .note { font-size: 12px; color: var(--secondary-text-color); margin: 2px 0 6px; }
             .err { font-size: 12px; color: var(--error-color, #db4437); margin-top: 8px; }
@@ -664,16 +759,29 @@ class SEMSimulationCard extends SEMLitBase {
             .total { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; }
             .total b { font-size: 14px; }
             .more { font-size: 11px; color: var(--secondary-text-color); padding: 6px 0 0; cursor: pointer; }
+            .tap { cursor: pointer; }
+            .tile.on { border-color: #8353d1; background: #8353d11c; }
+            .tile.empty { opacity: .55; cursor: default; }
+            .trow.open { background: #8353d10f; }
+            .detail { padding: 6px 8px 8px; border-bottom: 1px solid var(--divider-color); background: #8353d108; }
+            .dl { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; min-height: 22px; align-items: center; font-variant-numeric: tabular-nums; }
+            .why { font-size: 11px; color: var(--secondary-text-color); margin-top: 4px; }
+            .headline { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 4px 0 8px; font-size: 13px; }
+            .headline b { font-size: 18px; }
+            .headline small { color: var(--secondary-text-color); }
+            .ct-title.sub { margin-top: 14px; }
+            .ct-title .right.muted { color: var(--secondary-text-color); cursor: default; font-weight: 500; }
+            .mrow { display: grid; grid-template-columns: 80px 1fr auto; gap: 8px; align-items: center; font-size: 12px; min-height: 22px; font-variant-numeric: tabular-nums; }
+            .mbar { height: 6px; border-radius: 3px; background: var(--secondary-background-color); overflow: hidden; }
+            .mbar i { display: block; height: 100%; }
+            .mbar i.cheaper { background: #8DC892; }
+            .mbar i.dearer { background: #ff9800; }
+            .mbar i.same { background: var(--divider-color); }
             @media (max-width: 600px) {
                 .header-wrap { flex-wrap: wrap; }
                 .trow, .thead { grid-template-columns: 1.3fr .8fr .9fr 1.1fr 1.1fr; font-size: 11px; }
-                /* one row to swipe instead of a long wall of chips */
-                .grid {
-                    flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain;
-                    scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
-                    padding-bottom: 6px; scrollbar-width: thin;
-                }
-                .day { flex: 0 0 auto; width: 60px; min-height: 44px; justify-content: center; scroll-snap-align: start; }
+                .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                .mrow { grid-template-columns: 64px 1fr auto; }
             }
         `];
     }
@@ -682,7 +790,7 @@ class SEMSimulationCard extends SEMLitBase {
 semDefineCard('sem-simulation-card', SEMSimulationCard, {
     type: 'sem-simulation-card',
     name: 'SEM Simulation',
-    description: 'Replay recorded days with another battery, reserve, peak limit or price; estimated cost per day type',
+    description: 'Replay a recorded period with another battery, solar size, peak limit or price; estimated cost per day type and month',
     documentationURL:
         'https://github.com/traktore-org/sem-community/blob/develop/docs/DASHBOARD_GUIDE.md#sem-simulation-card',
 });
