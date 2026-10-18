@@ -6146,6 +6146,16 @@ Refs #1146 #280 #1049 #1054 #771 #1132.
 **Left open:** the diagnostics download keeps the brand walk's note "entities present, no role matched" for every brand near miss, roles or not; the card does not show it.
 Refs #1137 #915 #1032 #1054.
 
+### 156. An average whose energy runs one interval ahead of its time — GUARDED
+**Symptom:** `sensor.sem_battery_session_avg_power` read 548,700,000 W on the first update of every battery session on a ~5.5 kW GoodWe, then 11000, 8250, 7340 … — exactly P × (n+1)/n (#1155). As a `measurement` sensor every spike went into the recorder's long-term statistics.
+**Root shape:** a session started at `now()`, and the same cycle booked a whole update interval of energy. The duration (`now() − start`) was microseconds on the first update and n intervals on the n-th, while the energy covered n+1; the average divided the one by the other.
+**Where it lives:** `coordinator/coordinator.py` `_update_battery_session_tracking` (**fixed**: the session starts one update interval back, so duration and energy span the same time).
+**Closure:** a session that books the cycle's interval of energy on its first cycle starts that interval earlier; average = energy over a duration that covers exactly the booked intervals.
+**Guard:** `tests/test_1155_battery_session_avg_power.py` — the reporter's session at 10 s and at 30 s cycles: the first and every later average equal the battery power within 1 %, one minute holds 0.1 kWh at 6 kW, the start sits one interval before the first update and stays put. All seven fail on the old code.
+**Sweep question:** where an average is energy over elapsed wall-clock time, does the elapsed time start where the first booked energy starts?
+**Left open:** the EV session average (`coordinator/ev_control.py` `_update_session_tracking`) derives its duration the same way; its energy comes from the charger's meter and its duration is rounded to 0.1 min, so it shows no first-update spike, but it was not reworked here.
+Refs #1155 #351.
+
 ### 157. A margin taken from what is left, re-applied on every re-plan — the headroom shrinks to nothing — GUARDED
 **Symptom:** with charge pacing on, a clear day with sun until 18:15 predicted the pack full at 18:10 (#820, @ArneGollin1987, 18.10). The 10 % headroom was meant to make the pack full well before the end of sun. The owner saw why: every few seconds SEM planned again for a full battery in the last sunny hour.
 **Root shape:** a safety margin expressed relative to the REMAINING quantity, inside a loop that re-solves on the remaining quantity. `paced_charge_cap_w` solved the smallest cap that lands the remaining need in the last remaining slot and opened it by 10 %. The pack then ran a little ahead, the next re-solve saw a smaller need over a shorter day and opened THAT by 10 %, so the margin shrank with the need and the finish slid back to the last slot. In the reporter's words: "10 % fast in the last hour slot of the day and not 10 % faster over the whole loading of the day." A predicted time printed at the end of its hourly slot (18:00, not 17:13) hid how close it was. Kin of class 55 (a window that moves with the reader).
