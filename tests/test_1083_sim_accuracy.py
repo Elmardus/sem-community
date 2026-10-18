@@ -381,11 +381,26 @@ def test_harness_runs_both_models():
     assert rep.model == MODEL_BALANCE and rep.total.days == 3
 
 
-def test_a_chain_restarts_after_a_gap():
+def test_a_chain_restarts_after_a_long_gap():
+    # (accuracy, bug class 158) Three missing days end the stretch; one or
+    # two are bridged (test_1083_sim_invariants.py).
+    chain = PeriodChain(SimParams(capacity_kwh=10.0, reserve_pct=10.0),
+                        {"battery_capacity_kwh": 10.0})
+    a = chain.add(_night_day("2026-10-01"))
+    b = chain.add(_night_day("2026-10-05", soc=90.0))
+    assert a.start_soc_pct == pytest.approx(60.0)
+    assert b.start_soc_pct == pytest.approx(90.0)
+    chain.finish()
+    assert chain.stretches == 2
+
+
+def test_a_short_gap_is_bridged_with_the_real_packs_change():
     chain = PeriodChain(SimParams(capacity_kwh=10.0, reserve_pct=10.0),
                         {"battery_capacity_kwh": 10.0})
     a = chain.add(_night_day("2026-10-01"))
     b = chain.add(_night_day("2026-10-03", soc=90.0))
-    assert a.start_soc_pct == pytest.approx(60.0)
-    assert b.start_soc_pct == pytest.approx(90.0)
+    # the real pack went from 6 kWh (60 %) to 9 kWh over the missing day
+    assert b.start_kwh == pytest.approx(min(10.0, a.end_kwh + 3.0))
+    assert "bridged" in b.story[0]
     chain.finish()
+    assert chain.stretches == 1

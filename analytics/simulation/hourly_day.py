@@ -242,9 +242,15 @@ class HourlyDay:
             missing_hours=sorted(missing), notes=notes,
             **out,
         )
-        if not missing:
-            day_obj._check_balance()
-            day_obj.close_hours()
+        # Every day is checked and closed, one with a missing hour too.
+        # Skipping both on such a day let a counter jump through unclosed:
+        # PROD 24.04.2026 had a missing hour and, at 14:00, 144 kWh of solar
+        # against 239 kWh of car — the simulation bought the 94 kWh between
+        # them from the grid (+26 on one day) while the meters saw nothing
+        # (bug class 158). A missing hour reads 0 on its absent roles; closing
+        # it leaves the hour's net to the meters that were read.
+        day_obj._check_balance()
+        day_obj.close_hours()
         return day_obj
 
 

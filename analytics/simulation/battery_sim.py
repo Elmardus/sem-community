@@ -19,19 +19,38 @@ its evening run before the day — with the day's own forecast (that run's
 "tomorrow"), the day's house kWh and the day's first SOC. Prices as the
 coordinator reads them (``scheduler_rates``): off-peak = mean of the
 cheapest 4 hours in the 12 after the trigger hour, peak = mean of the
-07:00–20:00 hours, current = the trigger hour's price — this day's hours
-stand in for the evening before. The night ledger covers 00:00 to sunrise
-of the day; ``pack_night`` places the scheduler's deficit as SEM's
-``battery`` demand, and the real ``plan_gate`` answers each night hour.
+07:00–20:00 hours — this day's hours stand in for the evening before.
+The night runs from 00:00 to SEM's night end: sunrise, but never later
+than ``night_latest_end`` (07:00), as ``time_manager`` has it. The night
+ledger covers those hours; ``pack_night`` places the scheduler's deficit
+as SEM's ``battery`` demand, and the real ``plan_gate`` answers each night
+hour. Three rules keep the plan to what real SEM does (bug class 158):
+
+* the negative-price charge is SEM's reactive gate: live SEM re-evaluates
+  every 30 minutes with the price of that moment, so it charges only in
+  the night hours whose own price is below 0 — never a whole night at
+  positive prices because one hour was negative;
+* a day with no stored forecast (a backfilled day) plans with the day's
+  own solar as its forecast — perfect foresight, said in the day's notes —
+  where the scheduler's no-forecast tier would plan the whole house from
+  the grid even on a sunny day;
+* the deficit is never more than the day needs: the deepest the house
+  draws the pack below its midnight level before the sun refills it, less
+  what the pack already holds above its reserve. Without this a bigger
+  pack bought a bigger night charge for the same day.
 
 Days chain. One run is one pack: the simulated kWh carries from one day
-to the next (``simulate_period``); only the first day of a stretch of
-consecutive days starts from the recorded SOC × the install's real
-capacity (at most the new capacity). A day's ``delta`` is simulated −
-actual cost, with no credit. What the pack holds at the end of a stretch
-against what the real pack held is valued ONCE, at the stretch's mean
-import rate × √round-trip (``stored_energy_value``), and shown as its
-own line — never folded into a day.
+to the next (``simulate_period``). The first day of a stretch starts from
+the recorded SOC × the install's real capacity (at most the new
+capacity); a bigger reserve is filled on top, so a bigger pack does not
+spend its first sunny hours filling a reserve it never uses. A gap of up
+to ``BRIDGE_MAX_DAYS`` missing days does not end the stretch: the pack
+keeps its level, moved by what the real pack gained or lost over the
+missing days. A longer gap starts a new stretch. A day's ``delta`` is
+simulated − actual cost, with no credit. What the simulated pack gained
+over a stretch against what the real pack gained is valued ONCE, at the
+stretch's mean import rate × √round-trip (``stored_energy_value``), and
+shown as its own line — never folded into a day.
 
 Hourly means: prices flat inside each hour are reproduced exactly;
 15-minute prices and 15-minute peaks inside an hour are not seen, and
@@ -44,10 +63,12 @@ from datetime import date as _date, datetime, timedelta
 from typing import Any, Dict, List, Mapping, Optional, Union
 
 from ...consts.battery_modes import reserve_soc_of
+from ...consts.core import DEFAULT_NIGHT_LATEST_END
 from ...consts.ev_charge_modes import DEFAULT_EV_CHARGE_MODE
 from ...coordinator.battery_charge_scheduler import (
     BatteryChargeScheduler,
     SchedulerConfig,
+    SchedulerState,
 )
 from ...coordinator.charger_types import (
     BatteryDecision,
@@ -99,7 +120,8 @@ DEFAULTS_TAKEN = (
     "no grid-funded loads, no morning window, no battery boost",
     "every sink open (no house hold)",
     "night plan made once per day from that day's own forecast, house use "
-    "and first SOC",
+    "and first SOC; the charge never more than the day needs; a negative "
+    "price charges only in its own hours",
     "solar and house as recorded, closed on the grid and battery meters "
     "hour by hour; the car as recorded unless its mode is changed",
     "the share of the house the real pack left to the grid, learned from "
@@ -108,7 +130,15 @@ DEFAULTS_TAKEN = (
     "forecast taken as recorded: no correction factor, not stale",
     "stored energy at the end of the run valued once, at the run's mean "
     "import rate",
+    "a gap of up to two days bridged with the real pack's change; a longer "
+    "gap starts again from the recorded level",
 )
+
+#: a gap of at most this many missing days keeps the stretch going
+BRIDGE_MAX_DAYS = 2
+#: the note of a day planned with its own solar as the forecast
+FORECAST_PROXY_NOTE = ("no stored forecast — the day's own solar stood in "
+                       "(perfect foresight)")
 
 #: the coordinator's charge window and daytime hours (coordinator.py,
 #: tariff_provider.get_charge_window_rate / get_next_daytime_rate)
@@ -136,6 +166,12 @@ class SimParams:
     #: the car's charge mode (``ev_retime.EV_MODE_CHOICES``); ``recorded``
     #: keeps the car's hours as they were
     ev_mode: str = RECORDED
+    #: the recorded solar × this, hour by hour (more or fewer panels);
+    #: clipped at the inverter's AC limit when the config has one
+    pv_factor: float = 1.0
+    #: may the pack feed the car? None = as the install does it; False =
+    #: never (SEM's ``may_assist_ev`` off)
+    battery_to_ev: Optional[bool] = None
 
     @classmethod
     def from_config(cls, cfg: Mapping[str, Any], **changes) -> "SimParams":
@@ -226,6 +262,21 @@ class DayResult:
     #: what the undelivered kWh would cost from the grid at the day's mean
     #: import rate — shown beside the cost, never inside it
     ev_not_delivered_value: float = 0.0
+    #: the simulated pack at the start of the day (kWh)
+    start_kwh: float = 0.0
+    #: the real pack at the start of the day: first SOC × real capacity
+    recorded_start_kwh: Optional[float] = None
+    #: kWh the simulated pack took from the grid (forced charges)
+    grid_charge_kwh: float = 0.0
+    #: why the day came out as it did, in a few short lines — what a person
+    #: reads to see why a day differs (night charge, restart, bridge …)
+    story: List[str] = field(default_factory=list)
+    #: what the simulated pack gained over the day more (+) than the real
+    #: pack did (kWh), and that at the day's mean import rate × √round-trip:
+    #: a sunny day that fills a bigger pack pays for it in export it did not
+    #: sell, and the grey days after it spend it — this says so per day
+    pack_change_kwh: float = 0.0
+    pack_change_value: float = 0.0
 
     def as_dict(self) -> dict:
         return {
@@ -244,6 +295,13 @@ class DayResult:
             "ev_not_delivered_value": self.ev_not_delivered_value,
             "indicative": self.indicative,
             "indicative_reasons": list(self.indicative_reasons),
+            "start_kwh": self.start_kwh, "end_kwh": self.end_kwh,
+            "recorded_start_kwh": self.recorded_start_kwh,
+            "recorded_end_kwh": self.recorded_end_kwh,
+            "grid_charge_kwh": self.grid_charge_kwh,
+            "story": list(self.story),
+            "pack_change_kwh": self.pack_change_kwh,
+            "pack_change_value": self.pack_change_value,
             "hours": [dict(h) for h in self.hours],
         }
 
@@ -268,6 +326,8 @@ def sim_config(cfg: Mapping[str, Any], params: SimParams) -> Dict[str, Any]:
         out["battery_mode"] = str(params.battery_mode)
     if params.ev_mode and params.ev_mode != RECORDED:
         out["sim_ev_mode"] = str(params.ev_mode)
+    if params.battery_to_ev is False:
+        out["sim_no_battery_ev"] = True
     if params.peak_limit_kw:
         out["target_peak_limit"] = float(params.peak_limit_kw)
     else:
@@ -307,7 +367,8 @@ def synth_view(hour: SimHour, state: SimState, params: SimParams,
     ev_charging = hour.ev > 0.0
     # The car's consent to the pack (coordinator._ev_wants_pack): a car
     # plugged in on a charger in *Solar + battery*.
-    wants_pack = ev_charging and ev_mode_of(cfg) == "solar_plus_battery"
+    wants_pack = (ev_charging and ev_mode_of(cfg) == "solar_plus_battery"
+                  and not cfg.get("sim_no_battery_ev"))
     spend_on = bool(cfg.get("forecast_spending_enabled", False))
     # SEM's spendable budget rests on a learned night and a trusted
     # forecast an hour of statistics does not carry. Measured on PROD
@@ -393,35 +454,132 @@ def scheduler_rates(hours: List[SimHour], trigger_hour: int = 21):
             hours[t].import_rate)
 
 
-def plan_night(day: HourlyDay, hours: List[SimHour], soc_kwh: float,
-               params: SimParams, cfg: Mapping[str, Any]):
-    """SEM's scheduler and night packer for the night the day starts with.
+def night_end(day: HourlyDay, cfg: Mapping[str, Any]) -> int:
+    """The first hour that is no longer night: sunrise (the first hour with
+    solar), but never later than ``night_latest_end`` — SEM's own night
+    window (``time_manager.get_night_window``). A day whose solar counter
+    read nothing all morning must not stretch the night, and the forced
+    night charge with it, into the day."""
+    try:
+        latest = int(float(cfg.get("night_latest_end",
+                                   DEFAULT_NIGHT_LATEST_END)))
+    except (TypeError, ValueError):
+        latest = int(DEFAULT_NIGHT_LATEST_END)
+    return max(1, min(_sunrise(day), latest))
 
-    Returns ``(scheduler_decision, plan_dict)``, both None when the install
-    has night charging off."""
-    if not cfg.get("battery_charge_scheduler_enabled", False):
-        return None, None
+
+def day_need_kwh(hours: List["SimHour"]) -> float:
+    """What the day asks of the pack (AC kWh): the deepest the house draws
+    below the midnight level before the sun gives it back. A grey day: its
+    whole house; a sunny day: the hours before the surplus starts."""
+    level = deepest = 0.0
+    for h in hours:
+        level += h.solar - h.home
+        deepest = min(deepest, level)
+    return -deepest
+
+
+def _scheduler(cfg: Mapping[str, Any]):
     sched_cfg = SchedulerConfig.from_config(dict(cfg))
-    sched = BatteryChargeScheduler(None, sched_cfg)
-    off_peak, peak, current = scheduler_rates(hours, sched_cfg.trigger_hour)
+    return BatteryChargeScheduler(None, sched_cfg), sched_cfg
+
+
+def negative_price_decision(hour: "SimHour", soc_kwh: float,
+                            params: SimParams, cfg: Mapping[str, Any]):
+    """SEM's negative-price charge for one night hour, or None.
+
+    Live SEM re-evaluates every 30 minutes with the price of that moment
+    (``coordinator._maybe_run_scheduler_evaluation``), so the override
+    holds only while the price IS below 0. Each hour asks for itself; the
+    charge is still bounded by the pack's room and power in ``_dispatch``."""
+    if hour.import_rate >= 0:
+        return None
+    if not cfg.get("battery_charge_scheduler_enabled", False):
+        return None
+    sched, sched_cfg = _scheduler(cfg)
+    if not sched_cfg.force_charge_on_negative_price:
+        return None
     cap = float(params.capacity_kwh)
     decision = sched.evaluate(
         current_soc=100.0 * soc_kwh / cap if cap > 0 else 0.0,
-        forecast_tomorrow_kwh=float(day.forecast_kwh or 0.0),
+        forecast_tomorrow_kwh=0.0, expected_consumption_kwh=0.0,
+        off_peak_rate=hour.import_rate, peak_rate=hour.import_rate,
+        current_price=hour.import_rate)
+    return decision if getattr(decision, "price_forced", False) else None
+
+
+def cap_deficit(decision, need_kwh: float, soc_kwh: float, floor_kwh: float,
+                sched_cfg, eff: float):
+    """The scheduler's verdict with its deficit cut to what the day needs.
+
+    ``need_kwh`` is the day's draw on the pack (AC, ``day_need_kwh``); the
+    pack must hold ``need / eff`` above its floor, and holds ``soc − floor``
+    already. Real SEM plans its deficit from a learned house use and no
+    pack size; replayed from the day's own hours the deficit must not grow
+    with the pack, or a 115 kWh pack buys a night charge the day never
+    uses (bug class 158)."""
+    if decision is None:
+        return None
+    if getattr(getattr(decision, "state", None), "value", None) != "scheduled":
+        return decision
+    if getattr(decision, "price_forced", False):
+        return decision
+    room = max(0.0, need_kwh / max(eff, 1e-9) - max(0.0, soc_kwh - floor_kwh))
+    deficit = float(getattr(decision, "deficit_kwh", 0.0) or 0.0)
+    if deficit <= room:
+        return decision
+    if room < float(sched_cfg.min_deficit_kwh):
+        return replace(decision, state=SchedulerState.NOT_NEEDED,
+                       deficit_kwh=room,
+                       reason=f"the day needs {room:.1f} kWh more than the "
+                              "pack holds — below the threshold")
+    usable = float(sched_cfg.battery_usable_capacity_kwh or 0.0)
+    cap = float(sched_cfg.battery_capacity_kwh or 0.0)
+    soc_pct = 100.0 * soc_kwh / cap if cap > 0 else 0.0
+    target = min(float(sched_cfg.max_target_soc),
+                 soc_pct + (100.0 * room / usable if usable > 0 else 0.0))
+    return replace(decision, deficit_kwh=room, target_soc=target,
+                   reason=f"charge {room:.1f} kWh — what the day needs")
+
+
+def plan_night(day: HourlyDay, hours: List[SimHour], soc_kwh: float,
+               params: SimParams, cfg: Mapping[str, Any], *,
+               forecast_kwh: Optional[float] = None,
+               end_hour: Optional[int] = None):
+    """SEM's scheduler and night packer for the night the day starts with.
+
+    ``forecast_kwh``: the forecast the plan uses (the day's own, or its
+    solar as a proxy); None = the day's stored one. ``end_hour``: the
+    night's end (``night_end``). Returns ``(scheduler_decision,
+    plan_dict)``, both None when the install has night charging off."""
+    if not cfg.get("battery_charge_scheduler_enabled", False):
+        return None, None
+    sched, sched_cfg = _scheduler(cfg)
+    off_peak, peak, current = scheduler_rates(hours, sched_cfg.trigger_hour)
+    cap = float(params.capacity_kwh)
+    forecast = day.forecast_kwh if forecast_kwh is None else forecast_kwh
+    floor_kwh = cap * float(params.reserve_pct) / 100.0
+    decision = sched.evaluate(
+        current_soc=100.0 * soc_kwh / cap if cap > 0 else 0.0,
+        forecast_tomorrow_kwh=float(forecast or 0.0),
         expected_consumption_kwh=day.total("home"),
         off_peak_rate=off_peak,
         peak_rate=peak,
         correction_factor=1.0,
-        forecast_available=day.forecast_kwh is not None,
+        forecast_available=forecast is not None,
         forecast_age_hours=0.0,
-        current_price=current,
+        # A negative price is answered hour by hour
+        # (``negative_price_decision``): the evening's one price must not
+        # stand for the whole night.
+        current_price=max(0.0, current),
     )
-    sunrise = _sunrise(day)
+    decision = cap_deficit(decision, day_need_kwh(hours), soc_kwh, floor_kwh,
+                           sched_cfg, one_way(params.roundtrip))
+    end = night_end(day, cfg) if end_hour is None else int(end_hour)
     peak_w = float(params.peak_limit_kw or 0.0) * 1000.0
-    floor_kwh = cap * float(params.reserve_pct) / 100.0
     slots = [LedgerSlot(start=h.start, end=h.start + timedelta(hours=1),
                         price=h.import_rate, home_w=h.home * 1000.0)
-             for h in hours[:max(1, sunrise)]]
+             for h in hours[:max(1, end)]]
     ledger = build_night_ledger(
         slots, soc_kwh=soc_kwh, floor_kwh=floor_kwh,
         max_discharge_w=float(params.max_discharge_w), peak_limit_w=peak_w)
@@ -454,6 +612,8 @@ class _Flow:
     grid_export: float = 0.0
     battery_charge: float = 0.0
     battery_discharge: float = 0.0
+    #: the part of ``battery_charge`` that came from the grid
+    grid_charge: float = 0.0
 
 
 def _self_consume(hour: SimHour, soc: float, floor_kwh: float, cap: float,
@@ -535,7 +695,7 @@ def _dispatch(decision: BatteryDecision, hour: SimHour, soc: float,
             from_grid = grid_w / 1000.0
         f = _Flow(battery_charge=from_sun + from_grid,
                   grid_import=house_import + from_grid,
-                  grid_export=surplus - from_sun)
+                  grid_export=surplus - from_sun, grid_charge=from_grid)
         return f, None
     if intent is BatteryIntent.FORCE_DISCHARGE:
         floor_kwh = cap * max(float(params.reserve_pct),
@@ -630,6 +790,34 @@ def uncovered_share(grid: float, deficit: float) -> float:
     return max(0.0, min(UNCOVERED_MAX, grid / deficit))
 
 
+def recorded_kwh(soc_pct: Optional[float], real_cap: float) -> Optional[float]:
+    return None if soc_pct is None else real_cap * float(soc_pct) / 100.0
+
+
+def stretch_start_kwh(recorded: Optional[float], params: SimParams,
+                      cfg: Mapping[str, Any]) -> Optional[float]:
+    """Where the simulated pack starts a stretch, from the real pack's kWh.
+
+    The same kWh as the real pack (at most the new capacity) — no free
+    energy. When the what-if keeps a bigger reserve than the real pack did,
+    that difference is filled on top: the real pack's reserve was full too,
+    and a reserve is never spent, so a bigger pack must not spend its first
+    sunny hours (or the grid) filling it. Measured on PROD (#1083): every
+    day after a gap came out 4–5 dearer with a 115 kWh pack because its
+    23 kWh reserve started 17 kWh short. A real pack below its own reserve
+    stays where it was. None without a recorded SOC."""
+    if recorded is None:
+        return None
+    cap = float(params.capacity_kwh)
+    real_cap = real_capacity_kwh(cfg, params)
+    real_floor = real_cap * reserve_soc_of(cfg) / 100.0
+    floor = cap * float(params.reserve_pct) / 100.0
+    start = float(recorded)
+    if start >= real_floor and floor > real_floor:
+        start += floor - real_floor
+    return min(cap, max(0.0, start))
+
+
 def simulate_day(day: HourlyDay, params: SimParams,
                  cfg: Mapping[str, Any], *,
                  start_kwh: Optional[float] = None,
@@ -638,7 +826,7 @@ def simulate_day(day: HourlyDay, params: SimParams,
     """Replay one day hour by hour through ``decide_battery``.
 
     ``start_kwh``: the pack as the day before left it (a chained run);
-    ``None`` starts from the recorded SOC × the real capacity.
+    ``None`` starts a stretch from the recorded SOC (``stretch_start_kwh``).
     ``model``: ``MODEL_DECISIONS`` (SEM's real decisions) or
     ``MODEL_BALANCE`` (plain self-consumption every hour).
     ``uncovered``: the share of a house deficit the real pack left to the
@@ -649,6 +837,7 @@ def simulate_day(day: HourlyDay, params: SimParams,
         uncovered = uncovered_share(*uncovered_sums(day, reserve_soc_of(cfg)))
     reasons: List[str] = list(DEFAULTS_TAKEN)
     marks: List[str] = []
+    story: List[str] = []
     the_cfg = sim_config(cfg, params)
     flat_in = float(cfg.get("electricity_import_rate") or DEFAULT_IMPORT_RATE)
     flat_out = float(cfg.get("electricity_export_rate")
@@ -656,19 +845,34 @@ def simulate_day(day: HourlyDay, params: SimParams,
                      else DEFAULT_EXPORT_RATE)
     midnight = datetime.combine(_date.fromisoformat(day.date),
                                 datetime.min.time())
+    pv = max(0.0, float(params.pv_factor or 0.0))
+    ac_limit = float(cfg.get("inverter_ac_limit_w") or 0.0) / 1000.0
     hours: List[SimHour] = []
     price_missing = False
+    clipped = 0.0
     for h in range(HOURS):
         rin, miss_in = _rate(params.import_rate, day.import_rate[h], flat_in)
         rout, miss_out = _rate(params.export_rate, day.export_rate[h], flat_out)
         price_missing = price_missing or miss_in or miss_out
+        solar = day.solar[h]
+        if pv != 1.0:
+            solar *= pv
+            if ac_limit > 0 and solar > max(ac_limit, day.solar[h]):
+                # more panels on the same inverter: the AC side caps the hour
+                cut = max(ac_limit, day.solar[h])
+                clipped += solar - cut
+                solar = cut
         hours.append(SimHour(
             index=h, start=midnight + timedelta(hours=h),
-            solar=day.solar[h], home=day.home[h], ev=day.ev[h],
+            solar=solar, home=day.home[h], ev=day.ev[h],
             import_rate=rin, export_rate=rout, uncovered=float(uncovered),
             two_way=min(day.grid_import[h], day.grid_export[h])))
-    retimed = retime(params.ev_mode, day.ev, day.solar, day.home,
-                     [x.import_rate for x in hours],
+    if pv != 1.0:
+        story.append(f"solar × {pv:.2f}"
+                     + (f", {clipped:.1f} kWh cut at the inverter limit"
+                        if clipped > 0.05 else ""))
+    retimed = retime(params.ev_mode, day.ev, [x.solar for x in hours],
+                     day.home, [x.import_rate for x in hours],
                      ChargerLimits.from_config(cfg))
     if retimed.ev != list(day.ev):
         hours = [replace(x, ev=retimed.ev[x.index]) for x in hours]
@@ -686,36 +890,53 @@ def simulate_day(day: HourlyDay, params: SimParams,
     marks.extend(day.notes)
     if day.gap:
         marks.append("the day carries the gap tag")
+    if day.counters_disagree:
+        story.append("a counter jumped this day — closed on the meters")
 
     cap = float(params.capacity_kwh)
     eff = one_way(params.roundtrip)
     reserve_kwh = cap * float(params.reserve_pct) / 100.0
     real_cap = real_capacity_kwh(cfg, params)
+    recorded_start = recorded_kwh(day.first_soc(), real_cap)
     if start_kwh is not None:
         soc = min(cap, max(0.0, float(start_kwh)))
     else:
-        first = day.first_soc()
+        first = stretch_start_kwh(recorded_start, params, cfg)
         if first is None:
             soc = reserve_kwh
             marks.append("no SOC recorded — the pack starts at its reserve")
         else:
-            soc = min(cap, real_cap * float(first) / 100.0)
+            soc = first
             if soc < reserve_kwh:
                 # no free energy: the pack starts where the real one was and
                 # may not go lower — it only charges until it is above
                 marks.append("the recorded start SOC is below the new "
                              "reserve — the pack starts there")
+        story.append(f"starts from the recorded level: {soc:.1f} kWh")
     start_soc = soc
     state = SimState(soc_kwh=soc)
-    sunrise = _sunrise(day)
-    sched, plan = plan_night(day, hours, soc, params, the_cfg)
+    end_hour = night_end(day, the_cfg)
+    forecast = day.forecast_kwh
+    if forecast is None and the_cfg.get("battery_charge_scheduler_enabled"):
+        forecast = sum(x.solar for x in hours)
+        story.append(FORECAST_PROXY_NOTE)
+    elif forecast is not None and pv != 1.0:
+        forecast *= pv
+    sched, plan = plan_night(day, hours, soc, params, the_cfg,
+                             forecast_kwh=forecast, end_hour=end_hour)
 
     actual_rows: List[dict] = []
     sim_rows: List[dict] = []
+    night_grid = night_cost = neg_grid = 0.0
     for hour in hours:
         h = hour.index
-        night = h < sunrise
-        state.scheduler_decision = sched if night else None
+        night = h < end_hour
+        hour_sched = sched if night else None
+        if night and model == MODEL_DECISIONS:
+            neg = negative_price_decision(hour, state.soc_kwh, params, the_cfg)
+            if neg is not None:
+                hour_sched = neg
+        state.scheduler_decision = hour_sched
         state.plan = plan if night else None
         view = synth_view(hour, state, params, the_cfg)
         if model == MODEL_DECISIONS:
@@ -726,6 +947,9 @@ def simulate_day(day: HourlyDay, params: SimParams,
                                car_floor_kwh=car_floor_kwh(view, the_cfg, cap))
         else:
             decision = _BALANCE_DECISION
+        if params.battery_to_ev is False:
+            # the pack never feeds the car (``may_assist_ev`` off)
+            hour = replace(hour, car_floor_kwh=cap)
         flow, note = _dispatch(decision, hour, state.soc_kwh, params)
         # The meter bought and sold inside the recorded hour (a cloud, a
         # kettle): an hourly balance nets that away. It stays as recorded.
@@ -733,6 +957,12 @@ def simulate_day(day: HourlyDay, params: SimParams,
         flow.grid_export += hour.two_way
         if note:
             marks.append(f"{hour.start:%H}:00 {note}")
+        if flow.grid_charge > 0:
+            if hour.import_rate < 0:
+                neg_grid += flow.grid_charge
+            else:
+                night_grid += flow.grid_charge
+                night_cost += flow.grid_charge * hour.import_rate
         soc_start = state.soc_kwh
         soc_end = (soc_start + flow.battery_charge * eff
                    - flow.battery_discharge / eff)
@@ -754,6 +984,7 @@ def simulate_day(day: HourlyDay, params: SimParams,
             "grid_import": flow.grid_import, "grid_export": flow.grid_export,
             "battery_charge": flow.battery_charge,
             "battery_discharge": flow.battery_discharge,
+            "grid_charge": flow.grid_charge,
             "loss_kwh": bal.loss_kwh,
             "over_limit_kwh": _over(flow.grid_import, params),
             "import_rate": hour.import_rate, "export_rate": hour.export_rate,
@@ -786,19 +1017,38 @@ def simulate_day(day: HourlyDay, params: SimParams,
         elif intent is BatteryIntent.STOP_FORCE_DISCHARGE:
             state.forced_discharge = False
 
+    if night_grid > 0.05:
+        story.append(f"charge from grid {night_grid:.1f} kWh at "
+                     f"{night_cost / night_grid:.2f}")
+    if neg_grid > 0.05:
+        story.append(f"charge at a negative price {neg_grid:.1f} kWh")
+    if sched is not None and getattr(sched, "deficit_kwh", 0) and str(
+            getattr(sched, "reason", "")).endswith("what the day needs"):
+        story.append("night charge cut to what the day needs")
+    if retimed.not_delivered_kwh > 0.01:
+        story.append(f"car {retimed.not_delivered_kwh:.1f} kWh not delivered")
     actual = summarise_day(actual_rows)
     simulated = summarise_day(sim_rows)
     actual_cost = round(actual["net_cost"], 4)
     simulated_cost = round(simulated["net_cost"], 4)
     last = next((x for x in reversed(day.soc_pct) if x is not None), None)
-    recorded_end = None if last is None else real_cap * float(last) / 100.0
+    recorded_end = recorded_kwh(last, real_cap)
     mean_rate = sum(h.import_rate for h in hours) / len(hours)
+    change = 0.0
+    if recorded_start is not None and recorded_end is not None:
+        change = (state.soc_kwh - start_soc) - (recorded_end - recorded_start)
     return DayResult(
+        pack_change_kwh=round(change, 4),
+        pack_change_value=round(change * eff * mean_rate, 4),
         date=day.date, tags=list(day.tags),
         actual=actual, simulated=simulated,
         actual_cost=actual_cost, simulated_cost=simulated_cost,
         delta=round(simulated_cost - actual_cost, 4),
         end_kwh=state.soc_kwh,
+        start_kwh=start_soc,
+        recorded_start_kwh=recorded_start,
+        grid_charge_kwh=round(night_grid + neg_grid, 4),
+        story=story,
         ev_moved_kwh=round(retimed.moved_kwh, 4),
         ev_not_delivered_kwh=round(retimed.not_delivered_kwh, 4),
         ev_not_delivered_value=round(retimed.not_delivered_kwh * mean_rate, 4),
@@ -825,28 +1075,50 @@ class PeriodResult:
     """A chained run: the days, and the pack's end valued once."""
 
     days: List[DayResult]
-    #: (sim end kWh − real end kWh) × √round-trip × mean import rate, summed
-    #: over each stretch of consecutive days; below 0 the simulated pack
-    #: ended emptier than the real one
+    #: per stretch: (what the simulated pack gained − what the real pack
+    #: gained) × √round-trip × the stretch's mean import rate, summed; below
+    #: 0 the simulated pack ended emptier than the real one
     stored_energy_value: float = 0.0
-    #: kWh the simulated pack held more (+) than the real one at the ends
+    #: kWh the simulated pack gained more (+) than the real one, summed over
+    #: the stretches — a sum, so it may be larger than the pack itself
     stored_energy_kwh: float = 0.0
+    #: how many stretches the run fell into (a gap of more than
+    #: ``BRIDGE_MAX_DAYS`` days starts a new one)
+    stretches: int = 0
+
+
+def days_between(prev_date: Optional[str], date: str) -> Optional[int]:
+    if not prev_date:
+        return None
+    return (_date.fromisoformat(date) - _date.fromisoformat(prev_date)).days
 
 
 def consecutive(prev_date: Optional[str], date: str) -> bool:
     """Is ``date`` the day after ``prev_date``?"""
-    if not prev_date:
-        return False
-    return (_date.fromisoformat(date)
-            - _date.fromisoformat(prev_date)).days == 1
+    return days_between(prev_date, date) == 1
+
+
+def bridges(prev_date: Optional[str], date: str) -> bool:
+    """Does ``date`` continue the stretch ``prev_date`` ended — the next
+    day, or after at most ``BRIDGE_MAX_DAYS`` missing days?"""
+    n = days_between(prev_date, date)
+    return n is not None and 1 <= n <= BRIDGE_MAX_DAYS + 1
 
 
 class PeriodChain:
     """Walk days one at a time, carrying the pack. One day resident: the
     job feeds a day, keeps the small result, drops the day.
 
-    A day that is not the day after the last one starts a new stretch from
-    its recorded SOC; the stretch that ended is valued then."""
+    A day after a gap of more than ``BRIDGE_MAX_DAYS`` missing days starts
+    a new stretch from its recorded SOC; the stretch that ended is valued
+    then. A shorter gap is bridged: the pack keeps its level, moved by what
+    the real pack gained or lost over the missing days (the house used the
+    pack those days too; the real pack's change is the one measure of it).
+
+    The value of a stretch compares what each pack GAINED: (sim end − sim
+    start) − (real end − real start). A stretch start that fills a bigger
+    reserve, or clips to a smaller pack, is no gain and no loss; the same
+    holds for a bridge that the pack's size had to clip."""
 
     def __init__(self, params: SimParams, cfg: Mapping[str, Any],
                  model: str = MODEL_DECISIONS) -> None:
@@ -855,29 +1127,60 @@ class PeriodChain:
         self.model = model
         self._prev: Optional[DayResult] = None
         self._rates: List[float] = []
+        #: sim kWh − real kWh that no simulated decision made: the stretch
+        #: start and the bridges (never valued)
+        self._offset = 0.0
+        self._valued = True
         self.stored_energy_value = 0.0
         self.stored_energy_kwh = 0.0
+        self.stretches = 0
         #: the uncovered share, learned over every day seen so far
         self._unc_grid = 0.0
         self._unc_deficit = 0.0
 
     def _close(self) -> None:
         prev = self._prev
-        if prev is None or prev.recorded_end_kwh is None or not self._rates:
+        if (prev is None or prev.recorded_end_kwh is None or not self._rates
+                or not self._valued):
             return
         rate = sum(self._rates) / len(self._rates)
-        self.stored_energy_kwh += prev.end_kwh - prev.recorded_end_kwh
+        gained = prev.end_kwh - self._offset
+        self.stored_energy_kwh += gained - prev.recorded_end_kwh
         self.stored_energy_value += stored_energy_value(
-            prev.end_kwh, prev.recorded_end_kwh, rate, self.params.roundtrip)
+            gained, prev.recorded_end_kwh, rate, self.params.roundtrip)
+
+    def _bridge_start(self, prev: DayResult, day: HourlyDay):
+        """The pack after the missing days: its level, moved by the real
+        pack's change over them. Returns ``(start_kwh, missing_days)``."""
+        missing = days_between(prev.date, day.date) - 1
+        start = prev.end_kwh
+        if missing <= 0:
+            return start, 0
+        real_cap = real_capacity_kwh(self.cfg, self.params)
+        rec_now = recorded_kwh(day.first_soc(), real_cap)
+        moved = 0.0
+        if rec_now is not None and prev.recorded_end_kwh is not None:
+            moved = rec_now - prev.recorded_end_kwh
+        cap = float(self.params.capacity_kwh)
+        want = prev.end_kwh + moved
+        start = min(cap, max(0.0, want))
+        # the real pack moved ``moved``; whatever the size clipped is no
+        # simulated gain or loss
+        self._offset += start - want
+        return start, missing
 
     def add(self, day: HourlyDay) -> DayResult:
         prev = self._prev
         start = None
-        if prev is not None and consecutive(prev.date, day.date):
-            start = prev.end_kwh
+        missing = 0
+        if prev is not None and bridges(prev.date, day.date):
+            start, missing = self._bridge_start(prev, day)
         else:
             self._close()
             self._rates = []
+            self._offset = 0.0
+            self._valued = True
+            self.stretches += 1
         g, d = uncovered_sums(day, reserve_soc_of(self.cfg))
         self._unc_grid += g
         self._unc_deficit += d
@@ -885,6 +1188,15 @@ class PeriodChain:
                            model=self.model,
                            uncovered=uncovered_share(self._unc_grid,
                                                      self._unc_deficit))
+        if start is None:
+            if res.recorded_start_kwh is None:
+                # no record to compare with: the stretch is not valued
+                self._valued = False
+            else:
+                self._offset = res.start_kwh - res.recorded_start_kwh
+        if missing:
+            res.story.insert(0, f"{missing} missing day(s) bridged — the pack "
+                                "carried its level")
         self._rates.append(res.mean_import_rate)
         self._prev = res
         return res
@@ -905,4 +1217,5 @@ def simulate_period(days: List[HourlyDay], params: SimParams,
     chain.finish()
     return PeriodResult(days=out,
                         stored_energy_value=round(chain.stored_energy_value, 4),
-                        stored_energy_kwh=round(chain.stored_energy_kwh, 4))
+                        stored_energy_kwh=round(chain.stored_energy_kwh, 4),
+                        stretches=chain.stretches)
