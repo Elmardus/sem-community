@@ -199,7 +199,7 @@ async def test_three_days_three_rows_progress_done_and_stored():
                         "indicative", "reasons"}
     # (accuracy) the pack's end is valued once, on its own line, and the
     # own settings were checked against the real cost
-    assert set(res["stored_energy"]) == {"kwh", "value"}
+    assert set(res["stored_energy"]) == {"kwh", "value", "stretches"}
     assert res["calibration"]["days"] == 3
     assert res["calibrated"] is res["calibration"]["calibrated"]
     # the defaults every day takes are said once, not per day
@@ -442,7 +442,12 @@ async def test_defaults_and_days():
     d = job.defaults()
     assert d == {"capacity_kwh": 10.0, "reserve_pct": 10.0, "peak_limit_kw": 6.0,
                  "import_rate": 0.30, "export_rate": 0.08,
-                 "battery_mode": "auto", "ev_mode": "recorded", "currency": "CHF"}
+                 "battery_mode": "auto", "ev_mode": "recorded", "currency": "CHF",
+                 # (#1083 levers) battery power, PV size and the car's use of
+                 # the pack, as the install has them
+                 "max_charge_w": 5000.0, "max_discharge_w": 5000.0,
+                 "system_size_kwp": None, "pv_factor": 1.0,
+                 "battery_to_ev": True}
     job2, _, _ = _job(cfg={"battery_capacity_kwh": 5.0})
     assert job2.defaults()["peak_limit_kw"] is None
     days = job.days()
@@ -560,11 +565,11 @@ async def test_start_result_and_xlsx_over_websocket():
     out = _result(_call(ws.ws_xlsx, hass))
     assert out["filename"] == f"sem-simulation-{res['started_at'][:10]}.xlsx"
     sheets = _read_xlsx(base64.b64decode(out["base64"]))
-    assert list(sheets) == ["Days", "Totals", "Notes"]
+    assert list(sheets) == ["Days", "Months", "Totals", "Notes"]
     notes = {row[0][1]: row[1] for row in sheets["Notes"][1:]}
     assert "Own settings against the real cost, % off" in notes
     head = sheets["Days"][0]
-    assert head[0] == "Date" and head[-1] == "Indicative"
+    assert head[0] == "Date" and head[-2:] == ["Indicative", "Note"]
     assert all("(est.)" in h for h in head[3:6])
     assert "(est.)" not in head[2]
     assert len(sheets["Days"]) == 4
@@ -573,9 +578,9 @@ async def test_start_result_and_xlsx_over_websocket():
     assert first[2] == ("n", res["days"][0]["actual_cost"])
     totals = sheets["Totals"]
     assert all("(est.)" in h for h in totals[0][3:5])
-    assert totals[-1][0] == ("s", "total")
-    assert totals[-1][1] == ("n", 3)
-    assert [r[0][1] for r in totals[1:-1]] == ["mixed"]
+    end = next(i for i, r in enumerate(totals) if r and r[0] == ("s", "total"))
+    assert totals[end][1] == ("n", 3)
+    assert [r[0][1] for r in totals[1:end]] == ["mixed"]
 
 
 @pytest.mark.asyncio
@@ -633,7 +638,7 @@ async def test_unknown_run_id_while_runs_exist_and_an_all_skipped_xlsx():
     assert res["days"] == [] and len(res["skipped"]) == 3
     sheets = _read_xlsx(base64.b64decode(_result(_call(ws.ws_xlsx, hass))["base64"]))
     assert len(sheets["Days"]) == 1                  # the header only
-    assert sheets["Totals"][-1][:2] == [("s", "total"), ("n", 0)]
+    assert [("s", "total"), ("n", 0)] in [r[:2] for r in sheets["Totals"]]
 
 
 def test_start_schema_takes_the_documented_shape():

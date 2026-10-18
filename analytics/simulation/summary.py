@@ -14,7 +14,8 @@ SUMMARY_TAGS = ("sunny", "mixed", "grey", "car", "cheap")
 
 def _blank() -> dict:
     return {"days": 0, "actual_cost": 0.0, "simulated_cost": 0.0,
-            "delta": 0.0, "kwh_over_limit": 0.0, "indicative_days": 0}
+            "delta": 0.0, "kwh_over_limit": 0.0, "indicative_days": 0,
+            "net_delta": 0.0}
 
 
 def _add(total: dict, day) -> None:
@@ -24,6 +25,11 @@ def _add(total: dict, day) -> None:
     total["delta"] += float(day.delta)
     total["kwh_over_limit"] += float(day.kwh_over_limit)
     total["indicative_days"] += 1 if day.indicative else 0
+    # the difference with what the pack gained over each day counted — a
+    # day type that fills a bigger pack is not shown dearer for energy the
+    # other days spend (``DayResult.pack_change_value``)
+    total["net_delta"] += float(day.delta) - float(
+        getattr(day, "pack_change_value", 0.0) or 0.0)
 
 
 def _rounded(total: dict) -> dict:
