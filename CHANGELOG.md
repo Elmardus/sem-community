@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- ✨ **The Configuration tab opens on Everyday: only what SEM needs, in three groups** (#830). All settings shows the rest, one tap away.
+
 # [2.2.0-beta.21] — 17.10.2026
 
 - 🐛 **A charger SEM cannot drive no longer shows as "no role matched"** (#1137). The card says what it found, without a report button.

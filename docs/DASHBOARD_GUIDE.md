@@ -190,11 +190,33 @@ Entity types use a searchable entity picker filtered to the right domain. **Rese
 ![Configuration Tab](images/sem_config_tab.png)
 
 The single home for **every changeable setting** (`sem-config-card`),
-organized in collapsible sections: Setup overview, Sensor sources (power-source overrides for grid / solar / battery, #628), EV chargers, Battery zones, Tariff & pricing, Heat pump, Hot water, Battery scheduler, Load management, Solar forecast, PV strings (when 2+ strings are detected), Notifications, and Advanced
-zones, Tariff & pricing, Heat pump, Hot water, Battery scheduler, Load
-management, Solar forecast, Notifications (with the **Hints** setting, 2.2), and Advanced (update
-interval, deltas, min solar power, regulation offset, Observer Mode,
-SEM status history).
+organized in collapsible sections under three headings:
+
+| Group | Sections |
+|---|---|
+| **Basics** | Setup overview, Tariff & pricing, EV chargers, Battery zones, Sensor sources (power-source overrides for grid / solar / battery / house, #628) |
+| **My devices** | Heat pump, Hot water, Load management, PV strings (when 2+ strings are detected), Detected hardware |
+| **Fine-tuning** | Battery scheduler, Battery intelligence, Solar forecast, Notifications (with the **Hints** setting, 2.2), Advanced (update interval, delays, min solar power, regulation offset, Observer Mode, grid VPP, SEM status history, sign fixes) |
+
+##### Everyday and All settings
+
+A switch at the top picks one of two views. Your choice is kept in this
+browser (not in SEM's settings, so each person keeps their own) and the other
+SEM tabs follow the same switch.
+
+- **Everyday** (the default) shows what SEM needs to work: the tariff mode and
+  its prices (or its price entity / schedule), each charger's power sensor and
+  control entity, the battery's discharge protection and, when load
+  management is on, its on/off and peak limit. Sections you have already set
+  up stay visible; a section with nothing to change day to day shows one line
+  instead. Each section ends with **N more in All settings**, one tap to the
+  rest. Fine-tuning folds to one line unless one of its sections has unsaved
+  changes.
+- **All settings** shows every setting. Nothing is only reachable elsewhere.
+  Set-once values such as a car's battery capacity, min/max current, kWh per
+  100 km and phases, the plug and car sensors, and the battery zone floors are
+  here (the floors are also on the Battery tab, the charge target on the EV
+  tab).
 
 ##### Detected hardware (2.1)
 
