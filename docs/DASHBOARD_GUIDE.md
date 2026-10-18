@@ -389,9 +389,11 @@ refill, tonight's floor — plus the charge-pacing line (#820) and the sell
 window when one is scheduled. The pace is solved for the whole bill — what the
 pack still needs plus what the house will draw back out of it in the deficit
 hours before sunset — and carries a fixed 10 % headroom so an evening that
-comes in under the forecast still lands the pack full; the sensor behind the
-line (`sensor.sem_battery_charge_pacing`) shows both terms as `drain_kwh`
-and `headroom_pct`. The other figures on the panel are entities too:
+comes in under the forecast still lands the pack full. The headroom is a share
+of the whole sunny day: with sun from 08:00 to 18:15 the pack is planned full
+by about 17:13, and every re-plan keeps that time. The sensor behind the
+line (`sensor.sem_battery_charge_pacing`) shows the terms as `drain_kwh`,
+`headroom_pct` and `finish_by`. The other figures on the panel are entities too:
 `sensor.sem_battery_spendable_kwh`, `sensor.sem_battery_dynamic_floor_pct`,
 `sensor.sem_battery_measured_capacity_kwh`, `sensor.sem_battery_capacity_drift_pct`
 and `sensor.sem_forecast_trust_d1` / `_d2`. In the **Learning** state the panel also offers
