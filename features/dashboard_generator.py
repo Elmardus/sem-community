@@ -253,10 +253,9 @@ class DashboardGenerator:
         the coordinator, never recomputed here, so the dashboard and the
         entity set cannot disagree. All UNKNOWN (prune nothing) when no
         coordinator is loaded."""
-        from ..const import DOMAIN
         from ..coordinator.install_modules import all_unknown, presence_of
 
-        entries = self.hass.config_entries.async_entries(DOMAIN)
+        entries = self._sem_entries()
         if not entries:
             return all_unknown()
         return presence_of(getattr(entries[0], "runtime_data", None))
@@ -277,12 +276,11 @@ class DashboardGenerator:
         an incomplete read (the #614 rule, now the oracle's). Most SEM cards
         take ``entity_prefix`` and pick entities themselves; they are not
         pruned here and must tolerate absence (tests/test_923_cards_*)."""
-        from ..const import DOMAIN
         from ..coordinator.install_modules import (
             Module, Presence, absent_entity_ids, has_managed_charger,
         )
 
-        entries = self.hass.config_entries.async_entries(DOMAIN)
+        entries = self._sem_entries()
         if not entries:
             return
         full = {**entries[0].data, **entries[0].options}
@@ -324,14 +322,35 @@ class DashboardGenerator:
                     "#923 — removed %d dashboard reference(s) to entities this "
                     "install does not have", removed)
 
+    def _sem_entries(self) -> list:
+        """SEM's config entries, the running one first.
+
+        Every part of the dashboard reads ``entries[0]``. Home Assistant also
+        lists an ignored discovery or a disabled second entry, and when one of
+        those came first the dashboard was built from it: the Simulation tab
+        stayed hidden although the switch was on, because the switch writes to
+        the entry that runs (8 views instead of 9). The running entry — the one
+        with a coordinator — comes first; then any usable one; then the rest."""
+        from ..const import DOMAIN
+
+        entries = list(self.hass.config_entries.async_entries(DOMAIN) or [])
+
+        def rank(entry) -> int:
+            if getattr(entry, "runtime_data", None) is not None:
+                return 0
+            if getattr(entry, "source", None) == "ignore" or getattr(entry, "disabled_by", None):
+                return 2
+            return 1
+
+        return sorted(entries, key=rank)
+
     def _prune_sleeping_tabs(self, template: Dict[str, Any]) -> None:
         """#1083 — the ``simulation`` view shows only while the Simulation
         tab switch is on. The flag is read by ``simulation_tab_on`` (the
         switch's own resolver), never re-resolved here. No entry → off."""
-        from ..const import DOMAIN
         from ..coordinator.day_tag_store import simulation_tab_on
 
-        entries = self.hass.config_entries.async_entries(DOMAIN)
+        entries = self._sem_entries()
         if entries and simulation_tab_on(entries[0]):
             return
         views = template.get("views", [])
@@ -660,7 +679,7 @@ class DashboardGenerator:
         """
         # Check config option — K-Flow only used when explicitly selected
         from ..const import DOMAIN
-        entries = self.hass.config_entries.async_entries(DOMAIN)
+        entries = self._sem_entries()
         if entries:
             full_config = {**entries[0].data, **entries[0].options}
             # Support legacy use_kflow_card boolean for existing installs
@@ -706,7 +725,7 @@ class DashboardGenerator:
         # oracle (UNKNOWN keeps the section), the EV section from the #595
         # managed-charger rule, same as the EV tab.
         from ..coordinator.install_modules import Module, Presence, has_managed_charger
-        entries = self.hass.config_entries.async_entries(DOMAIN)
+        entries = self._sem_entries()
         has_battery = False
         has_ev = False
         if entries:
@@ -843,9 +862,8 @@ class DashboardGenerator:
         Multi charger: shows each charger's power as a separate series with
         distinct colors so you can see which charger is consuming how much.
         """
-        from ..const import DOMAIN
 
-        entries = self.hass.config_entries.async_entries(DOMAIN)
+        entries = self._sem_entries()
         if not entries:
             return
         full_config = {**entries[0].data, **entries[0].options}

@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔧 **You now download Simulation results and EV sessions as Excel files (.xlsx)** (#1083). A CSV did not open right in every country.
 - 🔧 **SEM can tag each finished day: sunny, grey, car, cheap prices or a data gap** (#1083). Off by default; diagnostics show the last seven.
 - ✨ **Simulation: pick the newest days with one slider, and try batteries up to 150 kWh** (#1083). Easier on a phone; a car pack fits.
+- 🐛 **The SEM dashboard is built from the SEM entry that runs** (#1083). An ignored or disabled second entry could hide the Simulation tab.
 
 # [2.2.0-beta.21] — 17.10.2026
 

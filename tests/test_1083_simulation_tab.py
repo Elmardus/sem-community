@@ -147,3 +147,34 @@ def test_every_template_view_has_a_header_row():
         title, sub, _colour = table[path]
         assert en.get(title) and en.get(sub), (path, title, sub)
     assert table[SIM_PATH] == ("simulation", "simulation_sub", "#8353d1")
+
+
+def test_the_running_entry_decides_not_the_first_listed():
+    """An ignored discovery listed first hid the tab although the switch was
+    on in the entry that runs: the dashboard came out with 8 views, not 9."""
+    hass = MagicMock()
+    ignored = SimpleNamespace(data={}, options={}, source="ignore",
+                              disabled_by=None, runtime_data=None)
+    running = SimpleNamespace(data={}, options={"simulation_tab": True},
+                              source="user", disabled_by=None,
+                              runtime_data=object())
+    hass.config_entries.async_entries.return_value = [ignored, running]
+    hass.data = {}
+    gen = DashboardGenerator(hass)
+    tpl = _template()
+    gen._prune_sleeping_tabs(tpl)
+    assert SIM_PATH in _paths(tpl)
+
+
+def test_a_disabled_second_entry_never_hides_the_tab():
+    hass = MagicMock()
+    disabled = SimpleNamespace(data={}, options={}, source="user",
+                               disabled_by="user", runtime_data=None)
+    live = SimpleNamespace(data={}, options={"simulation_tab": True},
+                           source="user", disabled_by=None, runtime_data=None)
+    hass.config_entries.async_entries.return_value = [disabled, live]
+    hass.data = {}
+    gen = DashboardGenerator(hass)
+    tpl = _template()
+    gen._prune_sleeping_tabs(tpl)
+    assert SIM_PATH in _paths(tpl)
