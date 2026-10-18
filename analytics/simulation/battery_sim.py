@@ -529,6 +529,8 @@ def cap_deficit(decision, need_kwh: float, soc_kwh: float, floor_kwh: float,
     if deficit <= room:
         return decision
     if room < float(sched_cfg.min_deficit_kwh):
+        # CAUSE: `room` is computed three lines up from this day's own need
+        # and the pack's level, and this branch is `room < min_deficit_kwh`.
         return replace(decision, state=SchedulerState.NOT_NEEDED,
                        deficit_kwh=room,
                        reason=f"the day needs {room:.1f} kWh more than the "
