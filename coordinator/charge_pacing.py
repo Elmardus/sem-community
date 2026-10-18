@@ -42,6 +42,11 @@ PACING_REFUSE_AFTER_CYCLES = 3
 #: sun cannot deliver. @ArneGollin1987 measured exactly this on a 2×10 kW
 #: install and proposed +10 %. Not user-facing: the option surface only
 #: shrinks (#830), and a margin is a property of the solver, not a preference.
+#: (#820, 18.10) It is ALSO a share of the day: the pack is planned full by
+#: ``finish_by`` (sunrise → end of sun, minus this share), a time fixed for
+#: the whole day. A cap multiplier alone is re-applied to the REMAINING need
+#: on every re-solve, so it shrinks to nothing and the plan slides back into
+#: the last sunny slot (full at 18:10 with sun until 18:15).
 PACING_HEADROOM_PCT: float = 10.0
 
 
@@ -75,6 +80,10 @@ class PacingDecision:
     re-solve raises a cap the remaining sun cannot deliver. Not a knob:
     the option surface only shrinks (#830), and 10 % is what the reporter
     proposed."""
+    finish_by: Optional[str] = None
+    """(#820, 18.10) ISO time the pace plans the pack full by — the end of
+    sun brought forward by ``headroom_pct`` of the day. Fixed for the day,
+    so ``full_at`` stays before it on every re-plan."""
 
 
 def _fill_kwh(ledger, cap_w: float) -> float:
@@ -119,6 +128,49 @@ def _full_slot(ledger, cap_w: float, need_kwh: float):
     return None
 
 
+def _slot_share(s, until) -> float:
+    """(#820) The fraction of slot ``s`` that lies before ``until``."""
+    if until is None:
+        return 1.0
+    if s.start >= until:
+        return 0.0
+    if s.end <= until:
+        return 1.0
+    return (until - s.start) / (s.end - s.start)
+
+
+def _full_time(ledger, cap_w: float, need_kwh: float, until=None):
+    """(#820) When the pack reaches ``need_kwh`` under ``cap_w`` — inside
+    the slot, not at its end — counting only energy before ``until``.
+    None when it does not get there. A slot-end answer hid a full at 17:13
+    as "18:00", the very number a user reads the headroom from."""
+    filled = 0.0
+    for s in ledger:
+        share = _slot_share(s, until)
+        if share <= 0.0:
+            break
+        leftover = 0.0
+        if s.cap_override_w is not None:
+            leftover = max(0.0, s.cap_override_w - s.grid_committed_w)
+        gain = min(leftover, cap_w) * s.hours * share / 1000.0
+        if gain > 0 and filled + gain >= need_kwh:
+            frac = max(0.0, need_kwh - filled) / gain * share
+            return s.start + (s.end - s.start) * frac
+        filled += gain
+    return None
+
+
+def pacing_finish_by(day_start, day_end):
+    """(#820) The fixed time the pack is planned full by: the end of sun
+    brought forward by PACING_HEADROOM_PCT of the WHOLE day's window. Both
+    ends are fixed for the day, so a re-plan at 15:00 aims at the same time
+    as the one at 08:00 — the headroom cannot shrink with the remaining
+    need. None without a usable window."""
+    if day_start is None or day_end is None or day_end <= day_start:
+        return None
+    return day_end - (day_end - day_start) * (PACING_HEADROOM_PCT / 100.0)
+
+
 def paced_charge_cap_w(
     *,
     ledger,
@@ -130,6 +182,7 @@ def paced_charge_cap_w(
     inverter_ac_limit_w: float = 0.0,
     hw_max_charge_w: float = 10000.0,
     end_margin_slots: int = 1,
+    day_start=None,
 ) -> PacingDecision:
     """The smallest constant charge cap that still fills the pack in time.
 
@@ -146,6 +199,11 @@ def paced_charge_cap_w(
     4. **Clipping** — hours where surplus exceeds the inverter's AC limit
        are sun that cannot be exported anyway; the cap opens to at least
        swallow the predicted clip. Captured energy beats an even pace.
+
+    ``day_start`` (sunrise) fixes the day's window: the cap is at least the
+    one that lands the pack full by ``pacing_finish_by(day_start, end of
+    the ledger)`` (#820). Past that time and still short, the cap is the
+    hardware maximum — the headroom never starves the pack.
     """
     if capacity_kwh <= 0 or not ledger:
         return PacingDecision(None, "pacing idle — no day model", code="none")
@@ -196,12 +254,28 @@ def paced_charge_cap_w(
     # exactly; open the cap by PACING_HEADROOM_PCT so an evening that comes
     # in under the model still lands it, never past the hardware.
     cap = min(hw_max_charge_w, cap * (1.0 + PACING_HEADROOM_PCT / 100.0))
+    # (#820, 18.10) ...and the margin as TIME, which a re-solve cannot eat:
+    # the smallest cap that is full by the day's fixed finish_by. A day that
+    # cannot make finish_by bisects to the hardware maximum.
+    finish_by = pacing_finish_by(day_start, ledger[-1].end)
+    if finish_by is not None:
+        lo, hi = 0.0, hw_max_charge_w
+        for _ in range(24):
+            mid = (lo + hi) / 2.0
+            if _full_time(ledger, mid, need_kwh, until=finish_by) is not None:
+                hi = mid
+            else:
+                lo = mid
+        cap = max(cap, hi)
 
     # Clipping guard: any slot whose surplus exceeds the AC limit is energy
     # that cannot leave the roof — open the cap far enough to absorb the
     # worst predicted clip on top of the pace.
     reason = (f"paced to land full at day's end, {PACING_HEADROOM_PCT:.0f} % "
               "in hand for an evening under the model")
+    if finish_by is not None:
+        reason = (f"paced to land full by {finish_by:%H:%M}, "
+                  f"{PACING_HEADROOM_PCT:.0f} % of the day before the sun ends")
     if inverter_ac_limit_w and inverter_ac_limit_w > 0:
         worst_clip = 0.0
         for s in ledger:
@@ -219,13 +293,15 @@ def paced_charge_cap_w(
             reason = ("paced, opened for predicted clipping — captured sun "
                       "beats an even pace")
 
-    slot = _full_slot(ledger, cap, need_kwh)
-    full_at = ledger[slot].end.isoformat() if slot is not None else None
+    full = _full_time(ledger, cap, need_kwh)
+    full_at = full.isoformat() if full is not None else None
     return PacingDecision(round(cap, 0), reason, full_at,
                           code="clip" if "clipping" in reason else "paced",
                           need_kwh=round(need_kwh, 2), fill_kwh=round(fill_kwh, 2),
                           drain_kwh=round(drain_kwh, 2),
-                          headroom_pct=PACING_HEADROOM_PCT)
+                          headroom_pct=PACING_HEADROOM_PCT,
+                          finish_by=(finish_by.isoformat()
+                                     if finish_by is not None else None))
 
 
 class ChargePacingWriter:
