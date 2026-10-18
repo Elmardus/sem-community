@@ -1522,6 +1522,9 @@
       },
       "ev_morning_window_enabled": {
         "name": "Morgonfönster för elbilen"
+      },
+      "simulation_tab": {
+        "name": "Simuleringsflik"
       }
     },
     "number": {

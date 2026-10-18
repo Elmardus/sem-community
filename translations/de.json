@@ -1522,6 +1522,9 @@
       },
       "ev_morning_window_enabled": {
         "name": "Morgen-Fenster für das E-Auto"
+      },
+      "simulation_tab": {
+        "name": "Simulations-Tab"
       }
     },
     "number": {

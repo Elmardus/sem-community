@@ -442,6 +442,17 @@ CONF_OUTDOOR_TEMPERATURE_ENTITY: Final = "outdoor_temperature_entity"
 CONF_TEMPERATURE_LOAD_FORECAST: Final = "temperature_load_forecast"
 DEFAULT_TEMPERATURE_LOAD_FORECAST: Final = False
 
+# (#1083) Soak flag, not a setting: tag each finished day (sunny / grey /
+# car / cheap / data gap) for the replay tool. It only records. Off until the
+# PROD soak; set with the set_option service, never a GUI control.
+CONF_DAY_TAGS: Final = "day_tags"
+DEFAULT_DAY_TAGS: Final = False
+
+# (#1083) The Simulation tab switch: shows the tab, turns day tagging on and
+# backfills 90 days of tags. A person's choice — persisted like the other
+# switch flags (``persisted_flags``).
+CONF_SIMULATION_TAB: Final = "simulation_tab"
+
 # (#1021) The grid operator's reduce-load relay (§14a EnWG, ripple control).
 # Unset = inert. Any binary_sensor / input_boolean the user picks.
 CONF_SHED_SIGNAL_ENTITY: Final = "shed_signal_entity"

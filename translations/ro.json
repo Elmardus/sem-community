@@ -1522,6 +1522,9 @@
       },
       "ev_morning_window_enabled": {
         "name": "Fereastra de dimineață VE"
+      },
+      "simulation_tab": {
+        "name": "Fila simulare"
       }
     },
     "number": {
