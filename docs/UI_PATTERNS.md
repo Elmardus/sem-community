@@ -50,6 +50,23 @@ panel — copy these, don't reinvent:
   option (not hover tooltips — they don't exist on touch).
 - Every option's help explains behavior, not the label.
 
+### Everyday and All settings
+- **One switch for every card**: *Everyday* (default) or *All settings*,
+  read with `getAllSettings()` from `src/util/view-mode.js` and changed with
+  `setAllSettings()`, which tells every card (`sem-view-mode-changed`). It is
+  kept per browser — a view is not a setting. Never call it "beginner".
+- Everyday keeps open what is used every day (EV: state, SOC, power, today,
+  solar share, charge mode, charge target, Charge by). The rest goes into
+  **folds**: *More* for controls changed now and then, *Details* for what
+  explains the result. A warning that needs action is never folded.
+- A fold is a `<button aria-expanded>` row (copy `.fold-btn`). All settings
+  opens every fold. A fold the user opens holds for that card on that page;
+  switching the view puts every fold back to the view's default.
+- Values set once (EV: battery size, min current, consumption) are one
+  *Set once* line in Everyday; each value opens the same more-info as its
+  tile. Folding must never make a setting unreachable.
+- Help (`?`) hints follow the toggle, not the view.
+
 ### Heroes / KPIs
 - One hero per surface. Big value (orange for solar), small uppercase label
   beneath, live secondary values as pill chips beside it.
