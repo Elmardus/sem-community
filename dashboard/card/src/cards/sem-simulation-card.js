@@ -275,6 +275,18 @@ class SEMSimulationCard extends SEMLitBase {
             </div></ha-card>`;
     }
 
+    // On a phone the day chips are one row you swipe; it opens at the newest
+    // day, once per load, so the strip never jumps under the person's finger.
+    updated(changed) {
+        super.updated?.(changed);
+        if (!changed.has('_days') || !this._days?.days?.length) return;
+        const grid = this.renderRoot?.querySelector('.grid');
+        if (!grid || grid.scrollWidth <= grid.clientWidth) return;
+        const newest = [...this._days.days].map((d) => d.date).sort().pop();
+        const chip = grid.querySelector(`.day[data-date="${newest}"]`);
+        if (chip) grid.scrollLeft = chip.offsetLeft - grid.offsetLeft - grid.clientWidth + chip.offsetWidth + 8;
+    }
+
     _renderDays() {
         const days = this._days?.days || [];
         const active = activePick(days, this._selected);
@@ -298,11 +310,12 @@ class SEMSimulationCard extends SEMLitBase {
                         </select>
                     </div>
                     ${this._renderRecentSlider(days)}
-                    <div class="grid">
+                    <div class="grid" aria-label="${this._t('sim_days')}">
                         ${days.map((d) => {
                             const ok = isSelectable(d);
                             const sel = ok && this._selected.has(d.date);
                             return html`<span class="day ${sel ? 'sel' : ''} ${ok ? '' : 'gap'}"
+                                data-date="${d.date}"
                                 title="${d.date} · ${this._tagTitle(d.tags)}"
                                 @click=${() => this._toggle(d)}><b>${chipDate(d.date)}</b><span>${tagGlyphs(d.tags)}</span></span>`;
                         })}
@@ -654,7 +667,13 @@ class SEMSimulationCard extends SEMLitBase {
             @media (max-width: 600px) {
                 .header-wrap { flex-wrap: wrap; }
                 .trow, .thead { grid-template-columns: 1.3fr .8fr .9fr 1.1fr 1.1fr; font-size: 11px; }
-                .day { width: 52px; }
+                /* one row to swipe instead of a long wall of chips */
+                .grid {
+                    flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain;
+                    scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
+                    padding-bottom: 6px; scrollbar-width: thin;
+                }
+                .day { flex: 0 0 auto; width: 60px; min-height: 44px; justify-content: center; scroll-snap-align: start; }
             }
         `];
     }

@@ -1774,8 +1774,9 @@ Each day carries tags:
 | ⚠️ | data gap — you cannot pick this day |
 
 Tap a day to pick it, or use a quick pick: all sunny, all grey, days with
-a car, last 30 days. On a phone, drag the **Most recent days** slider: it
-picks the newest days in one move. At most 90 days per run.
+a car, last 30 days. On a phone the days are one row: swipe it left and right (it opens at
+the newest day), or drag the **Most recent days** slider to pick the newest
+days in one move. At most 90 days per run.
 
 ### What if
 
