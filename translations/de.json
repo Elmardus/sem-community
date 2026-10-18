@@ -1892,7 +1892,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM prüft zwei geratene Netzzähler",
-      "description": "SEM hat keinen Netzleistungs-Sensor und hat nach Namen geraten: **{import_entity}** für den Netzbezug und **{export_entity}** für die Einspeisung. SEM nutzt sie erst, wenn sie zu deinen Netz-Energiezählern passen; bis dahin steht die Netzleistung auf 0. So wählst du deinen Zähler: Öffne das SEM-Dashboard, Tab ⚙ **Konfiguration**, und schalte oben **Erweitert** ein. Setze dann **Netzleistung** im Abschnitt **Sensorquellen**. Hat dein Zähler je einen Sensor für Bezug und Einspeisung, setze stattdessen **Netz-Bezug-Sensor** und **Netz-Einspeise-Sensor** im Abschnitt **Tarif & Preise**."
+      "description": "SEM hat keinen Netzleistungs-Sensor und hat nach Namen geraten: **{import_entity}** für den Netzbezug und **{export_entity}** für die Einspeisung. SEM nutzt sie erst, wenn sie zu deinen Netz-Energiezählern passen; bis dahin steht die Netzleistung auf 0. So wählst du deinen Zähler: Öffne das SEM-Dashboard, Tab ⚙ **Konfiguration**, und wähle oben **Alle Einstellungen**. Setze dann **Netzleistung** im Abschnitt **Sensorquellen**. Hat dein Zähler je einen Sensor für Bezug und Einspeisung, setze stattdessen **Netz-Bezug-Sensor** und **Netz-Einspeise-Sensor** im Abschnitt **Tarif & Preise**."
     },
     "battery_control_write_not_taken": {
       "title": "Ein Batterie-Steuerwert wird nicht übernommen: {entity_id}",
@@ -1912,7 +1912,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM konnte deine Netzleistungs-Zähler nicht finden",
-      "description": "SEM hat keinen Netzleistungs-Sensor, und die nach Namen geratenen Sensoren sind nicht dein Netzzähler: **{import_entity}** für den Bezug, **{export_entity}** für die Einspeisung. Sie passen nicht zu deinen Netz-Energiezählern, oder einer der beiden fehlt. SEM zeigt lieber keine Netzleistung als eine falsche. So wählst du deinen Zähler: Öffne das SEM-Dashboard, Tab ⚙ **Konfiguration**, und schalte oben **Erweitert** ein. Setze dann **Netzleistung** im Abschnitt **Sensorquellen**. Hat dein Zähler je einen Sensor für Bezug und Einspeisung, setze stattdessen **Netz-Bezug-Sensor** und **Netz-Einspeise-Sensor** im Abschnitt **Tarif & Preise**."
+      "description": "SEM hat keinen Netzleistungs-Sensor, und die nach Namen geratenen Sensoren sind nicht dein Netzzähler: **{import_entity}** für den Bezug, **{export_entity}** für die Einspeisung. Sie passen nicht zu deinen Netz-Energiezählern, oder einer der beiden fehlt. SEM zeigt lieber keine Netzleistung als eine falsche. So wählst du deinen Zähler: Öffne das SEM-Dashboard, Tab ⚙ **Konfiguration**, und wähle oben **Alle Einstellungen**. Setze dann **Netzleistung** im Abschnitt **Sensorquellen**. Hat dein Zähler je einen Sensor für Bezug und Einspeisung, setze stattdessen **Netz-Bezug-Sensor** und **Netz-Einspeise-Sensor** im Abschnitt **Tarif & Preise**."
     },
     "charger_device_gone": {
       "title": "Ladegerät {name}: Gerät fehlt",

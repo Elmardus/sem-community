@@ -291,8 +291,8 @@ SEM is still checking, grid power reads 0 rather than a number nobody stands
 behind.
 
 **Fix:** pick your meter yourself. On the SEM dashboard, open the ⚙
-**Configuration** tab and switch on **Advanced** at the top (both places below
-are hidden without it):
+**Configuration** tab and pick **All settings** at the top (both places below
+are hidden in **Everyday**):
 
 - one signed sensor for the grid (most meters — SolarEdge, Huawei, Shelly
   EM): section **Sensor sources**, set **Grid power**. SEM finds its sign.
@@ -349,7 +349,7 @@ A pick from tier 1 or tier 2 is not a guess and never enters the corroboration
 path.
 
 **Fix:** name the real meter, as in the section above: the ⚙
-**Configuration** tab with **Advanced** on, then **Sensor sources → Grid
+**Configuration** tab in **All settings**, then **Sensor sources → Grid
 power** for one signed sensor, or **Tariff & pricing → Grid import sensor /
 Grid export sensor** for a pair. The same notice shows when SEM found only an
 export sensor by name: SEM never reads a guessed export sensor alone as the

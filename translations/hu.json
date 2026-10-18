@@ -1892,7 +1892,7 @@
     },
     "split_grid_guessed": {
       "title": "A SEM két kitalált hálózati mérőt ellenőriz",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguráció**, and switch on **Haladó** at the top. Then set **Hálózati teljesítmény** in section **Szenzorforrások**. If your meter has one sensor for import and one for export, set **Hálózati import szenzor** and **Hálózati export szenzor** in section **Tarifa és árazás** instead."
+      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguráció**, and pick **Minden beállítás** at the top. Then set **Hálózati teljesítmény** in section **Szenzorforrások**. If your meter has one sensor for import and one for export, set **Hálózati import szenzor** and **Hálózati export szenzor** in section **Tarifa és árazás** instead."
     },
     "battery_control_write_not_taken": {
       "title": "Egy akkumulátor-vezérlési írás nem érvényesül: {entity_id}",
@@ -1912,7 +1912,7 @@
     },
     "split_grid_rejected": {
       "title": "A SEM nem találta meg a hálózati teljesítménymérőket",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguráció**, and switch on **Haladó** at the top. Then set **Hálózati teljesítmény** in section **Szenzorforrások**. If your meter has one sensor for import and one for export, set **Hálózati import szenzor** and **Hálózati export szenzor** in section **Tarifa és árazás** instead."
+      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguráció**, and pick **Minden beállítás** at the top. Then set **Hálózati teljesítmény** in section **Szenzorforrások**. If your meter has one sensor for import and one for export, set **Hálózati import szenzor** and **Hálózati export szenzor** in section **Tarifa és árazás** instead."
     },
     "charger_device_gone": {
       "title": "{name} töltő: az eszköz hiányzik",

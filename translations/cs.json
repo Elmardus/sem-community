@@ -1892,7 +1892,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM kontroluje dva odhadnuté elektroměry sítě",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfigurace**, and switch on **Pokročilé** at the top. Then set **Výkon sítě** in section **Zdroje senzorů**. If your meter has one sensor for import and one for export, set **Senzor importu ze sítě** and **Senzor exportu do sítě** in section **Tarif a ceny** instead."
+      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfigurace**, and pick **Všechna nastavení** at the top. Then set **Výkon sítě** in section **Zdroje senzorů**. If your meter has one sensor for import and one for export, set **Senzor importu ze sítě** and **Senzor exportu do sítě** in section **Tarif a ceny** instead."
     },
     "battery_control_write_not_taken": {
       "title": "Zápis řízení baterie se neujal: {entity_id}",
@@ -1912,7 +1912,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM nemohl najít vaše elektroměry sítě",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfigurace**, and switch on **Pokročilé** at the top. Then set **Výkon sítě** in section **Zdroje senzorů**. If your meter has one sensor for import and one for export, set **Senzor importu ze sítě** and **Senzor exportu do sítě** in section **Tarif a ceny** instead."
+      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfigurace**, and pick **Všechna nastavení** at the top. Then set **Výkon sítě** in section **Zdroje senzorů**. If your meter has one sensor for import and one for export, set **Senzor importu ze sítě** and **Senzor exportu do sítě** in section **Tarif a ceny** instead."
     },
     "charger_device_gone": {
       "title": "Nabíječka {name}: chybí zařízení",
