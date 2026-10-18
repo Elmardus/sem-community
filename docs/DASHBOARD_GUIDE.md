@@ -131,9 +131,28 @@ EV charging session tracking and statistics.
 | **Session Gauges** | Daily energy vs target, solar share percentage |
 | **Charging Power Chart** | 24h EV power curve |
 | **Charging Settings** | Charge target range (Min ↔ Max), [Charge mode selector](#charging-mode-selector-v163), Charge by deadline picker, Set as default |
-| **EV Intelligence** | Taper trend visualization, virtual SOC estimate, charge skip status & reasoning, battery health indicator |
 | **Lifetime Statistics** | Total energy, cost, sessions, solar share over all time |
 | **Sessions** (2.2) | Per charger: this month's count and kWh in the header, the month's list with totals, a CSV button. The energy is the charger's own meter |
+
+#### Everyday and All settings (2.2)
+
+The EV card has two views, switched at its top right: **Everyday** (the
+default) and **All settings**. It is the same switch as on the Configuration
+tab, kept per browser.
+
+Everyday shows, per charger, what you use every day: name and status, SOC,
+power, today's energy and solar share, the charge mode, the charge target with
+the km it adds, and *Charge by* with the next departure (and a warning when it
+cannot be reached). The rest is folded:
+
+| Fold | Holds |
+|---|---|
+| **More** | Pause, phase mode (when set up), weekday departures, *Charge in one block*, *Top up before leaving*, battery boost (homes with a battery) |
+| **Details** | Session energy and the current SEM set, the plan strip, the SOC estimate line, the learning note, the session list |
+
+Battery size, minimum current and consumption sit on one *Set once* line; tap a
+value to change it. All settings opens both folds and shows them as tiles. A
+fold you open stays open on this page until you switch the view.
 
 #### Charging mode selector (v1.6.3)
 
@@ -470,8 +489,10 @@ Today's EV charging progress against target, plus lifetime charging totals.
 **SEM EV Status** · *EV tab*
 
 The EV hero card: per-charger state, charge mode, target and deadline, with
-the intelligence readouts (taper, estimated SOC) and settings inline. This is
-the reference card for SEM's UI patterns — see [UI patterns](UI_PATTERNS.md).
+the plan, estimated SOC and settings folded under *More* and *Details* in the
+Everyday view and open in All settings (see
+[Everyday and All settings](#everyday-and-all-settings-22)). This is the
+reference card for SEM's UI patterns — see [UI patterns](UI_PATTERNS.md).
 
 Its plan strip paints the charger's night as *wait*, *charging*,
 *done* — or *estimate* (a paler wait): by day, before the joint Energy Plan
