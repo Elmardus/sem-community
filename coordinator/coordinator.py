@@ -8236,6 +8236,20 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         except Exception:  # noqa: BLE001 — no frame, no fixed window
             return None
 
+    def _pacing_in_daylight(self) -> bool:
+        """(#820) Between sunrise and the end of the sun's day."""
+        try:
+            now = dt_util.now()
+
+            def _at(hhmm):
+                h, m = (int(x) for x in hhmm.split(":"))
+                return now.replace(hour=h, minute=m, second=0, microsecond=0)
+
+            return (_at(self.time_manager.get_sunrise_time()) <= now
+                    < _at(self.time_manager.get_sunset_plus_10_time()))
+        except Exception:  # noqa: BLE001 — no frame, not daylight
+            return False
+
     def _today_pacing_ledger(self) -> list:
         """(#820) Today's remaining-day slots, or [] outside daylight /
         without a forecast. Same sun frame and home-draw fallback the
@@ -8701,12 +8715,21 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 ("night" if not ledger else
                  (("soc_expired" if soc_expired else "soc_unknown")
                   if soc is None else "none")))
+        # (#820, 20.10) Some reasons for "no cap" pass in a minute; the cap
+        # stays on those for a while (see ``release_is_soft``).
+        from .charge_pacing import release_is_soft
+        _day = getattr(self, "_pacing_in_daylight", None)
+        _soft = release_is_soft(
+            decision, enabled,
+            daylight=bool(callable(_day) and _day()) if (
+                decision is not None and decision.code == "none") else False)
         # (#820) a release gives the pack its full charge power, not only
         # the value the register happened to hold when pacing engaged
         action = await self._charge_pacing_writer.apply(
             self.hass, entity, cap, observer=self._observer_mode,
             hw_max_w=float(self.config.get(
-                "battery_max_charge_power_w", 5000.0) or 5000.0))
+                "battery_max_charge_power_w", 5000.0) or 5000.0),
+            soft=_soft)
         _bv = (getattr(self, "_sink_verdicts", None) or {}).get("battery")
         self._charge_pacing_state = {
             "enabled": enabled,

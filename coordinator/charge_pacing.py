@@ -32,6 +32,15 @@ PACING_MIN_WRITE_INTERVAL_S = 300.0
 #: (#820) A write is judged refused only when the register has not moved
 #: for this long AND for this many cycles — a Modbus read-back is a scan late.
 PACING_REFUSE_AFTER_S = 90.0
+
+#: (#820, 20.10) A release for a SOFT reason waits this long. Recorded PROD
+#: decisions flipped paced -> weak_day -> paced within minutes whenever the
+#: pack's need sat at what the day could fill, and a one-minute gap in the
+#: forecast read as "no day". Each flip gave the cap back and wrote it again.
+PACING_SOFT_HOLD_S = 900.0
+#: reasons that may pass in a minute; every other reason (buffer, target,
+#: pacing off, night) gives the cap back at once
+PACING_SOFT_CODES = frozenset({"weak_day", "trust"})
 PACING_REFUSE_AFTER_CYCLES = 3
 
 #: (#820) The margin the solved pace is opened by, in percent. The solver
@@ -304,6 +313,24 @@ def paced_charge_cap_w(
                                      if finish_by is not None else None))
 
 
+def release_is_soft(decision, enabled: bool, *, daylight: bool) -> bool:
+    """(#820, 20.10) May this "no cap" wait before the cap is given back?
+
+    Yes for ``weak_day`` and ``trust`` when the day is not clearly short (its
+    fill is at least 90 % of the need), and for a gap in the day model while
+    the sun is up. No for everything else, and never when pacing is off."""
+    if not enabled or decision is None:
+        return False
+    if decision.code == "none":
+        return bool(daylight)
+    if decision.code not in PACING_SOFT_CODES:
+        return False
+    fill, need = decision.fill_kwh, decision.need_kwh
+    if decision.code == "weak_day" and fill is not None and need:
+        return fill >= 0.9 * need
+    return True
+
+
 class ChargePacingWriter:
     """Owns the ONE side effect: the user-named max-charge-power number.
 
@@ -362,6 +389,8 @@ class ChargePacingWriter:
         #: was sent, and what it read once it took the write
         self._pre_write_w: float | None = None
         self._write_at: float | None = None
+        #: (#820, 20.10) when a cap was last wanted: a soft release waits
+        self._cap_wanted_at: float | None = None
         self._accepted_w: float | None = None
         #: None = pending, True = taken, False = refused
         self._taken: bool | None = None
@@ -391,6 +420,7 @@ class ChargePacingWriter:
         self._unconfirmed_cycles = 0
         self._pre_write_w = None
         self._write_at = None
+        self._cap_wanted_at = None
         self._accepted_w = None
         self._taken = None
         self.applied_differs = None
@@ -398,7 +428,8 @@ class ChargePacingWriter:
         self._adopt_check = False
 
     async def apply(self, hass, entity_id: str, cap_w, *,
-                    observer: bool, hw_max_w: float | None = None) -> str:
+                    observer: bool, hw_max_w: float | None = None,
+                    soft: bool = False) -> str:
         """Returns a short action token: wrote|held|write_refused|restored|
         idle|observer|no_limit_entity|limit_unreadable.
 
@@ -434,6 +465,10 @@ class ChargePacingWriter:
                     self.last_written_w = None
                     self._adopted = self._store is None
                     return "observer"
+                if (soft and self._cap_wanted_at is not None
+                        and self._clock() - self._cap_wanted_at
+                        < PACING_SOFT_HOLD_S):
+                    return "held"
                 # (#820) Below the buffer is full power. Arne's register read
                 # 1560 W when pacing engaged, so 1560 was "the value to put
                 # back" and the pack never got its maximum. Give back the
@@ -464,6 +499,7 @@ class ChargePacingWriter:
             return "idle"
         if observer:
             return "observer"
+        self._cap_wanted_at = self._clock()
         prepared = _fit(hass, entity_id, float(cap_w), ceiling=True)
         if prepared is None:
             # Not a power register SEM can scale to (or unreadable): the
