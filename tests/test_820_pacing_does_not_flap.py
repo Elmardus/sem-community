@@ -46,9 +46,15 @@ def test_a_clearly_short_day_is_weak():
     assert d.code == "weak_day" and d.cap_w is None, d
 
 
-def test_once_weak_it_stays_weak_until_the_day_fills_the_need():
-    assert _decide(5.9, 6.0, latched=True).code == "weak_day"
-    assert _decide(6.3, 6.0, latched=True).code == "paced"
+def test_once_weak_it_stays_weak_until_the_day_clearly_fills_the_need():
+    assert _decide(6.1, 6.0, latched=True).code == "weak_day"
+    assert _decide(6.5, 6.0, latched=True).code == "paced"
+
+
+def test_a_gap_under_one_battery_step_is_not_weak():
+    # 21 kWh pack: one SOC step is 0.21 kWh. 0.4 of 0.5 kWh is noise.
+    d = _decide(0.4, 0.5, latched=False)
+    assert d.code != "weak_day", d
 
 
 def test_the_two_edges_leave_no_flip_on_a_wobbling_forecast():

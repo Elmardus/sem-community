@@ -56,6 +56,9 @@ PACING_HEADROOM_PCT: float = 10.0
 #: the cap back and wrote it again. In between, the pace stays on, and it is
 #: near the hardware maximum anyway.
 PACING_WEAK_ENTER: float = 0.95
+#: and never for a gap smaller than one battery reading step (percent of
+#: capacity): the SOC moves in whole steps, so a smaller gap is noise
+PACING_SOC_STEP_PCT: float = 1.0
 #: seconds a missing day forecast is bridged with the last good one
 PACING_FORECAST_GAP_S: float = 600.0
 
@@ -253,7 +256,9 @@ def paced_charge_cap_w(
 
     fill_kwh = _fill_kwh(ledger, hw_max_charge_w)
     # (#820, 20.10) two edges: in at 95 % of the need, out at 100 %
-    weak_below = need_kwh if weak_latched else need_kwh * PACING_WEAK_ENTER
+    weak_below = need_kwh * 1.05 if weak_latched else min(
+        need_kwh * PACING_WEAK_ENTER,
+        need_kwh - capacity_kwh * PACING_SOC_STEP_PCT / 100.0)
     if fill_kwh < weak_below:
         return PacingDecision(
             None, "the day cannot fill the pack even uncapped — a cap "
