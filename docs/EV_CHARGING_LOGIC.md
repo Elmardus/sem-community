@@ -68,13 +68,11 @@ The per-mode detail lives in the same card: **Charge target** (Min / Max kWh),
 > The VPP export pause stops the car with its own explicit stop, not by
 > borrowing Off.
 >
-> **Solar only and forecast spending (#1115).** With forecast spending on and
-> a positive budget for tonight, SEM no longer holds the home battery back
-> while a Solar-only car charges on its floor. The battery may then cover the
-> car, down to the Buffer SoC or tonight's floor, whichever is higher. With
-> forecast spending off, the battery is held to the house and the grid pays.
-> The same happens when another plugged-in charger is set to *Solar +
-> battery*. Open for discussion: #1115.
+> **Solar only and forecast spending (#1115).** Forecast spending never lets
+> the home battery feed a Solar-only car. The battery is held to the house
+> and the grid pays for the car's floor charge. Only a charger set to *Solar +
+> battery* lets the battery cover a car, down to the Buffer SoC or tonight's
+> floor, whichever is higher.
 >
 > **`solar_only` and the battery "redirect" (#899).** Part of the measured
 > battery charge may be credited to the car on the assumption that the

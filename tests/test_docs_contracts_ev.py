@@ -195,27 +195,24 @@ class TestSolarOnly:
         assert pack.intent is BatteryIntent.LIMIT_DISCHARGE, pack.reason
         assert pack.discharge_limit_w <= 500.0
 
-    def test_forecast_spending_lets_the_pack_cover_a_solar_only_car(self):
-        """"With forecast spending on and a positive budget for tonight, SEM
-        no longer holds the home battery back while a Solar-only car charges
-        on its floor." — docs/EV_CHARGING_LOGIC.md — Solar only and forecast
+    def test_forecast_spending_never_lets_the_pack_feed_a_solar_only_car(self):
+        """"Forecast spending never lets the home battery feed a Solar-only
+        car. The battery is held to the house and the grid pays for the car's
+        floor charge." — docs/EV_CHARGING_LOGIC.md — Solar only and forecast
         spending (#1115).
 
-        Edge case — open for discussion, see #1115.
-
         Night, pack full, 3 kWh budget, no Solar + battery charger plugged
-        in: the car charges on its floor and the pack is not held back."""
+        in: the car charges on its floor and the pack stays held back."""
         d = decide(_view(SOLAR_ONLY, night=True, soc=100.0, target_kwh=5.0,
                          spendable=3.0,
                          config=_config(forecast_spending_enabled=True),
                          charger_cfg={"daily_ev_target": 5}))
         assert d.intent is ChargerIntent.CHARGE_AT_AMPS, d.reason
-        pack = _pack_side(solar=0.0, home=500.0, soc=100.0, spending=True,
-                          spendable=3.0, ev_wants_pack=False)
-        assert pack.intent is BatteryIntent.NORMAL, pack.reason
-        held = _pack_side(solar=0.0, home=500.0, soc=100.0, spending=False,
-                          spendable=3.0, ev_wants_pack=False)
-        assert held.intent is BatteryIntent.LIMIT_DISCHARGE, held.reason
+        for spending in (True, False):
+            pack = _pack_side(solar=0.0, home=500.0, soc=100.0,
+                              spending=spending, spendable=3.0,
+                              ev_wants_pack=False)
+            assert pack.intent is BatteryIntent.LIMIT_DISCHARGE, pack.reason
 
     def test_the_spending_still_stops_at_the_buffer(self):
         """"The battery may then cover the car, down to the Buffer SoC or
