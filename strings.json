@@ -189,7 +189,7 @@
       },
       "ev_charger_menu": {
         "title": "EV Chargers",
-        "description": "Manage your EV charger configuration.",
+        "description": "A charger is optional. No EV charger? Keep the first option selected and submit.",
         "data": {
           "action": "Action"
         },

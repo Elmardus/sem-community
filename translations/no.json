@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "EV-ladere",
-        "description": "Administrer konfigurasjonen av EV-laderne dine.",
+        "description": "En lader er valgfri. Har du ingen EV-lader? La det første alternativet stå valgt, og send inn.",
         "data": {
           "action": "Handling"
         },

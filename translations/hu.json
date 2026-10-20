@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "EV-töltők",
-        "description": "Kezelje az EV-töltők konfigurációját.",
+        "description": "A töltő nem kötelező. Nincs EV-töltője? Hagyja kiválasztva az első lehetőséget, és küldje el.",
         "data": {
           "action": "Művelet"
         },

@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "Carregadores VE",
-        "description": "Faça a gestão da configuração do seu carregador VE.",
+        "description": "O carregador é opcional. Não tem carregador VE? Deixe a primeira opção selecionada e envie.",
         "data": {
           "action": "Ação"
         },

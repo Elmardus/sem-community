@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "Ładowarki EV",
-        "description": "Zarządzaj konfiguracją ładowarek EV.",
+        "description": "Ładowarka jest opcjonalna. Nie masz ładowarki EV? Zostaw wybraną pierwszą opcję i zatwierdź.",
         "data": {
           "action": "Akcja"
         },

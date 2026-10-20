@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "EV-laturit",
-        "description": "Hallitse EV-laturiesi määrityksiä.",
+        "description": "Laturi on valinnainen. Eikö sinulla ole EV-laturia? Jätä ensimmäinen vaihtoehto valituksi ja lähetä.",
         "data": {
           "action": "Toiminto"
         },

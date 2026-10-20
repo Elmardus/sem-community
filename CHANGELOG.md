@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ **The EV tab opens in Everyday view**: per charger, mode, target and Charge by; pause, departures, plan and sessions fold under More and Details.
 - ✨ **The Configuration tab opens on Everyday: only what SEM needs, in three groups** (#830). All settings shows the rest, one tap away.
+- ✨ **The EV charger page in Configure says a charger is optional** (#1103). No EV charger? Keep the first option and submit.
 - 🐛 **A charger counter that jumps at plug-in after a quiet day no longer counts as charging** (#1101). Earlier restarts let the jump through.
 
 # [2.2.0-beta.22] — 18.10.2026

@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "电动汽车充电桩",
-        "description": "管理您的电动汽车充电桩配置。",
+        "description": "充电桩是可选的。没有电动汽车充电桩？保持选中第一项并提交即可。",
         "data": {
           "action": "操作"
         },

@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "Chargeurs VE",
-        "description": "Gérez la configuration de vos chargeurs VE.",
+        "description": "Un chargeur est facultatif. Pas de chargeur VE ? Laissez la première option sélectionnée et validez.",
         "data": {
           "action": "Action"
         },

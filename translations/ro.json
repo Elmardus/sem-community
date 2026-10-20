@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "Încărcătoare EV",
-        "description": "Gestionați configurația încărcătoarelor EV.",
+        "description": "Încărcătorul este opțional. Nu aveți încărcător EV? Lăsați prima opțiune selectată și trimiteți.",
         "data": {
           "action": "Acțiune"
         },

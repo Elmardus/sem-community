@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "EV-laddare",
-        "description": "Hantera konfigurationen av dina EV-laddare.",
+        "description": "En laddare är valfri. Har du ingen EV-laddare? Låt det första alternativet vara valt och skicka.",
         "data": {
           "action": "Åtgärd"
         },

@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "EV-laders",
-        "description": "Beheer de configuratie van je EV-laders.",
+        "description": "Een lader is optioneel. Geen EV-lader? Laat de eerste optie geselecteerd en verzend.",
         "data": {
           "action": "Actie"
         },
