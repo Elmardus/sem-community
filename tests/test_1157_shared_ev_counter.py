@@ -176,11 +176,29 @@ class TestTheJumpIsNotBooked:
         _, rows = _night(ED_EV, ("ev_charger",), chargers=(), sensors=())
         assert rows == (0.0, 0.0)
 
-    def test_two_boxes_read_through_the_fleet_sensor(self):
-        """No box has a power sensor of its own: the fleet sensor reads the
-        whole fleet, and so does the counter."""
-        _, rows = _night(ED_EV, ("links", "rechts"), sensors=())
-        assert rows == (0.0, 0.0)
+    def test_two_boxes_in_standby_are_not_charging(self):
+        """Each box draws 300 W: under the 500 W floor box by box, though
+        the two add up above it. Still idle, so the jump books nothing: the
+        rows hold only the 600 W the power read saw (1.81 kWh)."""
+        values = {ED_EV: 4321.0}
+        with freeze_time(NIGHT) as clock:
+            calc = _watched(values, ED_EV, ("links", "rechts"))
+            for _ in range(180):
+                _cycle(calc, clock, values, 300.0, 300.0)
+            values[ED_EV] += CATCH_UP
+            _cycle(calc, clock, values, 300.0, 300.0)
+            assert _rows(calc) == pytest.approx((1.81, 1.81), abs=0.01)
+            assert calc.ev_counter_step_not_drawn(ED_EV)[1] > 11.0
+
+    def test_a_rise_not_checked_yet_is_held(self):
+        """A reader of the counter before this cycle's check (a session's
+        total) sees the last checked reading, as #1101 does for own ones."""
+        values = {ED_EV: 4321.0}
+        with freeze_time(NIGHT):
+            calc = _watched(values, ED_EV, ("links", "rechts"))
+            seen = values[ED_EV]
+            assert calc.ev_counter_judged_kwh(ED_EV, seen + 11.0) == seen
+            assert calc.ev_counter_judged_kwh(ED_EV, seen - 1.0) == seen - 1.0
 
 
 @pytest.mark.unit
@@ -257,19 +275,41 @@ class TestChargingIsBooked:
                       values={RECHTS_W: "unavailable"})
         assert rows == (CATCH_UP, CATCH_UP)
 
-    def test_the_fleet_sensor_stands_in_only_for_the_one_counter(self):
-        """The fleet sensor reads a counter's boxes only when that counter
-        is the one SEM tracks — as before #1157."""
+    def test_two_boxes_on_one_fleet_sensor_are_not_watched(self):
+        """No box has a power sensor of its own. The fleet sensor may read
+        one box only (the Energy Dashboard's first EV device): it cannot
+        say the other is idle, so the jump is booked as it stands."""
+        _, rows = _night(ED_EV, ("links", "rechts"), sensors=())
+        assert rows == (CATCH_UP, CATCH_UP)
+
+    def test_the_fleet_sensor_stands_in_only_for_one_box(self):
+        """…and only when that counter is the one SEM tracks — as before
+        #1157."""
         values = {FLEET_W: 0.0}
-        calc = _calc(values, ED_EV, ("links", "rechts"), sensors=())
         fleet = SimpleNamespace(ev_power_fleet_entity=FLEET_W)
-        assert calc._ev_box_power_live(("links", "rechts"), fleet, {})
+        calc = _calc(values, ED_EV, ("links",), chargers=("links",),
+                     sensors=())
+        assert calc._ev_box_power_live(("links",), fleet, {})
+        calc = _calc(values, ED_EV, ("links", "rechts"), sensors=())
+        assert not calc._ev_box_power_live(("links", "rechts"), fleet, {})
         calc.configure_ev_counters(
             calc._hass, [ED_EV, "sensor.other"], True, complete=False,
-            owners={}, boxes={ED_EV: ["links", "rechts"],
-                              "sensor.other": ["links"]})
-        assert not calc._ev_box_power_live(("links", "rechts"), fleet, {})
+            owners={}, boxes={ED_EV: ["links"], "sensor.other": ["rechts"]})
+        assert not calc._ev_box_power_live(("links",), fleet, {})
 
+    def test_a_box_reading_below_zero_does_not_cancel_another(self):
+        """Links reads 400 W, under the floor: one phase of three may be
+        drawing, so three hours leave 3.6 kWh of room. Rechts's sensor
+        reads −400 W (an offset). It does not take that room away."""
+        values = {ED_EV: 4321.0}
+        with freeze_time(NIGHT) as clock:
+            calc = _watched(values, ED_EV, ("links", "rechts"))
+            for _ in range(180):
+                _cycle(calc, clock, values, 400.0, -400.0)
+            values[ED_EV] += 3.0
+            _cycle(calc, clock, values, 400.0, -400.0)
+            assert not calc._ev_counter_foreign
+            assert _rows(calc)[1] == pytest.approx(3.0, abs=0.01)
     def test_the_fleet_sensor_still_stands_in_for_the_one_own_counter(self):
         """#1101's rule holds beside a counter two chargers name: the one box
         with a counter of its own is read through the fleet sensor."""
@@ -281,6 +321,31 @@ class TestChargingIsBooked:
         fleet = SimpleNamespace(ev_power_fleet_entity=FLEET_W)
         assert calc._ev_box_power_live(("a",), fleet, {})
         assert not calc._ev_box_power_live(("b", "c"), fleet, {})
+
+
+@pytest.mark.unit
+class TestNothingIsOwedOnAFallback:
+    def test_another_box_s_draw_does_not_eat_the_next_move(self):
+        """The Energy Dashboard counter counts its first EV device, Links.
+        Rechts charges before midnight, so the counter does not move. That
+        draw is not owed by the counter: when it reports what Links drew
+        while SEM was down, the new day books it."""
+        values = {ED_EV: 4321.0}
+        with freeze_time("2026-10-11 21:00:30") as clock:
+            calc = _watched(values, ED_EV, ("links", "rechts"))
+            for _ in range(60):
+                _cycle(calc, clock, values)
+            for _ in range(119):
+                _cycle(calc, clock, values, 0.0, 11_000.0)
+            for _ in range(3):
+                _cycle(calc, clock, values)
+            assert calc._ev_counter_pending[ED_EV] > 20.0, "vacuous"
+            assert not calc._midnight_ev_baselines.get("owed")
+            clock.tick(timedelta(hours=2))
+            values[ED_EV] += 22.0
+            _cycle(calc, clock, values)
+            _cycle(calc, clock, values)
+            assert _rows(calc, "2026-10-12")[1] == pytest.approx(22.0, abs=0.01)
 
 
 @pytest.mark.unit

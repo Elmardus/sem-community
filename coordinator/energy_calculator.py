@@ -2442,10 +2442,14 @@ class EnergyCalculator:
             bl["whole"] = sorted(entities) if whole else None
             # (#1049) What a box drew before the anchor and its counter has
             # not reported yet. That counter's next move pays it first: it
-            # belongs to the row before the anchor, not to this one.
+            # belongs to the row before the anchor, not to this one. Only a
+            # counter of one box's own (#1157): a fallback's ``pending`` adds
+            # up every box, though it may count one (the Energy Dashboard's
+            # is its first EV device) — the rest would eat its real moves.
             bl["owed"] = {
                 e: self._ev_counter_pending[e] for e in entities
-                if self._ev_counter_pending.get(e, 0.0) > 0.0
+                if e in self._ev_counter_owner
+                and self._ev_counter_pending.get(e, 0.0) > 0.0
             }
         owed = bl.setdefault("owed", {})
         for entity_id, value in readings.items():
@@ -2565,7 +2569,9 @@ class EnergyCalculator:
             own = all(b in per_charger for b in boxes)
             draws = ([float(per_charger.get(b) or 0.0) for b in boxes]
                      if own else [fleet_w])
-            watts = sum(draws)
+            # A box that reads below zero (a sign-flipped sensor) does not
+            # cancel another box's charge.
+            watts = sum(max(0.0, w) for w in draws)
             # Standby is not charging (bug class 36), box by box.
             charging_w = sum(w for w in draws if w > EV_ACTIVE_CHARGE_FLOOR_W)
             if own:
@@ -2755,9 +2761,11 @@ class EnergyCalculator:
         """(#1101) Did this cycle read each box's OWN power sensor as a
         number? Only then does a read under the floor say the boxes are idle:
         a dark sensor reads 0 W, and so does the fleet's sum for a box that is
-        not in it. The one fleet sensor counts for the one counter SEM tracks
-        (a lone box, or a fallback counter of the whole fleet, #1157), and
-        for the one box with a counter of its own (#1101)."""
+        not in it. The one fleet sensor counts for a counter of one box, when
+        that is the one counter SEM tracks or the one box with a counter of
+        its own (#1101). Never for several boxes (#1157): the Energy
+        Dashboard's sensor is its first EV device, and a top-level one may
+        be the primary's, so it cannot say the others are idle."""
         lone_owner = tuple(self._ev_counter_owner.values())
         if boxes and all(b in per_charger for b in boxes):
             sensors: Dict[str, Any] = {}
@@ -2766,9 +2774,8 @@ class EnergyCalculator:
                     sensors.setdefault(c.get("id"),
                                        c.get("ev_charging_power_sensor"))
             entities = [sensors.get(b) for b in boxes]
-        elif not per_charger and (len(self._ev_counter_boxes) == 1
-                                  or (len(lone_owner) == 1
-                                      and boxes == lone_owner)):
+        elif not per_charger and len(boxes) == 1 and (
+                len(self._ev_counter_boxes) == 1 or boxes == lone_owner):
             entities = [getattr(power, "ev_power_fleet_entity", None)]
         else:
             return False

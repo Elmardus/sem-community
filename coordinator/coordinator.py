@@ -2355,9 +2355,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         """(#1157) Every counter ``_collect_ev_counter_entities`` hands over →
         the charger ids whose charging it counts, so a jump can be checked
         against their power. A charger's own counter counts that charger; a
-        counter two chargers name counts both; a fallback (legacy daily
-        sensor, Energy Dashboard ``ev_energy``) counts the whole fleet. Ids
-        and the primary's top-level counter as in ``_own_ev_counters``."""
+        counter two chargers name counts both. A fallback (legacy daily
+        sensor, Energy Dashboard ``ev_energy``) is given the whole fleet: SEM
+        does not know which boxes it counts (the Energy Dashboard's is its
+        first EV device), and more boxes only leave a jump more room. Ids and
+        the primary's top-level counter as in ``_own_ev_counters``."""
         top_level = self.config.get("ev_total_energy_sensor")
         fleet: List[str] = []
         named: Dict[str, List[str]] = {}
