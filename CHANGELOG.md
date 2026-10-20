@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A charger counter that jumps at plug-in after a quiet day no longer counts as charging** (#1101). Earlier restarts let the jump through.
+
 # [2.2.0-beta.22] — 18.10.2026
 
 - 🐛 **Charge pacing keeps its 10 % headroom on every re-plan** (#820). The pack is now planned full before the last sunny hour.
