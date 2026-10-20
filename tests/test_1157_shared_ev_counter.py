@@ -324,7 +324,7 @@ class TestChargingIsBooked:
 
 
 @pytest.mark.unit
-class TestNothingIsOwedOnAFallback:
+class TestWhatIsOwed:
     def test_another_box_s_draw_does_not_eat_the_next_move(self):
         """The Energy Dashboard counter counts its first EV device, Links.
         Rechts charges before midnight, so the counter does not move. That
@@ -346,6 +346,30 @@ class TestNothingIsOwedOnAFallback:
             _cycle(calc, clock, values)
             _cycle(calc, clock, values)
             assert _rows(calc, "2026-10-12")[1] == pytest.approx(22.0, abs=0.01)
+
+
+    def test_one_box_s_late_report_is_owed_not_doubled(self):
+        """One box, the Energy Dashboard counter: it is that box's. Links
+        charges an hour before midnight and the counter reports it at 00:30.
+        The old day holds it from the power read; the new day books none."""
+        values = {ED_EV: 4321.0}
+        with freeze_time("2026-10-11 22:00:30") as clock:
+            calc = _calc(values, ED_EV, ("links",), chargers=("links",),
+                         sensors=("links",))
+            for bump in (0.0, 0.002):
+                values[ED_EV] += bump
+                _read(calc, values, sensors=("links",))
+            for _ in range(59):
+                _cycle(calc, clock, values, sensors=("links",))
+            for _ in range(60):
+                _cycle(calc, clock, values, 11_000.0, sensors=("links",))
+            for _ in range(30):
+                _cycle(calc, clock, values, sensors=("links",))
+            values[ED_EV] += 11.0
+            _cycle(calc, clock, values, sensors=("links",))
+            _cycle(calc, clock, values, sensors=("links",))
+            assert calc._midnight_ev_baselines["owed"] == {}  # paid
+            assert _rows(calc, "2026-10-12")[1] == pytest.approx(0.0, abs=0.2)
 
 
 @pytest.mark.unit

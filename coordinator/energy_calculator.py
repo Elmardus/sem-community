@@ -2443,12 +2443,13 @@ class EnergyCalculator:
             # (#1049) What a box drew before the anchor and its counter has
             # not reported yet. That counter's next move pays it first: it
             # belongs to the row before the anchor, not to this one. Only a
-            # counter of one box's own (#1157): a fallback's ``pending`` adds
-            # up every box, though it may count one (the Energy Dashboard's
-            # is its first EV device) — the rest would eat its real moves.
+            # counter of one box (#1157): over several boxes ``pending`` adds
+            # up all of them, though the counter may count one (the Energy
+            # Dashboard's is its first EV device) — the rest would eat its
+            # real moves.
             bl["owed"] = {
                 e: self._ev_counter_pending[e] for e in entities
-                if e in self._ev_counter_owner
+                if len(self._ev_counter_boxes.get(e, ())) == 1
                 and self._ev_counter_pending.get(e, 0.0) > 0.0
             }
         owed = bl.setdefault("owed", {})
