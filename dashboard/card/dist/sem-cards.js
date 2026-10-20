@@ -5990,12 +5990,13 @@ const e=globalThis,t=e.ShadowRoot&&(void 0===e.ShadyCSS||e.ShadyCSS.nativeShadow
             <div class="ct-title sub"><ha-icon icon="mdi:lightning-bolt"></ha-icon>${this._t("sim_energy")}
                 <span class="right muted">${this._t("sim_actual_word")} → ${this._t("sim_simulated_word")}</span></div>
             ${t.map(e=>W`<div class="dl"><span>${this._t(e.key)}</span>
-                <span class="num">${e.actual} → ${e.simulated}${e.unit?" "+e.unit:""} ${this._est()}</span></div>`)}`:K}_renderResults(){const e=this._result;if(!e)return K;const t=this._hass?.language||"en",s=this._currency(),i=this._filter,{rows:r,more:a}=function(e,t=!1,s=8){const i=[...e||[]].sort((e,t)=>String(t.date).localeCompare(String(e.date)));return t||i.length<=s?{rows:i,more:0}:{rows:i.slice(0,s),more:i.length-s}}(xs(e.days,i),this._expanded),o=function(e,t,s=null){const i=Number(t?.days)||0,r=[];for(const t of bs){const a=e?.[t]||{},o=Number(a.days)||0;if("cheap"===t&&0===o)continue;const n="sunny"===t||"mixed"===t||"grey"===t;r.push({tag:t,glyph:ss[t],days:o,of:n?null:i,delta:o?ms(a.delta):null,actual:o?Number(a.actual)||0:null,simulated:o?Number(a.simulated)||0:null,on:s===t})}return r}(e.per_tag,e.total,i),n=$s(function(e,t){return t?e?.per_tag?.[t]||{days:0}:e?.total||{}}(e,i)),l=$s(e.total),c=e.skipped||[],d=function(e){const t=e?.calibration;return t&&void 0!==e?.calibrated?{ok:!!e.calibrated,pct:null===t.error_pct||void 0===t.error_pct?null:Number(t.error_pct)}:{ok:!0,pct:null}}(e);if(!d.ok)return W`
+                <span class="num">${e.actual} → ${e.simulated}${e.unit?" "+e.unit:""} ${this._est()}</span></div>`)}`:K}_renderResults(){const e=this._result;if(!e)return K;const t=this._hass?.language||"en",s=this._currency(),i=this._filter,{rows:r,more:a}=function(e,t=!1,s=8){const i=[...e||[]].sort((e,t)=>String(t.date).localeCompare(String(e.date)));return t||i.length<=s?{rows:i,more:0}:{rows:i.slice(0,s),more:i.length-s}}(xs(e.days,i),this._expanded),o=function(e,t,s=null){const i=Number(t?.days)||0,r=[];for(const t of bs){const a=e?.[t]||{},o=Number(a.days)||0;if("cheap"===t&&0===o)continue;const n="sunny"===t||"mixed"===t||"grey"===t;r.push({tag:t,glyph:ss[t],days:o,of:n?null:i,delta:o?ms(a.delta):null,actual:o?Number(a.actual)||0:null,simulated:o?Number(a.simulated)||0:null,on:s===t})}return r}(e.per_tag,e.total,i),n=$s(function(e,t){return t?e?.per_tag?.[t]||{days:0}:e?.total||{}}(e,i)),l=$s(e.total),c=e.skipped||[],d=function(e){const t=e?.calibration,s=e=>null==e?null:Number(e);return t&&void 0!==e?.calibrated?{ok:!!e.calibrated,pct:s(t.error_pct),days:s(t.days),leftOut:Number(t.left_out)||0,carDays:Number(t.car_days)||0,carPct:s(t.car_error_pct),repriced:!!e.repriced}:{ok:!0,pct:null,days:null,leftOut:0,carDays:0,carPct:null,repriced:!1}}(e);if(!d.ok)return W`
             <ha-card><div class="wrap">
                 <div class="ct-title"><ha-icon icon="mdi:chart-box-outline"></ha-icon>${this._t("sim_results")} · ${Ns(this._t("sim_last_run"),{n:l.days})}</div>
                 <div class="err">${Ns(this._t("sim_cant_simulate"),{pct:null===d.pct?"?":d.pct})}</div>
+                ${this._renderCalibLines(d)}
                 <div class="legend">${this._t("sim_limits")}</div>
-            </div></ha-card>`;const p=e.stored_energy||null,h=e.ev||null;return W`
+            </div></ha-card>`;const p=e.stored_energy||null,h=e.ev||null,_=Number(h?.not_delivered_kwh)||0;return W`
             <ha-card><div class="wrap">
                 <div class="ct-title"><ha-icon icon="mdi:chart-box-outline"></ha-icon>${this._t("sim_results")} · ${Ns(this._t("sim_last_run"),{n:l.days})}
                     <span class="right" role="button" tabindex="0" @click=${()=>this._download()}>
@@ -6020,7 +6021,7 @@ const e=globalThis,t=e.ShadowRoot&&(void 0===e.ShadyCSS||e.ShadyCSS.nativeShadow
                 </div>
                 <div class="legend">${this._t("sim_filter_hint")}</div>
                 <div class="thead"><span>${this._t("sim_col_day")}</span><span>${this._t("sim_col_tags")}</span>
-                    <span class="num">${this._t("sim_col_actual")} ${s}</span>
+                    <span class="num">${this._t("sim_col_actual")}${d.repriced?"*":""} ${s}</span>
                     <span class="num">${this._t("sim_col_simulated")} ${s}</span>
                     <span class="num">${this._t("sim_col_diff")}</span></div>
                 ${r.map(e=>this._renderRow(e,t))}
@@ -6037,11 +6038,16 @@ const e=globalThis,t=e.ShadowRoot&&(void 0===e.ShadyCSS||e.ShadyCSS.nativeShadow
                 ${this._renderMonths(e)}
                 ${this._renderEnergy(e)}
                 ${h&&((Number(h.moved_kwh)||0)>0||(Number(h.not_delivered_kwh)||0)>0)?W`<div class="legend">${Ns(this._t("sim_ev_moved"),{moved:Number(h.moved_kwh).toFixed(1),short:Number(h.not_delivered_kwh).toFixed(1)})} ${this._est()}</div>`:K}
+                ${_>0&&l.net?W`<div class="legend">${Ns(this._t("sim_net_ev_note"),{kwh:_.toFixed(1),value:us(h.not_delivered_value)+" "+s})} ${this._est()}</div>`:K}
+                ${d.repriced?W`<div class="legend">${this._t("sim_repriced_note")}</div>`:K}
+                ${this._renderCalibLines(d)}
                 ${l.kwhOverLimit>0?W`<div class="legend">${Ns(this._t("sim_over_limit"),{n:l.kwhOverLimit.toFixed(1)})} ${this._est()}</div>`:K}
                 ${c.length?W`<div class="legend" title="${c.map(e=>`${e.date}: ${e.reason}`).join("\n")}">${Ns(this._t("sim_skipped"),{n:c.length})}</div>`:K}
                 <div class="legend">${this._est()} ${this._t("sim_est_legend")}</div>
                 <div class="legend">${this._t("sim_limits")}</div>
-            </div></ha-card>`}render(){return W`
+            </div></ha-card>`}_renderCalibLines(e){return W`
+            ${null===e.days?K:W`<div class="legend">${Ns(this._t("sim_days_checked"),{n:e.days,m:e.leftOut})}</div>`}
+            ${e.carDays>0&&null!==e.carPct?W`<div class="legend">${Ns(this._t("sim_car_error"),{pct:e.carPct,n:e.carDays})}</div>`:K}`}render(){return W`
             <div class="sim">
                 ${this._renderHeader()}
                 ${this._renderPeriod()}

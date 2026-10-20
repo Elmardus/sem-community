@@ -260,7 +260,7 @@ class DayResult:
     ev_moved_kwh: float = 0.0
     ev_not_delivered_kwh: float = 0.0
     #: what the undelivered kWh would cost from the grid at the day's mean
-    #: import rate — shown beside the cost, never inside it
+    #: import rate — counted in the net total, not in the day cost
     ev_not_delivered_value: float = 0.0
     #: the simulated pack at the start of the day (kWh)
     start_kwh: float = 0.0

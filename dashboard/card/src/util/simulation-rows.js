@@ -474,6 +474,15 @@ export function fill(text, values) {
  */
 export function calibration(result) {
     const c = result?.calibration;
-    if (!c || result?.calibrated === undefined) return { ok: true, pct: null };
-    return { ok: !!result.calibrated, pct: c.error_pct === null || c.error_pct === undefined ? null : Number(c.error_pct) };
+    const num = (v) => (v === null || v === undefined ? null : Number(v));
+    if (!c || result?.calibrated === undefined) return { ok: true, pct: null, days: null, leftOut: 0, carDays: 0, carPct: null, repriced: false };
+    return {
+        ok: !!result.calibrated,
+        pct: num(c.error_pct),
+        days: num(c.days),
+        leftOut: Number(c.left_out) || 0,
+        carDays: Number(c.car_days) || 0,
+        carPct: num(c.car_error_pct),
+        repriced: !!result.repriced,
+    };
 }

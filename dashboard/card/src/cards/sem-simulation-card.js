@@ -565,11 +565,13 @@ class SEMSimulationCard extends SEMLitBase {
             <ha-card><div class="wrap">
                 <div class="ct-title"><ha-icon icon="mdi:chart-box-outline"></ha-icon>${this._t('sim_results')} · ${fill(this._t('sim_last_run'), { n: all.days })}</div>
                 <div class="err">${fill(this._t('sim_cant_simulate'), { pct: calib.pct === null ? '?' : calib.pct })}</div>
+                ${this._renderCalibLines(calib)}
                 <div class="legend">${this._t('sim_limits')}</div>
             </div></ha-card>`;
         }
         const stored = res.stored_energy || null;
         const ev = res.ev || null;
+        const evShort = Number(ev?.not_delivered_kwh) || 0;
         return html`
             <ha-card><div class="wrap">
                 <div class="ct-title"><ha-icon icon="mdi:chart-box-outline"></ha-icon>${this._t('sim_results')} · ${fill(this._t('sim_last_run'), { n: all.days })}
@@ -598,7 +600,7 @@ class SEMSimulationCard extends SEMLitBase {
                 </div>
                 <div class="legend">${this._t('sim_filter_hint')}</div>
                 <div class="thead"><span>${this._t('sim_col_day')}</span><span>${this._t('sim_col_tags')}</span>
-                    <span class="num">${this._t('sim_col_actual')} ${cur}</span>
+                    <span class="num">${this._t('sim_col_actual')}${calib.repriced ? '*' : ''} ${cur}</span>
                     <span class="num">${this._t('sim_col_simulated')} ${cur}</span>
                     <span class="num">${this._t('sim_col_diff')}</span></div>
                 ${rows.map((r) => this._renderRow(r, lang))}
@@ -615,11 +617,20 @@ class SEMSimulationCard extends SEMLitBase {
                 ${this._renderMonths(res)}
                 ${this._renderEnergy(res)}
                 ${ev && ((Number(ev.moved_kwh) || 0) > 0 || (Number(ev.not_delivered_kwh) || 0) > 0) ? html`<div class="legend">${fill(this._t('sim_ev_moved'), { moved: Number(ev.moved_kwh).toFixed(1), short: Number(ev.not_delivered_kwh).toFixed(1) })} ${this._est()}</div>` : nothing}
+                ${evShort > 0 && all.net ? html`<div class="legend">${fill(this._t('sim_net_ev_note'), { kwh: evShort.toFixed(1), value: money(ev.not_delivered_value) + ' ' + cur })} ${this._est()}</div>` : nothing}
+                ${calib.repriced ? html`<div class="legend">${this._t('sim_repriced_note')}</div>` : nothing}
+                ${this._renderCalibLines(calib)}
                 ${all.kwhOverLimit > 0 ? html`<div class="legend">${fill(this._t('sim_over_limit'), { n: all.kwhOverLimit.toFixed(1) })} ${this._est()}</div>` : nothing}
                 ${skipped.length ? html`<div class="legend" title="${skipped.map((s) => `${s.date}: ${s.reason}`).join('\n')}">${fill(this._t('sim_skipped'), { n: skipped.length })}</div>` : nothing}
                 <div class="legend">${this._est()} ${this._t('sim_est_legend')}</div>
                 <div class="legend">${this._t('sim_limits')}</div>
             </div></ha-card>`;
+    }
+
+    _renderCalibLines(calib) {
+        return html`
+            ${calib.days === null ? nothing : html`<div class="legend">${fill(this._t('sim_days_checked'), { n: calib.days, m: calib.leftOut })}</div>`}
+            ${calib.carDays > 0 && calib.carPct !== null ? html`<div class="legend">${fill(this._t('sim_car_error'), { pct: calib.carPct, n: calib.carDays })}</div>` : nothing}`;
     }
 
     render() {

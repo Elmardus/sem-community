@@ -122,6 +122,12 @@ class HourlyDay:
         """An hour where a counter jumped (``COUNTERS_DISAGREE_KWH``)."""
         return any(n.startswith(COUNTERS_DISAGREE) for n in self.notes)
 
+    @property
+    def counter_jumped(self) -> bool:
+        """A counter jumped or stepped back: the day's money is not exact."""
+        return self.counters_disagree or any(
+            "counter stepped back" in n for n in self.notes)
+
     def close_hours(self) -> float:
         """Make every hour close on the meters; returns the kWh moved.
 

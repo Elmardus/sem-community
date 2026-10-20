@@ -182,9 +182,10 @@ def month_rows(results: Iterable) -> List[Dict[str, Any]]:
             for _m, row in sorted(months.items())]
 
 
-class Calibration:
-    """The own settings against the real cost, day by day."""
+CAR_DAY_KWH = 0.5
 
+
+class _Tally:
     def __init__(self) -> None:
         self.days = 0
         self.actual = 0.0
@@ -205,13 +206,35 @@ class Calibration:
             return None
         return 100.0 * abs(self.simulated - self.actual) / self.moved
 
+
+class Calibration(_Tally):
+    """The own settings against the real cost, day by day. Days where a
+    counter jumped are left out; the days with a car are also tallied alone."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.left_out = 0
+        self.car = _Tally()
+
+    def add(self, own) -> None:
+        super().add(own)
+        if float(own.actual.get("ev", 0.0)) >= CAR_DAY_KWH:
+            self.car.add(own)
+
+    def skip(self) -> None:
+        self.left_out += 1
+
     def as_dict(self) -> Dict[str, Any]:
         err = self.error_pct
+        car = self.car.error_pct
         return {
             "calibrated": err is not None and err <= CALIBRATION_MAX_PCT,
             "error_pct": None if err is None else round(err, 1),
             "max_pct": CALIBRATION_MAX_PCT,
             "days": self.days,
+            "left_out": self.left_out,
+            "car_days": self.car.days,
+            "car_error_pct": None if car is None else round(car, 1),
             "actual": round(self.actual, 2),
             "own_simulated": round(self.simulated, 2),
         }
@@ -479,7 +502,9 @@ class SimulationJob:
         chain, own, calib = run["_chains"]
         result = chain.add(hourly)
         own_res = own.add(hourly) if own is not None else result
-        if not hourly.counters_disagree:
+        if hourly.counter_jumped:
+            calib.skip()
+        else:
             calib.add(own_res)
         del hourly, own_res
         result.hours = []           # the hour rows are not kept
@@ -572,6 +597,8 @@ class SimulationJob:
             "currency": self._currency(),
             "calibrated": bool(calib.get("calibrated")),
             "calibration": calib,
+            "repriced": any(str(params.get(k)) != "recorded"
+                            for k in ("import_rate", "export_rate")),
             "stored_energy": stored,
             "ev": {"moved_kwh": round(ev_moved, 2),
                    "not_delivered_kwh": round(ev_short, 2),

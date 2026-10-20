@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- ✨ **Simulation check skips days where a counter jumped, and says how many days it used** (#1083). Car days show their own error line.
+- ✨ **Simulation total counts car energy the what-if did not deliver; re-priced actuals are marked** (#1083).
 - ✨ **The EV tab opens in Everyday view**: per charger, mode, target and Charge by; pause, departures, plan and sessions fold under More and Details.
 - ✨ **The Configuration tab opens on Everyday: only what SEM needs, in three groups** (#830). All settings shows the rest, one tap away.
 - ✨ **The EV charger page in Configure says a charger is optional** (#1103). No EV charger? Keep the first option and submit.

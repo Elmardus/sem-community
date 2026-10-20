@@ -1813,7 +1813,11 @@
     "sim_preset_cheap_chargers": "Auta na Slunce + levně",
     "sim_preset_no_battery_ev": "Žádná baterie pro auto",
     "sim_preset_pv_ask_kwp": "Kolik kWp slunce navíc?",
-    "sim_preset_pv_ask_factor": "Slunce krát kolik? (např. 1.5)"
+    "sim_preset_pv_ask_factor": "Slunce krát kolik? (např. 1.5)",
+    "sim_repriced_note": "* Skutečnost je přepočtena podle vámi nastavených cen, ne zaplacených.",
+    "sim_days_checked": "Kontrola nastavení: použito {n} dní, vynecháno {m} (čítač skočil).",
+    "sim_car_error": "Dny s autem: vaše nastavení se liší o {pct} % za {n} dní.",
+    "sim_net_ev_note": "Čistý součet počítá i {kwh} kWh, které auto nedostalo ({value})."
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3629,7 +3633,11 @@
     "sim_preset_cheap_chargers": "Biler på Sol + billig",
     "sim_preset_no_battery_ev": "Intet batteri til bilen",
     "sim_preset_pv_ask_kwp": "Hvor mange kWp sol mere?",
-    "sim_preset_pv_ask_factor": "Sol gange hvor meget? (f.eks. 1.5)"
+    "sim_preset_pv_ask_factor": "Sol gange hvor meget? (f.eks. 1.5)",
+    "sim_repriced_note": "* Faktisk er genberegnet med de priser, du satte, ikke de betalte.",
+    "sim_days_checked": "Indstillingstjek: {n} dage brugt, {m} udeladt (en tæller sprang).",
+    "sim_car_error": "Dage med bil: dine indstillinger afviger {pct} % over {n} dage.",
+    "sim_net_ev_note": "Nettosummen tæller også {kwh} kWh, bilen ikke fik ({value})."
   },
   "de": {
     "% of limit": "% des Limits",
@@ -5445,7 +5453,11 @@
     "sim_preset_cheap_chargers": "Autos auf Solar + günstig",
     "sim_preset_no_battery_ev": "Keine Batterie fürs Auto",
     "sim_preset_pv_ask_kwp": "Wie viele kWp Solar mehr?",
-    "sim_preset_pv_ask_factor": "Solar mal wie viel? (z. B. 1.5)"
+    "sim_preset_pv_ask_factor": "Solar mal wie viel? (z. B. 1.5)",
+    "sim_repriced_note": "* Ist-Wert zu Ihren gesetzten Preisen neu bewertet, nicht zu den bezahlten.",
+    "sim_days_checked": "Einstellungsprüfung: {n} Tage genutzt, {m} ausgelassen (ein Zähler sprang).",
+    "sim_car_error": "Tage mit Auto: Ihre Einstellungen weichen um {pct} % ab (über {n} Tage).",
+    "sim_net_ev_note": "Die Netto-Summe zählt auch {kwh} kWh, die das Auto nicht bekam ({value})."
   },
   "en": {
     "% of limit": "% of limit",
@@ -7261,7 +7273,11 @@
     "sim_preset_cheap_chargers": "Cars on Solar + cheap",
     "sim_preset_no_battery_ev": "No battery for the car",
     "sim_preset_pv_ask_kwp": "How many kWp of solar more?",
-    "sim_preset_pv_ask_factor": "Solar times how much? (e.g. 1.5)"
+    "sim_preset_pv_ask_factor": "Solar times how much? (e.g. 1.5)",
+    "sim_repriced_note": "* Actual is re-priced at the rates you set, not the rates you paid.",
+    "sim_days_checked": "Settings check: {n} days used, {m} left out (a counter jumped).",
+    "sim_car_error": "Days with a car: your settings are off by {pct} % over {n} days.",
+    "sim_net_ev_note": "The net total also counts {kwh} kWh the car did not get ({value})."
   },
   "es": {
     "% of limit": "% del límite",
@@ -9077,7 +9093,11 @@
     "sim_preset_cheap_chargers": "Coches en Solar + barato",
     "sim_preset_no_battery_ev": "Sin batería para el coche",
     "sim_preset_pv_ask_kwp": "¿Cuántos kWp solares de más?",
-    "sim_preset_pv_ask_factor": "¿Solar por cuánto? (p. ej. 1.5)"
+    "sim_preset_pv_ask_factor": "¿Solar por cuánto? (p. ej. 1.5)",
+    "sim_repriced_note": "* Lo real se revalora con las tarifas que fijó, no con las pagadas.",
+    "sim_days_checked": "Control de ajustes: {n} días usados, {m} excluidos (un contador saltó).",
+    "sim_car_error": "Días con coche: sus ajustes difieren un {pct} % en {n} días.",
+    "sim_net_ev_note": "El total neto también cuenta {kwh} kWh que el coche no recibió ({value})."
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -10893,7 +10913,11 @@
     "sim_preset_cheap_chargers": "Autot tilaan Aurinko + halpa",
     "sim_preset_no_battery_ev": "Ei akkua autolle",
     "sim_preset_pv_ask_kwp": "Kuinka monta kWp aurinkoa lisää?",
-    "sim_preset_pv_ask_factor": "Aurinko kertaa kuinka paljon? (esim. 1.5)"
+    "sim_preset_pv_ask_factor": "Aurinko kertaa kuinka paljon? (esim. 1.5)",
+    "sim_repriced_note": "* Toteutunut on laskettu uudelleen asettamillasi hinnoilla, ei maksetuilla.",
+    "sim_days_checked": "Asetusten tarkistus: {n} päivää käytetty, {m} jätetty pois (mittari hyppäsi).",
+    "sim_car_error": "Päivät autolla: asetuksesi poikkeavat {pct} % {n} päivän ajalta.",
+    "sim_net_ev_note": "Nettosumma sisältää myös {kwh} kWh, joita auto ei saanut ({value})."
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -12709,7 +12733,11 @@
     "sim_preset_cheap_chargers": "Voitures sur Solaire + bon marché",
     "sim_preset_no_battery_ev": "Pas de batterie pour la voiture",
     "sim_preset_pv_ask_kwp": "Combien de kWc solaires en plus ?",
-    "sim_preset_pv_ask_factor": "Solaire multiplié par combien ? (p. ex. 1.5)"
+    "sim_preset_pv_ask_factor": "Solaire multiplié par combien ? (p. ex. 1.5)",
+    "sim_repriced_note": "* Le réel est revalorisé aux tarifs que vous avez fixés, pas à ceux payés.",
+    "sim_days_checked": "Contrôle des réglages : {n} jours utilisés, {m} écartés (un compteur a sauté).",
+    "sim_car_error": "Jours avec voiture : vos réglages divergent de {pct} % sur {n} jours.",
+    "sim_net_ev_note": "Le total net compte aussi {kwh} kWh que la voiture n'a pas reçus ({value})."
   },
   "hu": {
     "% of limit": "% a határból",
@@ -14525,7 +14553,11 @@
     "sim_preset_cheap_chargers": "Autók Nap + olcsó módban",
     "sim_preset_no_battery_ev": "Nincs akku az autónak",
     "sim_preset_pv_ask_kwp": "Hány kWp nappal több?",
-    "sim_preset_pv_ask_factor": "Nap szorozva mennyivel? (pl. 1.5)"
+    "sim_preset_pv_ask_factor": "Nap szorozva mennyivel? (pl. 1.5)",
+    "sim_repriced_note": "* A tényleges érték az Ön által megadott árakon újraszámolva, nem a fizetetteken.",
+    "sim_days_checked": "Beállításellenőrzés: {n} nap használva, {m} kihagyva (egy mérő ugrott).",
+    "sim_car_error": "Autós napok: a beállításai {pct} %-kal térnek el {n} napon.",
+    "sim_net_ev_note": "A nettó összeg a {kwh} kWh-t is számolja, amit az autó nem kapott meg ({value})."
   },
   "it": {
     "% of limit": "% del limite",
@@ -16341,7 +16373,11 @@
     "sim_preset_cheap_chargers": "Auto su Solare + economico",
     "sim_preset_no_battery_ev": "Niente batteria per l'auto",
     "sim_preset_pv_ask_kwp": "Quanti kWp solari in più?",
-    "sim_preset_pv_ask_factor": "Solare per quanto? (es. 1.5)"
+    "sim_preset_pv_ask_factor": "Solare per quanto? (es. 1.5)",
+    "sim_repriced_note": "* Il reale è rivalutato alle tariffe impostate, non a quelle pagate.",
+    "sim_days_checked": "Controllo impostazioni: {n} giorni usati, {m} esclusi (un contatore è saltato).",
+    "sim_car_error": "Giorni con auto: le impostazioni divergono del {pct} % su {n} giorni.",
+    "sim_net_ev_note": "Il totale netto conta anche {kwh} kWh che l'auto non ha ricevuto ({value})."
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -18157,7 +18193,11 @@
     "sim_preset_cheap_chargers": "Auto's op Zon + goedkoop",
     "sim_preset_no_battery_ev": "Geen batterij voor de auto",
     "sim_preset_pv_ask_kwp": "Hoeveel kWp zon erbij?",
-    "sim_preset_pv_ask_factor": "Zon maal hoeveel? (bijv. 1.5)"
+    "sim_preset_pv_ask_factor": "Zon maal hoeveel? (bijv. 1.5)",
+    "sim_repriced_note": "* Werkelijk is herberekend met de tarieven die u instelde, niet de betaalde.",
+    "sim_days_checked": "Instellingencontrole: {n} dagen gebruikt, {m} weggelaten (een teller sprong).",
+    "sim_car_error": "Dagen met auto: uw instellingen wijken {pct} % af over {n} dagen.",
+    "sim_net_ev_note": "Het netto totaal telt ook {kwh} kWh die de auto niet kreeg ({value})."
   },
   "no": {
     "% of limit": "% av grense",
@@ -19973,7 +20013,11 @@
     "sim_preset_cheap_chargers": "Biler på Sol + billig",
     "sim_preset_no_battery_ev": "Ikke batteri til bilen",
     "sim_preset_pv_ask_kwp": "Hvor mange kWp sol mer?",
-    "sim_preset_pv_ask_factor": "Sol ganger hvor mye? (f.eks. 1.5)"
+    "sim_preset_pv_ask_factor": "Sol ganger hvor mye? (f.eks. 1.5)",
+    "sim_repriced_note": "* Faktisk er regnet om med prisene du satte, ikke de betalte.",
+    "sim_days_checked": "Innstillingssjekk: {n} dager brukt, {m} utelatt (en teller hoppet).",
+    "sim_car_error": "Dager med bil: innstillingene dine avviker {pct} % over {n} dager.",
+    "sim_net_ev_note": "Nettosummen teller også {kwh} kWh bilen ikke fikk ({value})."
   },
   "pl": {
     "% of limit": "% limitu",
@@ -21789,7 +21833,11 @@
     "sim_preset_cheap_chargers": "Auta na Słońce + tanio",
     "sim_preset_no_battery_ev": "Bez baterii dla auta",
     "sim_preset_pv_ask_kwp": "Ile kWp słońca więcej?",
-    "sim_preset_pv_ask_factor": "Słońce razy ile? (np. 1.5)"
+    "sim_preset_pv_ask_factor": "Słońce razy ile? (np. 1.5)",
+    "sim_repriced_note": "* Rzeczywiste przeliczono wg ustawionych taryf, nie zapłaconych.",
+    "sim_days_checked": "Kontrola ustawień: użyto {n} dni, pominięto {m} (licznik skoczył).",
+    "sim_car_error": "Dni z autem: ustawienia odbiegają o {pct} % na {n} dniach.",
+    "sim_net_ev_note": "Suma netto liczy też {kwh} kWh, których auto nie dostało ({value})."
   },
   "pt": {
     "% of limit": "% do limite",
@@ -23605,7 +23653,11 @@
     "sim_preset_cheap_chargers": "Carros em Solar + barato",
     "sim_preset_no_battery_ev": "Sem bateria para o carro",
     "sim_preset_pv_ask_kwp": "Quantos kWp solares a mais?",
-    "sim_preset_pv_ask_factor": "Solar vezes quanto? (ex. 1.5)"
+    "sim_preset_pv_ask_factor": "Solar vezes quanto? (ex. 1.5)",
+    "sim_repriced_note": "* O real é reavaliado às tarifas definidas, não às pagas.",
+    "sim_days_checked": "Verificação das definições: {n} dias usados, {m} excluídos (um contador saltou).",
+    "sim_car_error": "Dias com carro: as suas definições divergem {pct} % em {n} dias.",
+    "sim_net_ev_note": "O total líquido também conta {kwh} kWh que o carro não recebeu ({value})."
   },
   "ro": {
     "% of limit": "% din limită",
@@ -25421,7 +25473,11 @@
     "sim_preset_cheap_chargers": "Mașini pe Solar + ieftin",
     "sim_preset_no_battery_ev": "Fără baterie pentru mașină",
     "sim_preset_pv_ask_kwp": "Câți kWp solari în plus?",
-    "sim_preset_pv_ask_factor": "Solar înmulțit cu cât? (ex. 1.5)"
+    "sim_preset_pv_ask_factor": "Solar înmulțit cu cât? (ex. 1.5)",
+    "sim_repriced_note": "* Realul este reevaluat la tarifele setate de dvs., nu la cele plătite.",
+    "sim_days_checked": "Verificarea setărilor: {n} zile folosite, {m} excluse (un contor a sărit).",
+    "sim_car_error": "Zile cu mașină: setările diferă cu {pct} % pe {n} zile.",
+    "sim_net_ev_note": "Totalul net numără și {kwh} kWh pe care mașina nu i-a primit ({value})."
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -27237,7 +27293,11 @@
     "sim_preset_cheap_chargers": "Bilar på Sol + billigt",
     "sim_preset_no_battery_ev": "Inget batteri till bilen",
     "sim_preset_pv_ask_kwp": "Hur många kWp sol till?",
-    "sim_preset_pv_ask_factor": "Sol gånger hur mycket? (t.ex. 1.5)"
+    "sim_preset_pv_ask_factor": "Sol gånger hur mycket? (t.ex. 1.5)",
+    "sim_repriced_note": "* Faktiskt är omräknat med priserna du satte, inte de betalda.",
+    "sim_days_checked": "Inställningskontroll: {n} dagar använda, {m} utelämnade (en mätare hoppade).",
+    "sim_car_error": "Dagar med bil: dina inställningar avviker {pct} % över {n} dagar.",
+    "sim_net_ev_note": "Nettosumman räknar också {kwh} kWh som bilen inte fick ({value})."
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -29053,6 +29113,10 @@
     "sim_preset_cheap_chargers": "汽车用“光伏 + 低价”",
     "sim_preset_no_battery_ev": "电池不为汽车供电",
     "sim_preset_pv_ask_kwp": "增加多少 kWp 光伏？",
-    "sim_preset_pv_ask_factor": "光伏乘以多少？（例如 1.5）"
+    "sim_preset_pv_ask_factor": "光伏乘以多少？（例如 1.5）",
+    "sim_repriced_note": "* 实际值按您设定的价格重新计价，而非实付价格。",
+    "sim_days_checked": "设置检查：使用 {n} 天，排除 {m} 天（计数器跳变）。",
+    "sim_car_error": "有车的日子：您的设置在 {n} 天内偏差 {pct} %。",
+    "sim_net_ev_note": "净合计还计入了车未获得的 {kwh} kWh（{value}）。"
   }
 }

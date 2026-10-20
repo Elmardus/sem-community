@@ -330,10 +330,12 @@ test('the two mode selects: SEM\'s modes, changed when not the install\'s', () =
 });
 
 test('calibration: a run the own settings could not reproduce shows no what-if', () => {
-    assert.deepEqual(calibration({ calibrated: false, calibration: { error_pct: 12.3 } }), { ok: false, pct: 12.3 });
-    assert.deepEqual(calibration({ calibrated: true, calibration: { error_pct: 1.2 } }), { ok: true, pct: 1.2 });
-    assert.deepEqual(calibration({}), { ok: true, pct: null });
-    assert.deepEqual(calibration(null), { ok: true, pct: null });
+    const c = calibration({ calibrated: false, calibration: { error_pct: 12.3, days: 20, left_out: 3, car_days: 9, car_error_pct: 15.1 }, repriced: true });
+    assert.deepEqual(c, { ok: false, pct: 12.3, days: 20, leftOut: 3, carDays: 9, carPct: 15.1, repriced: true });
+    assert.equal(calibration({ calibrated: true, calibration: { error_pct: 1.2 } }).ok, true);
+    assert.equal(calibration({ calibrated: true, calibration: { error_pct: 1.2 } }).carPct, null);
+    assert.equal(calibration({}).ok, true);
+    assert.equal(calibration(null).days, null);
 });
 
 // ── The "most recent days" slider (a phone needs one drag, not 90 taps) ──

@@ -28,8 +28,11 @@ def _add(total: dict, day) -> None:
     # the difference with what the pack gained over each day counted — a
     # day type that fills a bigger pack is not shown dearer for energy the
     # other days spend (``DayResult.pack_change_value``)
-    total["net_delta"] += float(day.delta) - float(
-        getattr(day, "pack_change_value", 0.0) or 0.0)
+    # and the car energy the what-if left undelivered priced in: it did not
+    # pay for it, so it is not a saving
+    total["net_delta"] += (float(day.delta) - float(
+        getattr(day, "pack_change_value", 0.0) or 0.0) + float(
+        getattr(day, "ev_not_delivered_value", 0.0) or 0.0))
 
 
 def _rounded(total: dict) -> dict:
