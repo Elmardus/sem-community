@@ -539,8 +539,259 @@ class TestRealLateCountersAreStillBooked:
             assert _rows(fresh)[1] == pytest.approx(5.0, abs=0.01)
 
 
+EVENING = "2026-10-17 18:00:00"
+EVENING_DAY = "2026-10-17"
+# 18 Oct 2026, 16:44: the rise 2 s after a plug-in, on 2.2.0-beta.21.
+PLUG_IN_STEP = 19.85
+
+
+def _only_links(calc):
+    """The reporter's set: only Links has a counter of its own in SEM, so
+    the set is partial and each charger's row follows its power (#1049)."""
+    calc.configure_ev_counters(calc._hass, [LINKS], True, complete=False,
+                               owners={LINKS: "links"})
+
+
+def _restart(calc, clock, values, down: timedelta, partial: bool = False):
+    stored = _store(calc)
+    clock.tick(down)
+    fresh = _calc(values)
+    if partial:
+        _only_links(fresh)
+    fresh.restore_state(stored)
+    fresh.charger_rows = dict(calc.charger_rows)
+    return fresh
+
+
+@pytest.mark.unit
+class TestUnseenTimeIsSpent:
+    """#1101, reopened 19 Oct 2026 on 2.2.0-beta.21. The Links counter sat
+    at 5291.49 kWh from 17 Oct, the box idle and read 0 W, then rose
+    19.85 kWh in one report 2 s after a plug-in on 18 Oct. No car charged;
+    the fleet row booked all of it and logged nothing.
+
+    ``room`` held every restart and dark read since the counter last moved,
+    at 44 kW, and never let go while the counter stayed flat: 27 minutes
+    unseen in a day is 19.85 kWh. ``unreported`` already had a wait — a
+    counter that has not shown a draw after two hours seen idle never will.
+    The same wait now spends the unseen part of ``room``; unseen time starts
+    it again. What SEM saw the box draw stays."""
+
+    @pytest.mark.parametrize("partial", [False, True])
+    def test_the_reporters_day(self, partial):
+        """Thirty minutes down at the evening restart, hours seen idle,
+        then the plug-in step: no row books it."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            if partial:
+                _only_links(calc)
+            _idle(calc, clock, values, 10)
+            calc = _restart(calc, clock, values, timedelta(minutes=30), partial)
+            _idle(calc, clock, values, 180)
+            assert calc._ev_counter_room[LINKS] < 0.01
+            values[LINKS] += PLUG_IN_STEP
+            _cycle(calc, clock, values)
+            assert _rows(calc, EVENING_DAY) == (0.0, 0.0)
+            assert calc.charger_rows["links"] == pytest.approx(0.0, abs=0.01)
+
+    def test_within_the_wait_the_unseen_time_still_counts(self):
+        """Not vacuous, and #658's case: an hour after the restart a counter
+        may still report what the box drew while SEM was down. The wait that
+        ran before the restart does not count: it starts again."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            _idle(calc, clock, values, 100)
+            calc = _restart(calc, clock, values, timedelta(minutes=30))
+            _idle(calc, clock, values, 60)
+            values[LINKS] += PLUG_IN_STEP
+            _cycle(calc, clock, values)
+            assert _rows(calc, EVENING_DAY) == pytest.approx(
+                (PLUG_IN_STEP, PLUG_IN_STEP), abs=0.01)
+
+    def test_a_dark_read_starts_the_wait_again(self):
+        """Thirty minutes of a dark power read late in a wait: that is new
+        unseen time, with a wait of its own."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            _idle(calc, clock, values, 100)
+            values[LINKS_W] = "unavailable"
+            _idle(calc, clock, values, 30)
+            values[LINKS_W] = 0.0
+            _idle(calc, clock, values, 60)
+            values[LINKS] += PLUG_IN_STEP
+            _cycle(calc, clock, values)
+            assert _rows(calc, EVENING_DAY) == pytest.approx(
+                (PLUG_IN_STEP, PLUG_IN_STEP), abs=0.01)
+
+    def test_after_a_dark_read_the_wait_spends_it_too(self):
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            values[LINKS_W] = "unavailable"
+            _idle(calc, clock, values, 30)
+            values[LINKS_W] = 0.0
+            _idle(calc, clock, values, 150)
+            values[LINKS] += PLUG_IN_STEP
+            _cycle(calc, clock, values)
+            assert _rows(calc, EVENING_DAY) == (0.0, 0.0)
+
+    def test_a_trickle_read_since_stays(self):
+        """300 W read for three hours after the restart may be one phase of
+        three: up to 2.7 kWh the counter can still show."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            _idle(calc, clock, values, 10)
+            calc = _restart(calc, clock, values, timedelta(minutes=30))
+            for _ in range(180):
+                _cycle(calc, clock, values, 300.0)
+            assert 2.6 < calc._ev_counter_room[LINKS] < 2.8
+            values[LINKS] += 2.5
+            _cycle(calc, clock, values, 300.0)
+            assert _rows(calc, EVENING_DAY)[1] == pytest.approx(2.5, abs=0.05)
+
+    def test_with_no_record_the_watch_starts_after_the_wait(self):
+        """A store from before #1101 has no record of the time since. Seen
+        idle for the wait, the counter's next step is judged like any."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            _idle(calc, clock, values, 10)
+            stored = _store(calc)
+            for key in ("room", "watched_at", "unseen_kwh", "quiet_h"):
+                del stored["ev_counter_pending"][key]
+            fresh = _calc(values)
+            fresh.restore_state(stored)
+            _idle(fresh, clock, values, 150)
+            values[LINKS] += 5.0
+            _cycle(fresh, clock, values)
+            assert _rows(fresh, EVENING_DAY) == (0.0, 0.0)
+
+    def test_a_session_seen_and_reported_late_is_booked(self):
+        """A cloud counter flat through an hour SEM watched at 11 kW, and
+        reporting it after more than the wait: SEM saw that charge, so the
+        wait does not spend it."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            _charge(calc, clock, values, 60, meter=0.0, watts=11_000.0)
+            _idle(calc, clock, values, 125)
+            values[LINKS] += 11.0
+            _cycle(calc, clock, values)
+            assert _rows(calc, EVENING_DAY) == pytest.approx((11.0, 11.0), abs=0.01)
+            assert calc.charger_rows["links"] == pytest.approx(11.0, abs=0.01)
+
+    def test_with_no_record_a_charge_seen_and_reported_late_is_booked(self):
+        """A new install: the counter is only first seen, so ``room`` has no
+        record. The wait starts the watch, but not under what SEM saw."""
+        values = {LINKS: 5170.12, RECHTS: 1094.83}
+        with freeze_time(EVENING) as clock:
+            calc = _calc(values)
+            _cycle(calc, clock, values)
+            assert LINKS not in calc._ev_counter_room
+            _charge(calc, clock, values, 60, meter=0.0, watts=11_000.0)
+            _idle(calc, clock, values, 125)
+            values[LINKS] += 11.0
+            _cycle(calc, clock, values)
+            assert _rows(calc, EVENING_DAY) == pytest.approx((11.0, 11.0), abs=0.01)
+
+    def test_after_an_upgrade_a_charge_seen_before_it_is_booked(self):
+        """A store from before the wait counts all of ``room`` as unseen;
+        the charge SEM saw before the restart still stays."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            _charge(calc, clock, values, 60, meter=0.0, watts=11_000.0)
+            stored = _store(calc)
+            for key in ("unseen_kwh", "quiet_h"):
+                del stored["ev_counter_pending"][key]
+            fresh = _calc(values)
+            fresh.restore_state(stored)
+            fresh.charger_rows = dict(calc.charger_rows)
+            _idle(fresh, clock, values, 125)
+            values[LINKS] += 11.0
+            _cycle(fresh, clock, values)
+            assert _rows(fresh, EVENING_DAY) == pytest.approx((11.0, 11.0), abs=0.01)
+
+    def test_watched_charging_counts_toward_the_wait(self):
+        """Dark for 30 minutes, then ten minutes SEM saw at 11 kW, then idle:
+        two hours after the dark read its part is spent; the seen charge is
+        all the step may book."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            values[LINKS_W] = "unavailable"
+            _idle(calc, clock, values, 30)
+            values[LINKS_W] = 0.0
+            _charge(calc, clock, values, 10, meter=0.0, watts=11_000.0)
+            _idle(calc, clock, values, 115)
+            values[LINKS] += PLUG_IN_STEP
+            _cycle(calc, clock, values)
+            assert _rows(calc, EVENING_DAY) == pytest.approx((1.83, 1.83), abs=0.05)
+
+    def test_a_move_clears_the_unseen_part(self):
+        """The counter moves after a dark read: that move holds the dark
+        time, so the wait has nothing left to spend from it. A charge SEM
+        sees next keeps its full reach."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            values[LINKS_W] = "unavailable"
+            _idle(calc, clock, values, 30)
+            values[LINKS_W] = 0.0
+            values[LINKS] += 0.2
+            _cycle(calc, clock, values)
+            _charge(calc, clock, values, 30, meter=0.0, watts=11_000.0)
+            _idle(calc, clock, values, 95)
+            values[LINKS] += 15.5
+            _cycle(calc, clock, values)
+            assert _rows(calc, EVENING_DAY) == pytest.approx((15.7, 15.7), abs=0.05)
+
+    def test_no_record_starts_the_wait_again(self):
+        """A wait nearly done before a store whose watch time is damaged:
+        the time since is unknown, so the wait starts again and the next
+        move is booked as it stands."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            _idle(calc, clock, values, 110)
+            stored = _store(calc)
+            stored["ev_counter_pending"]["watched_at"] = "junk"
+            fresh = _calc(values)
+            fresh.restore_state(stored)
+            _idle(fresh, clock, values, 15)
+            values[LINKS] += 5.0
+            _cycle(fresh, clock, values)
+            assert _rows(fresh, EVENING_DAY) == pytest.approx((5.0, 5.0), abs=0.01)
+
+
 @pytest.mark.unit
 class TestTheWatchSurvivesTheStore:
+    def test_the_wait_round_trips(self):
+        """A restart inside one cycle is no unseen time: the wait and the
+        unseen part it spends go on across it."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            values[LINKS_W] = "unavailable"
+            _idle(calc, clock, values, 30)
+            values[LINKS_W] = 0.0
+            _idle(calc, clock, values, 100)
+            stored = _store(calc)
+            assert stored["ev_counter_pending"]["unseen_kwh"][LINKS] > 20.0
+            fresh = _calc(values)
+            fresh.restore_state(stored)
+            fresh.charger_rows = dict(calc.charger_rows)
+            _idle(fresh, clock, values, 25)
+            values[LINKS] += PLUG_IN_STEP
+            _cycle(fresh, clock, values)
+            assert _rows(fresh, EVENING_DAY) == (0.0, 0.0)
+
+    def test_a_store_from_before_the_wait_spends_all_of_room(self):
+        """It does not tell what ``room`` holds, so all of it waits."""
+        calc = _calc({})
+        calc.restore_state({"ev_counter_pending": {"room": {LINKS: 22.0}}})
+        assert calc._ev_counter_unseen_kwh == {LINKS: 22.0}
+
+    def test_a_damaged_wait_is_dropped(self):
+        calc = _calc({})
+        calc.restore_state({"ev_counter_pending": {
+            "quiet_h": {LINKS: "x", RECHTS: 1.5, "b": True},
+            "unseen_kwh": {LINKS: float("nan"), RECHTS: 0.2, "c": -3.0}}})
+        assert calc._ev_counter_quiet_h == {RECHTS: 1.5}
+        assert calc._ev_counter_unseen_kwh == {RECHTS: 0.2}
+
     def test_room_and_watch_round_trip(self):
         with freeze_time(NIGHT) as clock:
             values, calc = _night()

@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ **The EV tab opens in Everyday view**: per charger, mode, target and Charge by; pause, departures, plan and sessions fold under More and Details.
 - ✨ **The Configuration tab opens on Everyday: only what SEM needs, in three groups** (#830). All settings shows the rest, one tap away.
+- 🐛 **A charger counter that jumps at plug-in after a quiet day no longer counts as charging** (#1101). Earlier restarts let the jump through.
+
+# [2.2.0-beta.22] — 18.10.2026
+
 - 🐛 **Charge pacing keeps its 10 % headroom on every re-plan** (#820). The pack is now planned full before the last sunny hour.
 - 🐛 **Battery session average power no longer spikes to megawatts when a session starts** (#1155). It now reads the real power from the first update.
 - ✨ **Simulation tab: replay your recorded days with another battery, reserve, peak limit or price** (#1083). Estimated cost per day type. Off by default.

@@ -426,6 +426,12 @@ class EnergyCalculator:
         # the box has been seen idle since it last charged. Both persisted.
         self._ev_counter_unreported: Dict[str, float] = {}
         self._ev_counter_idle_h: Dict[str, float] = {}
+        # (#1101) Per counter: the part of ``room`` from time SEM did not see
+        # the box (a dark or foreign power read, SEM down, a skipped cycle),
+        # and the hours SEM has watched the box since (``quiet_h``). Both
+        # persisted.
+        self._ev_counter_unseen_kwh: Dict[str, float] = {}
+        self._ev_counter_quiet_h: Dict[str, float] = {}
         # (#556) Daily-solar reconciliation against hardware production
         # counters — closes the cloud-poll undercount (integrating a power
         # sensor that reports 0/unavailable between polls). Baselines are
@@ -2500,6 +2506,13 @@ class EnergyCalculator:
         What SEM saw drawn and the counter has not shown yet
         (``_ev_counter_unreported``) is part of the reach until the box has
         been seen idle for ``EV_COUNTER_LATE_REPORT_H``.
+
+        (#1101) The same wait spends the unseen part of ``room``: once SEM
+        has watched the box that long since it last could not see it, a
+        counter has shown what the box drew then. Without it, every restart
+        and dark read since the counter last moved stayed in ``room`` at
+        44 kW: on a counter flat for a day, a 19.85 kWh catch-up at the next
+        plug-in was booked. What SEM saw the box draw stays.
         """
         self._ev_owners_drawing = set()
         self._ev_counter_foreign = {}
@@ -2510,8 +2523,11 @@ class EnergyCalculator:
         self._ev_watched_at = now
         if unseen_h is None:
             # No record of the last cycle: nothing is known about the time
-            # since, so every counter's next move is booked as it stands.
+            # since, so every counter's next move is booked as it stands —
+            # until SEM has watched its box for the late-report wait.
             self._ev_counter_room.clear()
+            self._ev_counter_unseen_kwh.clear()
+            self._ev_counter_quiet_h.clear()
         # More than a second unseen: SEM was down or skipped a cycle.
         gap = unseen_h is not None and unseen_h * 3600.0 > 1.0
         box_kw = self._ev_box_max_kw()
@@ -2532,8 +2548,10 @@ class EnergyCalculator:
                 value = self._energy_state_kwh(state)
             seen = self._ev_counter_seen.get(entity_id)
             room = self._ev_counter_room.get(entity_id)
+            unseen = self._ev_counter_unseen_kwh.get(entity_id, 0.0)
             if room is not None and gap:
                 room += box_kw * unseen_h
+                unseen += box_kw * unseen_h
             this_cycle = max(box_kw, watts / 1000.0) * interval_hours
             drawn = (watts * interval_hours / 1000.0
                      if watts > EV_ACTIVE_CHARGE_FLOOR_W else 0.0)
@@ -2562,8 +2580,9 @@ class EnergyCalculator:
                 self._ev_counter_pending[entity_id] = 0.0
                 if seen is not None:
                     # A real move starts the watch; a first sight (a store
-                    # from before it) leaves the next move as it stands.
-                    room = 0.0
+                    # from before it) leaves the next move as it stands,
+                    # unless the late-report wait starts the watch first.
+                    room = unseen = 0.0
             else:
                 if watts > EV_ACTIVE_CHARGE_FLOOR_W:
                     self._ev_counter_pending[entity_id] = (
@@ -2576,9 +2595,32 @@ class EnergyCalculator:
                 if room is not None and (
                         watts > EV_ACTIVE_CHARGE_FLOOR_W or not live):
                     room += this_cycle
+                    if not live:
+                        unseen += this_cycle
                 elif room is not None:
                     room += (EV_COUNTER_TRICKLE_FACTOR * max(0.0, watts)
                              * interval_hours / 1000.0)
+            # (#1101) Watched for the late-report wait since SEM last could
+            # not see the box: a counter has shown by now what the box drew
+            # then, so the unseen part of ``room`` is spent. What SEM saw —
+            # a charge, a trickle — stays, and never less than the draw it
+            # saw since the counter last moved (``pending``: a record that
+            # holds none, or an older store). Unseen time starts the wait
+            # again. No record yet: the watch starts.
+            quiet_h = self._ev_counter_quiet_h.get(entity_id, 0.0)
+            if not live or gap:
+                quiet_h = 0.0
+            else:
+                if quiet_h < EV_COUNTER_LATE_REPORT_H <= quiet_h + interval_hours:
+                    room = max(self._ev_counter_pending.get(entity_id, 0.0),
+                               (0.0 if room is None else room) - unseen)
+                    unseen = 0.0
+                quiet_h += interval_hours
+            self._ev_counter_quiet_h[entity_id] = quiet_h
+            if unseen > 0.0:
+                self._ev_counter_unseen_kwh[entity_id] = unseen
+            else:
+                self._ev_counter_unseen_kwh.pop(entity_id, None)
             if room is not None:
                 self._ev_counter_room[entity_id] = room
             # Seen idle long enough: a counter that has not shown the rest by
@@ -4202,6 +4244,8 @@ class EnergyCalculator:
                 "room": dict(self._ev_counter_room),
                 "unreported": dict(self._ev_counter_unreported),
                 "idle_h": dict(self._ev_counter_idle_h),
+                "unseen_kwh": dict(self._ev_counter_unseen_kwh),
+                "quiet_h": dict(self._ev_counter_quiet_h),
                 "watched_at": (self._ev_watched_at.isoformat()
                                if self._ev_watched_at else None),
             },
@@ -4338,14 +4382,21 @@ class EnergyCalculator:
                                   ("_ev_counter_seen", "seen"),
                                   ("_ev_counter_room", "room"),
                                   ("_ev_counter_unreported", "unreported"),
-                                  ("_ev_counter_idle_h", "idle_h")):
+                                  ("_ev_counter_idle_h", "idle_h"),
+                                  ("_ev_counter_unseen_kwh", "unseen_kwh"),
+                                  ("_ev_counter_quiet_h", "quiet_h")):
                     raw = pending.get(key)
                     if isinstance(raw, dict):
                         setattr(self, attr, {
                             str(e): float(v) for e, v in raw.items()
                             if isinstance(v, (int, float))
                             and not isinstance(v, bool) and math.isfinite(v)
+                            and v >= 0
                         })
+                if not isinstance(pending.get("unseen_kwh"), dict):
+                    # (#1101) A store from before the wait does not tell
+                    # what ``room`` holds: all of it waits to be spent.
+                    self._ev_counter_unseen_kwh = dict(self._ev_counter_room)
                 # (#1101) A time that does not parse, or has no zone, is no
                 # record: every counter's next move is booked as it stands.
                 watched_at = pending.get("watched_at")
