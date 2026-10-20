@@ -15,11 +15,14 @@ import { semTheme, semFormatPower, semGetCurrency, semDefineCard } from '../base
 import { resolveChargerSoc } from '../util/charger-soc.js';
 import { chargerStatusKey } from '../util/charger-status.js';
 import { evStripSegments, evStripWindow } from '../util/ev-strip.js';
+import { downloadBase64 } from '../util/download.js';
 import {
-    sessionMonth, shiftMonth, rowsForMonth, monthTotals, sessionRowView, sessionsCsv,
+    sessionMonth, shiftMonth, rowsForMonth, monthTotals, sessionRowView,
 } from '../util/sessions.js';
+import { getAllSettings, setAllSettings, VIEW_MODE_EVENT } from '../util/view-mode.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const CHARGER_COLORS = ['#8DC892', '#64B5F6'];
 
 class SEMEVStatusCard extends SEMLitBase {
@@ -28,6 +31,10 @@ class SEMEVStatusCard extends SEMLitBase {
             ...super.properties,
             _showHelp: { state: true },
             _sessions: { state: true },
+            // One switch for every tab: Everyday (false) or All settings (true)
+            _allSettings: { state: true },
+            // per charger: { more, details } the user opened or closed
+            _folds: { state: true },
         };
     }
 
@@ -43,11 +50,21 @@ class SEMEVStatusCard extends SEMLitBase {
         // snap it fresh on app resume / tab focus so the axis can't lag after a
         // long background.
         this._boundVisibility = () => { if (!document.hidden) this.requestUpdate(); };
+        // The view switch: Everyday folds away what is set once or read
+        // rarely; All settings opens every fold. A fold the user opens or
+        // closes holds for this card instance until the view changes.
+        this._allSettings = false;
+        this._folds = {};
+        this._boundViewMode = (e) => this._applyViewMode(
+            e && e.detail && typeof e.detail.all === 'boolean' ? e.detail.all : getAllSettings());
     }
 
     connectedCallback() {
         super.connectedCallback();
         document.addEventListener('visibilitychange', this._boundVisibility);
+        // read again on every return: the switch may have moved on another tab
+        this._applyViewMode(getAllSettings());
+        window.addEventListener(VIEW_MODE_EVENT, this._boundViewMode);
     }
 
     disconnectedCallback() {
@@ -55,6 +72,48 @@ class SEMEVStatusCard extends SEMLitBase {
         // (#980 follow-up) the pause countdown's minute tick
         if (this._pauseTimer) { clearInterval(this._pauseTimer); this._pauseTimer = null; }
         document.removeEventListener('visibilitychange', this._boundVisibility);
+        window.removeEventListener(VIEW_MODE_EVENT, this._boundViewMode);
+    }
+
+    // ── The view: Everyday or All settings ──────────────────────────────
+    _applyViewMode(all) {
+        if (all === this._allSettings) return;
+        this._allSettings = all;
+        this._folds = {};   // every fold back to the view's default
+    }
+
+    _setView(all) {
+        // the event comes back to this card too, with every other SEM card
+        setAllSettings(all);
+        this._applyViewMode(all);
+    }
+
+    _foldOpen(id, which) {
+        const own = (this._folds[id] || {})[which];
+        return typeof own === 'boolean' ? own : this._allSettings;
+    }
+
+    _toggleFold(id, which) {
+        this._folds = {
+            ...this._folds,
+            [id]: { ...(this._folds[id] || {}), [which]: !this._foldOpen(id, which) },
+        };
+    }
+
+    /** A fold: a button that says whether it is open, and what it holds. */
+    _renderFold(id, which, labelKey, content) {
+        const open = this._foldOpen(id, which);
+        return html`
+            <div class="fold fold-${which} ${open ? 'open' : ''}">
+                <button class="fold-btn" type="button"
+                        aria-expanded=${open ? 'true' : 'false'}
+                        @click=${(e) => { e.stopPropagation(); this._toggleFold(id, which); }}>
+                    <span class="fold-label">${this._t(labelKey)}</span>
+                    <ha-icon icon=${open ? 'mdi:chevron-up' : 'mdi:chevron-down'}
+                             style="--mdc-icon-size:16px"></ha-icon>
+                </button>
+                ${open ? html`<div class="fold-body">${content}</div>` : nothing}
+            </div>`;
     }
 
     // ── (#1024) Sessions ─────────────────────────────────────────────
@@ -106,16 +165,22 @@ class SEMEVStatusCard extends SEMLitBase {
         this._setSessionState(id, { loading: false, rows, month: keep || thisMonth });
     }
 
-    _downloadSessionsCsv(id, rows) {
-        const blob = new Blob([sessionsCsv(rows)], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'sem-sessions-' + id + '.csv';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    // (#1083) An .xlsx, not a CSV: Excel splits a CSV on ";" or "," by locale.
+    async _downloadSessionsXlsx(id) {
+        if (!this._hass?.callWS) return;
+        try {
+            const res = await this._hass.callWS({
+                type: 'solar_energy_management/session_history/xlsx', charger_id: id,
+            });
+            if (res?.base64) {
+                downloadBase64(res.filename || 'sem-sessions.xlsx', res.base64, XLSX_MIME);
+                this._setSessionState(id, { error: null });
+            }
+        } catch (err) {
+            // tell the person, not only the console
+            console.warn('SEM: session download failed', err);
+            this._setSessionState(id, { error: 'download' });
+        }
     }
 
     _renderSessions(id) {
@@ -191,9 +256,10 @@ class SEMEVStatusCard extends SEMLitBase {
                         <span class="metric-label ${more > 0 ? 'clickable' : ''}"
                               @click=${() => more > 0 && this._setSessionState(id, { all: true })}>${more > 0 ? fill('sessions_more', more) + ' · ' : ''}${fill('sessions_stored', rows.length)}</span>
                         ${rows.length ? html`
-                            <span class="metric-value sessions-csv" @click=${() => this._downloadSessionsCsv(id, rows)}>
-                                <ha-icon icon="mdi:download" style="--mdc-icon-size:14px"></ha-icon>${this._t('sessions_csv')}
-                            </span>` : nothing}
+                            <span class="metric-value sessions-dl" @click=${() => this._downloadSessionsXlsx(id)}>
+                                <ha-icon icon="mdi:download" style="--mdc-icon-size:14px"></ha-icon>${this._t('sessions_xlsx')}
+                            </span>
+                            ${st.error === 'download' ? html`<span class="metric-label">${this._t('sessions_download_failed')}</span>` : nothing}` : nothing}
                     </div>`}
             </div>
         `;
@@ -267,15 +333,11 @@ class SEMEVStatusCard extends SEMLitBase {
                 // (#440) charger_*_nights_until_charge / _charge_needed removed
             ].map(s => hass.states[`${prefix}${s}`]?.state || '').join(':')).join('|');
 
+            // Deadline (#246). The night_charging and tariff_optimized
+            // switches it once sat beside were removed in #277.
             key += '|' + this._chargers.map(id =>
-                hass.states[`switch.sem_charger_${id}_night_charging`]?.state || ''
+                hass.states[`time.sem_charger_${id}_target_time`]?.state || ''
             ).join(':');
-
-            // Deadline (#246) + tariff (#247) entities
-            key += '|' + this._chargers.map(id => [
-                hass.states[`time.sem_charger_${id}_target_time`]?.state || '',
-                hass.states[`switch.sem_charger_${id}_tariff_optimized`]?.state || '',
-            ].join(':')).join('|');
             const _cs = hass.states[`${prefix}charging_state`]?.attributes || {};
             key += '|' + [_cs.ev_tariff_waiting, _cs.ev_deadline_reachable,
                 _cs.ev_next_cheap_window].join(':');
@@ -457,33 +519,47 @@ class SEMEVStatusCard extends SEMLitBase {
             timeZone: this._hass?.config?.time_zone || undefined });
     }
 
+    /** (#1023) The locale's name of weekday i (0 = Monday). */
+    _dayName(i, style) {
+        const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+        // 1 Jan 2024 was a Monday: the locale names the days, no table needed
+        try {
+            return new Intl.DateTimeFormat(this._hass?.language || 'en', { weekday: style, timeZone: 'UTC' })
+                .format(new Date(Date.UTC(2024, 0, 1 + i, 12)));
+        } catch (e) { return DAYS[i]; }
+    }
+
+    /** (#1023) The next departure: its instant, its weekday key and its
+     *  label ("Mon 06:15"), or nothing when the view has none. */
+    _nextDeparture(dep) {
+        const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+        const next = dep.next ? new Date(dep.next) : null;
+        if (!next || isNaN(next)) return { next: null, key: null, label: '' };
+        let key = null;
+        try {
+            key = new Intl.DateTimeFormat('en-US', { weekday: 'short',
+                timeZone: this._hass?.config?.time_zone || undefined })
+                .format(next).toLowerCase().slice(0, 3);
+        } catch (e) { key = null; }
+        const label = DAYS.includes(key)
+            ? `${this._dayName(DAYS.indexOf(key), 'short')} ${this._hhmm(next)}`
+            : this._hhmm(next);
+        return { next, key, label };
+    }
+
     /**
      * (#1023) The departure rows — approved mockup 06.10, inside Charge
      * Target: a chip per weekday (a day with its own time in teal, the
-     * departure tonight is planned for outlined), the next departure, one
-     * block, and the top-up before leaving with what the plan booked for it.
+     * departure tonight is planned for outlined), one block, and the top-up
+     * before leaving with what the plan booked for it. The next departure
+     * itself sits under Charge by, which Everyday always shows.
      */
     _renderDepartureRows(id, dep, depDefault) {
         const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
         const own = dep.by_weekday || {};
-        const lang = this._hass?.language || 'en';
-        const tz = this._hass?.config?.time_zone || undefined;
-        // 1 Jan 2024 was a Monday: the locale names the days, no table needed
-        const dayName = (i, style) => {
-            try {
-                return new Intl.DateTimeFormat(lang, { weekday: style, timeZone: 'UTC' })
-                    .format(new Date(Date.UTC(2024, 0, 1 + i, 12)));
-            } catch (e) { return DAYS[i]; }
-        };
-        const next = dep.next ? new Date(dep.next) : null;
-        const nextOk = !!(next && !isNaN(next));
-        let nextKey = null;
-        if (nextOk) {
-            try {
-                nextKey = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: tz })
-                    .format(next).toLowerCase().slice(0, 3);
-            } catch (e) { nextKey = null; }
-        }
+        const dayName = (i, style) => this._dayName(i, style);
+        const { next, key: nextKey } = this._nextDeparture(dep);
+        const nextOk = !!next;
         const editing = this._depEdit && this._depEdit.id === id ? this._depEdit.day : null;
         const setDay = (day, value) => {
             const map = { ...own };
@@ -515,10 +591,6 @@ class SEMEVStatusCard extends SEMLitBase {
                     : this._fmtT('ev_dep_late_hint', { span });
             }
         }
-        const [nextPre, nextPost = ''] = (this._t('ev_dep_next') || '{when}').split('{when}');
-        const nextLabel = !nextOk ? ''
-            : DAYS.includes(nextKey) ? `${dayName(DAYS.indexOf(nextKey), 'short')} ${this._hhmm(next)}`
-            : this._hhmm(next);
         const help = (key) => this._showHelp ? html`
             <div class="ct-subhint dep-hint">
                 <div class="ct-hint-row"><span class="ct-hint-text">${this._t(key)}</span></div>
@@ -551,7 +623,7 @@ class SEMEVStatusCard extends SEMLitBase {
             </div>` : nothing}
             <div class="ct-subhint dep-hint">
                 <div class="ct-hint-row">
-                    <span class="ct-hint-text">${nextOk ? html`${nextPre}<b class="dep-next">${nextLabel}</b>${nextPost} · ` : nothing}${this._fmtT('ev_dep_tap_hint', { time: depDefault })}</span>
+                    <span class="ct-hint-text">${this._fmtT('ev_dep_tap_hint', { time: depDefault })}</span>
                 </div>
             </div>
             ${help('ev_dep_help_days')}
@@ -1262,12 +1334,119 @@ class SEMEVStatusCard extends SEMLitBase {
                 </select>`
             : html`<span class="ct-unit-static">${isSoc ? '%' : 'kWh'}</span>`;
 
+        // The view (one switch for every tab). Everyday keeps what is used
+        // every day open and folds the rest under More and Details; All
+        // settings opens both folds and shows the settings as tiles.
+        const all = this._allSettings;
+        const nextDep = this._nextDeparture(dep);
+        const [nextPre, nextPost = ''] = (this._t('ev_dep_next') || '{when}').split('{when}');
+        const hasOwnDays = Object.keys(dep.by_weekday || {}).length > 0;
+        const moreInfo = (entityId) => this.dispatchEvent(new CustomEvent('hass-more-info',
+            { bubbles: true, composed: true, detail: { entityId } }));
+        const minAmpsId = `number.sem_charger_${id}_minimum_current`;
+        const capacityId = `number.sem_charger_${id}_ev_battery_capacity_kwh`;
+        const consumptionId = `number.sem_charger_${id}_ev_kwh_per_100km`;
+        const tileHelp = (key) => this._showHelp
+            ? html`<div class="setting-help">${this._t(key)}</div>` : nothing;
+        const helpToggle = html`
+            <ha-icon
+                class="ev-help-toggle ${this._showHelp ? 'on' : ''}"
+                icon="${this._showHelp ? 'mdi:help-circle' : 'mdi:help-circle-outline'}"
+                title="${this._t('zone_help_toggle')}"
+                @click=${() => this._toggleHelp()}
+                style="--mdc-icon-size:16px"
+            ></ha-icon>`;
+
+        // ── More: what is changed now and then ──
+        const moreContent = html`
+            ${pauseAvailable ? html`
+            <div class="ct-row">
+                <span class="ct-label">${this._t('pause_charging_for')}</span>
+                <span class="ct-ctl ct-pause">
+                    <select class="ct-mode-select ct-pause-select"
+                            .value=${pauseDuration}
+                            @click=${(e) => e.stopPropagation()}
+                            @change=${(e) => this._selectOption(pauseDurationId, e.target.value)}>
+                        ${pauseOptions.map(o => html`
+                            <option value=${o} ?selected=${o === pauseDuration}>
+                                ${this._t(`pause_duration_${o}`) || o}
+                            </option>`)}
+                    </select>
+                    <button class="ct-pause-btn"
+                            @click=${(e) => { e.stopPropagation(); this._pressButton(pauseButtonId); }}
+                            title=${this._t('pause_charging_hint')}>
+                        <ha-icon icon="mdi:pause-octagon-outline" style="--mdc-icon-size:15px"></ha-icon>
+                        ${pauseRunning ? this._t('pause_charging_again') : this._t('pause_charging')}
+                    </button>
+                </span>
+            </div>
+            ` : nothing}
+            ${phaseModeExists ? html`
+            <div class="ct-row">
+                <span class="ct-label">${this._t('phase_mode')}</span>
+                <span class="ct-ctl">
+                    <select class="ct-mode-select"
+                            .value=${phaseMode}
+                            @click=${(e) => e.stopPropagation()}
+                            @change=${(e) => this._selectOption(phaseModeEntityId, e.target.value)}>
+                        ${phaseOptions.map(o => html`
+                            <option value=${o} ?selected=${o === phaseMode}>
+                                ${phaseLabels[o] || o}
+                            </option>`)}
+                    </select>
+                </span>
+            </div>
+            <div class="ct-subhint">
+                <div class="ct-hint-row">
+                    <span class="ct-hint-text">
+                        <ha-icon icon="mdi:sine-wave" style="--mdc-icon-size:12px;color:#8DC892"></ha-icon>
+                        ${phaseStatus}
+                    </span>
+                </div>
+            </div>
+            ` : nothing}
+            ${this._renderDepartureRows(id, dep, depDefault)}
+            ${this._renderBoostRow(id, dep, csAttrs)}
+        `;
+
+        // ── Details: what explains the charge, read when asked ──
+        const detailsContent = html`
+            ${all ? nothing : html`
+            <div class="details-now">
+                <span><span class="cm-label">${this._t('session')}</span>
+                    <span class="cm-value">${this._fmt(session, 1)} kWh</span></span>
+                ${commandedAmps > 0 ? html`
+                <span><span class="cm-label">${this._t('commanded_current')}</span>
+                    <span class="cm-value">${Math.round(commandedAmps)}&nbsp;A</span></span>` : nothing}
+            </div>`}
+            ${this._renderPlanStrip(id)}
+            ${estStop708 ? html`
+            <div class="soc-info-708 soc-info-708-stop">
+                <ha-icon icon="mdi:check-circle-outline" style="--mdc-icon-size:14px;color:#8DC892"></ha-icon>
+                <span>${fmt708('soc_target_reached_est')}<br>
+                    <small>${fmt708('soc_confirms_next_update')}</small></span>
+            </div>` : showSocInfo708 ? html`
+            <div class="soc-info-708">
+                <ha-icon icon="mdi:information-outline" style="--mdc-icon-size:14px;color:#5BC8D8"></ha-icon>
+                <span>${fmt708('soc_info_line')}</span>
+            </div>` : nothing}
+            ${chargeMode === 'solar_plus_battery' && learnerLearning ? html`
+            <div class="ct-subhint">
+                <div class="ct-hint-row">
+                    <ha-icon icon="mdi:school-outline" style="--mdc-icon-size:13px;color:#5BC8D8"></ha-icon>
+                    <span class="ct-hint-text">${learnerInfo}</span>
+                </div>
+            </div>
+            ` : nothing}
+            ${this._renderSessions(id)}
+        `;
+
         return html`
             <div class="charger-section">
                 <div class="charger-header">
                     <div class="charger-dot" style="background:${color}"></div>
                     <span class="charger-name">${name}</span>
-                    <span class="charger-status" style="color:${isCharging ? color : ''}">${statusText}${commandedAmps > 0 ? html` <span class="charger-set">(${Math.round(commandedAmps)}&nbsp;A)</span>` : nothing}</span>
+                    <span class="charger-status" style="color:${isCharging ? color : ''}">${statusText}${all && commandedAmps > 0 ? html` <span class="charger-set">(${Math.round(commandedAmps)}&nbsp;A)</span>` : nothing}</span>
                 </div>
 
                 <div class="charger-body">
@@ -1285,10 +1464,11 @@ class SEMEVStatusCard extends SEMLitBase {
                             <span class="cm-label">${this._t('today')}</span>
                             <span class="cm-value">${this._fmt(dailyEnergy, 1)} kWh</span>
                         </div>
+                        ${all ? html`
                         <div class="cm-row">
                             <span class="cm-label">${this._t('session')}</span>
                             <span class="cm-value">${this._fmt(session, 1)} kWh</span>
-                        </div>
+                        </div>` : nothing}
                         <div class="cm-row">
                             <span class="cm-label">${this._t('solar_share')}</span>
                             <span class="cm-value" style="color:#ff9800">${this._fmt(solar, 0)}%</span>
@@ -1299,19 +1479,6 @@ class SEMEVStatusCard extends SEMLitBase {
                              authority on whether to charge at night. -->
                     </div>
                 </div>
-
-                ${estStop708 ? html`
-                <div class="soc-info-708 soc-info-708-stop">
-                    <ha-icon icon="mdi:check-circle-outline" style="--mdc-icon-size:14px;color:#8DC892"></ha-icon>
-                    <span>${fmt708('soc_target_reached_est')}<br>
-                        <small>${fmt708('soc_confirms_next_update')}</small></span>
-                </div>` : showSocInfo708 ? html`
-                <div class="soc-info-708">
-                    <ha-icon icon="mdi:information-outline" style="--mdc-icon-size:14px;color:#5BC8D8"></ha-icon>
-                    <span>${fmt708('soc_info_line')}</span>
-                </div>` : nothing}
-
-                ${this._renderSessions(id)}
 
                 <div class="charge-target-group">
                     <div class="ct-title">
@@ -1345,28 +1512,10 @@ class SEMEVStatusCard extends SEMLitBase {
                             </select>
                         </span>
                     </div>
-                    ${pauseAvailable ? html`
-                    <div class="ct-row">
-                        <span class="ct-label">${this._t('pause_charging_for')}</span>
-                        <span class="ct-ctl ct-pause">
-                            <select class="ct-mode-select ct-pause-select"
-                                    .value=${pauseDuration}
-                                    @click=${(e) => e.stopPropagation()}
-                                    @change=${(e) => this._selectOption(pauseDurationId, e.target.value)}>
-                                ${pauseOptions.map(o => html`
-                                    <option value=${o} ?selected=${o === pauseDuration}>
-                                        ${this._t(`pause_duration_${o}`) || o}
-                                    </option>`)}
-                            </select>
-                            <button class="ct-pause-btn"
-                                    @click=${(e) => { e.stopPropagation(); this._pressButton(pauseButtonId); }}
-                                    title=${this._t('pause_charging_hint')}>
-                                <ha-icon icon="mdi:pause-octagon-outline" style="--mdc-icon-size:15px"></ha-icon>
-                                ${pauseRunning ? this._t('pause_charging_again') : this._t('pause_charging')}
-                            </button>
-                        </span>
-                    </div>
                     ${pauseRunning ? html`
+                    <!-- A running pause is what the mode reads Off for: it
+                         stays beside the mode in both views; the button that
+                         starts one is under More. -->
                     <div class="ct-subhint">
                         <div class="ct-hint-row">
                             <ha-icon icon="mdi:pause-circle-outline" style="--mdc-icon-size:13px;color:#8DC892"></ha-icon>
@@ -1377,15 +1526,6 @@ class SEMEVStatusCard extends SEMLitBase {
                                         .replace('{time}', pauseUntilLabel)}
                                     <span style="opacity:.75"> ${this._t('pause_resume_hint')}</span>`
                                 : this._t('pause_resuming')}</span>
-                        </div>
-                    </div>
-                    ` : nothing}
-                    ` : nothing}
-                    ${chargeMode === 'solar_plus_battery' && learnerLearning ? html`
-                    <div class="ct-subhint">
-                        <div class="ct-hint-row">
-                            <ha-icon icon="mdi:school-outline" style="--mdc-icon-size:13px;color:#5BC8D8"></ha-icon>
-                            <span class="ct-hint-text">${learnerInfo}</span>
                         </div>
                     </div>
                     ` : nothing}
@@ -1416,101 +1556,78 @@ class SEMEVStatusCard extends SEMLitBase {
                             <b style="color:#8DC892">${nextCheapLabel}</b>
                         </div>
                     ` : nothing)}
-                    ${phaseModeExists ? html`
-                    <div class="ct-row">
-                        <span class="ct-label">${this._t('phase_mode')}</span>
-                        <span class="ct-ctl">
-                            <select class="ct-mode-select"
-                                    .value=${phaseMode}
-                                    @click=${(e) => e.stopPropagation()}
-                                    @change=${(e) => this._selectOption(phaseModeEntityId, e.target.value)}>
-                                ${phaseOptions.map(o => html`
-                                    <option value=${o} ?selected=${o === phaseMode}>
-                                        ${phaseLabels[o] || o}
-                                    </option>`)}
-                            </select>
-                        </span>
-                    </div>
-                    <div class="ct-subhint">
-                        <div class="ct-hint-row">
-                            <span class="ct-hint-text">
-                                <ha-icon icon="mdi:sine-wave" style="--mdc-icon-size:12px;color:#8DC892"></ha-icon>
-                                ${phaseStatus}
-                            </span>
-                        </div>
-                    </div>
-                    ` : nothing}
-                    <div class="ct-row clickable"
-                        @click=${() => this.dispatchEvent(new CustomEvent('hass-more-info',
-                            { bubbles: true, composed: true, detail: { entityId: targetTimeId } }))}>
+                    <div class="ct-row clickable charge-by-row"
+                        @click=${() => moreInfo(targetTimeId)}>
                         <span class="ct-label">${this._t('ev_charge_by')}</span>
                         <span class="ct-ctl ct-time">
                             <ha-icon icon="mdi:clock-end" style="--mdc-icon-size:13px;color:#5BC8D8"></ha-icon>
                             ${targetTimeLabel}
-                            ${Object.keys(dep.by_weekday || {}).length ? html`<span class="dep-most">· ${this._t('ev_dep_most_days')}</span>` : nothing}
+                            ${hasOwnDays ? html`<span class="dep-most">· ${this._t('ev_dep_most_days')}</span>` : nothing}
                         </span>
                     </div>
+                    ${hasOwnDays && nextDep.label ? html`
+                    <!-- (#1023) A weekday with its own time makes the next
+                         departure worth saying; otherwise it is Charge by. -->
+                    <div class="ct-subhint dep-hint">
+                        <div class="ct-hint-row">
+                            <span class="ct-hint-text">${nextPre}<b class="dep-next">${nextDep.label}</b>${nextPost}</span>
+                        </div>
+                    </div>` : nothing}
                     ${deadlineUnreachable ? html`
                         <div class="ct-warn">
                             <ha-icon icon="mdi:clock-alert" style="--mdc-icon-size:14px;color:#f06292"></ha-icon>
                             <span>${this._t('ev_deadline_unreachable_short')}</span>
                         </div>
                     ` : nothing}
-                    ${this._renderDepartureRows(id, dep, depDefault)}
-                    ${this._renderPlanStrip(id)}
-                    ${this._renderBoostRow(id, dep, csAttrs)}
+                    ${this._renderFold(id, 'more', 'ev_fold_more', moreContent)}
                 </div>
 
+                ${this._renderFold(id, 'details', 'ev_fold_details', detailsContent)}
+
+                ${all ? html`
                 <div class="charger-settings ${this._showHelp ? 'help-mode' : ''}">
                     ${''/* ONE current knob: Min Amps. SEM auto-finds a fussy
                        car's start current and settles back here (#536). */}
                     <div class="setting-cell">
-                        <div
-                            class="setting-item clickable"
-                            @click=${() => {
-                                const event = new CustomEvent('hass-more-info', { bubbles: true, composed: true, detail: { entityId: `number.sem_charger_${id}_minimum_current` } });
-                                this.dispatchEvent(event);
-                            }}
-                        >
+                        <div class="setting-item clickable" @click=${() => moreInfo(minAmpsId)}>
                             <ha-icon icon="mdi:speedometer-slow" style="--mdc-icon-size:16px;color:#ff9800"></ha-icon>
                             <span class="setting-value">${this._fmt(minAmps, 0)}A</span>
                         </div>
-                        ${this._showHelp ? html`<div class="setting-help">${this._t('tile_help_min_amps')}</div>` : nothing}
+                        ${tileHelp('tile_help_min_amps')}
                     </div>
                     <div class="setting-cell">
-                        <div
-                            class="setting-item clickable"
-                            @click=${() => {
-                                const event = new CustomEvent('hass-more-info', { bubbles: true, composed: true, detail: { entityId: `number.sem_charger_${id}_ev_battery_capacity_kwh` } });
-                                this.dispatchEvent(event);
-                            }}
-                        >
+                        <div class="setting-item clickable" @click=${() => moreInfo(capacityId)}>
                             <ha-icon icon="mdi:car-battery" style="--mdc-icon-size:16px;color:#8DC892"></ha-icon>
                             <span class="setting-value">${this._fmt(capacityKwh, 0)} kWh</span>
                         </div>
-                        ${this._showHelp ? html`<div class="setting-help">${this._t('tile_help_capacity')}</div>` : nothing}
+                        ${tileHelp('tile_help_capacity')}
                     </div>
                     <div class="setting-cell">
-                        <div
-                            class="setting-item clickable"
-                            @click=${() => {
-                                const event = new CustomEvent('hass-more-info', { bubbles: true, composed: true, detail: { entityId: `number.sem_charger_${id}_ev_kwh_per_100km` } });
-                                this.dispatchEvent(event);
-                            }}
-                        >
+                        <div class="setting-item clickable" @click=${() => moreInfo(consumptionId)}>
                             <ha-icon icon="mdi:map-marker-distance" style="--mdc-icon-size:16px;color:#5BC8D8"></ha-icon>
                             <span class="setting-value">${this._fmt(consumption, 0)} kWh/100km</span>
                         </div>
-                        ${this._showHelp ? html`<div class="setting-help">${this._t('tile_help_consumption')}</div>` : nothing}
+                        ${tileHelp('tile_help_consumption')}
                     </div>
-                    <ha-icon
-                        class="ev-help-toggle ${this._showHelp ? 'on' : ''}"
-                        icon="${this._showHelp ? 'mdi:help-circle' : 'mdi:help-circle-outline'}"
-                        title="${this._t('zone_help_toggle')}"
-                        @click=${() => this._toggleHelp()}
-                        style="--mdc-icon-size:16px"
-                    ></ha-icon>
+                    ${helpToggle}
+                </div>` : html`
+                <!-- Everyday: the three set-once values on one line; each
+                     opens the same more-info its tile does. -->
+                <div class="set-once">
+                    <span class="set-once-label">${this._t('ev_set_once')}:</span>
+                    <button class="set-once-val" type="button" @click=${() => moreInfo(capacityId)}>${this._fmt(capacityKwh, 0)} kWh</button>
+                    <span class="set-once-sep">·</span>
+                    <button class="set-once-val" type="button" @click=${() => moreInfo(minAmpsId)}>${this._fmt(minAmps, 0)} A</button>
+                    <span class="set-once-sep">·</span>
+                    <button class="set-once-val" type="button" @click=${() => moreInfo(consumptionId)}>${this._fmt(consumption, 0)} kWh/100 km</button>
+                    ${helpToggle}
                 </div>
+                ${this._showHelp ? html`
+                <div class="set-once-help">
+                    ${tileHelp('tile_help_capacity')}
+                    ${tileHelp('tile_help_min_amps')}
+                    ${tileHelp('tile_help_consumption')}
+                </div>` : nothing}`}
             </div>
         `;
     }
@@ -1581,6 +1698,17 @@ class SEMEVStatusCard extends SEMLitBase {
 
             <ha-card>
                 <div class="${wrapClass}">
+                    ${this._chargers.length >= 1 ? html`
+                    <!-- The same switch as on the Configuration tab: one
+                         setting for every SEM card, kept per browser. -->
+                    <div class="view-switch" role="group" aria-label=${this._t('ev_view_label')}>
+                        <button class="view-seg ${this._allSettings ? '' : 'on'}" type="button"
+                                aria-pressed=${this._allSettings ? 'false' : 'true'}
+                                @click=${() => this._setView(false)}>${this._t('ev_view_everyday')}</button>
+                        <button class="view-seg ${this._allSettings ? 'on' : ''}" type="button"
+                                aria-pressed=${this._allSettings ? 'true' : 'false'}
+                                @click=${() => this._setView(true)}>${this._t('ev_view_all')}</button>
+                    </div>` : nothing}
                     <div class="hero">
                         <div class="ev-icon-area">
                             <svg viewBox="0 0 100 100">
@@ -1969,6 +2097,59 @@ class SEMEVStatusCard extends SEMLitBase {
             .setting-toggle.off { background: rgba(100,100,100,0.15); color: #666; }
             .setting-toggle:hover { opacity: 0.8; }
 
+            /* The view switch: Everyday | All settings */
+            .view-switch {
+                display: flex; justify-content: flex-end;
+                margin: -6px -8px 6px 0;
+            }
+            .view-seg {
+                font: inherit; font-size: 11px; font-weight: 600;
+                padding: 3px 10px; min-height: 24px;
+                border: 1px solid var(--divider-color, rgba(255,255,255,0.12));
+                background: transparent; cursor: pointer;
+                color: var(--secondary-text-color, #999);
+            }
+            .view-seg:first-child { border-radius: 8px 0 0 8px; }
+            .view-seg:last-child { border-radius: 0 8px 8px 0; border-left: none; }
+            .view-seg.on { background: rgba(141,200,146,0.18); color: #8DC892; }
+            .view-seg:focus-visible, .fold-btn:focus-visible, .set-once-val:focus-visible {
+                outline: 2px solid #8DC892; outline-offset: 1px;
+            }
+            /* Folds: More (inside Charge Target) and Details (below it) */
+            .fold-btn {
+                display: flex; align-items: center; justify-content: space-between;
+                width: 100%; min-height: 32px; padding: 4px 0;
+                font: inherit; font-size: 11px; font-weight: 600;
+                text-transform: uppercase; letter-spacing: 0.05em;
+                color: var(--secondary-text-color, #999);
+                background: none; border: none; cursor: pointer;
+                border-top: 1px solid rgba(255,255,255,0.06);
+            }
+            .fold-btn:hover { color: var(--primary-text-color, #e0e0e0); }
+            .fold-details { margin-top: 8px; padding: 0 2px; }
+            .fold-details > .fold-btn { border-top: none; }
+            .details-now {
+                display: flex; flex-wrap: wrap; gap: 4px 14px;
+                padding: 2px 0 4px;
+            }
+            .details-now > span { display: inline-flex; gap: 6px; align-items: baseline; }
+            /* Everyday: the three set-once values on one line */
+            .set-once {
+                display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
+                margin-top: 8px; padding-top: 8px;
+                border-top: 1px solid var(--divider-color, rgba(255,255,255,0.12));
+                font-size: 11px; color: var(--secondary-text-color, #999);
+            }
+            .set-once-val {
+                font: inherit; font-size: 12px; font-weight: 600;
+                color: var(--primary-text-color, #e0e0e0);
+                background: none; border: none; padding: 2px; cursor: pointer;
+                font-variant-numeric: tabular-nums;
+            }
+            .set-once-val:hover { text-decoration: underline; }
+            .set-once-help { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+            .set-once-help .setting-help { padding-left: 0; }
+
             /* Charge Target group (#235) */
             .charge-target-group {
                 margin-top: 8px;
@@ -2126,7 +2307,7 @@ class SEMEVStatusCard extends SEMLitBase {
             .sessions-span { color: #b5b5b5; font-weight: 400; }
             .sessions-foot { justify-content: space-between; min-height: 28px; }
             .sessions-foot .clickable { cursor: pointer; }
-            .sessions-csv { color: #5BC8D8; display: flex; gap: 4px; align-items: center; cursor: pointer; }
+            .sessions-dl { color: #5BC8D8; display: flex; gap: 4px; align-items: center; cursor: pointer; }
             .sessions-note { padding: 8px 0 4px; }
             /* 12h EV plan strip (#282, readability pass #464) */
             .plan-strip {

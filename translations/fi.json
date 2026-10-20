@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "EV-laturit",
-        "description": "Hallitse EV-laturiesi määrityksiä.",
+        "description": "Laturi on valinnainen. Eikö sinulla ole EV-laturia? Jätä ensimmäinen vaihtoehto valituksi ja lähetä.",
         "data": {
           "action": "Toiminto"
         },
@@ -1522,6 +1522,9 @@
       },
       "ev_morning_window_enabled": {
         "name": "Aamuikkuna sähköautolle"
+      },
+      "simulation_tab": {
+        "name": "Simulointivälilehti"
       }
     },
     "number": {
@@ -1892,7 +1895,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM tarkistaa kahta arvattua verkkomittaria",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Asetukset**, and switch on **Lisäasetukset** at the top. Then set **Verkon teho** in section **Anturilähteet**. If your meter has one sensor for import and one for export, set **Verkon tuontianturi** and **Verkon vientianturi** in section **Tariffi ja hinnoittelu** instead."
+      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Asetukset**, and pick **Kaikki asetukset** at the top. Then set **Verkon teho** in section **Anturilähteet**. If your meter has one sensor for import and one for export, set **Verkon tuontianturi** and **Verkon vientianturi** in section **Tariffi ja hinnoittelu** instead."
     },
     "battery_control_write_not_taken": {
       "title": "Akun ohjauskirjoitus ei jää voimaan: {entity_id}",
@@ -1912,7 +1915,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM ei löytänyt verkkomittareitasi",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Asetukset**, and switch on **Lisäasetukset** at the top. Then set **Verkon teho** in section **Anturilähteet**. If your meter has one sensor for import and one for export, set **Verkon tuontianturi** and **Verkon vientianturi** in section **Tariffi ja hinnoittelu** instead."
+      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Asetukset**, and pick **Kaikki asetukset** at the top. Then set **Verkon teho** in section **Anturilähteet**. If your meter has one sensor for import and one for export, set **Verkon tuontianturi** and **Verkon vientianturi** in section **Tariffi ja hinnoittelu** instead."
     },
     "charger_device_gone": {
       "title": "Laturi {name}: laite puuttuu",

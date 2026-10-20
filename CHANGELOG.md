@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- ✨ **Simulation check skips days where a counter jumped, and says how many days it used** (#1083). Car days show their own error line.
+- ✨ **Simulation total counts car energy the what-if did not deliver; re-priced actuals are marked** (#1083).
+- ✨ **The EV tab opens in Everyday view**: per charger, mode, target and Charge by; pause, departures, plan and sessions fold under More and Details.
+- ✨ **The Configuration tab opens on Everyday: only what SEM needs, in three groups** (#830). All settings shows the rest, one tap away.
+- ✨ **The EV charger page in Configure says a charger is optional** (#1103). No EV charger? Keep the first option and submit.
 - 🐛 **A shared car energy counter that jumps while every charger reads 0 W no longer counts as charging** (#1157). This includes the Energy Dashboard counter.
 
 # [2.2.0-beta.23] — 20.10.2026
@@ -23,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 **Charge pacing keeps its 10 % headroom on every re-plan** (#820). The pack is now planned full before the last sunny hour.
 - 🐛 **Battery session average power no longer spikes to megawatts when a session starts** (#1155). It now reads the real power from the first update.
+- ✨ **Simulation tab: replay your recorded days with another battery, reserve, peak limit or price** (#1083). Estimated cost per day type. Off by default.
+- 🔧 **You now download Simulation results and EV sessions as Excel files (.xlsx)** (#1083). A CSV did not open right in every country.
+- 🔧 **SEM can tag each finished day: sunny, grey, car, cheap prices or a data gap** (#1083). Off by default; diagnostics show the last seven.
+- ✨ **Simulation: swipe the days on a phone, pick the newest with a slider, try batteries up to 150 kWh** (#1083). A car pack fits.
+- 🐛 **The SEM dashboard is built from the SEM entry that runs** (#1083). An ignored or disabled second entry could hide the Simulation tab.
+- 🐛 **Simulation: a counter jump on a day with a missing hour no longer buys energy from the grid** (#1083). One day showed +26.
+- 🐛 **Simulation: a bigger battery no longer buys a bigger night charge** (#1083). A negative price charges only in its own hours.
+- ✨ **Simulation runs one period: last 30/90/365 days, a month or the newest days** (#1083). The battery carries its charge; short gaps are bridged.
+- ✨ **Simulation results: net incl. stored energy, per month, energy totals; tap a day for why it differs** (#1083). Day types filter the result.
+- ✨ **Simulation: try battery power, more solar, no battery for the car, or a one-tap scenario** (#1083). The Excel file has the per-day energy.
 
 # [2.2.0-beta.21] — 17.10.2026
 

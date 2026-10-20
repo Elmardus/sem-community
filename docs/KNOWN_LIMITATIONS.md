@@ -444,3 +444,34 @@ purpose (a dead controller must not strand the car). SEM stops once and
 does not fight the box; it raises a Repair instead. A stop only holds if
 SEM's arming is turned off (`keba_arm_failsafe: false` via `set_option`)
 and the box's own `Curr FS` is set to 0.
+
+## Simulation tab: estimates from hourly averages (#1083)
+
+The Simulation tab gives estimates, not measurements:
+
+- **Hourly averages.** It reads Home Assistant's hourly history. 15-minute
+  prices and short power peaks inside an hour are averaged away, and the
+  peak limit is checked per hour.
+- **The car and your loads stay as recorded.** Only the battery and the
+  grid change. A bigger battery does not move the car's charging.
+- **Two features are off in the simulation:** spending the battery on the
+  forecast, and the export guard.
+- **No data, no day.** Days before SEM was installed, or before Home
+  Assistant kept its history, cannot be simulated.
+- **Older days are judged by the hour.** Days older than Home Assistant's
+  history are tagged from hourly totals: sunny when the day came close to
+  the best day of the month around it and no hour dipped. A cloud that
+  passes inside one hour is not seen.
+- **One changed decision changes the rest.** Once the simulated battery
+  does something different from the real one, every hour after it is an
+  estimate (marked est.).
+- **The night plan knows the day.** A day without a stored forecast (one
+  read back from history) plans its night with its own solar: a perfect
+  forecast. The night charge is never more than the day needs, which can
+  be a little better than live SEM, whose plan rests on a learned house use.
+- **A short gap is bridged with your real battery's change.** Over one or
+  two missing days the simulated battery moves as your real one did; what
+  a bigger battery would have done on those days is not known.
+- **More solar keeps your house and car as recorded.** Only the solar hours
+  grow; nothing moves to use the extra sun, except what the car's charge
+  mode does on its own.

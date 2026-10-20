@@ -65,7 +65,7 @@
     "test_825_comparable_total.py": 1,
     "test_829_778_retention_safety.py": 5,
     "test_829_recorder_churn.py": 3,
-    "test_830_default_view_ratchet.py": 5,
+    "test_830_default_view_ratchet.py": 3,
     "test_833_plug_reader_delegates.py": 1,
     "test_841_peak_is_not_additive.py": 1,
     "test_845_mode_watch.py": 3,
@@ -100,5 +100,5 @@
     "test_pv_path_telemetry.py": 1,
     "test_switch.py": 3
   },
-  "total": 227
+  "total": 225
 }

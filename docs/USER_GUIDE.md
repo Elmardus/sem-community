@@ -24,6 +24,7 @@ Complete reference for Solar Energy Management (SEM).
 - [Peak Load Management](#peak-load-management)
 - [Tariff Integration](#tariff-integration)
 - [Solar Forecast](#solar-forecast)
+- [Simulation tab](#simulation-tab-1083)
 - [Observer Mode](#observer-mode)
 - [Sensors Reference](#sensors-reference)
 - [Daily Energy Reset](#daily-energy-reset)
@@ -1280,7 +1281,7 @@ SEM supports active control of **multiple EV chargers** (v1.4.0+). Add chargers 
 
 SEM keeps the last 400 finished charging sessions: start, end, charger,
 energy, solar share, cost and duration. The EV tab shows them per charger
-with a month view and totals, and a CSV button.
+with a month view and totals, and a download button (.xlsx).
 
 For your own log, call the service `solar_energy_management.export_session_history`
 from a script or automation. It returns the rows and the same rows as
@@ -1743,6 +1744,114 @@ automation can use it without a phone.
 "Night start" and "morning" are SEM's own night window (sunset and
 sunrise, bounded by the night settings), not fixed hours. The
 comparisons need three past nights or days first.
+
+---
+
+## Simulation tab (#1083)
+
+The Simulation tab asks "what if?" about days you already had. Pick a
+period, change a few battery, solar or price settings, and SEM shows what
+that period would have cost. Every simulated number is an estimate.
+
+### Switch it on
+
+**Configuration tab → All settings → Advanced → Simulation tab**, then
+reload the page.
+The tab is off by default. Turning it on also tags each day and reads the
+last 90 days from Home Assistant's history once, in the background.
+
+### Pick a period
+
+A battery carries its charge from one day to the next: a grey day after a
+sunny one starts with what the sunny day stored. So a run is always one
+continuous period, never single days:
+
+- **Last 30 / 90 / 365 days**
+- **Month**: one month from the list
+- **Most recent days**: drag the slider to take the newest days in one move
+
+The line under the picks shows the period and how many recorded days it
+holds. A day with a data gap (⚠️) is left out. The battery bridges a gap of
+up to two days: it keeps its level, moved by what your real battery gained
+or lost on those days. A longer gap starts again from your battery's
+recorded level. At most 365 days per run.
+
+### What if
+
+Each field shows your setting now and the value to try:
+
+- **Battery size** (kWh) — up to 150 kWh, so you can try a car battery as
+  home storage
+- **Battery charge power** and **Battery discharge power** (W) — a bigger
+  battery usually has more power
+- **Battery reserve** (%)
+- **Peak limit** (kW)
+- **Solar (PV)** — extra kWp on top of your system size, or a factor when
+  SEM does not know the size. Each recorded solar hour grows by that much;
+  with an inverter AC limit set, an hour never goes above it
+- **Import price** and **Export value** — as recorded, or one flat price
+- **Battery mode** and **Car charge mode**
+- **Battery may help the car** — No means the car never takes energy from
+  the battery
+
+**Scenarios** fill the fields in one tap: **+1 battery** (twice the size
+and power), **More solar** (asks how many kWp), **Cars on Solar + cheap**,
+**No battery for the car**. You can still change any field afterwards.
+
+### Run and stop
+
+**Run simulation** starts it. It runs on your Home Assistant, one day at a
+time, and shows how far it is. **Stop** ends it; the days done so far are
+kept. One run at a time.
+
+### Read the results
+
+- **Net incl. stored energy** is the headline: the difference with the
+  energy the simulated battery still holds counted. A bigger battery that
+  ends the period fuller has not lost that energy.
+- Each day shows the actual cost, the simulated cost and the difference.
+  Green is cheaper, orange is dearer. A sunny day can be dearer with a
+  bigger battery: it stores sun it would have sold, and the grey days after
+  it spend that energy.
+- Tap a day to open it: grid import and export, battery charge and
+  discharge, the battery at the day's end (actual → simulated), the
+  difference with what the battery gained that day, and why the day came
+  out as it did (for example "charge from grid 8.0 kWh at 0.20").
+- The day-type tiles (sunny, mixed, grey, car, cheap) are filters: tap one
+  to see only those days and their totals; tap **All days** to go back.
+  They never change what was simulated.
+- **Per month**: the difference per month, and the months where the what-if
+  comes out cheaper.
+- **Energy**: grid import, grid export, self-consumption and battery
+  cycles, actual → simulated.
+- **Extra energy left in the battery at stretch ends, summed**: what the
+  simulated battery held more (or less) than your real one at the end of
+  each stretch, added up. With several stretches it can be more than the
+  battery itself.
+- **est.** means estimated. The simulation runs SEM's real battery
+  decisions hour by hour, but the flows after a changed decision come
+  from the energy balance, not a meter.
+- **Indicative** days had a missing hour, price or battery level, or a
+  counter that jumped. Read them as a rough guide.
+- Before showing a what-if, SEM replays the same period with your own
+  settings. If that misses your real cost by more than 5 %, the tab says
+  the period cannot be simulated reliably instead.
+
+How the night charge is replayed: SEM's real scheduler plans each night
+from that day's forecast (a day without a stored forecast uses its own
+solar instead), never charges more than the day needs, charges at a
+negative price only in the hours that are negative, and stops by the end
+of the night (sunrise, at the latest 07:00).
+
+### Download
+
+**Download** saves the results as an Excel file (.xlsx): one row per day
+with grid and battery energy, the battery at the day's end and a short
+note; the difference per month; totals per day type with energy actual
+against simulated; and notes. The EV tab's session download is an .xlsx
+file too.
+
+Limits: [Known Limitations → Simulation tab](KNOWN_LIMITATIONS.md#simulation-tab-estimates-from-hourly-averages-1083).
 
 ---
 

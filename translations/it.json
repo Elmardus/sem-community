@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "Caricatori VE",
-        "description": "Gestisci la configurazione del tuo caricatore VE.",
+        "description": "Il caricatore è facoltativo. Nessun caricatore VE? Lascia selezionata la prima opzione e invia.",
         "data": {
           "action": "Azione"
         },
@@ -1522,6 +1522,9 @@
       },
       "ev_morning_window_enabled": {
         "name": "Finestra mattutina EV"
+      },
+      "simulation_tab": {
+        "name": "Scheda simulazione"
       }
     },
     "number": {
@@ -1892,7 +1895,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM sta controllando due contatori di rete indovinati",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Configurazione**, and switch on **Avanzate** at the top. Then set **Potenza di rete** in section **Sorgenti dei sensori**. If your meter has one sensor for import and one for export, set **Sensore importazione rete** and **Sensore esportazione rete** in section **Tariffa e prezzi** instead."
+      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Configurazione**, and pick **Tutte le impostazioni** at the top. Then set **Potenza di rete** in section **Sorgenti dei sensori**. If your meter has one sensor for import and one for export, set **Sensore importazione rete** and **Sensore esportazione rete** in section **Tariffa e prezzi** instead."
     },
     "battery_control_write_not_taken": {
       "title": "Una scrittura di controllo batteria non viene accettata: {entity_id}",
@@ -1912,7 +1915,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM non è riuscito a trovare i tuoi contatori di potenza di rete",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Configurazione**, and switch on **Avanzate** at the top. Then set **Potenza di rete** in section **Sorgenti dei sensori**. If your meter has one sensor for import and one for export, set **Sensore importazione rete** and **Sensore esportazione rete** in section **Tariffa e prezzi** instead."
+      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Configurazione**, and pick **Tutte le impostazioni** at the top. Then set **Potenza di rete** in section **Sorgenti dei sensori**. If your meter has one sensor for import and one for export, set **Sensore importazione rete** and **Sensore esportazione rete** in section **Tariffa e prezzi** instead."
     },
     "charger_device_gone": {
       "title": "Caricatore {name}: dispositivo mancante",
