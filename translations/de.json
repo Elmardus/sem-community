@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "EV-Ladegeräte",
-        "description": "Verwalte die Konfiguration deiner EV-Ladegeräte.",
+        "description": "Ein Ladegerät ist optional. Kein EV-Ladegerät? Lass die erste Option gewählt und sende ab.",
         "data": {
           "action": "Aktion"
         },

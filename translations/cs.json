@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "Nabíječky EV",
-        "description": "Spravujte konfiguraci svých nabíječek EV.",
+        "description": "Nabíječka je volitelná. Nemáte nabíječku EV? Ponechte vybranou první možnost a odešlete formulář.",
         "data": {
           "action": "Akce"
         },

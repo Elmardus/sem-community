@@ -535,7 +535,7 @@
       },
       "ev_charger_menu": {
         "title": "EV-opladere",
-        "description": "Administrer konfigurationen af dine EV-opladere.",
+        "description": "En oplader er valgfri. Har du ingen EV-oplader? Behold den første mulighed valgt, og send.",
         "data": {
           "action": "Handling"
         },

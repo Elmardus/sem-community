@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- ✨ **The EV charger page in Configure says a charger is optional** (#1103). No EV charger? Keep the first option and submit.
 - 🐛 **A charger counter that jumps at plug-in after a quiet day no longer counts as charging** (#1101). Earlier restarts let the jump through.
 
 # [2.2.0-beta.22] — 18.10.2026
