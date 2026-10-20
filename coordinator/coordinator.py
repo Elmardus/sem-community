@@ -435,6 +435,27 @@ def battery_unseen(coordinator) -> bool:
     return not detected > 0
 
 
+def _entity_device_lookup(hass):
+    """(#1159) ``entity_id → device id`` from the entity registry, or None.
+    No registry (no hass, a test double) or any failure answers None."""
+    from homeassistant.helpers import entity_registry as er
+    try:
+        reg = er.async_get(hass) if hass is not None else None
+    except Exception:  # noqa: BLE001 — no registry is no answer
+        reg = None
+
+    def device_of(entity_id) -> Optional[str]:
+        if reg is None or not entity_id:
+            return None
+        try:
+            device = getattr(reg.async_get(entity_id), "device_id", None)
+        except Exception:  # noqa: BLE001 — a failed look is not an answer
+            return None
+        return device if isinstance(device, str) and device else None
+
+    return device_of
+
+
 def _control_device_says_not_now(hass, entity_id: str) -> bool:
     """(#1032) Read the device beside a control entity for
     ``control_entity.device_says_not_now``: the entity's own attributes and
@@ -2361,26 +2382,80 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         the charger ids whose charging it counts, so a jump can be checked
         against their power. A charger's own counter counts that charger; a
         counter two chargers name counts both. A fallback (legacy daily
-        sensor, Energy Dashboard ``ev_energy``) is given the whole fleet: SEM
-        does not know which boxes it counts (the Energy Dashboard's is its
-        first EV device), and more boxes only leave a jump more room. Ids and
-        the primary's top-level counter as in ``_own_ev_counters``."""
+        sensor, Energy Dashboard ``ev_energy``) counts the one charger SEM can
+        tie it to (``_ev_counter_charger``, #1159), else it is given the whole
+        fleet: more boxes only leave a jump more room. Ids and the primary's
+        top-level counter as in ``_own_ev_counters``."""
+        return SEMCoordinator._ev_counter_scope(self)[0]
+
+    def _ev_counters_guessed(self) -> List[str]:
+        """(#1159) The counters ``_ev_counter_boxes`` gives the whole fleet of
+        several boxes only because SEM cannot tell which boxes they count.
+        None of their draw is owed at the day's start: the Energy Dashboard's
+        counter may count one box, and the others' draw would eat its moves."""
+        return SEMCoordinator._ev_counter_scope(self)[1]
+
+    def _ev_counter_scope(self) -> "tuple[Dict[str, List[str]], List[str]]":
+        """(#1157 #1159) ``(boxes, guessed)`` — see the two methods above."""
         top_level = self.config.get("ev_total_energy_sensor")
         fleet: List[str] = []
         named: Dict[str, List[str]] = {}
+        cards: Dict[str, Dict[str, Any]] = {}
         for index, charger in enumerate(self.config.get("ev_chargers") or []):
             if not isinstance(charger, dict):
                 continue
             cid = charger.get("id") or f"ev_charger_{index}"
             fleet.append(cid)
+            cards[cid] = charger
             entity = (charger.get("ev_total_energy_sensor")
                       or (top_level if index == 0 else None))
             if entity:
                 named.setdefault(entity, []).append(cid)
         if not fleet:
             fleet = ["ev_charger"]  # flat keys: ``primary_charger_id``
-        return {e: named.get(e, list(fleet))
-                for e in self._collect_ev_counter_entities()}
+        boxes: Dict[str, List[str]] = {}
+        guessed: List[str] = []
+        for entity in self._collect_ev_counter_entities():
+            if entity in named:
+                boxes[entity] = named[entity]
+                continue
+            tied = (SEMCoordinator._ev_counter_charger(self, entity, cards)
+                    if len(fleet) > 1 else None)
+            boxes[entity] = [tied] if tied else list(fleet)
+            if not tied and len(fleet) > 1:
+                guessed.append(entity)
+        return boxes, guessed
+
+    def _ev_counter_charger(
+        self, counter: str, cards: Dict[str, Dict[str, Any]],
+    ) -> Optional[str]:
+        """(#1159) The one charger a counter no charger names belongs to, or
+        None. A charger is it when the counter sits on that charger's device
+        (entity registry), or — for the Energy Dashboard's counter — when the
+        power sensor beside it there is the charger's own. Only one charger
+        may answer, and it must read its own power sensor, so the step check
+        and ``owed`` read that box alone. Two chargers on one device, or no
+        answer: None."""
+        from ..hardware_detection import charger_entity_ids
+        ed = getattr(self, "_energy_dashboard_config", None)
+        paired = (getattr(ed, "ev_power", None)
+                  if counter == getattr(ed, "ev_energy", None) else None)
+        device_of = _entity_device_lookup(getattr(self, "hass", None))
+        here = device_of(counter)
+        found = set()
+        for cid, card in cards.items():
+            devices = {device_of(e) for e in charger_entity_ids(card)}
+            devices.add(card.get("ev_service_device_id"))
+            if ((paired and paired == card.get("ev_charging_power_sensor"))
+                    or (here and here in devices)):
+                found.add(cid)
+        if len(found) != 1:
+            return None
+        cid = found.pop()
+        card = cards[cid]
+        # Read on its own: the reader keys a box's power by the card's id.
+        return (cid if card.get("id") and card.get("ev_charging_power_sensor")
+                else None)
 
     def _ev_counters_cover_fleet(self) -> bool:
         """(#1049) Does every charger have a counter of its own? Only then
@@ -2637,6 +2712,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             complete=self._ev_counters_cover_fleet(),
             owners=self._ev_counter_owners(),
             boxes=self._ev_counter_boxes(),
+            guessed=self._ev_counters_guessed(),
         )
 
         # Log EV sensor configuration

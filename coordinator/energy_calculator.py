@@ -408,6 +408,9 @@ class EnergyCalculator:
         # sensor, Energy Dashboard), or the chargers that name one counter.
         # The step check reads these boxes' power.
         self._ev_counter_boxes: Dict[str, Tuple[str, ...]] = {}
+        # (#1159) Counters given the whole fleet because SEM does not know
+        # which boxes they count: none of their ``pending`` is owed.
+        self._ev_counter_guessed: Set[str] = set()
         # (#1049) Owners drawing charging power this cycle. Runtime only.
         self._ev_owners_drawing: Set[str] = set()
         # (#1049) Per counter: the kWh its box drew since the counter last
@@ -1030,6 +1033,7 @@ class EnergyCalculator:
         complete: bool = False,
         owners: Optional[Dict[str, str]] = None,
         boxes: Optional[Dict[str, List[str]]] = None,
+        guessed: Optional[List[str]] = None,
     ) -> None:
         """Enable daily-EV reconciliation against wallbox counters (#658).
 
@@ -1056,6 +1060,10 @@ class EnergyCalculator:
         counts. A counter is checked against the power of these boxes
         (``_track_ev_pending``); one with no boxes is not checked. An owner is
         its counter's one box when ``boxes`` does not name it.
+
+        ``guessed`` (#1159): the counters whose boxes are the whole fleet only
+        because SEM does not know which boxes they count. Their ``pending``
+        is never owed at an anchor (``_ev_counter_owes``).
 
         Gated by the same ``prefer_hardware_energy`` option as the solar
         counters — it is the same promise ("trust the hardware over my
@@ -1088,6 +1096,8 @@ class EnergyCalculator:
         for entity_id, owner in owners.items():
             counted.setdefault(entity_id, (owner,))
         self._ev_counter_boxes = {e: b for e, b in counted.items() if b}
+        self._ev_counter_guessed = {e for e in (guessed or [])
+                                    if e in self._ev_counter_boxes}
         self._ev_counter_complete = bool(complete) and all(
             e in owners for e in self._ev_counter_entities)
         if self._ev_counter_enabled and not self._ev_counter_logged:
@@ -2442,14 +2452,12 @@ class EnergyCalculator:
             bl["whole"] = sorted(entities) if whole else None
             # (#1049) What a box drew before the anchor and its counter has
             # not reported yet. That counter's next move pays it first: it
-            # belongs to the row before the anchor, not to this one. Only a
-            # counter of one box (#1157): over several boxes ``pending`` adds
-            # up all of them, though the counter may count one (the Energy
-            # Dashboard's is its first EV device) — the rest would eat its
-            # real moves.
+            # belongs to the row before the anchor, not to this one. Only
+            # where ``pending`` is what the counter's own boxes drew
+            # (``_ev_counter_owes``, #1157 #1159). ``_trim_ev_owed`` ends it.
             bl["owed"] = {
                 e: self._ev_counter_pending[e] for e in entities
-                if len(self._ev_counter_boxes.get(e, ())) == 1
+                if self._ev_counter_owes(e)
                 and self._ev_counter_pending.get(e, 0.0) > 0.0
             }
         owed = bl.setdefault("owed", {})
@@ -2542,6 +2550,14 @@ class EnergyCalculator:
         up, and its room grows as fast as all of them at once. Before, only a
         box's own counter was checked, so a fallback's jump was booked while
         every box read 0 W.
+
+        (#1159) What a row owes a counter (``owed``) is never more than what
+        SEM saw its boxes draw that the counter has not shown yet: ``pending``
+        (since it last moved) or ``unreported`` (across moves, until the
+        late-report wait). A counter that has not moved since still owes it
+        all, however late. Once it has moved and the wait has passed, a late
+        jump is judged foreign and books nothing, so nothing is owed any
+        more. Before, what was left took the next real charge that day.
         """
         self._ev_owners_drawing = set()
         self._ev_counter_foreign = {}
@@ -2589,6 +2605,11 @@ class EnergyCalculator:
             seen = self._ev_counter_seen.get(entity_id)
             room = self._ev_counter_room.get(entity_id)
             unseen = self._ev_counter_unseen_kwh.get(entity_id, 0.0)
+            unreported = self._ev_counter_unreported.get(entity_id, 0.0)
+            # (#1159) Before this cycle adds to them: what SEM saw drawn
+            # that the counter has not shown yet.
+            self._trim_ev_owed(entity_id, max(
+                self._ev_counter_pending.get(entity_id, 0.0), unreported))
             # As much as every box it counts could draw at once.
             reach_kw = box_kw * len(boxes)
             if room is not None and gap:
@@ -2597,8 +2618,7 @@ class EnergyCalculator:
             this_cycle = max(reach_kw, watts / 1000.0) * interval_hours
             drawn = charging_w * interval_hours / 1000.0
             live = self._ev_box_power_live(boxes, power, per_charger)
-            unreported = self._ev_counter_unreported.get(entity_id, 0.0)
-            moved = (value is not None and seen is not None
+            moved =(value is not None and seen is not None
                      and value > seen + 0.001)
             if value is not None and value >= 0 and (
                 seen is None
@@ -2802,6 +2822,39 @@ class EnergyCalculator:
                    for b in self._ev_counter_boxes.get(e, ()))
             for e in entities
         )
+
+    def _ev_counter_owes(self, entity_id: str) -> bool:
+        """(#1159) Is this counter's ``pending`` what its own boxes drew, so a
+        row may owe it at an anchor? Its boxes must be known: not the whole
+        fleet given as a guess (``guessed``). Each box must read its own power
+        sensor; else ``pending`` holds the fleet's draw (``_track_ev_pending``),
+        which counts other boxes and not this one, and would eat the
+        counter's real moves. The one exception, as since #1049: a counter of
+        one box when no box reads its own, so the one sensor stands in."""
+        boxes = self._ev_counter_boxes.get(entity_id, ())
+        if not boxes or entity_id in self._ev_counter_guessed:
+            return False
+        sensors = {c.get("id"): c.get("ev_charging_power_sensor")
+                   for c in self.config.get("ev_chargers") or []
+                   if isinstance(c, dict)}
+        if all(sensors.get(b) for b in boxes):
+            return True
+        return len(boxes) == 1 and not any(sensors.values())
+
+    def _trim_ev_owed(self, entity_id: str, most: float) -> None:
+        """(#1159) Every row's ``owed`` of this counter, held to ``most``: what
+        SEM saw drawn that the counter has not shown yet. More than that is
+        never paid by a report, so it would take a real charge."""
+        rows = [self._ev_counter_baselines, self._midnight_ev_baselines,
+                *self._charger_counter_baselines.values()]
+        for bl in rows:
+            owed = bl.get("owed") if isinstance(bl, dict) else None
+            if not isinstance(owed, dict) or not _finite(owed.get(entity_id)):
+                continue  # nothing owed, or damaged: the anchor check drops it
+            if most <= 0.001:
+                del owed[entity_id]
+            elif owed[entity_id] > most:
+                owed[entity_id] = most
 
     def follow_charger_counter(
         self,

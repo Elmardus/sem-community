@@ -65,10 +65,11 @@ def _hass(values: dict) -> Mock:
 
 
 def _calc(values: dict, counter: str, boxes, *, chargers=("links", "rechts"),
-          sensors=("links", "rechts")) -> EnergyCalculator:
+          sensors=("links", "rechts"), guessed=()) -> EnergyCalculator:
     """A calculator set up the way the coordinator sets up a counter no box
     owns: not complete, no owner, and the boxes it counts. ``sensors``: the
-    chargers with a power sensor of their own."""
+    chargers with a power sensor of their own. ``guessed`` (#1159): the
+    counters given the whole fleet because SEM cannot tell their boxes."""
     hass = _hass(values)
     config = {
         "update_interval": 60,
@@ -82,7 +83,8 @@ def _calc(values: dict, counter: str, boxes, *, chargers=("links", "rechts"),
             for cid in chargers]
     calc = EnergyCalculator(config, TimeManager(hass))
     calc.configure_ev_counters(hass, [counter], True, complete=False,
-                               owners={}, boxes={counter: list(boxes)})
+                               owners={}, boxes={counter: list(boxes)},
+                               guessed=list(guessed))
     return calc
 
 
@@ -329,10 +331,12 @@ class TestWhatIsOwed:
         """The Energy Dashboard counter counts its first EV device, Links.
         Rechts charges before midnight, so the counter does not move. That
         draw is not owed by the counter: when it reports what Links drew
-        while SEM was down, the new day books it."""
+        while SEM was down, the new day books it. (#1159) SEM could not tie
+        the counter to Links, so it gave it the whole fleet as a guess."""
         values = {ED_EV: 4321.0}
         with freeze_time("2026-10-11 21:00:30") as clock:
-            calc = _watched(values, ED_EV, ("links", "rechts"))
+            calc = _watched(values, ED_EV, ("links", "rechts"),
+                            guessed=[ED_EV])
             for _ in range(60):
                 _cycle(calc, clock, values)
             for _ in range(119):
