@@ -2524,7 +2524,7 @@ class EnergyCalculator:
         if unseen_h is None:
             # No record of the last cycle: nothing is known about the time
             # since, so every counter's next move is booked as it stands —
-            # until its box has been seen idle for the late-report wait.
+            # until SEM has watched its box for the late-report wait.
             self._ev_counter_room.clear()
             self._ev_counter_unseen_kwh.clear()
             self._ev_counter_quiet_h.clear()
@@ -2580,7 +2580,8 @@ class EnergyCalculator:
                 self._ev_counter_pending[entity_id] = 0.0
                 if seen is not None:
                     # A real move starts the watch; a first sight (a store
-                    # from before it) leaves the next move as it stands.
+                    # from before it) leaves the next move as it stands,
+                    # unless the late-report wait starts the watch first.
                     room = unseen = 0.0
             else:
                 if watts > EV_ACTIVE_CHARGE_FLOOR_W:
@@ -2602,14 +2603,17 @@ class EnergyCalculator:
             # (#1101) Watched for the late-report wait since SEM last could
             # not see the box: a counter has shown by now what the box drew
             # then, so the unseen part of ``room`` is spent. What SEM saw —
-            # a charge, a trickle — stays. Unseen time starts the wait again.
-            # No record yet: the watch starts.
+            # a charge, a trickle — stays, and never less than the draw it
+            # saw since the counter last moved (``pending``: a record that
+            # holds none, or an older store). Unseen time starts the wait
+            # again. No record yet: the watch starts.
             quiet_h = self._ev_counter_quiet_h.get(entity_id, 0.0)
             if not live or gap:
                 quiet_h = 0.0
             else:
                 if quiet_h < EV_COUNTER_LATE_REPORT_H <= quiet_h + interval_hours:
-                    room = 0.0 if room is None else max(0.0, room - unseen)
+                    room = max(self._ev_counter_pending.get(entity_id, 0.0),
+                               (0.0 if room is None else room) - unseen)
                     unseen = 0.0
                 quiet_h += interval_hours
             self._ev_counter_quiet_h[entity_id] = quiet_h

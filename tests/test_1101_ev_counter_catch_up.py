@@ -677,6 +677,37 @@ class TestUnseenTimeIsSpent:
             assert _rows(calc, EVENING_DAY) == pytest.approx((11.0, 11.0), abs=0.01)
             assert calc.charger_rows["links"] == pytest.approx(11.0, abs=0.01)
 
+    def test_with_no_record_a_charge_seen_and_reported_late_is_booked(self):
+        """A new install: the counter is only first seen, so ``room`` has no
+        record. The wait starts the watch, but not under what SEM saw."""
+        values = {LINKS: 5170.12, RECHTS: 1094.83}
+        with freeze_time(EVENING) as clock:
+            calc = _calc(values)
+            _cycle(calc, clock, values)
+            assert LINKS not in calc._ev_counter_room
+            _charge(calc, clock, values, 60, meter=0.0, watts=11_000.0)
+            _idle(calc, clock, values, 125)
+            values[LINKS] += 11.0
+            _cycle(calc, clock, values)
+            assert _rows(calc, EVENING_DAY) == pytest.approx((11.0, 11.0), abs=0.01)
+
+    def test_after_an_upgrade_a_charge_seen_before_it_is_booked(self):
+        """A store from before the wait counts all of ``room`` as unseen;
+        the charge SEM saw before the restart still stays."""
+        with freeze_time(EVENING) as clock:
+            values, calc = _night()
+            _charge(calc, clock, values, 60, meter=0.0, watts=11_000.0)
+            stored = _store(calc)
+            for key in ("unseen_kwh", "quiet_h"):
+                del stored["ev_counter_pending"][key]
+            fresh = _calc(values)
+            fresh.restore_state(stored)
+            fresh.charger_rows = dict(calc.charger_rows)
+            _idle(fresh, clock, values, 125)
+            values[LINKS] += 11.0
+            _cycle(fresh, clock, values)
+            assert _rows(fresh, EVENING_DAY) == pytest.approx((11.0, 11.0), abs=0.01)
+
     def test_watched_charging_counts_toward_the_wait(self):
         """Dark for 30 minutes, then ten minutes SEM saw at 11 kW, then idle:
         two hours after the dark read its part is spent; the seen charge is
