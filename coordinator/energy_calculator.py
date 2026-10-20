@@ -403,6 +403,11 @@ class EnergyCalculator:
         # (#1049) Counter → the charger id whose power it counts. Set with
         # ``complete``.
         self._ev_counter_owner: Dict[str, str] = {}
+        # (#1157) Counter → every charger id whose charging it counts: its
+        # owner alone, or the whole fleet for a fallback counter (legacy daily
+        # sensor, Energy Dashboard), or the chargers that name one counter.
+        # The step check reads these boxes' power.
+        self._ev_counter_boxes: Dict[str, Tuple[str, ...]] = {}
         # (#1049) Owners drawing charging power this cycle. Runtime only.
         self._ev_owners_drawing: Set[str] = set()
         # (#1049) Per counter: the kWh its box drew since the counter last
@@ -1024,6 +1029,7 @@ class EnergyCalculator:
         self, hass: HomeAssistant, entity_ids: List[str], enabled: bool,
         complete: bool = False,
         owners: Optional[Dict[str, str]] = None,
+        boxes: Optional[Dict[str, List[str]]] = None,
     ) -> None:
         """Enable daily-EV reconciliation against wallbox counters (#658).
 
@@ -1045,6 +1051,11 @@ class EnergyCalculator:
         each counter to its charger id: until the counter reports what that
         box charged, the rows may not move down. A counter without an owner
         leaves the set partial.
+
+        ``boxes`` (#1157): each counter → every charger id whose charging it
+        counts. A counter is checked against the power of these boxes
+        (``_track_ev_pending``); one with no boxes is not checked. An owner is
+        its counter's one box when ``boxes`` does not name it.
 
         Gated by the same ``prefer_hardware_energy`` option as the solar
         counters — it is the same promise ("trust the hardware over my
@@ -1071,6 +1082,12 @@ class EnergyCalculator:
         owners = {e: str(o) for e, o in (owners or {}).items()
                   if e in self._ev_counter_entities and o}
         self._ev_counter_owner = owners
+        counted = {e: tuple(dict.fromkeys(str(c) for c in (cids or []) if c))
+                   for e, cids in (boxes or {}).items()
+                   if e in self._ev_counter_entities}
+        for entity_id, owner in owners.items():
+            counted.setdefault(entity_id, (owner,))
+        self._ev_counter_boxes = {e: b for e, b in counted.items() if b}
         self._ev_counter_complete = bool(complete) and all(
             e in owners for e in self._ev_counter_entities)
         if self._ev_counter_enabled and not self._ev_counter_logged:
@@ -2513,6 +2530,13 @@ class EnergyCalculator:
         and dark read since the counter last moved stayed in ``room`` at
         44 kW: on a counter flat for a day, a 19.85 kWh catch-up at the next
         plug-in was booked. What SEM saw the box draw stays.
+
+        (#1157) A counter no one box owns — a fallback (legacy daily sensor,
+        Energy Dashboard) or one two chargers name — is checked the same way
+        against every box it counts (``_ev_counter_boxes``): their draws add
+        up, and its room grows as fast as all of them at once. Before, only a
+        box's own counter was checked, so a fallback's jump was booked while
+        every box read 0 W.
         """
         self._ev_owners_drawing = set()
         self._ev_counter_foreign = {}
@@ -2533,14 +2557,23 @@ class EnergyCalculator:
         box_kw = self._ev_box_max_kw()
         per_charger = getattr(power, "ev_power_per_charger", None) or {}
         fleet_w = float(power.ev_power or 0.0)  # FLEET-READ: the fallback when a box's own draw is not known.
-        for entity_id, owner in self._ev_counter_owner.items():
-            # A box whose own draw is not read (no list, an id-less entry, no
-            # power sensor of its own) is charged the fleet's: that only ever
-            # holds a row higher.
-            watts = (float(per_charger.get(owner) or 0.0)
-                     if owner in per_charger else fleet_w)
-            if watts > EV_ACTIVE_CHARGE_FLOOR_W:
-                self._ev_owners_drawing.add(owner)
+        for entity_id, boxes in self._ev_counter_boxes.items():
+            # (#1157) A counter counts every box in ``boxes``: their draws
+            # add up. When one box's own draw is not read (no list, an id-less
+            # entry, no power sensor of its own), the counter is charged the
+            # fleet's: that only ever holds a row higher.
+            own = all(b in per_charger for b in boxes)
+            draws = ([float(per_charger.get(b) or 0.0) for b in boxes]
+                     if own else [fleet_w])
+            watts = sum(draws)
+            # Standby is not charging (bug class 36), box by box.
+            charging_w = sum(w for w in draws if w > EV_ACTIVE_CHARGE_FLOOR_W)
+            if own:
+                self._ev_owners_drawing.update(
+                    b for b, w in zip(boxes, draws, strict=True)
+                    if w > EV_ACTIVE_CHARGE_FLOOR_W)
+            elif charging_w > 0.0:
+                self._ev_owners_drawing.update(boxes)
             state = self._hass.states.get(entity_id)
             value = None
             if state is not None and state.state not in (
@@ -2549,13 +2582,14 @@ class EnergyCalculator:
             seen = self._ev_counter_seen.get(entity_id)
             room = self._ev_counter_room.get(entity_id)
             unseen = self._ev_counter_unseen_kwh.get(entity_id, 0.0)
+            # As much as every box it counts could draw at once.
+            reach_kw = box_kw * len(boxes)
             if room is not None and gap:
-                room += box_kw * unseen_h
-                unseen += box_kw * unseen_h
-            this_cycle = max(box_kw, watts / 1000.0) * interval_hours
-            drawn = (watts * interval_hours / 1000.0
-                     if watts > EV_ACTIVE_CHARGE_FLOOR_W else 0.0)
-            live = self._ev_box_power_live(owner, power, per_charger)
+                room += reach_kw * unseen_h
+                unseen += reach_kw * unseen_h
+            this_cycle = max(reach_kw, watts / 1000.0) * interval_hours
+            drawn = charging_w * interval_hours / 1000.0
+            live = self._ev_box_power_live(boxes, power, per_charger)
             unreported = self._ev_counter_unreported.get(entity_id, 0.0)
             moved = (value is not None and seen is not None
                      and value > seen + 0.001)
@@ -2570,7 +2604,7 @@ class EnergyCalculator:
                         # What SEM saw drawn and not yet shown may come in
                         # this step too, whenever the box drew it.
                         step -= self._judge_ev_step(
-                            entity_id, owner, seen, value,
+                            entity_id, boxes, seen, value,
                             room + this_cycle + unreported,
                             unreported + max(0.0, watts) * interval_hours / 1000.0,
                             now)
@@ -2584,16 +2618,15 @@ class EnergyCalculator:
                     # unless the late-report wait starts the watch first.
                     room = unseen = 0.0
             else:
-                if watts > EV_ACTIVE_CHARGE_FLOOR_W:
+                if charging_w > 0.0:
                     self._ev_counter_pending[entity_id] = (
                         self._ev_counter_pending.get(entity_id, 0.0)
-                        + watts * interval_hours / 1000.0
+                        + drawn
                     )
                 unreported += drawn
                 # Charging, or a power read that cannot say "idle": the box
                 # may have drawn its most. Seen idle: at most a trickle.
-                if room is not None and (
-                        watts > EV_ACTIVE_CHARGE_FLOOR_W or not live):
+                if room is not None and (charging_w > 0.0 or not live):
                     room += this_cycle
                     if not live:
                         unseen += this_cycle
@@ -2628,7 +2661,7 @@ class EnergyCalculator:
             # A dark read or a skipped cycle pauses the count; only charging
             # starts it again.
             idle_h = self._ev_counter_idle_h.get(entity_id, 0.0)
-            if watts > EV_ACTIVE_CHARGE_FLOOR_W:
+            if charging_w > 0.0:
                 idle_h = 0.0
             elif live and not gap:
                 idle_h += interval_hours
@@ -2641,8 +2674,8 @@ class EnergyCalculator:
                 self._ev_counter_unreported.pop(entity_id, None)
 
     def _judge_ev_step(
-        self, entity_id: str, owner: str, before: float, value: float,
-        room: float, seen_kwh: float, now: datetime,
+        self, entity_id: str, boxes: Tuple[str, ...], before: float,
+        value: float, room: float, seen_kwh: float, now: datetime,
     ) -> float:
         """(#1101) Book from a counter step no more than its box could draw.
 
@@ -2664,10 +2697,11 @@ class EnergyCalculator:
         # every cycle.
         log_on_change(
             _LOGGER, f"ev-step:{entity_id}:{now.date()}", logging.WARNING,
-            "EV counter %s rose %.2f kWh at once, but charger %s could have "
+            "EV counter %s rose %.2f kWh at once, but %s %s could have "
             "drawn at most %.2f kWh since it last moved — %.2f kWh not booked "
             "(the counter caught up on energy from outside this window)",
-            entity_id, step, owner, room, foreign,
+            entity_id, step, "charger" if len(boxes) == 1 else "chargers",
+            ", ".join(boxes), room, foreign,
         )
         return foreign
 
@@ -2679,7 +2713,7 @@ class EnergyCalculator:
         this cycle) waits for the next cycle: booked now, a row could not
         take a judged step back out of it."""
         if (value is None or not self._ev_counter_enabled
-                or entity_id not in self._ev_counter_owner):
+                or entity_id not in self._ev_counter_boxes):
             return value
         seen = self._ev_counter_seen.get(entity_id)
         return seen if seen is not None and value > seen + 0.001 else value
@@ -2715,24 +2749,34 @@ class EnergyCalculator:
         return max(EV_COUNTER_BOX_MAX_KW, configured)
 
     def _ev_box_power_live(
-        self, owner: str, power: PowerReadings, per_charger: Dict[str, float],
+        self, boxes: Tuple[str, ...], power: PowerReadings,
+        per_charger: Dict[str, float],
     ) -> bool:
-        """(#1101) Did this cycle read the owner's OWN power sensor as a
-        number? Only then does a read under the floor say the box is idle: a
-        dark sensor reads 0 W, and so does the fleet's sum for a box that is
-        not in it. A lone box read through the one fleet sensor counts."""
-        entity = None
-        if owner in per_charger:
-            entity = next(
-                (c.get("ev_charging_power_sensor")
-                 for c in self.config.get("ev_chargers") or []
-                 if isinstance(c, dict) and c.get("id") == owner),
-                None,
-            )
-        elif not per_charger and len(self._ev_counter_owner) == 1:
-            entity = getattr(power, "ev_power_fleet_entity", None)
-        if not entity:
+        """(#1101) Did this cycle read each box's OWN power sensor as a
+        number? Only then does a read under the floor say the boxes are idle:
+        a dark sensor reads 0 W, and so does the fleet's sum for a box that is
+        not in it. The one fleet sensor counts for the one counter SEM tracks
+        (a lone box, or a fallback counter of the whole fleet, #1157), and
+        for the one box with a counter of its own (#1101)."""
+        lone_owner = tuple(self._ev_counter_owner.values())
+        if boxes and all(b in per_charger for b in boxes):
+            sensors: Dict[str, Any] = {}
+            for c in self.config.get("ev_chargers") or []:
+                if isinstance(c, dict):
+                    sensors.setdefault(c.get("id"),
+                                       c.get("ev_charging_power_sensor"))
+            entities = [sensors.get(b) for b in boxes]
+        elif not per_charger and (len(self._ev_counter_boxes) == 1
+                                  or (len(lone_owner) == 1
+                                      and boxes == lone_owner)):
+            entities = [getattr(power, "ev_power_fleet_entity", None)]
+        else:
             return False
+        return all(entity and self._power_state_live(entity)
+                   for entity in entities)
+
+    def _power_state_live(self, entity: str) -> bool:
+        """(#1101) The power sensor reads a number."""
         state = self._hass.states.get(entity)
         if state is None or state.state in ("unknown", "unavailable", None, ""):
             return False
@@ -2746,7 +2790,8 @@ class EnergyCalculator:
         each counter has reported since — nothing it counts is still owed."""
         return not any(
             self._ev_counter_pending.get(e, 0.0) > 0.0
-            or self._ev_counter_owner.get(e) in self._ev_owners_drawing
+            or any(b in self._ev_owners_drawing
+                   for b in self._ev_counter_boxes.get(e, ()))
             for e in entities
         )
 

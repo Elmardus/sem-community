@@ -2351,6 +2351,30 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         """(#1049) Counter → the charger whose power it counts."""
         return {e: cid for cid, e in self._own_ev_counters().items() if e}
 
+    def _ev_counter_boxes(self) -> Dict[str, List[str]]:
+        """(#1157) Every counter ``_collect_ev_counter_entities`` hands over →
+        the charger ids whose charging it counts, so a jump can be checked
+        against their power. A charger's own counter counts that charger; a
+        counter two chargers name counts both; a fallback (legacy daily
+        sensor, Energy Dashboard ``ev_energy``) counts the whole fleet. Ids
+        and the primary's top-level counter as in ``_own_ev_counters``."""
+        top_level = self.config.get("ev_total_energy_sensor")
+        fleet: List[str] = []
+        named: Dict[str, List[str]] = {}
+        for index, charger in enumerate(self.config.get("ev_chargers") or []):
+            if not isinstance(charger, dict):
+                continue
+            cid = charger.get("id") or f"ev_charger_{index}"
+            fleet.append(cid)
+            entity = (charger.get("ev_total_energy_sensor")
+                      or (top_level if index == 0 else None))
+            if entity:
+                named.setdefault(entity, []).append(cid)
+        if not fleet:
+            fleet = ["ev_charger"]  # flat keys: ``primary_charger_id``
+        return {e: named.get(e, list(fleet))
+                for e in self._collect_ev_counter_entities()}
+
     def _ev_counters_cover_fleet(self) -> bool:
         """(#1049) Does every charger have a counter of its own? Only then
         does the counter set see all the charging the power integral sees,
@@ -2605,6 +2629,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             self.config.get("prefer_hardware_energy", True),
             complete=self._ev_counters_cover_fleet(),
             owners=self._ev_counter_owners(),
+            boxes=self._ev_counter_boxes(),
         )
 
         # Log EV sensor configuration
