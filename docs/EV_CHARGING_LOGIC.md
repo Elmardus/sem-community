@@ -296,6 +296,8 @@ Each charger has its own daily energy bucket (`daily_ev` for that charger). The 
 
 **Solar between sunrise and the deadline:** still counted into yesterday's bucket. Harmless, since Min was already hit.
 
+**A charger counter that jumps at plug-in.** Some charger counters stand still for hours, then jump at the next plug-in. If SEM saw the charger draw nothing in that time, the jump does not count as charging. After a Home Assistant restart or an unavailable power sensor, this holds once SEM has watched the charger for two hours.
+
 ---
 
 ## Troubleshooting
