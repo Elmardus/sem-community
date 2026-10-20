@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A shared car energy counter that jumps while every charger reads 0 W no longer counts as charging** (#1157). This includes the Energy Dashboard counter.
+
 # [2.2.0-beta.23] — 20.10.2026
 
 - 🐛 **A charger counter that jumps at plug-in after a quiet day no longer counts as charging** (#1101). Earlier restarts let the jump through.
