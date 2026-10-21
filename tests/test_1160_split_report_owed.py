@@ -11,11 +11,13 @@ The rule now: at the day's start a row that moves up only owes a counter
 whose box reads idle what SEM saw it draw and the counter has not shown
 (``unreported``, or ``pending`` if more). All counters together owe no more
 than the closing row held above its counters (``_ev_row_held``) plus the
-new row's anchor. ``unreported`` holds a power read above the meter too, so
-three reviews narrowed the part above ``pending`` (``late``): a row the
-counters own owes ``pending`` only; only this cycle's move, while SEM
-watched the box idle, pays ``late``; and it goes after the late-report
-wait. A box still charging owes ``pending`` only (#1161).
+new row's anchor. ``unreported`` holds a power read above the meter too,
+and four reviews each found a way that part (``late``) took real kWh. So
+``pending`` is paid first, as before; ``late`` is paid only by the part of
+a move that can be nothing but a late report (SEM watched the box idle
+since the counter last moved, above what it saw drawn since); and it goes
+after the late-report wait. A row the counters own, and a box still
+charging, owe ``pending`` only (#1161).
 """
 from __future__ import annotations
 
@@ -140,12 +142,23 @@ class TestTheRestIsBookedOnce:
 
     def test_across_a_restart_over_the_days_start(self):
         """SEM is down from 23:56 to 00:03: the closing row's figure comes
-        back from the store."""
+        back from the store, and the rest is owed."""
+        with freeze_time("2026-10-11 23:40:00") as clock:
+            values, calc = _night()
+            _only_links(calc)
+            calc, _ = _split(calc, clock, values, restart=420, after=0.0)
+            assert calc._midnight_ev_baselines["late"] == pytest.approx(
+                {LINKS: 1.2}, abs=0.01)
+
+    def test_a_rest_after_a_restart_is_left_open(self):
+        """Pinned, left open (as before #1160): after time SEM did not
+        watch, a move may be a charge SEM missed, so the rest that comes
+        then is booked again."""
         with freeze_time("2026-10-11 23:40:00") as clock:
             values, calc = _night()
             _only_links(calc)
             calc, _ = _split(calc, clock, values, restart=420)
-            assert _rows(calc, NEW_DAY)[1] == pytest.approx(0.0, abs=0.01)
+            assert _rows(calc, NEW_DAY)[1] == pytest.approx(1.2, abs=0.01)
 
     def test_a_row_the_counters_own_that_followed_them_down(self):
         """Every charger has its own counter. The box stopped and the
@@ -353,12 +366,11 @@ class TestAHighPowerReadIsNotOwedAllDay:
             calc = missed(calc, clock, values)
             assert _rows(calc, NEW_DAY)[1] == pytest.approx(12.0, abs=0.1)
 
-    def test_the_part_owed_as_pending_stays_after_the_wait(self):
+    def test_a_step_pays_the_pending_part_first(self):
         """0.6 shown at 23:52, then 0.36 more drawn with the counter flat:
-        1.56 owed, 0.36 of it ``pending``. A step of 0.6 pays the older
-        part first; after the wait the rest of that part goes, and the
-        0.36 stays owed (#1159: a rest that never comes is left to the next
-        charge)."""
+        1.56 owed, 0.36 of it ``pending``. A step of 0.6 pays the 0.36
+        first, as before #1160, then 0.24 of what is late; after the wait
+        the rest of that goes too."""
         with freeze_time("2026-10-11 23:40:00") as clock:
             values, calc = _night()
             _only_links(calc)
@@ -373,13 +385,14 @@ class TestAHighPowerReadIsNotOwedAllDay:
             assert bl["late"] == pytest.approx({LINKS: 1.2}, abs=0.01)
             values[LINKS] += 0.6
             _cycle(calc, clock, values)
-            assert bl["late"] == pytest.approx({LINKS: 0.6}, abs=0.01)
+            assert bl["owed"] == pytest.approx({LINKS: 0.96}, abs=0.01)
+            assert bl["late"] == pytest.approx({LINKS: 0.96}, abs=0.01)
             fresh = _calc(values)
             _only_links(fresh)
             fresh.restore_state(_store(calc))
             assert fresh._midnight_ev_baselines["late"] == bl["late"]
             _idle(calc, clock, values, 150)
-            assert bl["owed"] == pytest.approx({LINKS: 0.36}, abs=0.01)
+            assert not bl["owed"]
             assert not bl["late"]
 
     @pytest.mark.parametrize("idle_min", [30, 150])
@@ -411,10 +424,13 @@ class TestAHighPowerReadIsNotOwedAllDay:
             assert _rows(calc, NEW_DAY)[1] == pytest.approx(
                 0.1 * past + 12.0, abs=0.2)
 
-    def test_a_seen_session_inside_the_wait_does_not_pay_it(self):
+    @pytest.mark.parametrize("shown_after", [False, True])
+    def test_a_seen_session_inside_the_wait_does_not_pay_it(
+            self, shown_after):
         """30 minutes idle, a 60-minute session SEM sees (power on the
         meter), 30 idle, then a charge SEM misses: 10.8 + 12 (third fix:
-        18.08)."""
+        18.08). The counter shows the session as it runs, or in one step
+        after it: what SEM saw drawn is not a late report."""
         with freeze_time("2026-10-11 22:59:30") as clock:
             values, calc = _night()
             _only_links(calc)
@@ -422,7 +438,10 @@ class TestAHighPowerReadIsNotOwedAllDay:
             _cycle(calc, clock, values)  # the new day's anchor
             assert calc._midnight_ev_baselines["late"], "vacuous: none late"
             _idle(calc, clock, values, 30)
-            _charge(calc, clock, values, 60)
+            _charge(calc, clock, values, 60, meter=0.0 if shown_after
+                    else CHARGE_KWH)
+            if shown_after:
+                values[LINKS] += 10.8
             _idle(calc, clock, values, 30)
             calc = _restart_while_charging(calc, clock, values)
             assert _rows(calc, NEW_DAY)[1] == pytest.approx(22.8, abs=0.2)
@@ -440,6 +459,79 @@ class TestAHighPowerReadIsNotOwedAllDay:
             values[LINKS] = real
             calc = _restart_while_charging(calc, clock, values)
             assert _rows(calc, NEW_DAY)[1] == pytest.approx(12.0, abs=0.1)
+
+    def test_a_counter_dark_after_a_restart_pays_nothing_late(self):
+        """SEM is down two hours while the car charges 12 kWh; after it
+        comes back the counter cannot be read for a cycle (fourth fix:
+        7.28)."""
+        with freeze_time("2026-10-11 22:59:30") as clock:
+            values, calc = _night()
+            _only_links(calc)
+            _high_read(calc, clock, values, 60)
+            _cycle(calc, clock, values)  # the new day's anchor
+            _idle(calc, clock, values, 30)
+            real, values[LINKS] = values[LINKS] + 12.0, "unavailable"
+            calc = _restart(calc, clock, values, timedelta(hours=2),
+                            partial=True)
+            _cycle(calc, clock, values)
+            values[LINKS] = real
+            _idle(calc, clock, values, 5)
+            assert _rows(calc, NEW_DAY)[1] == pytest.approx(12.0, abs=0.1)
+
+    def test_a_counter_that_shows_a_missed_charge_cycles_later(self):
+        """As above, but the counter reads its old value for two cycles
+        after the restart, then the 12 kWh (fourth fix: 7.28)."""
+        with freeze_time("2026-10-11 22:59:30") as clock:
+            values, calc = _night()
+            _only_links(calc)
+            _high_read(calc, clock, values, 60)
+            _cycle(calc, clock, values)  # the new day's anchor
+            _idle(calc, clock, values, 30)
+            calc = _restart(calc, clock, values, timedelta(hours=2),
+                            partial=True)
+            _idle(calc, clock, values, 2)
+            values[LINKS] += 12.0
+            _idle(calc, clock, values, 5)
+            assert _rows(calc, NEW_DAY)[1] == pytest.approx(12.0, abs=0.1)
+
+    def test_a_charger_cloud_dark_for_two_hours(self):
+        """SEM runs, but power and counter are dark two hours while the car
+        charges 12 kWh; both come back at once (fourth fix: 7.28)."""
+        with freeze_time("2026-10-11 22:59:30") as clock:
+            values, calc = _night()
+            _only_links(calc)
+            _high_read(calc, clock, values, 60)
+            _cycle(calc, clock, values)  # the new day's anchor
+            _idle(calc, clock, values, 30)
+            real = values[LINKS]
+            values[LINKS] = values[LINKS_W] = "unavailable"
+            _idle(calc, clock, values, 120)
+            values[LINKS], values[LINKS_W] = real + 12.0, 0.0
+            _idle(calc, clock, values, 5)
+            assert _rows(calc, NEW_DAY)[1] == pytest.approx(12.0, abs=0.1)
+
+    def test_an_hourly_counter_pays_pending_first_as_before(self):
+        """The counter reports hourly: +6 at 23:00, +3 at 00:10, while the
+        box drew 9 and its power read 16.2. The 3.0 pays the ``pending``
+        part, as before #1160; what is left of it stays owed (#1159, left
+        open 9) and a charge SEM missed later is short by it (9.78, as
+        before; fourth fix: 6.78)."""
+        with freeze_time("2026-10-11 21:59:30") as clock:
+            values, calc = _night()
+            _only_links(calc)
+            shown = values[LINKS]
+            for i in range(90):
+                _cycle(calc, clock, values, CHARGE_W)
+                if i == 59:
+                    values[LINKS] = shown + 6.0
+            _idle(calc, clock, values, 40)
+            values[LINKS] = shown + 9.0
+            _idle(calc, clock, values, 150)
+            values[LINKS] += 12.0
+            calc = _restart(calc, clock, values, timedelta(hours=2),
+                            partial=True)
+            _idle(calc, clock, values, 5)
+            assert _rows(calc, NEW_DAY)[1] == pytest.approx(9.78, abs=0.05)
 
     @pytest.mark.parametrize("bad", ["x", None, float("nan"), [1.0]])
     def test_a_damaged_late_value_does_not_raise(self, bad):
