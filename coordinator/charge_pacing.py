@@ -49,6 +49,19 @@ PACING_REFUSE_AFTER_CYCLES = 3
 #: the last sunny slot (full at 18:10 with sun until 18:15).
 PACING_HEADROOM_PCT: float = 10.0
 
+#: (#820, 20.10) The weak-day verdict has two edges. A day is called weak
+#: when it fills under this share of the need, and stays weak until it fills
+#: all of it. On a forecast that just about fills the pack, one hard line
+#: flipped paced <-> weak every few minutes (PROD, 13.10), and each flip gave
+#: the cap back and wrote it again. In between, the pace stays on, and it is
+#: near the hardware maximum anyway.
+PACING_WEAK_ENTER: float = 0.95
+#: and never for a gap smaller than one battery reading step (percent of
+#: capacity): the SOC moves in whole steps, so a smaller gap is noise
+PACING_SOC_STEP_PCT: float = 1.0
+#: seconds a missing day forecast is bridged with the last good one
+PACING_FORECAST_GAP_S: float = 600.0
+
 
 @dataclass(frozen=True)
 class PacingDecision:
@@ -171,6 +184,16 @@ def pacing_finish_by(day_start, day_end):
     return day_end - (day_end - day_start) * (PACING_HEADROOM_PCT / 100.0)
 
 
+def bridge_forecast(day_kwh, last, now_s: float):
+    """(#820, 20.10) ``(day_kwh, last)``: a missing day forecast is bridged
+    with the last good one for ``PACING_FORECAST_GAP_S``."""
+    if day_kwh is not None and day_kwh > 0:
+        return day_kwh, (day_kwh, now_s)
+    if last and now_s - last[1] < PACING_FORECAST_GAP_S:
+        return last[0], last
+    return day_kwh, last
+
+
 def paced_charge_cap_w(
     *,
     ledger,
@@ -183,6 +206,7 @@ def paced_charge_cap_w(
     hw_max_charge_w: float = 10000.0,
     end_margin_slots: int = 1,
     day_start=None,
+    weak_latched: bool = False,
 ) -> PacingDecision:
     """The smallest constant charge cap that still fills the pack in time.
 
@@ -231,7 +255,11 @@ def paced_charge_cap_w(
     need_kwh += drain_kwh
 
     fill_kwh = _fill_kwh(ledger, hw_max_charge_w)
-    if fill_kwh < need_kwh:
+    # (#820, 20.10) two edges: in at 95 % of the need, out at 100 %
+    weak_below = need_kwh * 1.05 if weak_latched else min(
+        need_kwh * PACING_WEAK_ENTER,
+        need_kwh - capacity_kwh * PACING_SOC_STEP_PCT / 100.0)
+    if fill_kwh < weak_below:
         return PacingDecision(
             None, "the day cannot fill the pack even uncapped — a cap "
                   "only makes it worse", code="weak_day",

@@ -8266,6 +8266,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             day_kwh = getattr(_fd, "forecast_today_kwh", None)
             if day_kwh is None:
                 day_kwh = getattr(_fd, "forecast_remaining_today_kwh", None)
+            # (#820, 20.10) One missing forecast read is not "no day": it
+            # emptied the ledger and gave the cap back. Bridge a short gap.
+            from .charge_pacing import bridge_forecast
+            day_kwh, self._pacing_last_day_kwh = bridge_forecast(
+                day_kwh, getattr(self, "_pacing_last_day_kwh", None),
+                time.monotonic())
             prov = self._tariff_provider
             return today_remaining_slots(
                 now=now, sunrise=sunrise, sunset=sunset, day_kwh=day_kwh,
@@ -8695,7 +8701,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # A rig-shaped stand-in without it keeps the cap margin.
                 day_start=(_day_start() if callable(_day_start := getattr(
                     self, "_pacing_day_start", None)) else None),
+                weak_latched=bool(getattr(self, "_pacing_weak_latched", False)),
             )
+            self._pacing_weak_latched = decision.code == "weak_day"
         cap = decision.cap_w if (decision and enabled) else None
         code = (decision.code if decision else
                 ("night" if not ledger else
