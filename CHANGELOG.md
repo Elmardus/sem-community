@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ **The EV charger page in Configure says a charger is optional** (#1103). No EV charger? Keep the first option and submit.
 - 🐛 **A shared car energy counter that jumps while every charger reads 0 W no longer counts as charging** (#1157). This includes the Energy Dashboard counter.
 - 🐛 **A car charge that the charger reports late is booked once** (#1159). It no longer counts on two days or takes from the next charge.
+- 🐛 **A car charge the charger reports partly after midnight is counted once** (#1160). This is for homes where not every charger has its own counter.
 
 # [2.2.0-beta.23] — 20.10.2026
 
