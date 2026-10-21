@@ -140,16 +140,6 @@ class TestTheRestIsBookedOnce:
             assert _ev_row(calc, old) == pytest.approx(1.8, abs=0.01)
             assert _ev_row(calc, new) == pytest.approx(0.0, abs=0.01)
 
-    def test_across_a_restart_over_the_days_start(self):
-        """SEM is down from 23:56 to 00:03: the closing row's figure comes
-        back from the store, and the rest is owed."""
-        with freeze_time("2026-10-11 23:40:00") as clock:
-            values, calc = _night()
-            _only_links(calc)
-            calc, _ = _split(calc, clock, values, restart=420, after=0.0)
-            assert calc._midnight_ev_baselines["late"] == pytest.approx(
-                {LINKS: 1.2}, abs=0.01)
-
     def test_a_rest_after_a_restart_is_left_open(self):
         """Pinned, left open (as before #1160): after time SEM did not
         watch, a move may be a charge SEM missed, so the rest that comes
@@ -532,6 +522,50 @@ class TestAHighPowerReadIsNotOwedAllDay:
                             partial=True)
             _idle(calc, clock, values, 5)
             assert _rows(calc, NEW_DAY)[1] == pytest.approx(9.78, abs=0.05)
+
+    @pytest.mark.parametrize("event", ["charge", "dark", "restart"])
+    def test_what_is_late_lives_only_while_sem_watches_the_box_idle(
+            self, event):
+        """A charge, a dark power read or time SEM did not watch: a later
+        move may be kWh the power read missed, so nothing late is kept."""
+        with freeze_time("2026-10-11 22:59:30") as clock:
+            values, calc = _night()
+            _only_links(calc)
+            _high_read(calc, clock, values, 60)
+            _cycle(calc, clock, values)  # the new day's anchor
+            _idle(calc, clock, values, 10)
+            assert calc._midnight_ev_baselines["late"], "vacuous: none late"
+            if event == "charge":
+                _cycle(calc, clock, values, CHARGE_W)
+            elif event == "dark":
+                values[LINKS_W] = "unavailable"
+                _cycle(calc, clock, values)
+            else:
+                calc = _restart(calc, clock, values, timedelta(minutes=5),
+                                partial=True)
+                _cycle(calc, clock, values)
+            assert not calc._midnight_ev_baselines["late"]
+            assert not calc._midnight_ev_baselines["owed"]
+
+    def test_a_charge_shown_hours_later_after_a_seen_one(self):
+        """SEM is down an hour while the car charges 6 kWh; back, an hour
+        idle, a 10-minute charge SEM sees, then the counter shows both in
+        one step. Real 7.8 (fifth fix: 3.08)."""
+        with freeze_time("2026-10-11 22:59:30") as clock:
+            values, calc = _night()
+            _only_links(calc)
+            _high_read(calc, clock, values, 60)
+            _cycle(calc, clock, values)  # the new day's anchor
+            _idle(calc, clock, values, 30)
+            calc = _restart(calc, clock, values, timedelta(hours=1),
+                            partial=True)
+            _idle(calc, clock, values, 60)
+            for _ in range(10):
+                _cycle(calc, clock, values, CHARGE_W)
+            _idle(calc, clock, values, 55)
+            values[LINKS] += 6.0 + 1.8
+            _idle(calc, clock, values, 3)
+            assert _rows(calc, NEW_DAY)[1] == pytest.approx(7.8, abs=0.1)
 
     @pytest.mark.parametrize("bad", ["x", None, float("nan"), [1.0]])
     def test_a_damaged_late_value_does_not_raise(self, bad):
