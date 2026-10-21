@@ -2342,6 +2342,8 @@ class EnergyCalculator:
             baselines, str(day), entities, integrated,
             self._ev_counter_complete,
         )
+        # (#1160) The row as this cycle leaves it, for the next day's anchor.
+        baselines["row"] = integrated
         if target is None:
             return
 
@@ -2365,6 +2367,7 @@ class EnergyCalculator:
             return
         delta = adopted - integrated
         self._daily_accumulators[daily_key] = adopted
+        baselines["row"] = adopted
         for accumulators, key in periods:
             # max(0.0) — a delta can be negative since #1049, and a longer
             # period must never be dragged below zero by one day's correction.
@@ -2390,10 +2393,16 @@ class EnergyCalculator:
                 or not all(isinstance(m, dict) for m in maps)
                 or not all(_finite(v) for m in maps for v in m.values())
                 or ("anchor" in bl and not _finite(bl["anchor"]))):
+            # (#1160) What the closing day's row holds that its counters have
+            # not shown: the new day's anchor owes it to them.
+            closed = (self._ev_row_held(bl)
+                      if "date" in bl and bl.get("date") != day_str else None)
             # Day rollover (or first run / legacy or damaged shape):
             # fresh baselines for the new day.
             bl.clear()
             bl.update({"date": day_str, "base": {}, "last": {}})
+            if closed is not None:
+                bl["closed"] = closed
 
         readings: Dict[str, float] = {}
         for entity_id in entities:
@@ -2460,11 +2469,8 @@ class EnergyCalculator:
             # belongs to the row before the anchor, not to this one. Only
             # where ``pending`` is what the counter's own boxes drew
             # (``_ev_counter_owes``, #1157 #1159).
-            bl["owed"] = {
-                e: self._ev_counter_pending[e] for e in entities
-                if self._ev_counter_owes(e)
-                and self._ev_counter_pending.get(e, 0.0) > 0.0
-            }
+            bl["owed"] = self._ev_owed_at_anchor(
+                entities, bl.pop("closed", None), integrated)
         owed = bl.setdefault("owed", {})
         for entity_id, value in readings.items():
             if entity_id not in owed:
@@ -2492,6 +2498,56 @@ class EnergyCalculator:
             len(readings) == len(entities)
             and bl.get("whole") == sorted(entities),
         )
+
+    @staticmethod
+    def _ev_row_held(bl: Dict[str, Any]) -> Optional[float]:
+        """(#1160) kWh a day's row holds above what its counters showed.
+
+        ``row`` is the row as its last cycle left it; the counters showed
+        ``anchor`` plus each one's move since its base. A row that moves up
+        only keeps a power read above them; so does a row the counters own
+        while a car charges. A row that followed them holds none. None when
+        the store does not say (from before #1160, or damaged).
+        """
+        row, anchor = bl.get("row"), bl.get("anchor")
+        base, last = bl.get("base"), bl.get("last")
+        if not (_finite(row) and row >= 0.0 and _finite(anchor)
+                and isinstance(base, dict) and isinstance(last, dict)):
+            return None
+        moved = [(last.get(e), b) for e, b in base.items()]
+        if not all(_finite(v) and _finite(b) for v, b in moved):
+            return None
+        return max(0.0, row - max(0.0, anchor + sum(v - b for v, b in moved)))
+
+    def _ev_owed_at_anchor(
+        self, entities: List[str], closed: Optional[float], anchor: float,
+    ) -> Dict[str, float]:
+        """(#1049 #1159 #1160) What each counter owes a row's new anchor.
+
+        A counter can show part of a session before the day starts and the
+        rest after it. ``pending`` holds only what its boxes drew since it
+        last moved, so it owed none of that rest, and a row that still held
+        the session's power read booked the rest on both days. At the day's
+        start (``closed``: what the closing row held above its counters,
+        ``_ev_row_held``) a counter owes what SEM saw its boxes draw and it
+        has not shown (``unreported``, or ``pending`` if more). All of them
+        together owe no more than the two rows hold above the counters: the
+        closing row's ``closed`` and the new row's ``anchor``, shared out by
+        size. A row that followed its counters down holds none, and the new
+        day books the rest. Any other anchor (no closing day, a counter
+        that went back) owes ``pending`` only.
+        """
+        owing = [e for e in entities if self._ev_counter_owes(e)]
+        if not (_finite(closed) and closed >= 0.0):
+            want = {e: self._ev_counter_pending.get(e, 0.0) for e in owing}
+            return {e: v for e, v in want.items() if v > 0.0}
+        want = {e: max(self._ev_counter_pending.get(e, 0.0),
+                       self._ev_counter_unreported.get(e, 0.0))
+                for e in owing}
+        total = sum(want.values())
+        held = closed + max(0.0, anchor)
+        share = 1.0 if total <= held else held / total
+        return {e: v * share for e, v in want.items() if v * share > 0.0}
 
     @staticmethod
     def _ev_adoption(
@@ -2878,6 +2934,8 @@ class EnergyCalculator:
         target, all_read = self._ev_counter_target(
             bl, day, [counter], value, True)
         bl["counter"] = counter
+        # (#1160) The row as this cycle leaves it, for the next day's anchor.
+        bl["row"] = value
         chargers = self.config.get("ev_chargers") or []
         one_box = self._max_daily_ev_kwh() / max(1, len(chargers))
         if target is None or target > one_box:
@@ -2886,7 +2944,10 @@ class EnergyCalculator:
             f"charger {cid}", target, value, all_read,
             self._ev_settled([counter]),
         )
-        return value if adopted is None else adopted
+        if adopted is None:
+            return value
+        bl["row"] = adopted
+        return adopted
 
     def _tally_backing(self, category: str, today_str: str, backed: bool) -> None:
         """(#628 visibility) Count and announce counter-backing transitions.
