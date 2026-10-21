@@ -2470,7 +2470,7 @@ class EnergyCalculator:
             # where ``pending`` is what the counter's own boxes drew
             # (``_ev_counter_owes``, #1157 #1159).
             bl["owed"] = self._ev_owed_at_anchor(
-                entities, bl.pop("closed", None), integrated)
+                entities, bl.pop("closed", None), integrated, not whole)
         owed = bl.setdefault("owed", {})
         for entity_id, value in readings.items():
             if entity_id not in owed:
@@ -2521,29 +2521,36 @@ class EnergyCalculator:
 
     def _ev_owed_at_anchor(
         self, entities: List[str], closed: Optional[float], anchor: float,
+        up_only: bool,
     ) -> Dict[str, float]:
         """(#1049 #1159 #1160) What each counter owes a row's new anchor.
 
         A counter can show part of a session before the day starts and the
         rest after it. ``pending`` holds only what its boxes drew since it
         last moved, so it owed none of that rest, and a row that still held
-        the session's power read booked the rest on both days. At the day's
-        start (``closed``: what the closing row held above its counters,
-        ``_ev_row_held``) a counter owes what SEM saw its boxes draw and it
-        has not shown (``unreported``, or ``pending`` if more). All of them
-        together owe no more than the two rows hold above the counters: the
-        closing row's ``closed`` and the new row's ``anchor``, shared out by
-        size. A row that followed its counters down holds none, and the new
+        the session's power read booked the rest on both days.
+
+        At the day's start (``closed``: what the closing row held above its
+        counters, ``_ev_row_held``), a row that moves up only (``up_only``)
+        owes each counter what SEM saw its boxes draw and it has not shown
+        (``unreported``, or ``pending`` if more). Owing too much cannot cost
+        such a row a kWh: its power read is its floor. A row the counters
+        own would lose real kWh to a power read above the meter, which
+        ``unreported`` holds too, so it owes ``pending`` only. Either way,
+        all counters together owe no more than the two rows hold above them:
+        the closing row's ``closed`` and the new row's ``anchor``, shared out
+        by size. A row that followed its counters holds none, and the new
         day books the rest. Any other anchor (no closing day, a counter
-        that went back) owes ``pending`` only.
+        that went back) owes ``pending`` as before.
         """
-        owing = [e for e in entities if self._ev_counter_owes(e)]
+        pending = {e: self._ev_counter_pending.get(e, 0.0)
+                   for e in entities if self._ev_counter_owes(e)}
         if not (_finite(closed) and closed >= 0.0):
-            want = {e: self._ev_counter_pending.get(e, 0.0) for e in owing}
-            return {e: v for e, v in want.items() if v > 0.0}
-        want = {e: max(self._ev_counter_pending.get(e, 0.0),
-                       self._ev_counter_unreported.get(e, 0.0))
-                for e in owing}
+            return {e: v for e, v in pending.items() if v > 0.0}
+        want = pending
+        if up_only:
+            want = {e: max(v, self._ev_counter_unreported.get(e, 0.0))
+                    for e, v in pending.items()}
         total = sum(want.values())
         held = closed + max(0.0, anchor)
         share = 1.0 if total <= held else held / total
@@ -2934,20 +2941,18 @@ class EnergyCalculator:
         target, all_read = self._ev_counter_target(
             bl, day, [counter], value, True)
         bl["counter"] = counter
-        # (#1160) The row as this cycle leaves it, for the next day's anchor.
-        bl["row"] = value
         chargers = self.config.get("ev_chargers") or []
         one_box = self._max_daily_ev_kwh() / max(1, len(chargers))
-        if target is None or target > one_box:
-            return value
-        adopted = self._ev_adoption(
-            f"charger {cid}", target, value, all_read,
-            self._ev_settled([counter]),
-        )
-        if adopted is None:
-            return value
-        bl["row"] = adopted
-        return adopted
+        adopted = None
+        if target is not None and target <= one_box:
+            adopted = self._ev_adoption(
+                f"charger {cid}", target, value, all_read,
+                self._ev_settled([counter]),
+            )
+        row = value if adopted is None else adopted
+        # (#1160) The row as this cycle leaves it, for the next day's anchor.
+        bl["row"] = row
+        return row
 
     def _tally_backing(self, category: str, today_str: str, backed: bool) -> None:
         """(#628 visibility) Count and announce counter-backing transitions.
