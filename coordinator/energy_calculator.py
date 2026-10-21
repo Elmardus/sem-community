@@ -2612,7 +2612,8 @@ class EnergyCalculator:
         it would lose real kWh to that power read as soon as it drops to
         its counters. Either way, all counters together owe no more than
         the two rows hold above them: the closing row's ``closed`` and the
-        new row's ``anchor``, shared out by size. A row that followed its
+        new row's ``anchor``. ``pending`` is kept whole first; the late
+        parts share what is left by size. A row that followed its
         counters holds none, and the new day books the rest. Any other
         anchor (no closing day, a counter that went back) owes ``pending``
         as before.
@@ -2627,12 +2628,19 @@ class EnergyCalculator:
                     if e in self._ev_counter_seen_idle
                     and not self._ev_watch_gap else v
                     for e, v in pending.items()}
-        total = sum(want.values())
         held = closed + max(0.0, anchor)
-        share = 1.0 if total <= held else held / total
-        owed = {e: v * share for e, v in want.items() if v * share > 0.0}
-        late = {e: v - pending[e] for e, v in owed.items() if v > pending[e]}
-        return owed, late
+        owing = sum(pending.values())
+        if owing > held:
+            share = held / owing
+            return {e: v * share for e, v in pending.items()
+                    if v * share > 0.0}, {}
+        # ``pending`` whole first, as before; the late parts share the rest.
+        extra = {e: v - pending[e] for e, v in want.items() if v > pending[e]}
+        total = sum(extra.values())
+        share = 1.0 if total <= held - owing else (held - owing) / total
+        late = {e: v * share for e, v in extra.items() if v * share > 0.0}
+        owed = {e: v + late.get(e, 0.0) for e, v in pending.items()}
+        return {e: v for e, v in owed.items() if v > 0.0}, late
 
     @staticmethod
     def _ev_adoption(

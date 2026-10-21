@@ -35,6 +35,7 @@ from custom_components.solar_energy_management.coordinator.energy_calculator imp
 from .ast_contracts import calls
 from .test_1101_ev_counter_catch_up import (
     CHARGE_KWH,
+    OWNERS,
     CHARGE_W,
     LINKS,
     LINKS_W,
@@ -160,6 +161,32 @@ class TestTheRestIsBookedOnce:
             values[LINKS] += 10.8
             _idle(calc, clock, values, 5)
             assert _rows(calc, NEW_DAY)[1] == pytest.approx(0.0, abs=0.1)
+
+    def test_one_counters_pending_is_kept_whole(self):
+        """Two counters on a row that moves up only. Rechts's power read
+        0.6 above its meter before 23:00, Links's 0.6 below until 23:30;
+        then Links drew 5.04 with its counter flat until 00:20. Links owes
+        its 5.04 whole, and the new day books none (seventh fix: 0.54)."""
+        with freeze_time("2026-10-11 21:58:00") as clock:
+            values, calc = _night()
+            calc.configure_ev_counters(calc._hass, [LINKS, RECHTS], True,
+                                       complete=False, owners=OWNERS)
+            _idle(calc, clock, values, 2)
+            for _ in range(60):
+                values[RECHTS] += 0.17
+                _cycle(calc, clock, values, 0.0, CHARGE_W)
+            for _ in range(30):
+                values[LINKS] += 0.12
+                _cycle(calc, clock, values, 6_000.0)
+            _cycle(calc, clock, values)
+            for _ in range(28):
+                _cycle(calc, clock, values, CHARGE_W)
+            _idle(calc, clock, values, 21)
+            assert calc._midnight_ev_baselines["owed"][LINKS] == (
+                pytest.approx(5.04, abs=0.01))
+            values[LINKS] += 5.04
+            _idle(calc, clock, values, 180)
+            assert _rows(calc, NEW_DAY)[1] == pytest.approx(0.0, abs=0.05)
 
     def test_nothing_late_is_owed_right_after_sem_was_down(self):
         with freeze_time("2026-10-11 23:40:00") as clock:
