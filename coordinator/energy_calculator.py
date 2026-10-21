@@ -2469,14 +2469,17 @@ class EnergyCalculator:
         for entity_id, value in readings.items():
             if entity_id not in owed:
                 continue
-            # A counter can report a late session in several steps. (#1159)
-            # A step judged foreign pays too: the base took it out of the
-            # row, and so did nothing else. Kept, what was owed then took
-            # the next real charge that day.
-            paid = min(owed[entity_id], not_drawn.get(entity_id, 0.0)
-                       + max(0.0, value - bl["base"][entity_id]))
-            bl["base"][entity_id] += max(0.0, paid - not_drawn.get(entity_id, 0.0))
-            owed[entity_id] -= paid
+            if owed[entity_id] > 0.001:
+                # A counter can report a late session in several steps:
+                # what a step books pays first, oldest first. (#1159) Then
+                # what a step judged foreign took out of the row: nothing
+                # else did. Kept, what was owed then took the next real
+                # charge that day.
+                paid = min(owed[entity_id],
+                           max(0.0, value - bl["base"][entity_id]))
+                bl["base"][entity_id] += paid
+                owed[entity_id] -= paid + min(owed[entity_id] - paid,
+                                              not_drawn.get(entity_id, 0.0))
             if owed[entity_id] <= 0.001:  # paid, or a damaged store
                 del owed[entity_id]
 

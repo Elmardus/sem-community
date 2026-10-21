@@ -179,6 +179,35 @@ class TestOwedRunsOut:
             assert not calc._midnight_ev_baselines["owed"]
             assert _rows(calc, NEW_DAY)[1] == pytest.approx(0.0, abs=0.01)
 
+    def test_a_foreign_step_that_carries_the_rest_books_it_once(self):
+        """Inside the wait: the rest (1.2, still unreported) and 2.0 the
+        power read missed, in one step. The check books the 1.2 and refuses
+        the 2.0; the 1.2 pays what is owed, so the new day books none."""
+        with freeze_time("2026-10-11 23:48:00") as clock:
+            values, calc = _night()
+            _late_session(calc, clock, values)
+            values[LINKS] += 0.6
+            _cycle(calc, clock, values)
+            _idle(calc, clock, values, 20)
+            values[LINKS] += 1.2 + 2.0
+            _cycle(calc, clock, values)
+            assert calc._ev_counter_foreign, "vacuous: nothing judged"
+            _idle(calc, clock, values, 2)
+            assert _rows(calc, NEW_DAY)[1] == pytest.approx(0.0, abs=0.05)
+
+    def test_a_catch_up_with_the_late_report_books_neither(self):
+        """#1101's 11.18 kWh catch-up in the same step as the late report of
+        the 1.8 seen before midnight (the counter flat since)."""
+        with freeze_time("2026-10-11 23:48:00") as clock:
+            values, calc = _night()
+            _late_session(calc, clock, values)
+            _idle(calc, clock, values, 20)
+            values[LINKS] += 1.8 + 11.18
+            _cycle(calc, clock, values)
+            assert calc._ev_counter_foreign, "vacuous: nothing judged"
+            _idle(calc, clock, values, 2)
+            assert _rows(calc, NEW_DAY)[1] == pytest.approx(0.0, abs=0.05)
+
     def test_a_counter_that_has_not_moved_owes_it_all(self):
         """No watch record, and the wait has dropped ``unreported``: what the
         box drew since the counter last moved is still owed in full."""
