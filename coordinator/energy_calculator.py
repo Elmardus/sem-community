@@ -202,6 +202,15 @@ def _finite(value: Any) -> bool:
             and math.isfinite(value))
 
 
+def _ev_day_after(before: Any, day: str) -> bool:
+    """(#1160) ``day`` is the day right after ``before`` (ISO dates)."""
+    try:
+        return (date.fromisoformat(day)
+                - date.fromisoformat(str(before))) == timedelta(days=1)
+    except ValueError:
+        return False
+
+
 def _ev_counter_drop(value: float, ref: Optional[float]) -> Optional[str]:
     """(#1049) ``"dip"`` or ``"reset"`` for a reading below ``ref``, else None."""
     if ref is None or value >= ref - 0.001:
@@ -2388,15 +2397,16 @@ class EnergyCalculator:
         set with this very set, complete, all reading — only then does the
         target cover everything the row holds. Mutates ``bl`` in place.
         """
-        maps = [bl.get("base"), bl.get("last"), bl.get("owed", {})]
+        maps = [bl.get("base"), bl.get("last"), bl.get("owed", {}),
+                bl.get("late", {})]
         if (bl.get("date") != day_str
                 or not all(isinstance(m, dict) for m in maps)
                 or not all(_finite(v) for m in maps for v in m.values())
                 or ("anchor" in bl and not _finite(bl["anchor"]))):
-            # (#1160) What the closing day's row holds that its counters have
-            # not shown: the new day's anchor owes it to them.
+            # (#1160) What the day that just closed holds that its counters
+            # have not shown: the new day's anchor owes it to them.
             closed = (self._ev_row_held(bl)
-                      if "date" in bl and bl.get("date") != day_str else None)
+                      if _ev_day_after(bl.get("date"), day_str) else None)
             # Day rollover (or first run / legacy or damaged shape):
             # fresh baselines for the new day.
             bl.clear()
@@ -2469,9 +2479,10 @@ class EnergyCalculator:
             # belongs to the row before the anchor, not to this one. Only
             # where ``pending`` is what the counter's own boxes drew
             # (``_ev_counter_owes``, #1157 #1159).
-            bl["owed"] = self._ev_owed_at_anchor(
+            bl["owed"], bl["late"] = self._ev_owed_at_anchor(
                 entities, bl.pop("closed", None), integrated, not whole)
         owed = bl.setdefault("owed", {})
+        late = bl.setdefault("late", {})
         for entity_id, value in readings.items():
             if entity_id not in owed:
                 continue
@@ -2484,10 +2495,26 @@ class EnergyCalculator:
                 paid = min(owed[entity_id],
                            max(0.0, value - bl["base"][entity_id]))
                 bl["base"][entity_id] += paid
-                owed[entity_id] -= paid + min(owed[entity_id] - paid,
-                                              not_drawn.get(entity_id, 0.0))
+                cut = paid + min(owed[entity_id] - paid,
+                                 not_drawn.get(entity_id, 0.0))
+                owed[entity_id] -= cut
+                # (#1160) The part owed above ``pending`` is older: it is
+                # paid first. Once the box has been seen idle for the
+                # late-report wait, what is left of it was a power read
+                # above the meter (``_track_ev_pending`` drops it from
+                # ``unreported`` then): kept, it would take kWh the counter
+                # shows later that day, from charging SEM did not see.
+                if late.get(entity_id, 0.0) > 0.0:
+                    late[entity_id] = max(0.0, late[entity_id] - cut)
+                    if (self._ev_counter_idle_h.get(entity_id, 0.0)
+                            >= EV_COUNTER_LATE_REPORT_H):
+                        owed[entity_id] -= late[entity_id]
+                        late[entity_id] = 0.0
             if owed[entity_id] <= 0.001:  # paid, or a damaged store
                 del owed[entity_id]
+        for entity_id in [e for e, v in late.items()
+                          if e not in owed or v <= 0.0]:
+            del late[entity_id]
 
         counter_daily = sum(
             value - bl["base"][entity_id]
@@ -2522,8 +2549,9 @@ class EnergyCalculator:
     def _ev_owed_at_anchor(
         self, entities: List[str], closed: Optional[float], anchor: float,
         up_only: bool,
-    ) -> Dict[str, float]:
-        """(#1049 #1159 #1160) What each counter owes a row's new anchor.
+    ) -> Tuple[Dict[str, float], Dict[str, float]]:
+        """(#1049 #1159 #1160) What each counter owes a row's new anchor,
+        and the part of it above ``pending`` (``late``).
 
         A counter can show part of a session before the day starts and the
         rest after it. ``pending`` holds only what its boxes drew since it
@@ -2531,22 +2559,24 @@ class EnergyCalculator:
         the session's power read booked the rest on both days.
 
         At the day's start (``closed``: what the closing row held above its
-        counters, ``_ev_row_held``), a row that moves up only (``up_only``)
-        owes each counter what SEM saw its boxes draw and it has not shown
-        (``unreported``, or ``pending`` if more). Owing too much cannot cost
-        such a row a kWh: its power read is its floor. A row the counters
-        own would lose real kWh to a power read above the meter, which
-        ``unreported`` holds too, so it owes ``pending`` only. Either way,
-        all counters together owe no more than the two rows hold above them:
-        the closing row's ``closed`` and the new row's ``anchor``, shared out
-        by size. A row that followed its counters holds none, and the new
-        day books the rest. Any other anchor (no closing day, a counter
-        that went back) owes ``pending`` as before.
+        counters, ``_ev_row_held``), a row that moves up only
+        (``up_only``) owes each counter what SEM saw its boxes draw and it
+        has not shown (``unreported``, or ``pending`` if more). That part
+        can be a power read above the meter, which the counter never shows:
+        it is dropped after the late-report wait, as ``unreported`` is
+        (``_ev_counter_target``). A row the counters own would lose real
+        kWh to it as soon as it drops to its counters, so it owes
+        ``pending`` only. Either way, all counters together owe no more
+        than the two rows hold above them: the closing row's ``closed`` and
+        the new row's ``anchor``, shared out by size. A row that followed
+        its counters holds none, and the new day books the rest. Any other
+        anchor (no closing day, a counter that went back) owes ``pending``
+        as before.
         """
         pending = {e: self._ev_counter_pending.get(e, 0.0)
                    for e in entities if self._ev_counter_owes(e)}
         if not (_finite(closed) and closed >= 0.0):
-            return {e: v for e, v in pending.items() if v > 0.0}
+            return {e: v for e, v in pending.items() if v > 0.0}, {}
         want = pending
         if up_only:
             want = {e: max(v, self._ev_counter_unreported.get(e, 0.0))
@@ -2554,7 +2584,9 @@ class EnergyCalculator:
         total = sum(want.values())
         held = closed + max(0.0, anchor)
         share = 1.0 if total <= held else held / total
-        return {e: v * share for e, v in want.items() if v * share > 0.0}
+        owed = {e: v * share for e, v in want.items() if v * share > 0.0}
+        late = {e: v - pending[e] for e, v in owed.items() if v > pending[e]}
+        return owed, late
 
     @staticmethod
     def _ev_adoption(
