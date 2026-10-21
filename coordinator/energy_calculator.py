@@ -202,6 +202,15 @@ def _finite(value: Any) -> bool:
             and math.isfinite(value))
 
 
+def _ev_day_after(before: Any, day: str) -> bool:
+    """(#1160) ``day`` is the day right after ``before`` (ISO dates)."""
+    try:
+        return (date.fromisoformat(day)
+                - date.fromisoformat(str(before))) == timedelta(days=1)
+    except ValueError:
+        return False
+
+
 def _ev_counter_drop(value: float, ref: Optional[float]) -> Optional[str]:
     """(#1049) ``"dip"`` or ``"reset"`` for a reading below ``ref``, else None."""
     if ref is None or value >= ref - 0.001:
@@ -443,6 +452,14 @@ class EnergyCalculator:
         # (#1159) Counters whose boxes this cycle read each on their own
         # power sensor, so ``pending`` is their own draw. Runtime only.
         self._ev_counter_own_read: Set[str] = set()
+        # (#1160) Counters whose boxes this cycle read idle: each box read
+        # on its own power sensor, none charging. ``_ev_watch_gap``: this
+        # cycle follows time SEM did not watch (down, a skipped cycle).
+        # ``_ev_counter_late_step``: the kWh of this cycle's move that can
+        # only be a late report — see ``_track_ev_pending``. Runtime only.
+        self._ev_counter_seen_idle: Set[str] = set()
+        self._ev_watch_gap = False
+        self._ev_counter_late_step: Dict[str, float] = {}
         # (#556) Daily-solar reconciliation against hardware production
         # counters — closes the cloud-poll undercount (integrating a power
         # sensor that reports 0/unavailable between polls). Baselines are
@@ -2342,6 +2359,8 @@ class EnergyCalculator:
             baselines, str(day), entities, integrated,
             self._ev_counter_complete,
         )
+        # (#1160) The row as this cycle leaves it, for the next day's anchor.
+        baselines["row"] = integrated
         if target is None:
             return
 
@@ -2365,6 +2384,7 @@ class EnergyCalculator:
             return
         delta = adopted - integrated
         self._daily_accumulators[daily_key] = adopted
+        baselines["row"] = adopted
         for accumulators, key in periods:
             # max(0.0) — a delta can be negative since #1049, and a longer
             # period must never be dragged below zero by one day's correction.
@@ -2385,16 +2405,42 @@ class EnergyCalculator:
         set with this very set, complete, all reading — only then does the
         target cover everything the row holds. Mutates ``bl`` in place.
         """
-        maps = [bl.get("base"), bl.get("last"), bl.get("owed", {})]
+        maps = [bl.get("base"), bl.get("last"), bl.get("owed", {}),
+                bl.get("late", {})]
         if (bl.get("date") != day_str
                 or not all(isinstance(m, dict) for m in maps)
                 or not all(_finite(v) for m in maps for v in m.values())
                 or ("anchor" in bl and not _finite(bl["anchor"]))):
+            # (#1160) What the day that just closed holds that its counters
+            # have not shown: the new day's anchor owes it to them.
+            closed = (self._ev_row_held(bl)
+                      if _ev_day_after(bl.get("date"), day_str) else None)
             # Day rollover (or first run / legacy or damaged shape):
             # fresh baselines for the new day.
             bl.clear()
             bl.update({"date": day_str, "base": {}, "last": {}})
+            if closed is not None:
+                bl["closed"] = closed
 
+        owed, late = bl.get("owed", {}), bl.get("late", {})
+        for entity_id in list(late):
+            # (#1160) The part owed above ``pending`` (``late``) is a late
+            # report of a session that ended before the day started, or a
+            # power read above the meter, which the counter never shows. It
+            # is kept only while SEM watches the box idle, for the
+            # late-report wait at most (``_track_ev_pending`` drops it from
+            # ``unreported`` then). Once the box charges, its read goes dark
+            # or SEM was not watching, a later move may be kWh the power
+            # read missed, and what is left of it would take them. Also in
+            # a cycle no counter reads.
+            if entity_id in owed and (
+                    entity_id not in self._ev_counter_seen_idle
+                    or self._ev_watch_gap
+                    or self._ev_counter_idle_h.get(entity_id, 0.0)
+                    >= EV_COUNTER_LATE_REPORT_H):
+                owed[entity_id] -= min(max(0.0, late[entity_id]),
+                                       owed[entity_id])
+                late[entity_id] = 0.0
         readings: Dict[str, float] = {}
         for entity_id in entities:
             state = self._hass.states.get(entity_id)
@@ -2460,28 +2506,48 @@ class EnergyCalculator:
             # belongs to the row before the anchor, not to this one. Only
             # where ``pending`` is what the counter's own boxes drew
             # (``_ev_counter_owes``, #1157 #1159).
-            bl["owed"] = {
-                e: self._ev_counter_pending[e] for e in entities
-                if self._ev_counter_owes(e)
-                and self._ev_counter_pending.get(e, 0.0) > 0.0
-            }
+            bl["owed"], bl["late"] = self._ev_owed_at_anchor(
+                entities, bl.pop("closed", None), integrated, not whole)
         owed = bl.setdefault("owed", {})
+        late = bl.setdefault("late", {})
         for entity_id, value in readings.items():
             if entity_id not in owed:
                 continue
-            if owed[entity_id] > 0.001:
+            lag = min(max(0.0, late.get(entity_id, 0.0)), owed[entity_id])
+            payable = owed[entity_id] - lag
+            if payable > 0.001:
                 # A counter can report a late session in several steps:
                 # what a step books pays first, oldest first. (#1159) Then
                 # what a step judged foreign took out of the row: nothing
                 # else did. Kept, what was owed then took the next real
                 # charge that day.
-                paid = min(owed[entity_id],
-                           max(0.0, value - bl["base"][entity_id]))
+                paid = min(payable, max(0.0, value - bl["base"][entity_id]))
                 bl["base"][entity_id] += paid
-                owed[entity_id] -= paid + min(owed[entity_id] - paid,
-                                              not_drawn.get(entity_id, 0.0))
+                cut = paid + min(payable - paid,
+                                 not_drawn.get(entity_id, 0.0))
+                owed[entity_id] -= cut
+                not_drawn[entity_id] = max(
+                    0.0, not_drawn.get(entity_id, 0.0) - (cut - paid))
+            # Only the part of this cycle's move that can be nothing but a
+            # late report (``_ev_counter_late_step``: SEM watched the box
+            # idle since the counter last moved) pays ``late``: a move while
+            # a box charges is that charge, a move after time SEM did not
+            # watch may be one it missed.
+            late_step = self._ev_counter_late_step.get(entity_id, 0.0)
+            if lag > 0.0 and late_step > 0.0:
+                booked = min(lag, late_step,
+                             max(0.0, value - bl["base"][entity_id]))
+                bl["base"][entity_id] += booked
+                cut = booked + min(lag - booked,
+                                   not_drawn.get(entity_id, 0.0))
+                owed[entity_id] -= cut
+                lag -= cut
+            late[entity_id] = lag
             if owed[entity_id] <= 0.001:  # paid, or a damaged store
                 del owed[entity_id]
+        for entity_id in [e for e, v in late.items()
+                          if e not in owed or v <= 0.0]:
+            del late[entity_id]
 
         counter_daily = sum(
             value - bl["base"][entity_id]
@@ -2492,6 +2558,89 @@ class EnergyCalculator:
             len(readings) == len(entities)
             and bl.get("whole") == sorted(entities),
         )
+
+    @staticmethod
+    def _ev_row_held(bl: Dict[str, Any]) -> Optional[float]:
+        """(#1160) kWh a day's row holds above what its counters showed.
+
+        ``row`` is the row as its last cycle left it; the counters showed
+        ``anchor`` plus each one's move since its base. A row that moves up
+        only keeps a power read above them; so does a row the counters own
+        while a car charges. A row that followed them holds none. Plus what
+        it still owed (a counter flat for a whole day). None when the store
+        does not say (from before #1160, or damaged).
+        """
+        row, anchor = bl.get("row"), bl.get("anchor")
+        base, last = bl.get("base"), bl.get("last")
+        owed = bl.get("owed", {})
+        if not (_finite(row) and row >= 0.0 and _finite(anchor)
+                and isinstance(base, dict) and isinstance(last, dict)
+                and isinstance(owed, dict)
+                and all(_finite(v) for v in owed.values())):
+            return None
+        moved = [(last.get(e), b) for e, b in base.items()]
+        if not all(_finite(v) and _finite(b) for v, b in moved):
+            return None
+        # What it still owed from before its own anchor is owed on.
+        return (max(0.0, row - max(0.0, anchor + sum(v - b for v, b in moved)))
+                + sum(max(0.0, v) for v in owed.values()))
+
+    def _ev_owed_at_anchor(
+        self, entities: List[str], closed: Optional[float], anchor: float,
+        up_only: bool,
+    ) -> Tuple[Dict[str, float], Dict[str, float]]:
+        """(#1049 #1159 #1160) What each counter owes a row's new anchor,
+        and the part of it above ``pending`` (``late``).
+
+        A counter can show part of a session before the day starts and the
+        rest after it. ``pending`` holds only what its boxes drew since it
+        last moved, so it owed none of that rest, and a row that still held
+        the session's power read booked the rest on both days.
+
+        At the day's start (``closed``: what the closing row held above its
+        counters, ``_ev_row_held``), a row that moves up only
+        (``up_only``) owes a counter whose boxes SEM sees idle what it saw
+        them draw and the counter has not shown (``unreported``, or
+        ``pending`` if more). The part above ``pending`` (``late``) can be
+        a power read above the meter, which the counter never shows, so
+        only a move that can be nothing but a late report pays it
+        (``_ev_counter_late_step``). It goes once the box charges, its
+        read goes dark, SEM was not watching, or the late-report wait has
+        passed (``_ev_counter_target``). A box still
+        charging owes ``pending`` only: SEM cannot tell its counter's late
+        report from the new charge (#1161). So does a row the counters own:
+        it would lose real kWh to that power read as soon as it drops to
+        its counters. Either way, all counters together owe no more than
+        the two rows hold above them: the closing row's ``closed`` and the
+        new row's ``anchor``. ``pending`` is kept whole first; the late
+        parts share what is left by size. A row that followed its
+        counters holds none, and the new day books the rest. Any other
+        anchor (no closing day, a counter that went back) owes ``pending``
+        as before.
+        """
+        pending = {e: self._ev_counter_pending.get(e, 0.0)
+                   for e in entities if self._ev_counter_owes(e)}
+        if not (_finite(closed) and closed >= 0.0):
+            return {e: v for e, v in pending.items() if v > 0.0}, {}
+        want = pending
+        if up_only:
+            want = {e: max(v, self._ev_counter_unreported.get(e, 0.0))
+                    if e in self._ev_counter_seen_idle
+                    and not self._ev_watch_gap else v
+                    for e, v in pending.items()}
+        held = closed + max(0.0, anchor)
+        owing = sum(pending.values())
+        if owing > held:
+            share = held / owing
+            return {e: v * share for e, v in pending.items()
+                    if v * share > 0.0}, {}
+        # ``pending`` whole first, as before; the late parts share the rest.
+        extra = {e: v - pending[e] for e, v in want.items() if v > pending[e]}
+        total = sum(extra.values())
+        share = 1.0 if total <= held - owing else (held - owing) / total
+        late = {e: v * share for e, v in extra.items() if v * share > 0.0}
+        owed = {e: v + late.get(e, 0.0) for e, v in pending.items()}
+        return {e: v for e, v in owed.items() if v > 0.0}, late
 
     @staticmethod
     def _ev_adoption(
@@ -2567,10 +2716,21 @@ class EnergyCalculator:
         (#1159) …and which counters read each of their boxes on its own
         power sensor this cycle (``_ev_counter_own_read``): only their
         ``pending`` may be owed at an anchor (``_ev_counter_owes``).
+
+        (#1160) …and which of those read every box idle
+        (``_ev_counter_seen_idle``): only such a counter may owe a late
+        report of the day before at an anchor. A move SEM watched every box
+        for since the counter last moved (nothing unseen, no gap), with
+        none charging now, has a part that can only be a late report: the
+        step above what SEM saw them draw since (``_ev_counter_late_step``).
+        Only that part pays it (``_ev_counter_target``).
         """
         self._ev_owners_drawing = set()
         self._ev_counter_foreign = {}
         self._ev_counter_own_read = set()
+        self._ev_counter_seen_idle = set()
+        self._ev_watch_gap = False
+        self._ev_counter_late_step = {}
         if not self._ev_counter_enabled or not self._hass:
             return
         now = now or dt_util.now()
@@ -2585,6 +2745,7 @@ class EnergyCalculator:
             self._ev_counter_quiet_h.clear()
         # More than a second unseen: SEM was down or skipped a cycle.
         gap = unseen_h is not None and unseen_h * 3600.0 > 1.0
+        self._ev_watch_gap = gap
         box_kw = self._ev_box_max_kw()
         per_charger = getattr(power, "ev_power_per_charger", None) or {}
         fleet_w = float(power.ev_power or 0.0)  # FLEET-READ: the fallback when a box's own draw is not known.
@@ -2635,6 +2796,16 @@ class EnergyCalculator:
             ):
                 if moved:
                     step = value - seen
+                    if (room is not None and unseen <= 0.0 and live
+                            and charging_w <= 0.0):
+                        # (#1160) SEM watched every box since the counter
+                        # last moved (time it did not, a gap too, is in
+                        # ``unseen``), and none charges now: the part of the
+                        # step above what it saw them draw since can only
+                        # be a late report of what they drew before.
+                        self._ev_counter_late_step[entity_id] = max(
+                            0.0, step - self._ev_counter_pending.get(
+                                entity_id, 0.0))
                     if room is not None:
                         # What SEM saw drawn and not yet shown may come in
                         # this step too, whenever the box drew it.
@@ -2675,6 +2846,8 @@ class EnergyCalculator:
             # saw since the counter last moved (``pending``: a record that
             # holds none, or an older store). Unseen time starts the wait
             # again. No record yet: the watch starts.
+            if live and charging_w <= 0.0:
+                self._ev_counter_seen_idle.add(entity_id)  # (#1160)
             quiet_h = self._ev_counter_quiet_h.get(entity_id, 0.0)
             if not live or gap:
                 quiet_h = 0.0
@@ -2880,13 +3053,16 @@ class EnergyCalculator:
         bl["counter"] = counter
         chargers = self.config.get("ev_chargers") or []
         one_box = self._max_daily_ev_kwh() / max(1, len(chargers))
-        if target is None or target > one_box:
-            return value
-        adopted = self._ev_adoption(
-            f"charger {cid}", target, value, all_read,
-            self._ev_settled([counter]),
-        )
-        return value if adopted is None else adopted
+        adopted = None
+        if target is not None and target <= one_box:
+            adopted = self._ev_adoption(
+                f"charger {cid}", target, value, all_read,
+                self._ev_settled([counter]),
+            )
+        row = value if adopted is None else adopted
+        # (#1160) The row as this cycle leaves it, for the next day's anchor.
+        bl["row"] = row
+        return row
 
     def _tally_backing(self, category: str, today_str: str, backed: bool) -> None:
         """(#628 visibility) Count and announce counter-backing transitions.
