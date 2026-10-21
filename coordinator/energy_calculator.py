@@ -2422,6 +2422,25 @@ class EnergyCalculator:
             if closed is not None:
                 bl["closed"] = closed
 
+        owed, late = bl.get("owed", {}), bl.get("late", {})
+        for entity_id in list(late):
+            # (#1160) The part owed above ``pending`` (``late``) is a late
+            # report of a session that ended before the day started, or a
+            # power read above the meter, which the counter never shows. It
+            # is kept only while SEM watches the box idle, for the
+            # late-report wait at most (``_track_ev_pending`` drops it from
+            # ``unreported`` then). Once the box charges, its read goes dark
+            # or SEM was not watching, a later move may be kWh the power
+            # read missed, and what is left of it would take them. Also in
+            # a cycle no counter reads.
+            if entity_id in owed and (
+                    entity_id not in self._ev_counter_seen_idle
+                    or self._ev_watch_gap
+                    or self._ev_counter_idle_h.get(entity_id, 0.0)
+                    >= EV_COUNTER_LATE_REPORT_H):
+                owed[entity_id] -= min(max(0.0, late[entity_id]),
+                                       owed[entity_id])
+                late[entity_id] = 0.0
         readings: Dict[str, float] = {}
         for entity_id in entities:
             state = self._hass.states.get(entity_id)
@@ -2491,23 +2510,6 @@ class EnergyCalculator:
                 entities, bl.pop("closed", None), integrated, not whole)
         owed = bl.setdefault("owed", {})
         late = bl.setdefault("late", {})
-        for entity_id in list(late):
-            # (#1160) The part owed above ``pending`` (``late``) is a late
-            # report of a session that ended before the day started, or a
-            # power read above the meter, which the counter never shows. It
-            # is kept only while SEM watches the box idle, for the
-            # late-report wait at most (``_track_ev_pending`` drops it from
-            # ``unreported`` then). Once the box charges, its read goes dark
-            # or SEM was not watching, a later move may be kWh the power
-            # read missed, and what is left of it would take them.
-            if entity_id in owed and (
-                    entity_id not in self._ev_counter_seen_idle
-                    or self._ev_watch_gap
-                    or self._ev_counter_idle_h.get(entity_id, 0.0)
-                    >= EV_COUNTER_LATE_REPORT_H):
-                owed[entity_id] -= min(max(0.0, late[entity_id]),
-                                       owed[entity_id])
-                late[entity_id] = 0.0
         for entity_id, value in readings.items():
             if entity_id not in owed:
                 continue
@@ -2564,18 +2566,24 @@ class EnergyCalculator:
         ``row`` is the row as its last cycle left it; the counters showed
         ``anchor`` plus each one's move since its base. A row that moves up
         only keeps a power read above them; so does a row the counters own
-        while a car charges. A row that followed them holds none. None when
-        the store does not say (from before #1160, or damaged).
+        while a car charges. A row that followed them holds none. Plus what
+        it still owed (a counter flat for a whole day). None when the store
+        does not say (from before #1160, or damaged).
         """
         row, anchor = bl.get("row"), bl.get("anchor")
         base, last = bl.get("base"), bl.get("last")
+        owed = bl.get("owed", {})
         if not (_finite(row) and row >= 0.0 and _finite(anchor)
-                and isinstance(base, dict) and isinstance(last, dict)):
+                and isinstance(base, dict) and isinstance(last, dict)
+                and isinstance(owed, dict)
+                and all(_finite(v) for v in owed.values())):
             return None
         moved = [(last.get(e), b) for e, b in base.items()]
         if not all(_finite(v) and _finite(b) for v, b in moved):
             return None
-        return max(0.0, row - max(0.0, anchor + sum(v - b for v, b in moved)))
+        # What it still owed from before its own anchor is owed on.
+        return (max(0.0, row - max(0.0, anchor + sum(v - b for v, b in moved)))
+                + sum(max(0.0, v) for v in owed.values()))
 
     def _ev_owed_at_anchor(
         self, entities: List[str], closed: Optional[float], anchor: float,
@@ -2616,7 +2624,8 @@ class EnergyCalculator:
         want = pending
         if up_only:
             want = {e: max(v, self._ev_counter_unreported.get(e, 0.0))
-                    if e in self._ev_counter_seen_idle else v
+                    if e in self._ev_counter_seen_idle
+                    and not self._ev_watch_gap else v
                     for e, v in pending.items()}
         total = sum(want.values())
         held = closed + max(0.0, anchor)
