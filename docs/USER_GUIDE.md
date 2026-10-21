@@ -1855,6 +1855,13 @@ kept. One run at a time.
 - Before showing a what-if, SEM replays the same period with your own
   settings. If that misses your real cost by more than 5 %, the tab says
   the period cannot be simulated reliably instead.
+  This check leaves out days where a counter jumped, and says how many
+  days it used. Days when a car charged get their own line: how far off
+  your settings are on those days.
+- If the what-if gives the car less energy than it really got, the net
+  total counts that energy at the import price: it was not a saving.
+- With a flat **Import price** or **Export value**, the actual cost is
+  re-priced at that price and marked with *.
 
 How the night charge is replayed: SEM's real scheduler plans each night
 from that day's forecast (a day without a stored forecast uses its own
