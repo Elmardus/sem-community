@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
-- 🐛 **Charge pacing no longer gives the limit back and sets it again when the forecast just fills the pack** (#820). A short forecast gap is bridged.
+- 🐛 **Charge pacing no longer drops the limit and sets it again when the forecast just fills the battery** (#820). A short forecast gap is bridged.
 - ✨ **Simulation check skips days where a counter jumped, and says how many days it used** (#1083). Car days show their own error line.
 - ✨ **Simulation total counts car energy the what-if did not deliver; re-priced actuals are marked** (#1083).
 - ✨ **The EV tab opens in Everyday view**: per charger, mode, target and Charge by; pause, departures, plan and sessions fold under More and Details.
