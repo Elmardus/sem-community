@@ -1708,6 +1708,10 @@ Diagnose button shows what the register holds and accepts, what SEM sent, and
 any line another integration logged about that entity, such as a template
 number that dropped the write ("set_value: Already running").
 
+When the forecast just fills the battery, pacing keeps its limit. It no
+longer lets the limit go and sets it again. A short gap in the forecast does
+not end pacing.
+
 ### Grid CO₂
 
 SEM finds your grid CO₂ sensor by its unit (g or kg CO₂ per kWh). If it found
