@@ -65,6 +65,19 @@ STORAGE_KEY = "sem_device_mappings"
 MAX_PLAUSIBLE_CHARGER_AMPS: int = 32
 
 
+def _tariff_payload(live: Any, goals: Dict[str, Any]) -> Dict[str, Any]:
+    """(#812) The own-tariff fields for the card: the live device's, else
+    what is stored (no live object yet)."""
+    from ..coordinator.device_tariff import parse_rate, tariff_of
+    if live is not None:
+        t = tariff_of(live)
+        return {"tariff_rate": t.rate, "tariff_entity": t.entity,
+                "tariff_meter": t.meter}
+    return {"tariff_rate": parse_rate(goals.get("tariff_rate")),
+            "tariff_entity": str(goals.get("tariff_entity") or ""),
+            "tariff_meter": str(goals.get("tariff_meter") or "")}
+
+
 def _goal_bool(value: Any) -> bool:
     """(#620) Parse a stored goal bool. The service persists these as STRINGS
     ("True"/"False"), and ``bool("False")`` is True in Python — so an explicit
@@ -546,6 +559,9 @@ class UnifiedDeviceRegistry:
         "phase",
         # (#1021) wiring: this load sits behind the grid operator's relay
         "behind_operator_relay",
+        # (#812) the load's own tariff: a fixed rate or a price entity, and
+        # its own meter. None set = the house tariff.
+        "tariff_rate", "tariff_entity", "tariff_meter",
     )
 
     def phase_for(self, device_id: str) -> str:
@@ -570,6 +586,10 @@ class UnifiedDeviceRegistry:
         if "behind_operator_relay" in goals:
             device.behind_operator_relay = _goal_bool(
                 goals.get("behind_operator_relay"))
+        # (#812) key-present-only, like the phase: a heat pump's config row
+        # seeds its tariff, a stored goal overrides the fields it names.
+        from ..coordinator.device_tariff import TARIFF_KEYS, apply_tariff
+        apply_tariff(device, {k: goals[k] for k in TARIFF_KEYS if k in goals})
         device.daily_min_runtime_sec = int(
             float(goals.get("daily_min_runtime_min", 0)) * 60
         )
@@ -2415,6 +2435,9 @@ class UnifiedDeviceRegistry:
                 # (#1021) the Configure-device switch
                 "behind_operator_relay": _goal_bool(
                     goals.get("behind_operator_relay")),
+                # (#812) the load's own tariff — what the LIVE device holds,
+                # so a heat pump's config-seeded tariff shows here too
+                **_tariff_payload(live, goals),
                 # (#705) the comfort band — pre-fill for the editor.
                 "comfort_entity": goals.get("comfort_entity", ""),
                 "comfort_target": goals.get("comfort_target", 0),

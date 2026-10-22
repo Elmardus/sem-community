@@ -1547,6 +1547,8 @@ OPTIONS_FLOW_OWNED_KEYS = frozenset({
     "heat_pump_sg_ready_service",
     "heat_pump_sg_ready_service_data",
     "heat_pump_sg_ready_state_entity",
+    # (#812) the pump's own tariff and meter
+    "heat_pump_tariff_rate", "heat_pump_tariff_entity", "heat_pump_tariff_meter",
     "heat_pump_temperature_sensor",
     "heat_pump_energy_sensor",
     "heat_pump_rated_power",
@@ -3479,6 +3481,32 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             errors=errors
         )
 
+    def _heat_pump_tariff_fields(self, current) -> dict:
+        """(#812) The pump's own tariff: a fixed rate or a price entity, and
+        its own meter. All empty = the house tariff. ``current(key)`` reads the
+        saved value (the primary pump's flat key, or one row of ``heat_pumps``).
+        """
+        hass = getattr(self, "hass", None)
+        currency = getattr(getattr(hass, "config", None), "currency", None) or "EUR"
+        return {
+            vol.Optional(
+                "heat_pump_tariff_rate",
+                description={"suggested_value": current("heat_pump_tariff_rate")},
+            ): selector.NumberSelector(selector.NumberSelectorConfig(
+                min=0.0, max=10000.0, step=0.001,
+                unit_of_measurement=f"{currency}/kWh", mode="box")),
+            vol.Optional(
+                "heat_pump_tariff_entity",
+                description={"suggested_value": current("heat_pump_tariff_entity")},
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain=["sensor", "input_number"])),
+            vol.Optional(
+                "heat_pump_tariff_meter",
+                description={"suggested_value": current("heat_pump_tariff_meter")},
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", device_class="energy")),
+        }
+
     async def async_step_heat_pump(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -3630,6 +3658,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain=["sensor", "select", "input_select"])
                 ),
+                **self._heat_pump_tariff_fields(_opt),
             }),
             errors=errors,
         )
@@ -3842,6 +3871,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain=["sensor", "select", "input_select"])
                 ),
+                **self._heat_pump_tariff_fields(_row),
             }),
             errors=errors,
         )
