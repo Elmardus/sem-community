@@ -87,6 +87,9 @@ VALUE_DEFAULTS: Mapping[str, Any] = {
 # energy tax (2026 rate per kWh, excl. VAT — check your bill for 2027) and
 # 21 % VAT, and turns the per-kWh feed-in fee on; the fee itself and the
 # supplier markup differ per supplier, so they stay what the user typed.
+# Tax and VAT only mean something on a spot price, so the preset also says
+# the price sensor reports spot (ENTSO-E, Nord Pool). A price that is
+# already all-in (Tibber's total) needs no preset.
 PRESET_FIELDS: Mapping[str, Mapping[str, Any]] = {
     PRESET_NONE: {
         CONF_IMPORT_MARKUP: 0.0,
@@ -97,6 +100,7 @@ PRESET_FIELDS: Mapping[str, Mapping[str, Any]] = {
         CONF_FEED_IN_FEE_TIERS: "",
     },
     PRESET_NL_2027: {
+        CONF_IMPORT_PRICE_BASIS: BASIS_SPOT,
         CONF_IMPORT_ENERGY_TAX: 0.0916,
         CONF_IMPORT_VAT_PERCENT: 21.0,
         CONF_FEED_IN_FEE_MODEL: FEE_PER_KWH,

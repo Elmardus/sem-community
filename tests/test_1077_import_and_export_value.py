@@ -366,6 +366,7 @@ class TestThePreset:
         assert out[TAX] == pytest.approx(0.0916)
         assert out[VAT] == 21.0
         assert out[MODEL] == vl.FEE_PER_KWH
+        assert out[BASIS] == vl.BASIS_SPOT     # tax and VAT go on a spot price
         assert MARKUP not in out and FEE not in out   # supplier's own numbers
 
     def test_none_clears_everything(self):
@@ -422,11 +423,13 @@ class TestTheSettings:
         flow = _flow(mock_hass, config_entry, {})
         result = await _step(flow, config_entry, {
             "tariff_mode": "static", PRESET: vl.PRESET_NL_2027,
-            BASIS: vl.BASIS_SPOT, TAX: 0.0, VAT: 0.0, MODEL: vl.FEE_NONE})
+            BASIS: vl.BASIS_ALL_IN, TAX: 0.0, VAT: 0.0, MODEL: vl.FEE_NONE})
         assert result["step_id"] == "load_management"
         assert flow._data[TAX] == pytest.approx(0.0916)
         assert flow._data[VAT] == 21.0
         assert flow._data[MODEL] == vl.FEE_PER_KWH
+        # the form still showed "all-in"; picking the preset sets spot
+        assert flow._data[BASIS] == vl.BASIS_SPOT
 
     def test_owned_and_in_the_diagnose_dump(self):
         from custom_components.solar_energy_management.config_flow import (
@@ -570,11 +573,14 @@ class TestTheFlowRefusesTheClash:
         assert flow._data[MARKUP] == 0.02
 
     @pytest.mark.asyncio
-    async def test_the_nl_preset_on_all_in_is_refused(self, mock_hass, config_entry):
+    async def test_the_nl_preset_sets_spot_so_it_is_never_a_clash(
+            self, mock_hass, config_entry):
+        """The preset owns the basis: choosing it on an all-in form saves."""
         flow = _flow(mock_hass, config_entry, {})
         result = await _step(flow, config_entry, {
             "tariff_mode": "static", PRESET: vl.PRESET_NL_2027})
-        assert result["errors"] == {BASIS: ERR_KEY}
+        assert result["step_id"] == "load_management"
+        assert flow._data[BASIS] == vl.BASIS_SPOT
 
 
 @pytest.mark.asyncio
