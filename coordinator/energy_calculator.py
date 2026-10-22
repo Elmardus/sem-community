@@ -332,6 +332,8 @@ VALUE_FEED_IN_FEE = "value_feed_in_fee"
 #: own import cost, so the two daily figures roll together.
 DEVICE_TARIFF_KWH = "device_tariff_kwh:"
 DEVICE_TARIFF_COST = "device_tariff_cost:"
+#: (#812) Device kWh taken out of the house's import cost today (all devices).
+DEVICE_TARIFF_MOVED = "device_tariff_moved"
 CO2_KG_PER_TREE_PER_YEAR = 22  # EPA estimate
 
 
@@ -3987,14 +3989,35 @@ class EnergyCalculator:
     def accumulate_device_tariff(
         self, device_id: str, grid_kwh: float, cost: float, day: date,
     ) -> None:
-        """(#812) Book a device's grid kWh at its own tariff."""
+        """(#812) Book a device's grid kWh at its own tariff — and move them
+        out of the house's import cost.
+
+        ``cost_import`` already booked every imported kWh at the house rate
+        (``calculate_energy``). The device's share is taken back out at that
+        rate and put back in at the device's price, so the house's daily cost
+        is ONE total: (house kWh − device kWh) × house rate + device kWh ×
+        device price. The kWh moved are capped at what the house imported
+        today: a device meter that runs ahead of the main meter can never
+        drive the house's own kWh below zero.
+        """
         if not device_id or not grid_kwh:
             return
+        grid_kwh, cost = float(grid_kwh), float(cost)
         month_key, year_key = self._month_key(day), str(day.year)
         self._accumulate(f"{DEVICE_TARIFF_KWH}{device_id}", day,
-                         month_key, year_key, float(grid_kwh))
+                         month_key, year_key, grid_kwh)
         self._accumulate_cost(f"{DEVICE_TARIFF_COST}{device_id}", day,
-                              month_key, year_key, float(cost))
+                              month_key, year_key, cost)
+        room = max(0.0, self._daily_accumulators.get(f"grid_import_{day}", 0.0)
+                   - self._daily_accumulators.get(f"{DEVICE_TARIFF_MOVED}_{day}", 0.0))
+        moved = min(grid_kwh, room)
+        if moved <= 0:
+            return
+        self._accumulate(DEVICE_TARIFF_MOVED, day, month_key, year_key, moved)
+        own_price = cost / grid_kwh
+        house_rate = float(self._import_rate or 0.0)
+        self._accumulate_cost("cost_import", day, month_key, year_key,
+                              moved * (own_price - house_rate))
 
     def get_device_tariff(self, device_id: str, day: date) -> Dict[str, float]:
         """(#812) Today's grid kWh and cost of a device on its own tariff."""
