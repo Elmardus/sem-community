@@ -628,6 +628,32 @@ class SEMPerBatterySelect(CoordinatorEntity, SelectEntity):
         opts = self.options
         return self._value if self._value in opts else (opts[0] if opts else None)
 
+    def _stored_mode(self):
+        """The mode in the store this select writes: the scalar for the one
+        global select, else this battery's ``battery_modes`` slot. Unset is
+        ``auto`` (what ``_per_battery_config`` runs)."""
+        cfg = getattr(self.coordinator, "config", None)
+        if not isinstance(cfg, dict):
+            return None
+        if self._idx is None:
+            return cfg.get("battery_mode") or DEFAULT_BATTERY_MODE
+        lst = cfg.get("battery_modes")
+        if isinstance(lst, list) and self._idx < len(lst) and lst[self._idx]:
+            return lst[self._idx]
+        return DEFAULT_BATTERY_MODE
+
+    def _handle_coordinator_update(self) -> None:
+        """(#1131) The config is the truth; the select follows it.
+
+        ``_value`` changed only on the user's own pick, so SEM putting a
+        finished Force charge back on Auto (or the set_option service) left
+        the select showing a mode nothing ran. Same rule as the charger mode
+        select (#980)."""
+        value = self._stored_mode()
+        if isinstance(value, str) and value in self.options and value != self._value:
+            self._value = value
+        super()._handle_coordinator_update()
+
     @property
     def available(self) -> bool:
         return self.coordinator.last_update_success

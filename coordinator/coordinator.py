@@ -7714,6 +7714,48 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # readers resolve it (``reserve_soc_of``, mode → ``auto``).
         return {**cfg, **overrides} if overrides else cfg
 
+    def _finish_manual_battery_mode(
+        self, idx: int, count: int, runtime, soc_read: bool,
+    ) -> None:
+        """(#1131) Put a battery back on Auto when its manual job is done.
+
+        Force charge stayed on at 100 %: the house took 1 % and SEM bought it
+        back from the grid at once, for as long as nobody changed the mode.
+        Force discharge did the same at the reserve with the next day's sun.
+        Each is one job; ``manual_mode_done`` says when it is finished.
+
+        A mode write, not a command — the same as picking Auto by hand, so the
+        cycle that follows decides as Auto and stops the forced op SEM
+        started (#1066). It reads the user's mode, before the VPP override is
+        laid over it: a grid event's force charge is the event's, and never
+        moves the select. The store written is the one ``_per_battery_config``
+        reads, so the control on screen shows it.
+        """
+        from .decide_battery import manual_mode_done
+        if self.config_entry is None:
+            return          # too early to persist anything
+        cfg = self._per_battery_config(idx, count)
+        mode = str(cfg.get("battery_mode", "auto") or "auto").lower()
+        soc = getattr(runtime, "last_known_soc", None)
+        if not manual_mode_done(mode, soc, soc_read=soc_read,
+                                reserve=reserve_soc_of(cfg)):
+            return
+        from .. import persist_global_option, persist_per_battery_option
+        if has_per_battery_controls(self, count):
+            slugs = getattr(self, "battery_control_slugs", None)
+            n = max(count, len(slugs) if isinstance(slugs, tuple) else 0)
+            persist_per_battery_option(
+                self.hass, self.config_entry, self, idx, "battery_modes",
+                DEFAULT_BATTERY_MODE, n)
+        else:
+            persist_global_option(
+                self.hass, self.config_entry, self, "battery_mode",
+                DEFAULT_BATTERY_MODE)
+        _LOGGER.info(
+            "Battery %s: %s finished at %.0f%% — mode back to %s (#1131)",
+            getattr(runtime, "battery_id", idx), mode, float(soc),
+            DEFAULT_BATTERY_MODE)
+
     def _arbitrage_enabled(self, battery_count: int = 0) -> bool:
         """(#533 / #638 C6+C7) Can battery→grid arbitrage act on THIS install?
 
@@ -9178,8 +9220,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # ``"primary"`` entry built from the fleet sensors — identical
         # behaviour to v1.7.0.
         battery_items: list[tuple[str, BatteryRuntime]] = []
+        # (#1131) Which units have a level at all: one whose SOC sensor has
+        # not answered yet carries 0.0, which is no level. With ``available``
+        # (not a held value) this is what may end a manual mode.
+        soc_seen: dict[str, bool] = {}
         if power.batteries:
             for battery_id, bp in power.batteries.items():
+                soc_seen[battery_id] = bp.soc_pct is not None
                 battery_items.append((battery_id, BatteryRuntime(
                     battery_id=battery_id,
                     last_known_soc=float(bp.soc_pct or 0.0),
@@ -9202,6 +9249,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 )))
         else:
             # Legacy single-battery fallback — synthesise one runtime.
+            soc_seen["primary"] = bool(getattr(power, "battery_soc_known", True))
             battery_items.append(("primary", BatteryRuntime(
                 battery_id="primary",
                 last_known_soc=float(getattr(power, "battery_soc", 0.0) or 0.0),
@@ -9298,6 +9346,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                             battery_id, type(adapter).__name__,
                         )
 
+            # (#1131) A manual charge or sale that has done its job hands
+            # the battery back to Auto before this cycle decides.
+            self._finish_manual_battery_mode(
+                batt_idx, _bat_count, runtime,
+                bool(runtime.available and soc_seen.get(battery_id, False)))
             _forced = ((False, False) if self._observer_mode
                        else forced_ops(adapter))
             view = BatteryView(
