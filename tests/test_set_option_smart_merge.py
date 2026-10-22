@@ -285,6 +285,9 @@ class TestStructuralKeysVisibility:
             "heat_pump_energy_sensor", "hot_water_energy_sensor",
             "heat_pump_rated_power", "hot_water_rated_power",
             "heat_pump_invert_sg_ready",
+            # (#812) the pump's own tariff decides whether its cost sensor exists
+            "heat_pump_tariff_rate", "heat_pump_tariff_entity",
+            "heat_pump_tariff_meter",
             "hot_water_entity", "hot_water_power_sensor",
             "hot_water_temperature_sensor",
             "ev_chargers",

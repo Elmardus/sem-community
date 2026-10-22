@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ **Energy tax, VAT and a feed-in fee can be set; SEM then decides on what a kWh is worth** (#1077). Preset for the Netherlands 2027.
 - ✨ **SEM stops exporting when a sold kWh is worth too little** (#1090). The battery and loads take the sun; nothing is bought.
 - ✨ **The logbook says why SEM changed a device** (#1084). Each start, stop or step names its reason; diagnostics keeps the last 200.
+- ✨ **A heat pump or load can have its own tariff and meter** (#812). Its cheap hours follow that price; a sensor shows its cost.
 
 # [2.2.0-beta.24] — 21.10.2026
 
