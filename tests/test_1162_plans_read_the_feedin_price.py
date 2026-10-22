@@ -173,3 +173,27 @@ class TestTheDayLedgerSeesTheFeedinPrice:
                 lambda f=fake: SEMCoordinator._configured_export_rate(f))
             assert _slots(SEMCoordinator._export_rate_at(fake)) == \
                 _slots(STATIC)
+
+
+class TestASilentEntityAcrossMidnight:
+    """A "today" array is anchored to the current day. An entity that does
+    not update across midnight keeps its State object; the feed-in curve must
+    re-anchor like the import curve does, not fall back to the live value."""
+
+    def test_export_follows_the_new_days_curve_like_import(self, monkeypatch):
+        import custom_components.solar_energy_management.tariff \
+            .tariff_provider as tp
+        today = [round(0.10 + 0.01 * h, 2) for h in range(24)]
+        state = _state(0.20, {"today": today})
+        hass = _hass({FEEDIN: state, "sensor.price": state})
+        prov = DynamicTariffProvider(hass, price_entity="sensor.price",
+                                     feedin_entity=FEEDIN, export_rate=STATIC)
+        clock = {"now": DAY.replace(hour=23, minute=50)}
+        monkeypatch.setattr(tp.dt_util, "now", lambda: clock["now"])
+
+        assert prov.get_export_rate_at(clock["now"]) == 0.33
+        assert prov.get_price_at(clock["now"]) == 0.33
+
+        clock["now"] = DAY + timedelta(days=1, minutes=10)
+        assert prov.get_price_at(clock["now"]) == 0.10
+        assert prov.get_export_rate_at(clock["now"]) == 0.10

@@ -1157,6 +1157,27 @@ class DynamicTariffProvider(TariffProvider):
                 return None
         return None
 
+    @staticmethod
+    def _curve_memo_key(state, fc_state, interval_s: float, *extra) -> tuple:
+        """When a parsed price curve may be reused — ONE rule for the import
+        and the feed-in curve (#1162).
+
+        HA State objects are immutable — a new object (new id +
+        last_updated) appears on every entity update, so identity +
+        last_updated is a free change detector. The trailing slot epoch
+        expires the memo every market slot anyway: an entity that stays
+        silent across midnight keeps its State object, and a flat "today"
+        array is anchored to the CURRENT day, so it must be re-read.
+        """
+        return (
+            id(state),
+            getattr(state, "last_updated", None),
+            id(fc_state),
+            getattr(fc_state, "last_updated", None),
+            *extra,
+            int(dt_util.now().timestamp() // interval_s),
+        )
+
     def _read_prices_list(self) -> List[PricePoint]:
         """Read upcoming prices from entity attributes.
 
@@ -1223,13 +1244,9 @@ class DynamicTariffProvider(TariffProvider):
             if self._forecast_entity else None
         )
         memo_interval_s = getattr(self, "_last_parsed_gap_seconds", None) or 3600.0
-        memo_key = (
-            id(state),
-            getattr(state, "last_updated", None),
-            id(fc_state),
-            getattr(fc_state, "last_updated", None),
+        memo_key = self._curve_memo_key(
+            state, fc_state, memo_interval_s,
             self._service_prices_fetched_at,
-            int(dt_util.now().timestamp() // memo_interval_s),
         )
         if (
             memo_key == getattr(self, "_parse_memo_key", None)
@@ -2007,17 +2024,19 @@ class DynamicTariffProvider(TariffProvider):
 
         Read from the feed-in entity's own arrays, then from its forecast
         sibling (Amber's ``feed_in_forecast``, Octopus's export rates
-        event). Same parsers as the import curve. Memoised on the states'
-        identity: HA replaces a State object on every update, and a plan
-        asks this once per slot.
+        event). Same parsers and the same memo rule as the import curve: a
+        plan asks this once per slot.
         """
         if not self._feedin_entity:
             return []
         fc_id = getattr(self, "_feedin_forecast_entity", None)
         state = self.hass.states.get(self._feedin_entity)
         fc_state = self.hass.states.get(fc_id) if fc_id else None
-        key = (id(state), getattr(state, "last_updated", None),
-               id(fc_state), getattr(fc_state, "last_updated", None))
+        # (#1162) the import curve's memo rule, not a copy: a silent entity
+        # keeps one State object across midnight, and a "today" array must
+        # still re-anchor to the new day.
+        prior_gap = getattr(self, "_export_gap_seconds", None) or 3600.0
+        key = self._curve_memo_key(state, fc_state, prior_gap)
         if key == getattr(self, "_export_memo_key", None):
             return self._export_memo
         pairs: List[Tuple[datetime, float]] = []
@@ -2043,6 +2062,12 @@ class DynamicTariffProvider(TariffProvider):
         except TypeError:
             # naive and aware stamps mixed — no curve beats a wrong one
             curve = []
+        gap = (self._detect_interval(curve).total_seconds()
+               if len(curve) >= 2 else 3600.0)
+        if gap != prior_gap:
+            # re-key on the curve's real slot length, as the import path does
+            key = self._curve_memo_key(state, fc_state, gap)
+        self._export_gap_seconds = gap
         self._export_memo_key = key
         self._export_memo = curve
         return curve
