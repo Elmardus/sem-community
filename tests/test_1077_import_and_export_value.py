@@ -8,7 +8,7 @@ be what it was before — to the bit, in every tariff mode.
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
