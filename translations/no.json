@@ -534,7 +534,10 @@
           "heat_pump_relay1_on_value": "SG-Ready-relé 1 — ON-verdi",
           "heat_pump_relay1_off_value": "SG-Ready-relé 1 — OFF-verdi",
           "heat_pump_relay2_on_value": "SG-Ready-relé 2 — ON-verdi",
-          "heat_pump_relay2_off_value": "SG-Ready-relé 2 — OFF-verdi"
+          "heat_pump_relay2_off_value": "SG-Ready-relé 2 — OFF-verdi",
+          "heat_pump_tariff_rate": "Egen tariff: fast pris",
+          "heat_pump_tariff_entity": "Egen tariff: prisentitet",
+          "heat_pump_tariff_meter": "Egen tariff: måler (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Switch-entitet for SG-Ready-relé 1 (signal for normal drift). Angis sammen med relé 2 for SG-Ready-protokollen.",
@@ -548,7 +551,10 @@
           "heat_pump_relay1_on_value": "Bare for et text-/number-/select-relé: verdien SEM skriver for å lukke relé 1. La stå tom for en bryter.",
           "heat_pump_relay1_off_value": "Bare for et text-/number-/select-relé: verdien SEM skriver for å åpne relé 1. La stå tom for en bryter.",
           "heat_pump_relay2_on_value": "Bare for et text-/number-/select-relé: verdien SEM skriver for å lukke relé 2. La stå tom for en bryter.",
-          "heat_pump_relay2_off_value": "Bare for et text-/number-/select-relé: verdien SEM skriver for å åpne relé 2. La stå tom for en bryter."
+          "heat_pump_relay2_off_value": "Bare for et text-/number-/select-relé: verdien SEM skriver for å åpne relé 2. La stå tom for en bryter.",
+          "heat_pump_tariff_rate": "Fast pris for varmepumpens egen måler, f.eks. en varmepumpetariff. 0 = husets tariff.",
+          "heat_pump_tariff_entity": "En sensor med varmepumpens pris, hvis den endres. Billige timer følger da denne prisen.",
+          "heat_pump_tariff_meter": "Valgfri. kWh-telleren på varmepumpens egen måler. Tom = SEM anslår andelen fra nettet."
         }
       },
       "ev_charger_menu": {
@@ -708,7 +714,10 @@
           "heat_pump_relay1_on_value": "SG-Ready-relé 1 — ON-verdi",
           "heat_pump_relay1_off_value": "SG-Ready-relé 1 — OFF-verdi",
           "heat_pump_relay2_on_value": "SG-Ready-relé 2 — ON-verdi",
-          "heat_pump_relay2_off_value": "SG-Ready-relé 2 — OFF-verdi"
+          "heat_pump_relay2_off_value": "SG-Ready-relé 2 — OFF-verdi",
+          "heat_pump_tariff_rate": "Egen tariff: fast pris",
+          "heat_pump_tariff_entity": "Egen tariff: prisentitet",
+          "heat_pump_tariff_meter": "Egen tariff: måler (kWh)"
         }
       }
     },
@@ -1485,6 +1494,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Innmatingsgebyrer i år"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} tariffkostnad i dag"
       }
     },
     "binary_sensor": {

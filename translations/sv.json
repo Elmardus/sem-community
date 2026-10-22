@@ -534,7 +534,10 @@
           "heat_pump_relay1_on_value": "SG-Ready kontakt 1 — PÅ-värde",
           "heat_pump_relay1_off_value": "SG-Ready kontakt 1 — AV-värde",
           "heat_pump_relay2_on_value": "SG-Ready kontakt 2 — PÅ-värde",
-          "heat_pump_relay2_off_value": "SG-Ready kontakt 2 — AV-värde"
+          "heat_pump_relay2_off_value": "SG-Ready kontakt 2 — AV-värde",
+          "heat_pump_tariff_rate": "Egen tariff: fast pris",
+          "heat_pump_tariff_entity": "Egen tariff: prisentitet",
+          "heat_pump_tariff_meter": "Egen tariff: mätare (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Switch-entitet för SG-Ready-relä 1 (signal för normaldrift). Ange tillsammans med relä 2 för SG-Ready-protokollet.",
@@ -548,7 +551,10 @@
           "heat_pump_relay1_on_value": "Bara för en text-/number-/select-kontakt: värdet SEM skriver för att sluta kontakt 1. Lämna tom för en switch.",
           "heat_pump_relay1_off_value": "Bara för en text-/number-/select-kontakt: värdet SEM skriver för att öppna kontakt 1. Lämna tom för en switch.",
           "heat_pump_relay2_on_value": "Bara för en text-/number-/select-kontakt: värdet SEM skriver för att sluta kontakt 2. Lämna tom för en switch.",
-          "heat_pump_relay2_off_value": "Bara för en text-/number-/select-kontakt: värdet SEM skriver för att öppna kontakt 2. Lämna tom för en switch."
+          "heat_pump_relay2_off_value": "Bara för en text-/number-/select-kontakt: värdet SEM skriver för att öppna kontakt 2. Lämna tom för en switch.",
+          "heat_pump_tariff_rate": "Fast pris för värmepumpens egen mätare, t.ex. en värmepumpstariff. 0 = husets tariff.",
+          "heat_pump_tariff_entity": "En sensor med värmepumpens pris, om det ändras. Billiga timmar följer då detta pris.",
+          "heat_pump_tariff_meter": "Valfritt. kWh-räknaren på värmepumpens egen mätare. Tom = SEM uppskattar dess andel från nätet."
         }
       },
       "ev_charger_menu": {
@@ -708,7 +714,10 @@
           "heat_pump_relay1_on_value": "SG-Ready kontakt 1 — PÅ-värde",
           "heat_pump_relay1_off_value": "SG-Ready kontakt 1 — AV-värde",
           "heat_pump_relay2_on_value": "SG-Ready kontakt 2 — PÅ-värde",
-          "heat_pump_relay2_off_value": "SG-Ready kontakt 2 — AV-värde"
+          "heat_pump_relay2_off_value": "SG-Ready kontakt 2 — AV-värde",
+          "heat_pump_tariff_rate": "Egen tariff: fast pris",
+          "heat_pump_tariff_entity": "Egen tariff: prisentitet",
+          "heat_pump_tariff_meter": "Egen tariff: mätare (kWh)"
         }
       }
     },
@@ -1485,6 +1494,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Inmatningsavgifter i år"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} tariffkostnad idag"
       }
     },
     "binary_sensor": {

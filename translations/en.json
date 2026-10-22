@@ -534,7 +534,10 @@
           "heat_pump_relay1_on_value": "SG-Ready contact 1 — ON value",
           "heat_pump_relay1_off_value": "SG-Ready contact 1 — OFF value",
           "heat_pump_relay2_on_value": "SG-Ready contact 2 — ON value",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value"
+          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value",
+          "heat_pump_tariff_rate": "Own tariff: fixed rate",
+          "heat_pump_tariff_entity": "Own tariff: price entity",
+          "heat_pump_tariff_meter": "Own tariff: meter (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Switch entity for SG-Ready relay 1 (normal operation signal). Set together with relay 2 for SG-Ready protocol.",
@@ -548,7 +551,10 @@
           "heat_pump_relay1_on_value": "Only for a text/number/select contact: the value SEM writes to close contact 1. Leave empty for a switch.",
           "heat_pump_relay1_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 1. Leave empty for a switch.",
           "heat_pump_relay2_on_value": "Only for a text/number/select contact: the value SEM writes to close contact 2. Leave empty for a switch.",
-          "heat_pump_relay2_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 2. Leave empty for a switch."
+          "heat_pump_relay2_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 2. Leave empty for a switch.",
+          "heat_pump_tariff_rate": "A fixed price for the heat pump's own meter, e.g. a heat pump tariff. 0 = house tariff.",
+          "heat_pump_tariff_entity": "A sensor with the heat pump's price, if it changes. Cheap hours then follow this price.",
+          "heat_pump_tariff_meter": "Optional. The kWh counter of the heat pump's own meter. Empty = SEM estimates its grid share."
         }
       },
       "ev_charger_menu": {
@@ -708,7 +714,10 @@
           "heat_pump_relay1_on_value": "SG-Ready contact 1 — ON value",
           "heat_pump_relay1_off_value": "SG-Ready contact 1 — OFF value",
           "heat_pump_relay2_on_value": "SG-Ready contact 2 — ON value",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value"
+          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value",
+          "heat_pump_tariff_rate": "Own tariff: fixed rate",
+          "heat_pump_tariff_entity": "Own tariff: price entity",
+          "heat_pump_tariff_meter": "Own tariff: meter (kWh)"
         }
       }
     },
@@ -1485,6 +1494,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Feed-in fees this year"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} tariff cost today"
       }
     },
     "binary_sensor": {

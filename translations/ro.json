@@ -534,7 +534,10 @@
           "heat_pump_relay1_on_value": "Contact 1 SG-Ready — valoare PORNIT",
           "heat_pump_relay1_off_value": "Contact 1 SG-Ready — valoare OPRIT",
           "heat_pump_relay2_on_value": "Contact 2 SG-Ready — valoare PORNIT",
-          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valoare OPRIT"
+          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valoare OPRIT",
+          "heat_pump_tariff_rate": "Tarif propriu: preț fix",
+          "heat_pump_tariff_entity": "Tarif propriu: entitate de preț",
+          "heat_pump_tariff_meter": "Tarif propriu: contor (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Entitate switch pentru releul SG-Ready 1 (semnal de funcționare normală). Setați-o împreună cu releul 2 pentru protocolul SG-Ready.",
@@ -548,7 +551,10 @@
           "heat_pump_relay1_on_value": "Doar pentru un contact text/number/select: valoarea pe care SEM o scrie pentru a închide contactul 1. Lăsați gol pentru un switch.",
           "heat_pump_relay1_off_value": "Doar pentru un contact text/number/select: valoarea pe care SEM o scrie pentru a deschide contactul 1. Lăsați gol pentru un switch.",
           "heat_pump_relay2_on_value": "Doar pentru un contact text/number/select: valoarea pe care SEM o scrie pentru a închide contactul 2. Lăsați gol pentru un switch.",
-          "heat_pump_relay2_off_value": "Doar pentru un contact text/number/select: valoarea pe care SEM o scrie pentru a deschide contactul 2. Lăsați gol pentru un switch."
+          "heat_pump_relay2_off_value": "Doar pentru un contact text/number/select: valoarea pe care SEM o scrie pentru a deschide contactul 2. Lăsați gol pentru un switch.",
+          "heat_pump_tariff_rate": "Preț fix pentru contorul propriu al pompei de căldură, de ex. un tarif pentru pompa de căldură. 0 = tariful casei.",
+          "heat_pump_tariff_entity": "Un senzor cu prețul pompei de căldură, dacă se schimbă. Orele ieftine urmează atunci acest preț.",
+          "heat_pump_tariff_meter": "Opțional. Contorul de kWh propriu al pompei de căldură. Gol = SEM estimează partea din rețea."
         }
       },
       "ev_charger_menu": {
@@ -708,7 +714,10 @@
           "heat_pump_relay1_on_value": "Contact 1 SG-Ready — valoare PORNIT",
           "heat_pump_relay1_off_value": "Contact 1 SG-Ready — valoare OPRIT",
           "heat_pump_relay2_on_value": "Contact 2 SG-Ready — valoare PORNIT",
-          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valoare OPRIT"
+          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valoare OPRIT",
+          "heat_pump_tariff_rate": "Tarif propriu: preț fix",
+          "heat_pump_tariff_entity": "Tarif propriu: entitate de preț",
+          "heat_pump_tariff_meter": "Tarif propriu: contor (kWh)"
         }
       }
     },
@@ -1485,6 +1494,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Taxe de injecție anul acesta"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} cost tarif azi"
       }
     },
     "binary_sensor": {

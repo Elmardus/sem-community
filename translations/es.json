@@ -534,7 +534,10 @@
           "heat_pump_relay1_on_value": "Contacto 1 SG-Ready — valor ON",
           "heat_pump_relay1_off_value": "Contacto 1 SG-Ready — valor OFF",
           "heat_pump_relay2_on_value": "Contacto 2 SG-Ready — valor ON",
-          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF"
+          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF",
+          "heat_pump_tariff_rate": "Tarifa propia: precio fijo",
+          "heat_pump_tariff_entity": "Tarifa propia: entidad de precio",
+          "heat_pump_tariff_meter": "Tarifa propia: contador (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Entidad switch del relé 1 SG-Ready (señal de funcionamiento normal). Configúrela junto con el relé 2 para el protocolo SG-Ready.",
@@ -548,7 +551,10 @@
           "heat_pump_relay1_on_value": "Solo para un contacto text/number/select: el valor que SEM escribe para cerrar el contacto 1. Déjelo vacío para un switch.",
           "heat_pump_relay1_off_value": "Solo para un contacto text/number/select: el valor que SEM escribe para abrir el contacto 1. Déjelo vacío para un switch.",
           "heat_pump_relay2_on_value": "Solo para un contacto text/number/select: el valor que SEM escribe para cerrar el contacto 2. Déjelo vacío para un switch.",
-          "heat_pump_relay2_off_value": "Solo para un contacto text/number/select: el valor que SEM escribe para abrir el contacto 2. Déjelo vacío para un switch."
+          "heat_pump_relay2_off_value": "Solo para un contacto text/number/select: el valor que SEM escribe para abrir el contacto 2. Déjelo vacío para un switch.",
+          "heat_pump_tariff_rate": "Precio fijo del contador propio de la bomba de calor, p. ej. una tarifa para bomba de calor. 0 = tarifa de la casa.",
+          "heat_pump_tariff_entity": "Un sensor con el precio de la bomba de calor, si cambia. Las horas baratas siguen entonces este precio.",
+          "heat_pump_tariff_meter": "Opcional. El contador de kWh propio de la bomba de calor. Vacío = SEM estima su parte de red."
         }
       },
       "ev_charger_menu": {
@@ -708,7 +714,10 @@
           "heat_pump_relay1_on_value": "Contacto 1 SG-Ready — valor ON",
           "heat_pump_relay1_off_value": "Contacto 1 SG-Ready — valor OFF",
           "heat_pump_relay2_on_value": "Contacto 2 SG-Ready — valor ON",
-          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF"
+          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF",
+          "heat_pump_tariff_rate": "Tarifa propia: precio fijo",
+          "heat_pump_tariff_entity": "Tarifa propia: entidad de precio",
+          "heat_pump_tariff_meter": "Tarifa propia: contador (kWh)"
         }
       }
     },
@@ -1485,6 +1494,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Cargos por vertido este año"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} coste de tarifa hoy"
       }
     },
     "binary_sensor": {

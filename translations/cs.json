@@ -534,7 +534,10 @@
           "heat_pump_relay1_on_value": "Kontakt 1 SG-Ready — hodnota ZAP",
           "heat_pump_relay1_off_value": "Kontakt 1 SG-Ready — hodnota VYP",
           "heat_pump_relay2_on_value": "Kontakt 2 SG-Ready — hodnota ZAP",
-          "heat_pump_relay2_off_value": "Kontakt 2 SG-Ready — hodnota VYP"
+          "heat_pump_relay2_off_value": "Kontakt 2 SG-Ready — hodnota VYP",
+          "heat_pump_tariff_rate": "Vlastní tarif: pevná cena",
+          "heat_pump_tariff_entity": "Vlastní tarif: entita ceny",
+          "heat_pump_tariff_meter": "Vlastní tarif: elektroměr (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Entita switch pro relé SG-Ready 1 (signál normálního provozu). Nastavte společně s relé 2 pro protokol SG-Ready.",
@@ -548,7 +551,10 @@
           "heat_pump_relay1_on_value": "Jen pro kontakt typu text/number/select: hodnota, kterou SEM zapíše pro sepnutí kontaktu 1. U spínače ponechte prázdné.",
           "heat_pump_relay1_off_value": "Jen pro kontakt typu text/number/select: hodnota, kterou SEM zapíše pro rozepnutí kontaktu 1. U spínače ponechte prázdné.",
           "heat_pump_relay2_on_value": "Jen pro kontakt typu text/number/select: hodnota, kterou SEM zapíše pro sepnutí kontaktu 2. U spínače ponechte prázdné.",
-          "heat_pump_relay2_off_value": "Jen pro kontakt typu text/number/select: hodnota, kterou SEM zapíše pro rozepnutí kontaktu 2. U spínače ponechte prázdné."
+          "heat_pump_relay2_off_value": "Jen pro kontakt typu text/number/select: hodnota, kterou SEM zapíše pro rozepnutí kontaktu 2. U spínače ponechte prázdné.",
+          "heat_pump_tariff_rate": "Pevná cena pro vlastní elektroměr tepelného čerpadla, např. tarif pro tepelné čerpadlo. 0 = tarif domu.",
+          "heat_pump_tariff_entity": "Senzor s cenou tepelného čerpadla, pokud se mění. Levné hodiny se pak řídí touto cenou.",
+          "heat_pump_tariff_meter": "Volitelné. Čítač kWh vlastního elektroměru tepelného čerpadla. Prázdné = SEM odhadne jeho podíl ze sítě."
         }
       },
       "ev_charger_menu": {
@@ -708,7 +714,10 @@
           "heat_pump_relay1_on_value": "Kontakt 1 SG-Ready — hodnota ZAP",
           "heat_pump_relay1_off_value": "Kontakt 1 SG-Ready — hodnota VYP",
           "heat_pump_relay2_on_value": "Kontakt 2 SG-Ready — hodnota ZAP",
-          "heat_pump_relay2_off_value": "Kontakt 2 SG-Ready — hodnota VYP"
+          "heat_pump_relay2_off_value": "Kontakt 2 SG-Ready — hodnota VYP",
+          "heat_pump_tariff_rate": "Vlastní tarif: pevná cena",
+          "heat_pump_tariff_entity": "Vlastní tarif: entita ceny",
+          "heat_pump_tariff_meter": "Vlastní tarif: elektroměr (kWh)"
         }
       }
     },
@@ -1485,6 +1494,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Poplatky za dodávku letos"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} náklady tarifu dnes"
       }
     },
     "binary_sensor": {

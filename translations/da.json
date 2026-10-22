@@ -534,7 +534,10 @@
           "heat_pump_relay1_on_value": "SG-Ready-relæ 1 — ON-værdi",
           "heat_pump_relay1_off_value": "SG-Ready-relæ 1 — OFF-værdi",
           "heat_pump_relay2_on_value": "SG-Ready-relæ 2 — ON-værdi",
-          "heat_pump_relay2_off_value": "SG-Ready-relæ 2 — OFF-værdi"
+          "heat_pump_relay2_off_value": "SG-Ready-relæ 2 — OFF-værdi",
+          "heat_pump_tariff_rate": "Egen tarif: fast pris",
+          "heat_pump_tariff_entity": "Egen tarif: prisentitet",
+          "heat_pump_tariff_meter": "Egen tarif: måler (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Switch-entitet til SG-Ready-relæ 1 (signal for normal drift). Angives sammen med relæ 2 for SG-Ready-protokollen.",
@@ -548,7 +551,10 @@
           "heat_pump_relay1_on_value": "Kun til et text-/number-/select-relæ: den værdi SEM skriver for at lukke relæ 1. Lad stå tom for en kontakt.",
           "heat_pump_relay1_off_value": "Kun til et text-/number-/select-relæ: den værdi SEM skriver for at åbne relæ 1. Lad stå tom for en kontakt.",
           "heat_pump_relay2_on_value": "Kun til et text-/number-/select-relæ: den værdi SEM skriver for at lukke relæ 2. Lad stå tom for en kontakt.",
-          "heat_pump_relay2_off_value": "Kun til et text-/number-/select-relæ: den værdi SEM skriver for at åbne relæ 2. Lad stå tom for en kontakt."
+          "heat_pump_relay2_off_value": "Kun til et text-/number-/select-relæ: den værdi SEM skriver for at åbne relæ 2. Lad stå tom for en kontakt.",
+          "heat_pump_tariff_rate": "Fast pris for varmepumpens egen måler, f.eks. en varmepumpetarif. 0 = husets tarif.",
+          "heat_pump_tariff_entity": "En sensor med varmepumpens pris, hvis den skifter. Billige timer følger så denne pris.",
+          "heat_pump_tariff_meter": "Valgfri. kWh-tælleren på varmepumpens egen måler. Tom = SEM anslår dens andel fra nettet."
         }
       },
       "ev_charger_menu": {
@@ -708,7 +714,10 @@
           "heat_pump_relay1_on_value": "SG-Ready-relæ 1 — ON-værdi",
           "heat_pump_relay1_off_value": "SG-Ready-relæ 1 — OFF-værdi",
           "heat_pump_relay2_on_value": "SG-Ready-relæ 2 — ON-værdi",
-          "heat_pump_relay2_off_value": "SG-Ready-relæ 2 — OFF-værdi"
+          "heat_pump_relay2_off_value": "SG-Ready-relæ 2 — OFF-værdi",
+          "heat_pump_tariff_rate": "Egen tarif: fast pris",
+          "heat_pump_tariff_entity": "Egen tarif: prisentitet",
+          "heat_pump_tariff_meter": "Egen tarif: måler (kWh)"
         }
       }
     },
@@ -1485,6 +1494,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Gebyrer for levering i år"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} tarifomkostning i dag"
       }
     },
     "binary_sensor": {

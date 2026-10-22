@@ -1053,6 +1053,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
                 ${this._renderComfortBand(device)}
                 ${this._renderOvernightPicker(device)}
                 ${this._renderAntiCycle(device)}
+                ${this._renderOwnTariff(device)}
                 <div class="ge-row">
                     <span class="ge-label">${this._t('stop_condition')}</span>
                     <span class="ge-ctl">
@@ -1305,6 +1306,65 @@ class SEMLoadPriorityCard extends SEMLitBase {
                 </span>
             </div>
             <div class="ge-hint">${this._t('anti_cycle_hint')}</div>`;
+    }
+
+    /** (#812) The load's own tariff: a fixed rate or a price entity, and its
+     *  own meter. Empty = the house tariff. A heat pump keeps its tariff in
+     *  the Config tab (Heat pump section), so its row only says where. */
+    _renderOwnTariff(device) {
+        const g = device.goals || {};
+        const title = html`
+            <div class="ge-title" style="margin-top:10px">
+                <ha-icon icon="mdi:cash-multiple" style="--mdc-icon-size:14px;color:#488fc2"></ha-icon>
+                ${this._t('device_tariff_section')}
+            </div>`;
+        if (String(device.id || '').startsWith('heat_pump')) {
+            return html`${title}<div class="ge-hint">${this._t('device_tariff_heat_pump')}</div>`;
+        }
+        const send = (key, v) => {
+            device.goals = { ...(device.goals || {}), [key]: v };
+            this._sendDeviceUpdate(device.id, key, String(v));
+        };
+        const picker = (key, domains, deviceClass) => (
+            this.hass && customElements.get('ha-entity-picker') ? html`
+            <ha-entity-picker class="ge-entity"
+                   .hass=${this.hass}
+                   .value=${g[key] || ''}
+                   .includeDomains=${domains}
+                   .entityFilter=${deviceClass
+                       ? (st) => st?.attributes?.device_class === deviceClass : undefined}
+                   allow-custom-entity
+                   @value-changed=${(e) => send(key, e.detail?.value ?? '')}
+                   @click=${(e) => e.stopPropagation()}></ha-entity-picker>
+            ` : html`
+            <input type="text" class="ge-entity" .value="${g[key] || ''}"
+                   @change=${(e) => send(key, e.target.value.trim())}
+                   @click=${(e) => e.stopPropagation()}>`);
+        const rate = parseFloat(g.tariff_rate) || 0;
+        return html`
+            ${title}
+            <div class="ge-row">
+                <span class="ge-label">${this._t('device_tariff_rate')}</span>
+                <span class="ge-ctl">
+                    <input type="number" min="0" step="0.001" style="width:72px"
+                           .value="${rate > 0 ? String(rate) : ''}" placeholder="\u2014"
+                           @change=${(e) => {
+                               const v = parseFloat(e.target.value);
+                               send('tariff_rate', Number.isFinite(v) && v > 0 ? v : 0);
+                           }}
+                           @click=${(e) => e.stopPropagation()}>
+                    <span class="ge-unit">/kWh</span>
+                </span>
+            </div>
+            <div class="ge-row">
+                <span class="ge-label">${this._t('device_tariff_entity')}</span>
+                <span class="ge-ctl">${picker('tariff_entity', ['sensor', 'input_number'], null)}</span>
+            </div>
+            <div class="ge-row">
+                <span class="ge-label">${this._t('device_tariff_meter')}</span>
+                <span class="ge-ctl">${picker('tariff_meter', ['sensor'], 'energy')}</span>
+            </div>
+            <div class="ge-hint">${this._t('device_tariff_hint')}</div>`;
     }
 
     // ── Lit-native pointer-drag reorder (no SortableJS) ──

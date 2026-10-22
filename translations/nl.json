@@ -534,7 +534,10 @@
           "heat_pump_relay1_on_value": "SG-Ready contact 1 — AAN-waarde",
           "heat_pump_relay1_off_value": "SG-Ready contact 1 — UIT-waarde",
           "heat_pump_relay2_on_value": "SG-Ready contact 2 — AAN-waarde",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — UIT-waarde"
+          "heat_pump_relay2_off_value": "SG-Ready contact 2 — UIT-waarde",
+          "heat_pump_tariff_rate": "Eigen tarief: vaste prijs",
+          "heat_pump_tariff_entity": "Eigen tarief: prijsentiteit",
+          "heat_pump_tariff_meter": "Eigen tarief: meter (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Switch-entiteit voor SG-Ready relais 1 (signaal voor normaal bedrijf). Stel samen met relais 2 in voor het SG-Ready protocol.",
@@ -548,7 +551,10 @@
           "heat_pump_relay1_on_value": "Alleen voor een tekst-/getal-/select-contact: de waarde die SEM schrijft om contact 1 te sluiten. Laat leeg voor een schakelaar.",
           "heat_pump_relay1_off_value": "Alleen voor een tekst-/getal-/select-contact: de waarde die SEM schrijft om contact 1 te openen. Laat leeg voor een schakelaar.",
           "heat_pump_relay2_on_value": "Alleen voor een tekst-/getal-/select-contact: de waarde die SEM schrijft om contact 2 te sluiten. Laat leeg voor een schakelaar.",
-          "heat_pump_relay2_off_value": "Alleen voor een tekst-/getal-/select-contact: de waarde die SEM schrijft om contact 2 te openen. Laat leeg voor een schakelaar."
+          "heat_pump_relay2_off_value": "Alleen voor een tekst-/getal-/select-contact: de waarde die SEM schrijft om contact 2 te openen. Laat leeg voor een schakelaar.",
+          "heat_pump_tariff_rate": "Vaste prijs voor de eigen meter van de warmtepomp, bijv. een warmtepomptarief. 0 = huistarief.",
+          "heat_pump_tariff_entity": "Een sensor met de prijs van de warmtepomp, als die wisselt. Goedkope uren volgen dan deze prijs.",
+          "heat_pump_tariff_meter": "Optioneel. De kWh-teller van de eigen meter van de warmtepomp. Leeg = SEM schat het netaandeel."
         }
       },
       "ev_charger_menu": {
@@ -708,7 +714,10 @@
           "heat_pump_relay1_on_value": "SG-Ready contact 1 — AAN-waarde",
           "heat_pump_relay1_off_value": "SG-Ready contact 1 — UIT-waarde",
           "heat_pump_relay2_on_value": "SG-Ready contact 2 — AAN-waarde",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — UIT-waarde"
+          "heat_pump_relay2_off_value": "SG-Ready contact 2 — UIT-waarde",
+          "heat_pump_tariff_rate": "Eigen tarief: vaste prijs",
+          "heat_pump_tariff_entity": "Eigen tarief: prijsentiteit",
+          "heat_pump_tariff_meter": "Eigen tarief: meter (kWh)"
         }
       }
     },
@@ -1485,6 +1494,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Terugleverkosten dit jaar"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} tariefkosten vandaag"
       }
     },
     "binary_sensor": {

@@ -534,7 +534,10 @@
           "heat_pump_relay1_on_value": "Contact 1 SG-Ready — valeur ON",
           "heat_pump_relay1_off_value": "Contact 1 SG-Ready — valeur OFF",
           "heat_pump_relay2_on_value": "Contact 2 SG-Ready — valeur ON",
-          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valeur OFF"
+          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valeur OFF",
+          "heat_pump_tariff_rate": "Tarif propre : prix fixe",
+          "heat_pump_tariff_entity": "Tarif propre : entité de prix",
+          "heat_pump_tariff_meter": "Tarif propre : compteur (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Entité switch du relais SG-Ready 1 (signal de fonctionnement normal). À renseigner avec le relais 2 pour utiliser le protocole SG-Ready.",
@@ -548,7 +551,10 @@
           "heat_pump_relay1_on_value": "Uniquement pour un contact texte/nombre/sélecteur : la valeur que SEM écrit pour fermer le contact 1. Laissez vide pour un interrupteur.",
           "heat_pump_relay1_off_value": "Uniquement pour un contact texte/nombre/sélecteur : la valeur que SEM écrit pour ouvrir le contact 1. Laissez vide pour un interrupteur.",
           "heat_pump_relay2_on_value": "Uniquement pour un contact texte/nombre/sélecteur : la valeur que SEM écrit pour fermer le contact 2. Laissez vide pour un interrupteur.",
-          "heat_pump_relay2_off_value": "Uniquement pour un contact texte/nombre/sélecteur : la valeur que SEM écrit pour ouvrir le contact 2. Laissez vide pour un interrupteur."
+          "heat_pump_relay2_off_value": "Uniquement pour un contact texte/nombre/sélecteur : la valeur que SEM écrit pour ouvrir le contact 2. Laissez vide pour un interrupteur.",
+          "heat_pump_tariff_rate": "Prix fixe du compteur propre de la pompe à chaleur, p. ex. un tarif pompe à chaleur. 0 = tarif de la maison.",
+          "heat_pump_tariff_entity": "Un capteur avec le prix de la pompe à chaleur, s'il varie. Les heures creuses suivent alors ce prix.",
+          "heat_pump_tariff_meter": "Facultatif. Le compteur kWh propre de la pompe à chaleur. Vide = SEM estime sa part du réseau."
         }
       },
       "ev_charger_menu": {
@@ -708,7 +714,10 @@
           "heat_pump_relay1_on_value": "Contact 1 SG-Ready — valeur ON",
           "heat_pump_relay1_off_value": "Contact 1 SG-Ready — valeur OFF",
           "heat_pump_relay2_on_value": "Contact 2 SG-Ready — valeur ON",
-          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valeur OFF"
+          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valeur OFF",
+          "heat_pump_tariff_rate": "Tarif propre : prix fixe",
+          "heat_pump_tariff_entity": "Tarif propre : entité de prix",
+          "heat_pump_tariff_meter": "Tarif propre : compteur (kWh)"
         }
       }
     },
@@ -1485,6 +1494,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Frais d'injection cette année"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} coût du tarif aujourd'hui"
       }
     },
     "binary_sensor": {
