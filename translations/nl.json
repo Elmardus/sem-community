@@ -734,7 +734,8 @@
       "heat_pump_service_invalid": "De SG-Ready-service moet domain.service zijn (bijv. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "De SG-Ready-servicegegevens moeten een JSON-object zijn.",
       "heat_pump_contact_values_missing": "Dit SG-Ready-contact is een tekst-/getal-/select-entiteit, dus SEM heeft zowel de AAN- als de UIT-waarde nodig om te schrijven. Vul beide in, of kies een schakelaar-entiteit.",
-      "calendar_needs_schedule": "Kalendermodus heeft een piekuren-schema nodig. Kies een Schema-helper of een andere tariefmodus."
+      "calendar_needs_schedule": "Kalendermodus heeft een piekuren-schema nodig. Kies een Schema-helper of een andere tariefmodus.",
+      "value_needs_spot_basis": "Een opslag, energiebelasting of btw geldt alleen bij een spotprijs. Kies de spotbasis of zet ze op 0."
     }
   },
   "entity": {
@@ -1809,6 +1810,9 @@
     },
     "departure_bad_time": {
       "message": "“{day}: {time}” is geen vertrek: dagen zijn mon … sun, tijden HH:MM van 00:00 tot 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Een opslag, energiebelasting of btw geldt alleen bij een spotprijs. Kies de spotbasis of zet ze op 0."
     }
   },
   "issues": {

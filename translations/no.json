@@ -734,7 +734,8 @@
       "heat_pump_service_invalid": "SG-Ready-tjenesten må være domain.service (f.eks. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "SG-Ready tjenestedata må være et JSON-objekt.",
       "heat_pump_contact_values_missing": "Dette SG-Ready-reléet er en text-/number-/select-entitet, så SEM trenger både ON- og OFF-verdien å skrive. Fyll ut begge, eller velg en bryter-entitet.",
-      "calendar_needs_schedule": "Kalendermodus trenger en tidsplan for høylast. Velg en Tidsplan-hjelper eller en annen tariffmodus."
+      "calendar_needs_schedule": "Kalendermodus trenger en tidsplan for høylast. Velg en Tidsplan-hjelper eller en annen tariffmodus.",
+      "value_needs_spot_basis": "Et påslag, elavgift eller mva gjelder bare ved en spotpris. Velg spotgrunnlaget, eller sett dem til 0."
     }
   },
   "entity": {
@@ -1809,6 +1810,9 @@
     },
     "departure_bad_time": {
       "message": "«{day}: {time}» er ikke en avreise: dagene er mon … sun, tidene HH:MM fra 00:00 til 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Et påslag, elavgift eller mva gjelder bare ved en spotpris. Velg spotgrunnlaget, eller sett dem til 0."
     }
   },
   "issues": {

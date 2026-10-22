@@ -734,7 +734,8 @@
       "heat_pump_service_invalid": "Serviciul SG-Ready trebuie să fie domain.service (de ex. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "Datele serviciului SG-Ready trebuie să fie un obiect JSON.",
       "heat_pump_contact_values_missing": "Acest contact SG-Ready este o entitate text/number/select, așa că SEM are nevoie să scrie atât valoarea ON cât și OFF. Completați-le pe amândouă, sau alegeți o entitate switch.",
-      "calendar_needs_schedule": "Modul Calendar are nevoie de un program pentru orele de vârf. Alegeți un ajutor Program sau alt mod de tarif."
+      "calendar_needs_schedule": "Modul Calendar are nevoie de un program pentru orele de vârf. Alegeți un ajutor Program sau alt mod de tarif.",
+      "value_needs_spot_basis": "Un adaos, o taxă pe energie sau TVA se aplică doar la un preț spot. Alege baza spot sau setează-le la 0."
     }
   },
   "entity": {
@@ -1809,6 +1810,9 @@
     },
     "departure_bad_time": {
       "message": "„{day}: {time}” nu este o plecare: zilele sunt mon … sun, orele HH:MM, de la 00:00 la 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Un adaos, o taxă pe energie sau TVA se aplică doar la un preț spot. Alege baza spot sau setează-le la 0."
     }
   },
   "issues": {

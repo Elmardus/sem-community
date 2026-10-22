@@ -62,7 +62,7 @@ from .const import (
 from .consts.bounds import BOUNDS, bounds_selector
 from .tariff.value_layer import (
     DEFAULT_EXPORT_VALUE_THRESHOLD, FEE_MODELS, PRESETS, PRICE_BASES,
-    VALUE_DEFAULTS, apply_value_preset,
+    VALUE_DEFAULTS, apply_value_preset, basis_contradiction,
 )
 from .coordinator.ev_taper_detector import resolve_charge_efficiency
 from .coordinator.units import energy_state_to_kwh, normalize_unit
@@ -3125,6 +3125,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             # of those fields makes the preset "custom". Same rule as the
             # card's path through set_option.
             user_input = apply_value_preset(user_input, current_config)
+            # (#1077) An all-in price adds nothing, so a markup, tax or VAT
+            # beside it would be ignored. Refuse it; the user picks the basis.
+            if basis_contradiction({**current_config, **user_input}):
+                errors["import_price_basis"] = "value_needs_spot_basis"
             if not errors:
                 _merge_form_input(self, self._data, user_input)
                 return await self.async_step_load_management()

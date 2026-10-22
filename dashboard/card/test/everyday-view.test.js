@@ -163,8 +163,9 @@ test('battery + one charger: Everyday shows 6 setting rows, not 20', () => {
 
 test('All settings still shows every row', () => {
     // 97 rows on this home, as before the Everyday filter was closed;
-    // (#1077) +6 for the value fields (preset, price basis, markup, tax,
-    // VAT, fee model; the fee amount and tiers show only for their model).
+    // (#1077) +6 for the value fields (preset, price basis, fee model, and
+    // markup, tax and VAT, greyed out on an all-in price); the fee amount
+    // and tiers show only for their model.
     // (#1090) +1 for the export threshold.
     // (#812) +3 for the heat pump's own tariff (rate, price entity, meter).
     const everyday = renderTab(card()).total;

@@ -1248,21 +1248,26 @@ class ChargerReconciler:
         log = getattr(self, "decision_log", None)
         if log is None:
             return
-        kind = action.kind
-        if kind is ActionKind.DISABLE:
-            verb, value = "disable", None
-        elif kind is ActionKind.PARK_OFF:
-            verb, value = "park_off", None
-        elif kind in (ActionKind.WRITE_CURRENT, ActionKind.START_AND_WRITE):
-            amps = int(action.amps or 0)
-            verb, value = ("charge", float(amps)) if amps > 0 else ("stop", None)
-        else:
-            return
-        from .decision_log import record_charger
-        observer = getattr(getattr(adapter, "_device", None),
-                           "observer_mode", False) is True
-        record_charger(log, decision, verb=verb, value=value,
-                       observer=observer)
+        # (#1084 review) everything below is recording only: nothing in it
+        # may raise into the write it describes
+        try:
+            kind = action.kind
+            if kind is ActionKind.DISABLE:
+                verb, value = "disable", None
+            elif kind is ActionKind.PARK_OFF:
+                verb, value = "park_off", None
+            elif kind in (ActionKind.WRITE_CURRENT, ActionKind.START_AND_WRITE):
+                amps = int(action.amps or 0)
+                verb, value = ("charge", float(amps)) if amps > 0 else ("stop", None)
+            else:
+                return
+            from .decision_log import record_charger
+            observer = getattr(getattr(adapter, "_device", None),
+                               "observer_mode", False) is True
+            record_charger(log, decision, verb=verb, value=value,
+                           observer=observer)
+        except Exception as e:  # noqa: BLE001 — recording only, never the send
+            _LOGGER.debug("decision log: charger row not written: %s", e)
 
     # ── #627 stop-unenforceable repair plumbing ──────────────────────────
     def _device_and_hass(self, adapter):

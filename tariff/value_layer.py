@@ -22,6 +22,7 @@ Assistant.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Tuple
 
@@ -86,6 +87,9 @@ VALUE_DEFAULTS: Mapping[str, Any] = {
 # energy tax (2026 rate per kWh, excl. VAT — check your bill for 2027) and
 # 21 % VAT, and turns the per-kWh feed-in fee on; the fee itself and the
 # supplier markup differ per supplier, so they stay what the user typed.
+# Tax and VAT only mean something on a spot price, so the preset also says
+# the price sensor reports spot (ENTSO-E, Nord Pool). A price that is
+# already all-in (Tibber's total) needs no preset.
 PRESET_FIELDS: Mapping[str, Mapping[str, Any]] = {
     PRESET_NONE: {
         CONF_IMPORT_MARKUP: 0.0,
@@ -96,6 +100,7 @@ PRESET_FIELDS: Mapping[str, Mapping[str, Any]] = {
         CONF_FEED_IN_FEE_TIERS: "",
     },
     PRESET_NL_2027: {
+        CONF_IMPORT_PRICE_BASIS: BASIS_SPOT,
         CONF_IMPORT_ENERGY_TAX: 0.0916,
         CONF_IMPORT_VAT_PERCENT: 21.0,
         CONF_FEED_IN_FEE_MODEL: FEE_PER_KWH,
@@ -126,12 +131,15 @@ def parse_tiers(value: Any) -> Tuple[Tuple[float, float], ...]:
     """
     pairs = []
     if isinstance(value, str):
-        items = [p for p in value.replace(";", ",").split(",") if p.strip()]
+        # A new pair starts only where "<kWh>:" follows a separator, so a
+        # decimal comma inside a fee ("1000:0,02") stays one number.
+        items = [p for p in re.split(r"[,;]\s*(?=\d+(?:[.,]\d+)?\s*:)", value)
+                 if p.strip()]
         for item in items:
-            parts = item.split(":")
-            if len(parts) != 2:
-                continue
-            pairs.append((parts[0], parts[1]))
+            m = re.match(r"\s*(\d+(?:[.,]\d+)?)\s*:\s*(-?\d+(?:[.,]\d+)?)", item)
+            if m:
+                pairs.append((m.group(1).replace(",", "."),
+                              m.group(2).replace(",", ".")))
     elif isinstance(value, (list, tuple)):
         for item in value:
             if isinstance(item, Mapping):
@@ -253,6 +261,34 @@ def settings_from_config(config: Mapping[str, Any] | None) -> ValueSettings:
         fee=_amount(cfg.get(CONF_FEED_IN_FEE)),
         tiers=parse_tiers(cfg.get(CONF_FEED_IN_FEE_TIERS)),
     )
+
+
+# The import amounts that only mean something on a spot price (#1077).
+IMPORT_ADD_KEYS: Tuple[str, ...] = (
+    CONF_IMPORT_MARKUP, CONF_IMPORT_ENERGY_TAX, CONF_IMPORT_VAT_PERCENT,
+)
+
+
+def basis_contradiction(config: Mapping[str, Any] | None,
+                        changed: Mapping[str, Any] | None = None) -> bool:
+    """Does an all-in price carry a markup, tax or VAT (#1077)?
+
+    An all-in price adds nothing, so those amounts would be ignored
+    without a word. ``config`` is the whole result (stored + new). With
+    ``changed`` (a partial write, the card's set_option), only a write
+    that causes the clash is refused: picking all-in, or a positive
+    amount. Setting an amount to 0 is always allowed. One check for the
+    options flow and set_option.
+    """
+    s = settings_from_config(config)
+    if s.basis != BASIS_ALL_IN or not (
+            s.markup or s.energy_tax or s.vat_percent):
+        return False
+    if changed is None:
+        return True
+    if CONF_IMPORT_PRICE_BASIS in changed:
+        return True
+    return any(_amount(changed[k]) > 0 for k in IMPORT_ADD_KEYS if k in changed)
 
 
 def apply_value_preset(submitted: Mapping[str, Any],

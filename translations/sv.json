@@ -734,7 +734,8 @@
       "heat_pump_service_invalid": "SG-Ready-tjänsten måste vara domain.service (t.ex. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "SG-Ready-tjänstdatan måste vara ett JSON-objekt.",
       "heat_pump_contact_values_missing": "Den här SG-Ready-kontakten är en text-/number-/select-entitet, så SEM behöver både PÅ- och AV-värdet för att skriva. Fyll i båda, eller välj en switch-entitet.",
-      "calendar_needs_schedule": "Kalenderläget behöver ett schema för högtid. Välj en Schema-hjälpare eller ett annat tariffläge."
+      "calendar_needs_schedule": "Kalenderläget behöver ett schema för högtid. Välj en Schema-hjälpare eller ett annat tariffläge.",
+      "value_needs_spot_basis": "Ett påslag, energiskatt eller moms gäller bara vid ett spotpris. Välj spotgrunden eller sätt dem till 0."
     }
   },
   "entity": {
@@ -1809,6 +1810,9 @@
     },
     "departure_bad_time": {
       "message": "”{day}: {time}” är ingen avresa: dagarna är mon … sun, tiderna HH:MM från 00:00 till 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Ett påslag, energiskatt eller moms gäller bara vid ett spotpris. Välj spotgrunden eller sätt dem till 0."
     }
   },
   "issues": {

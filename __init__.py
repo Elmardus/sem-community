@@ -6202,11 +6202,20 @@ async def _async_register_phase_services(
         # does: the preset fills the fields it owns, and a hand-changed one
         # of those makes it "custom". These keys are read when the tariff
         # provider is built, so they take the reload path below.
-        from .tariff.value_layer import VALUE_OPTION_KEYS, apply_value_preset
+        from .tariff.value_layer import (
+            VALUE_OPTION_KEYS, apply_value_preset, basis_contradiction,
+        )
         if any(k in options for k in VALUE_OPTION_KEYS):
-            options = apply_value_preset(
-                options,
-                {**(target_entry.data or {}), **(target_entry.options or {})})
+            _stored = {**(target_entry.data or {}), **(target_entry.options or {})}
+            options = apply_value_preset(options, _stored)
+            # (#1077) An all-in price adds nothing: refuse a markup, tax or
+            # VAT beside it, judged on the merged result. Zeroing one is
+            # always allowed.
+            if basis_contradiction({**_stored, **options}, options):
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="value_needs_spot_basis",
+                )
 
         merged = {**(target_entry.options or {}), **options}
         if merged == (target_entry.options or {}):

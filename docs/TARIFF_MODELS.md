@@ -119,8 +119,13 @@ sold kWh are different money. SEM can work with both:
 
 Set it under Tariff & Advanced, or on the Config tab (All settings). The
 preset *Netherlands from 2027* fills energy tax (the 2026 rate, 0.0916 per
-kWh excl. VAT — check your bill) and 21 % VAT. Enter your supplier's markup
-and feed-in fee yourself. The preset *None* adds nothing. With every field
+kWh excl. VAT — check your bill) and 21 % VAT, and sets the price to *Spot
+price*. It is for a raw market price (Nord Pool, ENTSO-e); a price that
+already has tax, like Tibber's, needs no preset. Enter your supplier's markup
+and feed-in fee yourself. The preset *None* adds nothing.
+
+A markup, energy tax or VAT is only added to a spot price, so SEM refuses
+them next to *All-in*. With every field
 at 0, all prices are exactly what they were.
 
 ### Tax is never added twice

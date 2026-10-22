@@ -366,6 +366,7 @@ class TestThePreset:
         assert out[TAX] == pytest.approx(0.0916)
         assert out[VAT] == 21.0
         assert out[MODEL] == vl.FEE_PER_KWH
+        assert out[BASIS] == vl.BASIS_SPOT     # tax and VAT go on a spot price
         assert MARKUP not in out and FEE not in out   # supplier's own numbers
 
     def test_none_clears_everything(self):
@@ -422,11 +423,13 @@ class TestTheSettings:
         flow = _flow(mock_hass, config_entry, {})
         result = await _step(flow, config_entry, {
             "tariff_mode": "static", PRESET: vl.PRESET_NL_2027,
-            TAX: 0.0, VAT: 0.0, MODEL: vl.FEE_NONE})
+            BASIS: vl.BASIS_ALL_IN, TAX: 0.0, VAT: 0.0, MODEL: vl.FEE_NONE})
         assert result["step_id"] == "load_management"
         assert flow._data[TAX] == pytest.approx(0.0916)
         assert flow._data[VAT] == 21.0
         assert flow._data[MODEL] == vl.FEE_PER_KWH
+        # the form still showed "all-in"; picking the preset sets spot
+        assert flow._data[BASIS] == vl.BASIS_SPOT
 
     def test_owned_and_in_the_diagnose_dump(self):
         from custom_components.solar_energy_management.config_flow import (
@@ -477,3 +480,143 @@ class TestTheCoordinatorHandsItOver:
         from custom_components.solar_energy_management.coordinator import SEMCoordinator
         coord = SEMCoordinator(mock_hass, {"tariff_mode": "static", "update_interval": 30})
         assert coord._tariff_provider.value_settings == ValueSettings()
+
+
+# ─── review, 23.10 ──────────────────────────────────────────────────────────
+
+def test_a_decimal_comma_in_a_tier_fee_is_one_number():
+    assert vl.parse_tiers("0:0, 1000:0,02, 3000:0,05") == (
+        (0.0, 0.0), (1000.0, 0.02), (3000.0, 0.05))
+    assert vl.parse_tiers("0:0; 1000:0.02") == ((0.0, 0.0), (1000.0, 0.02))
+
+
+def test_the_year_count_starts_at_zero_on_new_year():
+    from custom_components.solar_energy_management.coordinator.energy_calculator import (
+        EnergyCalculator,
+    )
+    calc = EnergyCalculator({}, MagicMock())
+    calc._yearly_accumulators = {"grid_export_2026": 2400.0}
+    assert calc.export_year_to_date_kwh(datetime(2026, 12, 31, 23, 59)) == 2400.0
+    assert calc.export_year_to_date_kwh(datetime(2027, 1, 1, 0, 1)) == 0.0
+
+
+def test_a_failing_log_row_never_stops_the_charger_write():
+    from custom_components.solar_energy_management.coordinator import charger_reconciler as cr
+    rec = cr.ChargerReconciler.__new__(cr.ChargerReconciler)
+    rec.decision_log = object()
+    action = MagicMock(kind=cr.ActionKind.WRITE_CURRENT, amps=10)
+    with patch("custom_components.solar_energy_management.coordinator."
+               "decision_log.record_charger", side_effect=RuntimeError("boom")):
+        rec._log_write(action, MagicMock(), MagicMock())   # must not raise
+
+
+# ── An all-in price takes no markup, tax or VAT ──────────────────────────
+# An all-in price adds nothing, so those amounts would be ignored without a
+# word. The flow and set_option refuse the clash through one check.
+
+ERR_KEY = "value_needs_spot_basis"
+
+
+class TestTheBasisCheck:
+    @pytest.mark.parametrize("key", [MARKUP, TAX, VAT])
+    def test_all_in_with_an_amount_clashes(self, key):
+        assert vl.basis_contradiction({BASIS: vl.BASIS_ALL_IN, key: 0.02})
+        assert vl.basis_contradiction({key: 0.02})          # all-in is the default
+
+    @pytest.mark.parametrize("basis", [vl.BASIS_SPOT, vl.BASIS_SPOT_INCL_VAT])
+    def test_a_spot_basis_never_clashes(self, basis):
+        assert not vl.basis_contradiction({BASIS: basis, MARKUP: 0.02, VAT: 21.0})
+
+    def test_nothing_set_never_clashes(self):
+        assert not vl.basis_contradiction({})
+        assert not vl.basis_contradiction(None)
+
+    def test_a_partial_write_is_judged_on_what_it_changes(self):
+        clash = {BASIS: vl.BASIS_ALL_IN, MARKUP: 0.02, TAX: 0.09}
+        assert vl.basis_contradiction(clash, {MARKUP: 0.02})
+        assert vl.basis_contradiction(clash, {BASIS: vl.BASIS_ALL_IN})
+        # Zeroing one amount is always allowed, even while another remains.
+        assert not vl.basis_contradiction({**clash, MARKUP: 0.0}, {MARKUP: 0.0})
+        # A write that touches no value field is not refused.
+        assert not vl.basis_contradiction(clash, {"tariff_mode": "static"})
+
+    def test_the_error_has_words_in_every_language(self):
+        files = [ROOT / "strings.json", *sorted((ROOT / "translations").glob("*.json"))]
+        for f in files:
+            d = json.loads(f.read_text(encoding="utf-8"))
+            assert d["options"]["error"].get(ERR_KEY), f.name
+            assert d["exceptions"][ERR_KEY]["message"], f.name
+        cards = json.loads((ROOT / "dashboard" / "translations.json").read_text(
+            encoding="utf-8"))
+        for lang, table in cards.items():
+            assert table.get("config_value_needs_spot_basis"), lang
+
+    def test_the_card_greys_the_amounts_on_all_in(self):
+        card = (ROOT / "dashboard" / "card" / "src" / "cards"
+                / "sem-config-card.js").read_text(encoding="utf-8")
+        assert "disabled: allIn" in card
+        assert "config_value_needs_spot_basis" in card
+
+
+class TestTheFlowRefusesTheClash:
+    @pytest.mark.asyncio
+    async def test_refused_then_accepted_on_a_spot_basis(self, mock_hass, config_entry):
+        flow = _flow(mock_hass, config_entry, {})
+        sent = {"tariff_mode": "static", BASIS: vl.BASIS_ALL_IN, MARKUP: 0.02}
+        result = await _step(flow, config_entry, sent)
+        assert result["step_id"] == "settings_tariff"
+        assert result["errors"] == {BASIS: ERR_KEY}
+        assert MARKUP not in flow._data
+
+        result = await _step(flow, config_entry, {**sent, BASIS: vl.BASIS_SPOT})
+        assert result["step_id"] == "load_management"
+        assert flow._data[MARKUP] == 0.02
+
+    @pytest.mark.asyncio
+    async def test_the_nl_preset_sets_spot_so_it_is_never_a_clash(
+            self, mock_hass, config_entry):
+        """The preset owns the basis: choosing it on an all-in form saves."""
+        flow = _flow(mock_hass, config_entry, {})
+        result = await _step(flow, config_entry, {
+            "tariff_mode": "static", PRESET: vl.PRESET_NL_2027})
+        assert result["step_id"] == "load_management"
+        assert flow._data[BASIS] == vl.BASIS_SPOT
+
+
+@pytest.mark.asyncio
+async def test_set_option_refuses_the_clash_both_ways(sem_real_hass, sem_config_entry):
+    from homeassistant.exceptions import ServiceValidationError
+
+    from custom_components.solar_energy_management.const import DOMAIN
+
+    from .test_services_real import _seed_sem_input_sensors
+
+    hass, entry = sem_real_hass, sem_config_entry
+    _seed_sem_input_sensors(hass)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    async def save(options):
+        await hass.services.async_call(
+            DOMAIN, "set_option", {"options": options}, blocking=True)
+        await hass.async_block_till_done()
+
+    # A markup beside the default all-in basis.
+    with pytest.raises(ServiceValidationError) as err:
+        await save({MARKUP: 0.02})
+    assert err.value.translation_key == ERR_KEY
+    assert MARKUP not in entry.options
+
+    await save({BASIS: vl.BASIS_SPOT, MARKUP: 0.02})
+    assert entry.options[MARKUP] == 0.02
+
+    # Back to all-in while the markup is set.
+    with pytest.raises(ServiceValidationError):
+        await save({BASIS: vl.BASIS_ALL_IN})
+    assert entry.options[BASIS] == vl.BASIS_SPOT
+
+    # Zeroing is always allowed; then all-in is fine again.
+    await save({MARKUP: 0.0})
+    await save({BASIS: vl.BASIS_ALL_IN})
+    assert entry.options[BASIS] == vl.BASIS_ALL_IN

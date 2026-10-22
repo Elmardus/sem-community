@@ -1545,17 +1545,25 @@ class SEMConfigCard extends SEMLitBase {
         const feeUnit = model === 'fixed_monthly' ? `${currency}/Mt` : `${currency}/kWh`;
         // (#1090) the export threshold: below this value SEM stops exporting
         const feeUnitKwh = `${currency}/kWh`;
+        // (#1077) An all-in price already holds markup, tax and VAT: those
+        // rows are greyed out with a one-line hint, and set_option refuses
+        // a positive amount beside an all-in basis.
+        const basis = this._stagedVal('opt:import_price_basis',
+            opts.import_price_basis ?? 'all_in');
+        const allIn = basis === 'all_in';
+        const kwhUnit = currency + '/kWh';
         return html`
             ${this._renderOptionSelect('tariff_value_preset', 'config_value_preset',
                 presetOptions, opts, 'config_help_value_preset', 'none')}
             ${this._renderOptionSelect('import_price_basis', 'config_price_basis',
                 basisOptions, opts, 'config_help_price_basis', 'all_in')}
+            ${allIn ? html`<div class="setting-help-text">${this._t('config_value_needs_spot_basis')}</div>` : nothing}
             ${this._renderOptionNumberInput('import_markup', 'config_import_markup',
-                { min: 0, max: 10000, step: 0.0001, unit: `${currency}/kWh`, default: 0 }, opts, 'config_help_import_markup')}
+                { min: 0, max: 10000, step: 0.0001, unit: kwhUnit, default: 0, disabled: allIn }, opts, 'config_help_import_markup')}
             ${this._renderOptionNumberInput('import_energy_tax', 'config_import_energy_tax',
-                { min: 0, max: 10000, step: 0.0001, unit: `${currency}/kWh`, default: 0 }, opts, 'config_help_import_energy_tax')}
+                { min: 0, max: 10000, step: 0.0001, unit: kwhUnit, default: 0, disabled: allIn }, opts, 'config_help_import_energy_tax')}
             ${this._renderOptionNumberInput('import_vat_percent', 'config_import_vat_percent',
-                { min: 0, max: 100, step: 0.1, unit: '%', default: 0 }, opts, 'config_help_import_vat_percent')}
+                { min: 0, max: 100, step: 0.1, unit: '%', default: 0, disabled: allIn }, opts, 'config_help_import_vat_percent')}
             ${this._renderOptionSelect('feed_in_fee_model', 'config_fee_model',
                 feeOptions, opts, 'config_help_fee_model', 'none')}
             ${model === 'per_kwh' || model === 'fixed_monthly'
@@ -2591,11 +2599,12 @@ class SEMConfigCard extends SEMLitBase {
             this._stage(sid, 'option', clamped);
         };
         return html`
-            <div class="stepper-cell ${dirty ? 'dirty' : ''}">
+            <div class="stepper-cell ${dirty ? 'dirty' : ''} ${cfg.disabled ? 'is-disabled' : ''}">
                 <div class="ctrl-row">
                     <span class="ctrl-label">${this._t(labelKey)}${dirty ? html`<span class="dirty-dot">●</span>` : nothing}${this._helpBtn(helpKey)}</span>
                     <div class="num-input-wrap">
                         <input class="sem-num-input" type="number"
+                               ?disabled=${!!cfg.disabled}
                                .value=${String(cur)}
                                min=${cfg.min} max=${cfg.max} step=${cfg.step}
                                @change=${(e) => commit(e.target.value)}
@@ -3998,6 +4007,8 @@ class SEMConfigCard extends SEMLitBase {
                     outline: none;
                 }
                 .sem-num-input:focus { border-color: ${accent}; }
+                .stepper-cell.is-disabled .ctrl-row { opacity: 0.5; }
+                .sem-num-input:disabled { cursor: not-allowed; }
                 .num-unit {
                     font-size: 12px; color: var(--secondary-text-color, ${T.textSec});
                 }
