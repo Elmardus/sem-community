@@ -723,7 +723,8 @@
       "heat_pump_service_invalid": "Usługa SG-Ready musi mieć postać domain.service (np. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "Dane usługi SG-Ready muszą być obiektem JSON.",
       "heat_pump_contact_values_missing": "Ten styk SG-Ready to encja text/number/select, więc SEM potrzebuje zapisać zarówno wartość ZAŁ, jak i WYŁ. Wypełnij obie albo wybierz encję typu switch.",
-      "calendar_needs_schedule": "Tryb Kalendarz wymaga harmonogramu szczytu. Wybierz pomocnika Harmonogram lub inny tryb taryfy."
+      "calendar_needs_schedule": "Tryb Kalendarz wymaga harmonogramu szczytu. Wybierz pomocnika Harmonogram lub inny tryb taryfy.",
+      "value_needs_spot_basis": "Marża, podatek energetyczny lub VAT dotyczą tylko ceny spot. Wybierz podstawę spot albo ustaw je na 0."
     }
   },
   "entity": {
@@ -1795,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "„{day}: {time}” nie jest godziną wyjazdu: dni to mon … sun, godziny w formacie HH:MM od 00:00 do 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Marża, podatek energetyczny lub VAT dotyczą tylko ceny spot. Wybierz podstawę spot albo ustaw je na 0."
     }
   },
   "issues": {

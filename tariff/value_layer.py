@@ -259,6 +259,34 @@ def settings_from_config(config: Mapping[str, Any] | None) -> ValueSettings:
     )
 
 
+# The import amounts that only mean something on a spot price (#1077).
+IMPORT_ADD_KEYS: Tuple[str, ...] = (
+    CONF_IMPORT_MARKUP, CONF_IMPORT_ENERGY_TAX, CONF_IMPORT_VAT_PERCENT,
+)
+
+
+def basis_contradiction(config: Mapping[str, Any] | None,
+                        changed: Mapping[str, Any] | None = None) -> bool:
+    """Does an all-in price carry a markup, tax or VAT (#1077)?
+
+    An all-in price adds nothing, so those amounts would be ignored
+    without a word. ``config`` is the whole result (stored + new). With
+    ``changed`` (a partial write, the card's set_option), only a write
+    that causes the clash is refused: picking all-in, or a positive
+    amount. Setting an amount to 0 is always allowed. One check for the
+    options flow and set_option.
+    """
+    s = settings_from_config(config)
+    if s.basis != BASIS_ALL_IN or not (
+            s.markup or s.energy_tax or s.vat_percent):
+        return False
+    if changed is None:
+        return True
+    if CONF_IMPORT_PRICE_BASIS in changed:
+        return True
+    return any(_amount(changed[k]) > 0 for k in IMPORT_ADD_KEYS if k in changed)
+
+
 def apply_value_preset(submitted: Mapping[str, Any],
                        stored: Mapping[str, Any]) -> dict:
     """Fill the fields a preset owns, on the way into the options.

@@ -723,7 +723,8 @@
       "heat_pump_service_invalid": "Le service SG-Ready doit être au format domain.service (par exemple ems_esp.send_command).",
       "heat_pump_service_data_invalid": "Les données du service SG-Ready doivent être un objet JSON.",
       "heat_pump_contact_values_missing": "Ce contact SG-Ready est une entité texte/nombre/sélecteur, donc SEM a besoin à la fois de la valeur ON et de la valeur OFF à écrire. Renseignez les deux, ou choisissez une entité interrupteur.",
-      "calendar_needs_schedule": "Le mode Calendrier a besoin d'un horaire des heures pleines. Choisissez un assistant Planification ou un autre mode tarifaire."
+      "calendar_needs_schedule": "Le mode Calendrier a besoin d'un horaire des heures pleines. Choisissez un assistant Planification ou un autre mode tarifaire.",
+      "value_needs_spot_basis": "Une marge, une taxe sur l'énergie ou la TVA ne s'appliquent qu'à un prix spot. Choisissez la base spot ou mettez-les à 0."
     }
   },
   "entity": {
@@ -1795,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "« {day} : {time} » n’est pas un départ : les jours sont mon … sun, les heures HH:MM de 00:00 à 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Une marge, une taxe sur l'énergie ou la TVA ne s'appliquent qu'à un prix spot. Choisissez la base spot ou mettez-les à 0."
     }
   },
   "issues": {

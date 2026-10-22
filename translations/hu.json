@@ -723,7 +723,8 @@
       "heat_pump_service_invalid": "Az SG-Ready szolgáltatásnak domain.service formátumúnak kell lennie (pl. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "Az SG-Ready szolgáltatás adatainak JSON objektumnak kell lenniük.",
       "heat_pump_contact_values_missing": "Ez az SG-Ready érintkező egy text/number/select entitás, ezért a SEM-nek mind a BE, mind a KI értékre szüksége van az íráshoz. Töltse ki mindkettőt, vagy válasszon egy switch entitást.",
-      "calendar_needs_schedule": "A Naptár mód csúcsidő ütemezést igényel. Válasszon egy Ütemezés segédet vagy másik tarifamódot."
+      "calendar_needs_schedule": "A Naptár mód csúcsidő ütemezést igényel. Válasszon egy Ütemezés segédet vagy másik tarifamódot.",
+      "value_needs_spot_basis": "Felár, energiaadó vagy áfa csak spot árnál érvényes. Válaszd a spot alapot, vagy állítsd őket 0-ra."
     }
   },
   "entity": {
@@ -1795,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "A(z) „{day}: {time}” nem indulási idő: a napok mon … sun, az időpontok HH:MM alakúak, 00:00 és 23:59 között."
+    },
+    "value_needs_spot_basis": {
+      "message": "Felár, energiaadó vagy áfa csak spot árnál érvényes. Válaszd a spot alapot, vagy állítsd őket 0-ra."
     }
   },
   "issues": {

@@ -723,7 +723,8 @@
       "heat_pump_service_invalid": "Služba SG-Ready musí být ve tvaru domain.service (např. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "Data služby SG-Ready musí být objekt JSON.",
       "heat_pump_contact_values_missing": "Tento kontakt SG-Ready je entita text/number/select, takže SEM potřebuje zapsat jak hodnotu ZAP, tak hodnotu VYP. Vyplňte obě, nebo vyberte entitu typu switch.",
-      "calendar_needs_schedule": "Režim Kalendář potřebuje rozvrh špičky. Vyberte pomocníka Plán nebo jiný tarifní režim."
+      "calendar_needs_schedule": "Režim Kalendář potřebuje rozvrh špičky. Vyberte pomocníka Plán nebo jiný tarifní režim.",
+      "value_needs_spot_basis": "Přirážka, daň z energie nebo DPH platí jen u spotové ceny. Zvolte spotový základ, nebo je nastavte na 0."
     }
   },
   "entity": {
@@ -1795,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "„{day}: {time}“ není odjezd: dny jsou mon … sun, časy HH:MM od 00:00 do 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Přirážka, daň z energie nebo DPH platí jen u spotové ceny. Zvolte spotový základ, nebo je nastavte na 0."
     }
   },
   "issues": {

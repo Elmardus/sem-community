@@ -723,7 +723,8 @@
       "heat_pump_service_invalid": "SG-Ready-servicen skal være domain.service (f.eks. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "SG-Ready servicedata skal være et JSON-objekt.",
       "heat_pump_contact_values_missing": "Dette SG-Ready-relæ er en text-/number-/select-entitet, så SEM har brug for både ON- og OFF-værdien at skrive. Udfyld begge, eller vælg en kontakt-entitet.",
-      "calendar_needs_schedule": "Kalendertilstand kræver et spidslast-skema. Vælg en Tidsplan-hjælper eller en anden tarif-tilstand."
+      "calendar_needs_schedule": "Kalendertilstand kræver et spidslast-skema. Vælg en Tidsplan-hjælper eller en anden tarif-tilstand.",
+      "value_needs_spot_basis": "Et tillæg, elafgift eller moms gælder kun ved en spotpris. Vælg spotgrundlaget, eller sæt dem til 0."
     }
   },
   "entity": {
@@ -1795,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "”{day}: {time}” er ikke en afgang: dagene er mon … sun, tiderne HH:MM fra 00:00 til 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Et tillæg, elafgift eller moms gælder kun ved en spotpris. Vælg spotgrundlaget, eller sæt dem til 0."
     }
   },
   "issues": {

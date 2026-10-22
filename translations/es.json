@@ -723,7 +723,8 @@
       "heat_pump_service_invalid": "El servicio SG-Ready debe ser domain.service (p. ej. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "Los datos del servicio SG-Ready deben ser un objeto JSON.",
       "heat_pump_contact_values_missing": "Este contacto SG-Ready es una entidad text/number/select, así que SEM necesita tanto el valor ON como el OFF para escribir. Rellene ambos, o elija una entidad switch.",
-      "calendar_needs_schedule": "El modo Calendario necesita un horario de punta. Elige un ayudante Programación u otro modo de tarifa."
+      "calendar_needs_schedule": "El modo Calendario necesita un horario de punta. Elige un ayudante Programación u otro modo de tarifa.",
+      "value_needs_spot_basis": "Un recargo, impuesto eléctrico o IVA solo se aplica con un precio spot. Elige la base spot o ponlos a 0."
     }
   },
   "entity": {
@@ -1795,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "«{day}: {time}» no es una salida: los días son mon … sun y las horas HH:MM, de 00:00 a 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Un recargo, impuesto eléctrico o IVA solo se aplica con un precio spot. Elige la base spot o ponlos a 0."
     }
   },
   "issues": {

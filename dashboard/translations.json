@@ -1843,7 +1843,8 @@
     "config_fee_model_none": "Žádný",
     "config_fee_model_per_kwh": "Za kWh",
     "config_fee_model_tiered": "Pásma podle kWh za rok",
-    "config_fee_model_fixed_monthly": "Pevně měsíčně"
+    "config_fee_model_fixed_monthly": "Pevně měsíčně",
+    "config_value_needs_spot_basis": "Jen u spotové ceny. Cena vč. všeho je už obsahuje."
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3689,7 +3690,8 @@
     "config_fee_model_none": "Ingen",
     "config_fee_model_per_kwh": "Pr. kWh",
     "config_fee_model_tiered": "Trin efter kWh pr. år",
-    "config_fee_model_fixed_monthly": "Fast pr. måned"
+    "config_fee_model_fixed_monthly": "Fast pr. måned",
+    "config_value_needs_spot_basis": "Kun ved en spotpris. En pris med alt inklusive har dem allerede."
   },
   "de": {
     "% of limit": "% des Limits",
@@ -5535,7 +5537,8 @@
     "config_fee_model_none": "Keine",
     "config_fee_model_per_kwh": "Pro kWh",
     "config_fee_model_tiered": "Stufen nach kWh pro Jahr",
-    "config_fee_model_fixed_monthly": "Fest pro Monat"
+    "config_fee_model_fixed_monthly": "Fest pro Monat",
+    "config_value_needs_spot_basis": "Nur bei einem Spotpreis. Ein Endpreis enthält sie schon."
   },
   "en": {
     "% of limit": "% of limit",
@@ -7381,7 +7384,8 @@
     "config_fee_model_none": "None",
     "config_fee_model_per_kwh": "Per kWh",
     "config_fee_model_tiered": "Tiers by kWh per year",
-    "config_fee_model_fixed_monthly": "Fixed per month"
+    "config_fee_model_fixed_monthly": "Fixed per month",
+    "config_value_needs_spot_basis": "Only for a spot price. An all-in price already holds these."
   },
   "es": {
     "% of limit": "% del límite",
@@ -9227,7 +9231,8 @@
     "config_fee_model_none": "Ninguno",
     "config_fee_model_per_kwh": "Por kWh",
     "config_fee_model_tiered": "Tramos por kWh al año",
-    "config_fee_model_fixed_monthly": "Fijo al mes"
+    "config_fee_model_fixed_monthly": "Fijo al mes",
+    "config_value_needs_spot_basis": "Solo con un precio spot. Un precio total ya los incluye."
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -11073,7 +11078,8 @@
     "config_fee_model_none": "Ei mitään",
     "config_fee_model_per_kwh": "kWh:lta",
     "config_fee_model_tiered": "Portaat kWh/vuosi mukaan",
-    "config_fee_model_fixed_monthly": "Kiinteä kuukaudessa"
+    "config_fee_model_fixed_monthly": "Kiinteä kuukaudessa",
+    "config_value_needs_spot_basis": "Vain pörssihinnalle. Kokonaishinta sisältää ne jo."
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -12919,7 +12925,8 @@
     "config_fee_model_none": "Aucun",
     "config_fee_model_per_kwh": "Par kWh",
     "config_fee_model_tiered": "Paliers selon kWh par an",
-    "config_fee_model_fixed_monthly": "Fixe par mois"
+    "config_fee_model_fixed_monthly": "Fixe par mois",
+    "config_value_needs_spot_basis": "Seulement pour un prix spot. Un prix tout compris les contient déjà."
   },
   "hu": {
     "% of limit": "% a határból",
@@ -14765,7 +14772,8 @@
     "config_fee_model_none": "Nincs",
     "config_fee_model_per_kwh": "kWh-nként",
     "config_fee_model_tiered": "Sávok éves kWh szerint",
-    "config_fee_model_fixed_monthly": "Fix havi"
+    "config_fee_model_fixed_monthly": "Fix havi",
+    "config_value_needs_spot_basis": "Csak spot árnál. A teljes ár már tartalmazza őket."
   },
   "it": {
     "% of limit": "% del limite",
@@ -16611,7 +16619,8 @@
     "config_fee_model_none": "Nessuno",
     "config_fee_model_per_kwh": "Per kWh",
     "config_fee_model_tiered": "Scaglioni per kWh all'anno",
-    "config_fee_model_fixed_monthly": "Fisso al mese"
+    "config_fee_model_fixed_monthly": "Fisso al mese",
+    "config_value_needs_spot_basis": "Solo con un prezzo spot. Un prezzo tutto incluso li contiene già."
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -18457,7 +18466,8 @@
     "config_fee_model_none": "Geen",
     "config_fee_model_per_kwh": "Per kWh",
     "config_fee_model_tiered": "Staffel naar kWh per jaar",
-    "config_fee_model_fixed_monthly": "Vast per maand"
+    "config_fee_model_fixed_monthly": "Vast per maand",
+    "config_value_needs_spot_basis": "Alleen bij een spotprijs. Een all-in prijs bevat ze al."
   },
   "no": {
     "% of limit": "% av grense",
@@ -20303,7 +20313,8 @@
     "config_fee_model_none": "Ingen",
     "config_fee_model_per_kwh": "Per kWh",
     "config_fee_model_tiered": "Trinn etter kWh per år",
-    "config_fee_model_fixed_monthly": "Fast per måned"
+    "config_fee_model_fixed_monthly": "Fast per måned",
+    "config_value_needs_spot_basis": "Bare ved en spotpris. En pris med alt inkludert har dem allerede."
   },
   "pl": {
     "% of limit": "% limitu",
@@ -22149,7 +22160,8 @@
     "config_fee_model_none": "Brak",
     "config_fee_model_per_kwh": "Za kWh",
     "config_fee_model_tiered": "Progi według kWh rocznie",
-    "config_fee_model_fixed_monthly": "Stała miesięcznie"
+    "config_fee_model_fixed_monthly": "Stała miesięcznie",
+    "config_value_needs_spot_basis": "Tylko dla ceny spot. Cena z wszystkim już je zawiera."
   },
   "pt": {
     "% of limit": "% do limite",
@@ -23995,7 +24007,8 @@
     "config_fee_model_none": "Nenhuma",
     "config_fee_model_per_kwh": "Por kWh",
     "config_fee_model_tiered": "Escalões por kWh por ano",
-    "config_fee_model_fixed_monthly": "Fixo por mês"
+    "config_fee_model_fixed_monthly": "Fixo por mês",
+    "config_value_needs_spot_basis": "Só para um preço spot. Um preço com tudo incluído já os contém."
   },
   "ro": {
     "% of limit": "% din limită",
@@ -25841,7 +25854,8 @@
     "config_fee_model_none": "Niciuna",
     "config_fee_model_per_kwh": "Pe kWh",
     "config_fee_model_tiered": "Praguri după kWh pe an",
-    "config_fee_model_fixed_monthly": "Fix pe lună"
+    "config_fee_model_fixed_monthly": "Fix pe lună",
+    "config_value_needs_spot_basis": "Doar pentru un preț spot. Un preț total le include deja."
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -27687,7 +27701,8 @@
     "config_fee_model_none": "Ingen",
     "config_fee_model_per_kwh": "Per kWh",
     "config_fee_model_tiered": "Steg efter kWh per år",
-    "config_fee_model_fixed_monthly": "Fast per månad"
+    "config_fee_model_fixed_monthly": "Fast per månad",
+    "config_value_needs_spot_basis": "Bara vid ett spotpris. Ett pris med allt inräknat har dem redan."
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -29533,6 +29548,7 @@
     "config_fee_model_none": "无",
     "config_fee_model_per_kwh": "按度",
     "config_fee_model_tiered": "按年度度数分阶梯",
-    "config_fee_model_fixed_monthly": "每月固定"
+    "config_fee_model_fixed_monthly": "每月固定",
+    "config_value_needs_spot_basis": "仅适用于现货价格。全包价格已包含这些。"
   }
 }
