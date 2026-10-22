@@ -69,7 +69,7 @@ Branch `feature/value-of-a-kwh`. One idea: SEM decides on what a kWh is
 
 ### E. "Why?" card — mockup first
 
-- Timeline per device from the log. Mockup to Guido before code
+- Timeline per device from the log. Mockup for review before code
   (`docs/UI_PATTERNS.md`, EV card as reference).
 
 ## Settings

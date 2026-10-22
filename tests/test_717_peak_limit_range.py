@@ -72,11 +72,12 @@ def _number_selector_bounds(source: str, key: str) -> list[tuple[str, str]]:
     The gap between the key and its selector must not swallow another schema
     entry — a greedy ``.*?`` happily matched ``"target_peak_limit"`` against a
     ``NumberSelectorConfig`` fifty lines further down and reported that
-    field's bounds instead.
+    field's bounds instead. Nor may it cross into another function: the key
+    list near the top met a helper's selector (#1077).
     """
     out: list[tuple[str, str]] = []
     for match in re.finditer(
-        rf'"{key}",(?:(?!vol\.(?:Required|Optional)).)*?'
+        rf'"{key}",(?:(?!vol\.(?:Required|Optional)|\ndef ).)*?'
         r"NumberSelectorConfig\((.*?)\)\s*\)",
         source,
         re.S,

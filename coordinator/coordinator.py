@@ -651,6 +651,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 from .price_signal import comparative_level
                 level = comparative_level(provider)
                 inputs["price_level"] = getattr(level, "value", level)
+            # DARK-SOC: record — a blink leaves the log row without a SOC
             if (not getattr(power, "battery_soc_unavailable", False)
                     and getattr(power, "battery_soc_known", True)):
                 inputs["soc"] = getattr(power, "battery_soc", None)
