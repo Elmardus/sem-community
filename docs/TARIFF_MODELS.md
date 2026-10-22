@@ -154,6 +154,14 @@ Tiers are written `kWh this year : fee per kWh`, for example
 it starts at 0 on 1 January. The yearly fees sensor shows it, the fee now,
 and where the next tier starts.
 
+### Stop exporting below (#1090)
+
+When a sold kWh is worth less than this, SEM stops exporting: the battery
+and the loads take the sun first, and charge pacing lifts its limit. SEM
+does not buy for it — grid charging still needs a negative import price.
+Default 0: the meter closes only below zero, as before. It needs the
+*Export guard* switch, which cuts the inverter's export.
+
 ### Sensors
 
 They appear once a value field is set, daily and yearly:
