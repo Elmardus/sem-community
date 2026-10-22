@@ -2096,6 +2096,29 @@ def _cleanup_stale_entities(
         _LOGGER.debug("Stale entity cleanup skipped: %s", e)
 
 
+def _device_tariff_descriptions(hass, coordinator) -> list:
+    """(#812) One daily cost sensor per device that has its own tariff."""
+    from .coordinator.device_tariff import tariff_of
+    controller = getattr(coordinator, "_surplus_controller", None)
+    devices = getattr(controller, "_devices", None) or {}
+    out = []
+    for did, device in sorted(devices.items()):
+        if not tariff_of(device).configured:
+            continue
+        name = str(getattr(device, "name", "") or did)
+        out.append(SensorEntityDescription(
+            key=f"daily_tariff_cost_{did}",
+            name=f"{name} Tariff Cost Today",
+            translation_key="per_device_tariff_cost",
+            translation_placeholders={"device": name},
+            device_class=SensorDeviceClass.MONETARY,
+            state_class=SensorStateClass.TOTAL,
+            native_unit_of_measurement=hass.config.currency,
+            suggested_display_precision=2,
+        ))
+    return out
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: SEMConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -2351,6 +2374,14 @@ async def async_setup_entry(
     for desc in per_charger_descriptions:
         sensors.append(SEMSolarSensor(coordinator, desc, entry.entry_id))
 
+    # (#812) A device on its own tariff gets a daily cost sensor: its grid
+    # kWh priced at that tariff. No tariff set, no sensor — and since this
+    # list feeds the stale sweep below, clearing the tariff removes it.
+    per_device_tariff_descriptions = _device_tariff_descriptions(
+        hass, coordinator)
+    for desc in per_device_tariff_descriptions:
+        sensors.append(SEMSolarSensor(coordinator, desc, entry.entry_id))
+
     if per_charger_descriptions:
         _LOGGER.info("Created %d per-charger sensors for %d charger(s)",
                       len(per_charger_descriptions), len(ev_chargers))
@@ -2470,6 +2501,7 @@ async def async_setup_entry(
         + per_charger_descriptions
         + per_string_descriptions
         + per_battery_descriptions
+        + per_device_tariff_descriptions
     )
     _fix_entity_ids(hass, entry, all_descriptions, "sensor")
     _cleanup_stale_entities(hass, entry, all_descriptions, "sensor")
@@ -3157,6 +3189,14 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 "battery_boost_preview": self.coordinator.data.get(
                     "battery_boost_preview"),
             })
+        elif self.entity_description.key.startswith("daily_tariff_cost_"):
+            # (#812) What the cost rests on: the device's grid kWh today and
+            # its price and level now.
+            did = self.entity_description.key[len("daily_tariff_cost_"):]
+            attrs["grid_kwh_today"] = self.coordinator.data.get(
+                f"daily_tariff_grid_kwh_{did}")
+            attrs["price_now"] = self.coordinator.data.get(f"tariff_price_{did}")
+            attrs["price_level"] = self.coordinator.data.get(f"tariff_level_{did}")
         elif self.entity_description.key == "yearly_feed_in_fees":
             # (#1077) Where a tiered fee stands: this year's export, the fee
             # on the next kWh, and where the next tier starts.

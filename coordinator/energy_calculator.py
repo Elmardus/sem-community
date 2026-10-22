@@ -327,6 +327,11 @@ CO2_CORRECTION_CATEGORY = "co2_live_correction"
 VALUE_SELF_CONSUMPTION = "value_self_consumption"
 VALUE_EXPORT = "value_export"
 VALUE_FEED_IN_FEE = "value_feed_in_fee"
+#: (#812) A device on its own tariff: its grid kWh and what they cost at
+#: that tariff, per device id. Keyed on the calendar day like the house's
+#: own import cost, so the two daily figures roll together.
+DEVICE_TARIFF_KWH = "device_tariff_kwh:"
+DEVICE_TARIFF_COST = "device_tariff_cost:"
 CO2_KG_PER_TREE_PER_YEAR = 22  # EPA estimate
 
 
@@ -3977,6 +3982,27 @@ class EnergyCalculator:
             "monthly_kwh": self._get_monthly(category, self._month_key(meter_day)),
             "yearly_kwh": self._get_yearly(category, str(meter_day.year)),
             "lifetime_kwh": self._get_lifetime(category),
+        }
+
+    def accumulate_device_tariff(
+        self, device_id: str, grid_kwh: float, cost: float, day: date,
+    ) -> None:
+        """(#812) Book a device's grid kWh at its own tariff."""
+        if not device_id or not grid_kwh:
+            return
+        month_key, year_key = self._month_key(day), str(day.year)
+        self._accumulate(f"{DEVICE_TARIFF_KWH}{device_id}", day,
+                         month_key, year_key, float(grid_kwh))
+        self._accumulate_cost(f"{DEVICE_TARIFF_COST}{device_id}", day,
+                              month_key, year_key, float(cost))
+
+    def get_device_tariff(self, device_id: str, day: date) -> Dict[str, float]:
+        """(#812) Today's grid kWh and cost of a device on its own tariff."""
+        return {
+            "daily_grid_kwh": self._get_daily(
+                f"{DEVICE_TARIFF_KWH}{device_id}", day),
+            "daily_cost": self._get_daily_cost(
+                f"{DEVICE_TARIFF_COST}{device_id}", day),
         }
 
     def get_device_splits(self, device_id: str, meter_day: date) -> Dict[str, float]:

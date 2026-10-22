@@ -646,6 +646,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             calc = getattr(self, "_energy_calculator", None)
             inputs["import_price"] = getattr(calc, "_import_rate", None)
             inputs["export_rate"] = getattr(calc, "_export_rate", None)
+            # (#812) the house rate is the noise floor a device's own price
+            # curve is classified against (``DeviceTariffs.provider_for``)
+            _dt = getattr(self._surplus_controller, "device_tariffs", None)
+            if _dt is not None:
+                _dt.house_rate = inputs["import_price"]
             provider = getattr(self, "_tariff_provider", None)
             if provider is not None and getattr(provider, "available", True):
                 from .price_signal import comparative_level
@@ -5388,6 +5393,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # home-hold state lives, so a known-incoherent cycle ships the
             # last coherent set instead of a fresh/substituted chimera.
             result["power_snapshot"] = self._build_power_snapshot(power)
+            # (#812) devices on their own tariff: book this cycle's grid
+            # kWh at that tariff and publish today's cost per device.
+            try:
+                result.update(self._book_device_tariffs(power, power_flows))
+            except Exception:  # noqa: BLE001 — the books never cost a cycle
+                _LOGGER.debug("device tariff books skipped", exc_info=True)
             # 3a — core snapshot complete (power/flows/energy/battery/EV/
             # charging). Everything below is enrichment; a throw past this
             # point degrades to core data (see the except handler), it does
@@ -15926,6 +15937,41 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 estimated=not getattr(
                     device, "daily_energy_is_measured", False),
             )
+
+    def _book_device_tariffs(self, power, power_flows) -> Dict[str, Any]:
+        """(#812) Price each own-tariff device's grid kWh at its tariff.
+
+        The kWh the device booked this cycle (#768), times the share of the
+        house load the grid supplied (SEM's own flow split) — or, when the
+        device names its own meter, that meter's step. Priced at the
+        device's price now. Returns the per-device keys the cost sensors
+        read; a device without its own tariff adds nothing.
+        """
+        from .device_tariff import grid_share, tariff_of
+        calc = getattr(self, "_energy_calculator", None)
+        tariffs = getattr(self._surplus_controller, "device_tariffs", None)
+        if calc is None or tariffs is None:
+            return {}
+        day = dt_util.now().date()
+        share = grid_share(getattr(power_flows, "grid_to_home", 0.0),
+                           getattr(power, "home_consumption_power", 0.0))
+        out: Dict[str, Any] = {}
+        for device in list(self._surplus_controller._devices.values()):
+            if not tariff_of(device).configured:
+                continue
+            did = device.device_id
+            kwh = tariffs.grid_kwh(
+                device, getattr(device, "last_cycle_energy_kwh", 0.0) or 0.0,
+                share)
+            price = tariffs.price_now(device)
+            if kwh and price is not None:
+                calc.accumulate_device_tariff(did, kwh, kwh * price, day)
+            books = calc.get_device_tariff(did, day)
+            out[f"daily_tariff_cost_{did}"] = books["daily_cost"]
+            out[f"daily_tariff_grid_kwh_{did}"] = books["daily_grid_kwh"]
+            out[f"tariff_price_{did}"] = price
+            out[f"tariff_level_{did}"] = getattr(device, "_tariff_level", None)
+        return out
 
     def _comfort_split_for(self, device, now):
         """(#772) The comfort bucket for this cycle's kWh, or None.
