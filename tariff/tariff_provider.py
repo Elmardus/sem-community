@@ -20,6 +20,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .value_layer import NO_VALUE, ValueSettings
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -349,6 +351,15 @@ class TariffData:
     #   negative_price_shortcircuit
     classifier_path: str = "unknown"
 
+    # (#1077) The value layer. ``current_export_rate`` above is the export
+    # VALUE (net of the per-kWh fee); these say how it was made.
+    current_export_spot_rate: Optional[float] = None
+    feed_in_fee_rate: float = 0.0
+    feed_in_fixed_monthly: float = 0.0
+    export_ytd_kwh: float = 0.0
+    next_fee_tier_kwh: Optional[float] = None
+    value_layer_on: bool = False
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "tariff_current_import_rate": round(self.current_import_rate, 4),
@@ -382,6 +393,50 @@ class TariffData:
 
 class TariffProvider(ABC):
     """Base class for tariff providers."""
+
+    #: (#1077) What a kWh is worth on each side — tax, VAT, markup on the
+    #: import price; the feed-in fee off the export price. Class defaults
+    #: so a provider built any way (``__new__`` in tests included) answers
+    #: with today's prices until the coordinator hands it real settings.
+    value_settings: ValueSettings = NO_VALUE
+    #: (#1077) kWh exported this calendar year, for the tiered feed-in fee.
+    #: Fed each cycle by the coordinator from the yearly export counter.
+    export_ytd_kwh: float = 0.0
+
+    def _import_value(self, price: float, surcharge: float = 0.0) -> float:
+        """(#1077) The price a sensor or rate table reports → what a bought
+        kWh costs. All value fields at 0 returns ``price + surcharge``."""
+        return self.value_settings.import_value(price, surcharge)
+
+    def _export_value(self, spot_export: float) -> float:
+        """(#1077) The export price SEM read → what a sold kWh earns."""
+        return self.value_settings.export_value(
+            spot_export, self.export_ytd_kwh)
+
+    def get_current_spot_export_rate(self) -> float:
+        """(#1077) The export price before the feed-in fee — what
+        ``get_current_export_rate`` returned before the value layer. Only
+        the books need it (gross export value next to the fees)."""
+        return self.get_current_export_rate()
+
+    def feed_in_fee_rate(self) -> float:
+        """(#1077) The feed-in fee on the next exported kWh."""
+        return self.value_settings.fee_rate(self.export_ytd_kwh)
+
+    def _value_fields(self, data: "TariffData") -> "TariffData":
+        """(#1077) The value layer's own numbers on the tariff snapshot."""
+        try:
+            data.current_export_spot_rate = float(
+                self.get_current_spot_export_rate())
+        except (TypeError, ValueError):
+            data.current_export_spot_rate = data.current_export_rate
+        data.feed_in_fee_rate = self.feed_in_fee_rate()
+        data.feed_in_fixed_monthly = self.value_settings.fixed_monthly_fee()
+        data.export_ytd_kwh = float(self.export_ytd_kwh or 0.0)
+        data.next_fee_tier_kwh = self.value_settings.next_tier_kwh(
+            data.export_ytd_kwh)
+        data.value_layer_on = self.value_settings.configured
+        return data
 
     @abstractmethod
     def get_current_import_rate(self) -> float:
@@ -465,9 +520,13 @@ class StaticTariffProvider(TariffProvider):
         return self.peak_start <= now.hour < self.peak_end
 
     def get_current_import_rate(self) -> float:
-        return self.peak_rate if self._is_high_tariff() else self.off_peak_rate
+        return self._import_value(
+            self.peak_rate if self._is_high_tariff() else self.off_peak_rate)
 
     def get_current_export_rate(self) -> float:
+        return self._export_value(self.export_rate)
+
+    def get_current_spot_export_rate(self) -> float:
         return self.export_rate
 
     def _rates_differ(self) -> bool:
@@ -512,7 +571,8 @@ class StaticTariffProvider(TariffProvider):
         return PriceLevel.CHEAP
 
     def get_price_at(self, when: datetime) -> Optional[float]:
-        return self.peak_rate if self._is_high_tariff(when) else self.off_peak_rate
+        return self._import_value(
+            self.peak_rate if self._is_high_tariff(when) else self.off_peak_rate)
 
     def get_price_level_at(self, when: datetime) -> Optional[PriceLevel]:
         # The same time rule get_price_level applies now: NT = CHEAP — and
@@ -525,9 +585,14 @@ class StaticTariffProvider(TariffProvider):
 
     def get_tariff_data(self) -> TariffData:
         now = dt_util.now()
+        # (#1077) The day's range in the same values the current rate is
+        # published in. The value is monotonic in the price, so min stays
+        # min; with nothing set it is the rate itself.
+        peak_v = self._import_value(self.peak_rate)
+        off_v = self._import_value(self.off_peak_rate)
         data = TariffData(
             current_import_rate=self.get_current_import_rate(),
-            current_export_rate=self.export_rate,
+            current_export_rate=self.get_current_export_rate(),
             price_level=self.get_price_level(),
             currency=self.currency,
             provider="static",
@@ -541,14 +606,15 @@ class StaticTariffProvider(TariffProvider):
             # (#994) THE DAY, not the rate table. At the weekend only NT
             # occurs, so min == max and nothing downstream waits for an
             # expensive hour that arrives on Monday.
-            today_min_price=(self.off_peak_rate if self._both_rates_occur()
+            today_min_price=(off_v if self._both_rates_occur()
                              else self.get_current_import_rate()),
-            today_max_price=(self.peak_rate if self._both_rates_occur()
+            today_max_price=(peak_v if self._both_rates_occur()
                              else self.get_current_import_rate()),
-            today_avg_price=((self.peak_rate + self.off_peak_rate) / 2
+            today_avg_price=((peak_v + off_v) / 2
                              if self._both_rates_occur()
                              else self.get_current_import_rate()),
         )
+        self._value_fields(data)
 
         # Calculate next cheap window (next NT period)
         if self._is_high_tariff():
@@ -1936,7 +2002,11 @@ class DynamicTariffProvider(TariffProvider):
         ``_read_current_price()`` (see ``get_price_level`` /
         ``get_tariff_data``).
         """
-        return self._read_current_price() + self._grid_import_surcharge()
+        # (#1077) …as a VALUE: markup, energy tax and VAT join here when the
+        # price sensor is bare spot (``import_price_basis``). All zero is
+        # exactly the old ``price + surcharge``.
+        return self._import_value(
+            self._read_current_price(), self._grid_import_surcharge())
 
     def _grid_import_surcharge(self) -> float:
         """Return the configured per-kWh import surcharge, defaulting off."""
@@ -1978,12 +2048,14 @@ class DynamicTariffProvider(TariffProvider):
             if curve_now is not None and curve_now > 0.0 and live_raw > 0.0:
                 factor = live_raw / float(curve_now)
                 if factor > 1.0:
-                    return float(raw_min) * factor + surcharge
+                    # (#1077) The value layer goes on AFTER the like-for-like
+                    # correction, once, exactly like the surcharge.
+                    return self._import_value(float(raw_min) * factor, surcharge)
         except Exception:  # noqa: BLE001
             pass
         # No correction applied (identity path): the surcharge still
         # applies once to every imported kWh.
-        return float(raw_min) + self._grid_import_surcharge()
+        return self._import_value(float(raw_min), self._grid_import_surcharge())
 
     def _signed_export(self, val: float) -> float:
         """The feed-in price as SEM reads it — one sign rule for the live
@@ -2005,6 +2077,11 @@ class DynamicTariffProvider(TariffProvider):
         return abs(val) if self._provider_name == "amber" else val
 
     def get_current_export_rate(self) -> float:
+        """(#1077) The export VALUE: the price read below, less the feed-in
+        fee on the next kWh. With no fee it is that price, unchanged."""
+        return self._export_value(self.get_current_spot_export_rate())
+
+    def get_current_spot_export_rate(self) -> float:
         """Read export rate from feed-in entity if available, else static.
 
         The configured static ``export_rate`` is a credit and stays as-is;
@@ -2086,7 +2163,9 @@ class DynamicTariffProvider(TariffProvider):
             for p in curve:
                 try:
                     if p.timestamp <= when < p.timestamp + interval:
-                        return self._signed_export(p.price)
+                        # (#1077) the plan weighs the VALUE, as the live
+                        # rate below does: the fee comes off every slot
+                        return self._export_value(self._signed_export(p.price))
                 except TypeError:
                     break  # naive/aware mismatch — fall back to now
         return self.get_current_export_rate()
@@ -2181,7 +2260,7 @@ class DynamicTariffProvider(TariffProvider):
         interval = self._detect_interval(prices)
         for p in prices:
             if p.timestamp <= when < p.timestamp + interval:
-                return p.price + self._grid_import_surcharge()
+                return self._import_value(p.price, self._grid_import_surcharge())
         return None
 
     def get_price_level_at(self, when: datetime) -> Optional[PriceLevel]:
@@ -2253,12 +2332,15 @@ class DynamicTariffProvider(TariffProvider):
                 # import-rate sensor, so expose the same effective all-in
                 # convention. Keep upcoming_prices raw: optimisation applies
                 # the surcharge later via effective_import_floor().
+                # (#1077) …and the same value layer, which is monotonic in
+                # the price, so min stays min.
                 surcharge = self._grid_import_surcharge()
-                data.today_min_price = min(today_prices) + surcharge
-                data.today_max_price = max(today_prices) + surcharge
-                data.today_avg_price = (
-                    sum(today_prices) / len(today_prices) + surcharge
-                )
+                data.today_min_price = self._import_value(
+                    min(today_prices), surcharge)
+                data.today_max_price = self._import_value(
+                    max(today_prices), surcharge)
+                data.today_avg_price = self._import_value(
+                    sum(today_prices) / len(today_prices), surcharge)
 
             # Find next cheap window
             for p in prices:
@@ -2277,6 +2359,7 @@ class DynamicTariffProvider(TariffProvider):
                     data.next_expensive_window_start = p.timestamp
                     break
 
+        self._value_fields(data)
         return data
 
     def find_cheapest_hours(
@@ -2353,7 +2436,9 @@ class DynamicTariffProvider(TariffProvider):
         # grid import surcharge exactly once — it applies
         # to every imported kWh, and each selected slot is one kWh of
         # import. The raw ``PricePoint`` objects stay untouched.
-        return sum(p.price for p in slots) / len(slots) + self._grid_import_surcharge()
+        return self._import_value(
+            sum(p.price for p in slots) / len(slots),
+            self._grid_import_surcharge())
 
     def get_next_daytime_rate(
         self, peak_start: int = 7, peak_end: int = 20,
@@ -2379,7 +2464,8 @@ class DynamicTariffProvider(TariffProvider):
             return None
         # Average of the raw future daytime slots, then apply the
         # configured grid import surcharge exactly once (per imported kWh).
-        return sum(day_prices) / len(day_prices) + self._grid_import_surcharge()
+        return self._import_value(
+            sum(day_prices) / len(day_prices), self._grid_import_surcharge())
 
     def price_series_fingerprint(self) -> Optional[int]:
         """Stable fingerprint of the known price series.

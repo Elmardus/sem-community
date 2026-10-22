@@ -122,6 +122,7 @@ from .ev_control import EVControlMixin
 from ..tariff import StaticTariffProvider, DynamicTariffProvider
 from ..tariff.calendar_provider import CalendarTariffProvider
 from ..tariff.tariff_provider import _local_date as _tariff_local_date
+from ..tariff.value_layer import settings_from_config as value_settings_from_config
 from ..analytics.pv_performance import PVPerformanceAnalyzer
 from ..analytics.consumption_predictor import ConsumptionPredictor
 from .ev_taper_detector import EVTaperDetector
@@ -924,6 +925,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 export_rate=config.get("electricity_export_rate", 0.075),
                 currency=currency,
             )
+        # (#1077) What a kWh is worth — tax, VAT and markup on import, the
+        # feed-in fee off export — for every mode alike. All fields 0 (the
+        # default) leaves every price exactly as it was.
+        self._tariff_provider.value_settings = value_settings_from_config(config)
 
         # Phase 5: PV performance analyzer
         self._pv_analyzer = PVPerformanceAnalyzer(
@@ -3877,9 +3882,15 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # Update tariff rates before energy/cost calculation so cost accumulators
             # use the current rate for this cycle (fixes dynamic tariff mid-day bug)
             try:
+                # (#1077) The tiered feed-in fee reads where this year's
+                # export stands — the yearly export counter, persisted and
+                # reset on 1 January by the energy calculator.
+                self._tariff_provider.export_ytd_kwh = (
+                    self._energy_calculator.export_year_to_date_kwh())
                 _tariff = self._tariff_provider.get_tariff_data()
                 self._energy_calculator._import_rate = _tariff.current_import_rate
                 self._energy_calculator._export_rate = _tariff.current_export_rate
+                self._energy_calculator.set_value_rates(_tariff)
                 if self._tariff_rate_warned:
                     _LOGGER.info("Tariff rate update recovered")
                     self._tariff_rate_warned = False
@@ -6817,6 +6828,16 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             tariff = self._tariff_provider.get_tariff_data()
             tariff_data.tariff_current_import_rate = tariff.current_import_rate
             tariff_data.tariff_current_export_rate = tariff.current_export_rate
+            # (#1077) the tiered fee's position, for the fees sensor
+            _ytd = getattr(tariff, "export_ytd_kwh", 0.0)
+            _fee = getattr(tariff, "feed_in_fee_rate", 0.0)
+            tariff_data.tariff_export_ytd_kwh = (
+                round(float(_ytd), 1) if isinstance(_ytd, (int, float)) else 0.0)
+            tariff_data.tariff_feed_in_fee_rate = (
+                float(_fee) if isinstance(_fee, (int, float)) else 0.0)
+            _tier = getattr(tariff, "next_fee_tier_kwh", None)
+            tariff_data.tariff_next_fee_tier_kwh = (
+                float(_tier) if isinstance(_tier, (int, float)) else None)
             # (#994) ``price_level`` is tri-state now. ``.value`` on None
             # raised AttributeError — caught by this block's own except — so
             # a flat or not-yet-loaded tariff silently dropped the WHOLE
@@ -16240,6 +16261,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     # so a new import rate never opens a spread on its own.
                     tp.peak_rate, tp.off_peak_rate = _cfg_tariff_rates(
                         cfg, peak_default=tp.peak_rate)
+                # (#1077) the value fields, pushed live like the rates
+                tp.value_settings = value_settings_from_config(cfg)
             except (TypeError, ValueError):
                 pass
 

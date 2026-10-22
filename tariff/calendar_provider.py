@@ -405,9 +405,14 @@ class CalendarTariffProvider(TariffProvider):
         return _tariff_word(self._get_tariff_at(now)) == "ht"
 
     def get_current_import_rate(self) -> float:
-        return self.peak_rate if self._is_high_tariff() else self.off_peak_rate
+        # (#1077) as a value; all value fields at 0 = the rate itself
+        return self._import_value(
+            self.peak_rate if self._is_high_tariff() else self.off_peak_rate)
 
     def get_current_export_rate(self) -> float:
+        return self._export_value(self.export_rate)
+
+    def get_current_spot_export_rate(self) -> float:
         return self.export_rate
 
     def _rates_differ(self) -> bool:
@@ -501,7 +506,8 @@ class CalendarTariffProvider(TariffProvider):
         # break-even falls back to the configured rates.
         if not self._known_at(when):
             return None
-        return self.peak_rate if self._is_high_tariff(when) else self.off_peak_rate
+        return self._import_value(
+            self.peak_rate if self._is_high_tariff(when) else self.off_peak_rate)
 
     def get_price_level_at(self, when: datetime) -> "PriceLevel | None":
         # Same calendar rule get_price_level applies now: NT = CHEAP (#638),
@@ -516,9 +522,12 @@ class CalendarTariffProvider(TariffProvider):
         now = dt_util.now()
         is_ht = self._is_high_tariff(now)
 
+        # (#1077) the same values the current rate is published in
+        peak_v = self._import_value(self.peak_rate)
+        off_v = self._import_value(self.off_peak_rate)
         data = TariffData(
-            current_import_rate=self.peak_rate if is_ht else self.off_peak_rate,
-            current_export_rate=self.export_rate,
+            current_import_rate=peak_v if is_ht else off_v,
+            current_export_rate=self.get_current_export_rate(),
             price_level=self.get_price_level(),
             currency=self.currency,
             provider="calendar",
@@ -535,11 +544,11 @@ class CalendarTariffProvider(TariffProvider):
             # reporting the rate table's two would tell every consumer —
             # and ``variation_known``, which reads exactly these two fields
             # — to wait for an hour this day can never reach.
-            today_min_price=(self.off_peak_rate if self._comparison_stands()
+            today_min_price=(off_v if self._comparison_stands()
                              else self.get_current_import_rate()),
-            today_max_price=(self.peak_rate if self._comparison_stands()
+            today_max_price=(peak_v if self._comparison_stands()
                              else self.get_current_import_rate()),
-            today_avg_price=((self.peak_rate + self.off_peak_rate) / 2
+            today_avg_price=((peak_v + off_v) / 2
                              if self._comparison_stands()
                              else self.get_current_import_rate()),
         )
@@ -556,6 +565,7 @@ class CalendarTariffProvider(TariffProvider):
             if next_change:
                 data.next_expensive_window_start = next_change
 
+        self._value_fields(data)
         return data
 
     def _find_next_transition(self, from_dt: datetime, to_tariff: str) -> Optional[datetime]:
@@ -613,9 +623,9 @@ class CalendarTariffProvider(TariffProvider):
                 # The card reads `level` first and falls back to the
                 # legacy HT/NT word; give it both so it never has to.
                 "level": "normal" if current_tariff == "ht" else "cheap",
-                "avg_price": round(
+                "avg_price": round(self._import_value(
                     self.peak_rate if current_tariff == "ht"
-                    else self.off_peak_rate, 4),
+                    else self.off_peak_rate), 4),
             })
 
         for hour in range(24):
