@@ -266,7 +266,8 @@
           "import_vat_percent": "增值税",
           "feed_in_fee_model": "上网费用",
           "feed_in_fee": "上网费用金额",
-          "feed_in_fee_tiers": "上网费用阶梯"
+          "feed_in_fee_tiers": "上网费用阶梯",
+          "export_value_threshold": "低于此值停止出口"
         },
         "data_description": {
           "tariff_mode": "选择“静态”代表固定费率，“动态”代表实时计价，或选择“日历”代表分时电价计划。",
@@ -293,7 +294,8 @@
           "import_vat_percent": "购电的增值税，百分比。",
           "feed_in_fee_model": "供应商对送入电网的电收取的费用：按度、按今年送出度数分阶梯，或每月固定金额。",
           "feed_in_fee": "按度：每度费用。每月固定：每月金额。",
-          "feed_in_fee_tiers": "仅用于阶梯。今年送出度数 : 每度费用，例如 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "仅用于阶梯。今年送出度数 : 每度费用，例如 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "售出每 kWh 的价值低于此值时，SEM 停止出口：电池和负载优先使用太阳能。0 = 仅低于零时。需要开启“出口守护”开关。"
         }
       },
       "load_management": {

@@ -266,7 +266,8 @@
           "import_vat_percent": "TVA",
           "feed_in_fee_model": "Taxă de injecție",
           "feed_in_fee": "Valoarea taxei de injecție",
-          "feed_in_fee_tiers": "Praguri ale taxei de injecție"
+          "feed_in_fee_tiers": "Praguri ale taxei de injecție",
+          "export_value_threshold": "Oprește exportul sub"
         },
         "data_description": {
           "electricity_import_rate": "Tarif de import de zi/unic (monedă/kWh, cu TVA inclus). Folosit ca rezervă atunci când prețul dinamic este indisponibil.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "TVA pe kWh cumpărat, în procente.",
           "feed_in_fee_model": "Cât cere furnizorul pentru energia injectată în rețea: pe kWh, pe praguri după kWh din acest an, sau o sumă fixă pe lună.",
           "feed_in_fee": "Pe kWh: taxa pe kWh. Fix pe lună: suma pe lună.",
-          "feed_in_fee_tiers": "Doar pentru praguri. kWh injectați anul acesta : taxă pe kWh, de exemplu 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Doar pentru praguri. kWh injectați anul acesta : taxă pe kWh, de exemplu 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Dacă un kWh vândut valorează mai puțin, SEM oprește exportul: bateria și consumatorii iau întâi soarele. 0 = doar sub zero. Necesită comutatorul Gardă de export."
         }
       },
       "load_management": {

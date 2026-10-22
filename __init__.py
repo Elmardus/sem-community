@@ -6213,6 +6213,8 @@ async def _async_register_phase_services(
             "status_retention_days",
             # (#1088) read fresh every cycle by _grid_co2_reading
             "grid_co2_entity", "co2_live_intensity",
+            # (#1090) read every cycle by _export_value_threshold
+            "export_value_threshold",
         }
         # (#637) Some options are backed by number entities under a DIFFERENT
         # name (number.py CONFIG_KEY_MAP, #542) — the naive number.sem_<key>
@@ -6783,6 +6785,7 @@ async def _async_register_phase_services(
         "tariff_value_preset", "import_price_basis", "import_markup",
         "import_energy_tax", "import_vat_percent", "feed_in_fee_model",
         "feed_in_fee", "feed_in_fee_tiers",
+        "export_value_threshold",   # (#1090)
     }
     _DIAGNOSE_TARIFF_STATE = {
         "tariff_provider", "tariff_is_dynamic", "tariff_currency",

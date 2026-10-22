@@ -266,7 +266,8 @@
           "import_vat_percent": "VAT",
           "feed_in_fee_model": "Opłata za oddawanie energii",
           "feed_in_fee": "Wysokość opłaty",
-          "feed_in_fee_tiers": "Progi opłaty"
+          "feed_in_fee_tiers": "Progi opłaty",
+          "export_value_threshold": "Zatrzymaj eksport poniżej"
         },
         "data_description": {
           "electricity_import_rate": "Dzienna/jednostrefowa stawka importu (waluta/kWh z VAT). Używana zapasowo, gdy ceny dynamiczne są niedostępne.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "VAT od kupionej kWh, w procentach.",
           "feed_in_fee_model": "Ile sprzedawca pobiera za energię oddaną do sieci: za kWh, progowo według kWh w tym roku, lub stała kwota miesięcznie.",
           "feed_in_fee": "Za kWh: opłata za kWh. Stała miesięcznie: kwota na miesiąc.",
-          "feed_in_fee_tiers": "Tylko dla progów. kWh oddane w tym roku : opłata za kWh, na przykład 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Tylko dla progów. kWh oddane w tym roku : opłata za kWh, na przykład 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Gdy sprzedana kWh jest warta mniej, SEM zatrzymuje eksport: bateria i odbiorniki biorą słońce najpierw. 0 = tylko poniżej zera. Wymaga przełącznika Strażnik eksportu."
         }
       },
       "load_management": {

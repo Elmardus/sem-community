@@ -266,7 +266,8 @@
           "import_vat_percent": "IVA",
           "feed_in_fee_model": "Taxa de injeção",
           "feed_in_fee": "Valor da taxa de injeção",
-          "feed_in_fee_tiers": "Escalões da taxa de injeção"
+          "feed_in_fee_tiers": "Escalões da taxa de injeção",
+          "export_value_threshold": "Parar exportação abaixo de"
         },
         "data_description": {
           "electricity_import_rate": "Taxa de importação diurna/simples (moeda/kWh, com IVA). Usada como recurso quando o preço dinâmico não está disponível.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "IVA sobre o kWh comprado, em percentagem.",
           "feed_in_fee_model": "O que o fornecedor cobra pela energia injetada na rede: por kWh, por escalões segundo os kWh do ano, ou um valor fixo por mês.",
           "feed_in_fee": "Por kWh: a taxa por kWh. Fixo por mês: o valor mensal.",
-          "feed_in_fee_tiers": "Só para escalões. kWh injetados este ano : taxa por kWh, por exemplo 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Só para escalões. kWh injetados este ano : taxa por kWh, por exemplo 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Se um kWh vendido vale menos, o SEM para a exportação: a bateria e as cargas ficam primeiro com o sol. 0 = só abaixo de zero. Requer o interruptor Guarda de exportação."
         }
       },
       "load_management": {

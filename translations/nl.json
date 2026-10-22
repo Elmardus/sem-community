@@ -266,7 +266,8 @@
           "import_vat_percent": "Btw",
           "feed_in_fee_model": "Terugleverkosten",
           "feed_in_fee": "Bedrag terugleverkosten",
-          "feed_in_fee_tiers": "Staffel terugleverkosten"
+          "feed_in_fee_tiers": "Staffel terugleverkosten",
+          "export_value_threshold": "Stop teruglevering onder"
         },
         "data_description": {
           "electricity_import_rate": "Dag-/standaard importtarief (valuta/kWh incl. btw). Wordt gebruikt als terugval wanneer dynamische prijzen niet beschikbaar zijn.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "Btw op de gekochte kWh, in procent.",
           "feed_in_fee_model": "Wat uw leverancier rekent voor stroom die u teruglevert: per kWh, in staffels naar kWh dit jaar, of een vast bedrag per maand.",
           "feed_in_fee": "Per kWh: de kosten per kWh. Vast per maand: het bedrag per maand.",
-          "feed_in_fee_tiers": "Alleen voor staffels. kWh teruggeleverd dit jaar : kosten per kWh, bijvoorbeeld 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Alleen voor staffels. kWh teruggeleverd dit jaar : kosten per kWh, bijvoorbeeld 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Is een verkochte kWh minder waard, dan stopt SEM met terugleveren: accu en verbruikers nemen eerst de zon. 0 = alleen onder nul. Vereist de schakelaar Exportwaker."
         }
       },
       "load_management": {

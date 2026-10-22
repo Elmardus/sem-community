@@ -266,7 +266,8 @@
           "import_vat_percent": "DPH",
           "feed_in_fee_model": "Poplatek za dodávku do sítě",
           "feed_in_fee": "Výše poplatku",
-          "feed_in_fee_tiers": "Pásma poplatku"
+          "feed_in_fee_tiers": "Pásma poplatku",
+          "export_value_threshold": "Zastavit export pod"
         },
         "data_description": {
           "electricity_import_rate": "Denní/jednotná sazba za odběr (měna/kWh včetně DPH). Používá se jako záloha, když není dynamické ceny.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "DPH z koupené kWh, v procentech.",
           "feed_in_fee_model": "Co dodavatel účtuje za energii poslanou do sítě: za kWh, v pásmech podle kWh za tento rok, nebo pevnou částku měsíčně.",
           "feed_in_fee": "Za kWh: poplatek za kWh. Pevně měsíčně: částka za měsíc.",
-          "feed_in_fee_tiers": "Jen pro pásma. kWh poslané letos : poplatek za kWh, například 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Jen pro pásma. kWh poslané letos : poplatek za kWh, například 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Když má prodaná kWh menší hodnotu, SEM zastaví export: baterie a spotřebiče berou slunce jako první. 0 = jen pod nulou. Vyžaduje přepínač Hlídač exportu."
         }
       },
       "load_management": {

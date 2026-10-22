@@ -266,7 +266,8 @@
           "import_vat_percent": "Moms",
           "feed_in_fee_model": "Gebyr for levering til nettet",
           "feed_in_fee": "Gebyrets størrelse",
-          "feed_in_fee_tiers": "Trin for gebyret"
+          "feed_in_fee_tiers": "Trin for gebyret",
+          "export_value_threshold": "Stop eksport under"
         },
         "data_description": {
           "electricity_import_rate": "Dag-/fast importpris (valuta/kWh inkl. moms). Bruges som reserve, når dynamisk prissætning ikke er tilgængelig.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "Moms på den købte kWh, i procent.",
           "feed_in_fee_model": "Hvad leverandøren tager for strøm, du sender ud på nettet: pr. kWh, i trin efter kWh i år, eller et fast beløb pr. måned.",
           "feed_in_fee": "Pr. kWh: gebyret pr. kWh. Fast pr. måned: beløbet pr. måned.",
-          "feed_in_fee_tiers": "Kun for trin. kWh sendt ud i år : gebyr pr. kWh, for eksempel 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Kun for trin. kWh sendt ud i år : gebyr pr. kWh, for eksempel 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Er en solgt kWh mindre værd, stopper SEM eksporten: batteri og forbrugere tager solen først. 0 = kun under nul. Kræver kontakten Eksportvagt."
         }
       },
       "load_management": {

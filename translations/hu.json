@@ -266,7 +266,8 @@
           "import_vat_percent": "ÁFA",
           "feed_in_fee_model": "Betáplálási díj",
           "feed_in_fee": "A díj összege",
-          "feed_in_fee_tiers": "A díj sávjai"
+          "feed_in_fee_tiers": "A díj sávjai",
+          "export_value_threshold": "Export leállítása ez alatt"
         },
         "data_description": {
           "electricity_import_rate": "Nappali/egységes vételezési ár (pénznem/kWh, áfával). Tartalékként használatos, ha a dinamikus árazás nem érhető el.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "ÁFA a vett kWh-ra, százalékban.",
           "feed_in_fee_model": "Mit kér a szolgáltató a hálózatba küldött energiáért: kWh-nként, sávosan az idei kWh szerint, vagy fix havi összeget.",
           "feed_in_fee": "kWh-nként: a díj kWh-nként. Fix havi: a havi összeg.",
-          "feed_in_fee_tiers": "Csak sávokhoz. Idén betáplált kWh : díj kWh-nként, például 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Csak sávokhoz. Idén betáplált kWh : díj kWh-nként, például 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Ha egy eladott kWh ennél kevesebbet ér, a SEM leállítja az exportot: az akkumulátor és a fogyasztók kapják először a napot. 0 = csak nulla alatt. Az Export-őr kapcsoló kell hozzá."
         }
       },
       "load_management": {

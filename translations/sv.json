@@ -266,7 +266,8 @@
           "import_vat_percent": "Moms",
           "feed_in_fee_model": "Avgift för inmatning",
           "feed_in_fee": "Avgiftens storlek",
-          "feed_in_fee_tiers": "Steg för avgiften"
+          "feed_in_fee_tiers": "Steg för avgiften",
+          "export_value_threshold": "Stoppa export under"
         },
         "data_description": {
           "electricity_import_rate": "Dag-/enhetstariff för import (valuta/kWh inkl. moms). Används som reserv när dynamisk prissättning inte är tillgänglig.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "Moms på köpt kWh, i procent.",
           "feed_in_fee_model": "Vad leverantören tar för el du skickar ut på nätet: per kWh, i steg efter kWh i år, eller ett fast belopp per månad.",
           "feed_in_fee": "Per kWh: avgiften per kWh. Fast per månad: beloppet per månad.",
-          "feed_in_fee_tiers": "Bara för steg. kWh utskickat i år : avgift per kWh, till exempel 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Bara för steg. kWh utskickat i år : avgift per kWh, till exempel 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Är en såld kWh värd mindre stoppar SEM exporten: batteri och laster tar solen först. 0 = bara under noll. Kräver brytaren Exportvakt."
         }
       },
       "load_management": {

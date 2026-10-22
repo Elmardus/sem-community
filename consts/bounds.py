@@ -131,6 +131,9 @@ BOUNDS: dict[str, Range] = {
     "import_energy_tax": Range(0, 10000, step=0.0001),
     "import_vat_percent": Range(0, 100, step=0.1, unit="%"),
     "feed_in_fee": Range(0, 100000, step=0.0001),
+    # (#1090) Stop exporting below this export value. May be negative: a
+    # small loss per kWh accepted before the meter closes.
+    "export_value_threshold": Range(-10000, 10000, step=0.0001),
 }
 
 

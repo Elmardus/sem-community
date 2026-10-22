@@ -266,7 +266,8 @@
           "import_vat_percent": "ALV",
           "feed_in_fee_model": "Verkkoon syötön maksu",
           "feed_in_fee": "Maksun suuruus",
-          "feed_in_fee_tiers": "Maksun portaat"
+          "feed_in_fee_tiers": "Maksun portaat",
+          "export_value_threshold": "Lopeta vienti alle"
         },
         "data_description": {
           "electricity_import_rate": "Päivä- tai kiinteä ostohinta (valuutta/kWh sis. alv). Käytetään varalla, kun dynaaminen hinnoittelu ei ole käytettävissä.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "ALV ostetulle kWh:lle, prosentteina.",
           "feed_in_fee_model": "Mitä myyjä veloittaa verkkoon syötetystä sähköstä: kWh:lta, portaittain tämän vuoden kWh:n mukaan, tai kiinteä summa kuukaudessa.",
           "feed_in_fee": "kWh:lta: maksu kWh:lta. Kiinteä kuukaudessa: summa kuukaudessa.",
-          "feed_in_fee_tiers": "Vain portaille. Tänä vuonna syötetyt kWh : maksu kWh:lta, esimerkiksi 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Vain portaille. Tänä vuonna syötetyt kWh : maksu kWh:lta, esimerkiksi 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Jos myyty kWh on arvoltaan pienempi, SEM lopettaa viennin: akku ja kuormat ottavat auringon ensin. 0 = vain alle nollan. Vaatii kytkimen Vientivahti."
         }
       },
       "load_management": {

@@ -266,7 +266,8 @@
           "import_vat_percent": "MwSt.",
           "feed_in_fee": "Höhe der Einspeisegebühr",
           "feed_in_fee_model": "Einspeisegebühr",
-          "feed_in_fee_tiers": "Stufen der Einspeisegebühr"
+          "feed_in_fee_tiers": "Stufen der Einspeisegebühr",
+          "export_value_threshold": "Einspeisung stoppen unter"
         },
         "data_description": {
           "electricity_import_rate": "Tag-/Einheitstarif für den Import (Währung/kWh inkl. MwSt.). Wird als Rückfallwert verwendet, wenn keine dynamische Preisgestaltung verfügbar ist.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "MwSt. auf die bezogene kWh, in Prozent.",
           "feed_in_fee_model": "Was Ihr Lieferant für eingespeisten Strom verlangt: pro kWh, in Stufen nach kWh dieses Jahr oder ein fester Betrag pro Monat.",
           "feed_in_fee": "Pro kWh: die Gebühr pro kWh. Fest pro Monat: der Betrag pro Monat.",
-          "feed_in_fee_tiers": "Nur für Stufen. kWh eingespeist dieses Jahr : Gebühr pro kWh, zum Beispiel 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Nur für Stufen. kWh eingespeist dieses Jahr : Gebühr pro kWh, zum Beispiel 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Ist eine verkaufte kWh weniger wert, stoppt SEM die Einspeisung: Batterie und Verbraucher nehmen zuerst die Sonne. 0 = nur unter null. Braucht den Schalter Einspeise-Wächter."
         }
       },
       "load_management": {

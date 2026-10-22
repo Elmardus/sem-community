@@ -1843,7 +1843,10 @@
     "config_fee_model_none": "Žádný",
     "config_fee_model_per_kwh": "Za kWh",
     "config_fee_model_tiered": "Pásma podle kWh za rok",
-    "config_fee_model_fixed_monthly": "Pevně měsíčně"
+    "config_fee_model_fixed_monthly": "Pevně měsíčně",
+    "config_export_value_threshold": "Zastavit export pod",
+    "config_help_export_value_threshold": "Když má prodaná kWh menší hodnotu, SEM zastaví export: baterie a spotřebiče berou slunce jako první. 0 = jen pod nulou. Vyžaduje přepínač Hlídač exportu.",
+    "pacing_closed_meter": "export zavřen, baterie bere slunce"
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3689,7 +3692,10 @@
     "config_fee_model_none": "Ingen",
     "config_fee_model_per_kwh": "Pr. kWh",
     "config_fee_model_tiered": "Trin efter kWh pr. år",
-    "config_fee_model_fixed_monthly": "Fast pr. måned"
+    "config_fee_model_fixed_monthly": "Fast pr. måned",
+    "config_export_value_threshold": "Stop eksport under",
+    "config_help_export_value_threshold": "Er en solgt kWh mindre værd, stopper SEM eksporten: batteri og forbrugere tager solen først. 0 = kun under nul. Kræver kontakten Eksportvagt.",
+    "pacing_closed_meter": "eksport lukket, batteriet tager solen"
   },
   "de": {
     "% of limit": "% des Limits",
@@ -5535,7 +5541,10 @@
     "config_fee_model_none": "Keine",
     "config_fee_model_per_kwh": "Pro kWh",
     "config_fee_model_tiered": "Stufen nach kWh pro Jahr",
-    "config_fee_model_fixed_monthly": "Fest pro Monat"
+    "config_fee_model_fixed_monthly": "Fest pro Monat",
+    "config_export_value_threshold": "Einspeisung stoppen unter",
+    "config_help_export_value_threshold": "Ist eine verkaufte kWh weniger wert, stoppt SEM die Einspeisung: Batterie und Verbraucher nehmen zuerst die Sonne. 0 = nur unter null. Braucht den Schalter Einspeise-Wächter.",
+    "pacing_closed_meter": "Einspeisung zu, Batterie nimmt die Sonne"
   },
   "en": {
     "% of limit": "% of limit",
@@ -7381,7 +7390,10 @@
     "config_fee_model_none": "None",
     "config_fee_model_per_kwh": "Per kWh",
     "config_fee_model_tiered": "Tiers by kWh per year",
-    "config_fee_model_fixed_monthly": "Fixed per month"
+    "config_fee_model_fixed_monthly": "Fixed per month",
+    "config_export_value_threshold": "Stop exporting below",
+    "config_help_export_value_threshold": "When a sold kWh is worth less than this, SEM stops exporting: the battery and loads take the sun first. 0 = only below zero. Needs the Export guard switch.",
+    "pacing_closed_meter": "export closed, battery takes the sun"
   },
   "es": {
     "% of limit": "% del límite",
@@ -9227,7 +9239,10 @@
     "config_fee_model_none": "Ninguno",
     "config_fee_model_per_kwh": "Por kWh",
     "config_fee_model_tiered": "Tramos por kWh al año",
-    "config_fee_model_fixed_monthly": "Fijo al mes"
+    "config_fee_model_fixed_monthly": "Fijo al mes",
+    "config_export_value_threshold": "Detener exportación por debajo de",
+    "config_help_export_value_threshold": "Si un kWh vendido vale menos, SEM detiene la exportación: la batería y las cargas toman el sol primero. 0 = solo por debajo de cero. Requiere el interruptor Guardia de exportación.",
+    "pacing_closed_meter": "exportación cerrada, la batería toma el sol"
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -11073,7 +11088,10 @@
     "config_fee_model_none": "Ei mitään",
     "config_fee_model_per_kwh": "kWh:lta",
     "config_fee_model_tiered": "Portaat kWh/vuosi mukaan",
-    "config_fee_model_fixed_monthly": "Kiinteä kuukaudessa"
+    "config_fee_model_fixed_monthly": "Kiinteä kuukaudessa",
+    "config_export_value_threshold": "Lopeta vienti alle",
+    "config_help_export_value_threshold": "Jos myyty kWh on arvoltaan pienempi, SEM lopettaa viennin: akku ja kuormat ottavat auringon ensin. 0 = vain alle nollan. Vaatii kytkimen Vientivahti.",
+    "pacing_closed_meter": "vienti suljettu, akku ottaa auringon"
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -12919,7 +12937,10 @@
     "config_fee_model_none": "Aucun",
     "config_fee_model_per_kwh": "Par kWh",
     "config_fee_model_tiered": "Paliers selon kWh par an",
-    "config_fee_model_fixed_monthly": "Fixe par mois"
+    "config_fee_model_fixed_monthly": "Fixe par mois",
+    "config_export_value_threshold": "Arrêter l'export sous",
+    "config_help_export_value_threshold": "Si un kWh vendu vaut moins, SEM arrête l'export : la batterie et les charges prennent d'abord le soleil. 0 = seulement sous zéro. Nécessite l'interrupteur Garde d'export.",
+    "pacing_closed_meter": "export fermé, la batterie prend le soleil"
   },
   "hu": {
     "% of limit": "% a határból",
@@ -14765,7 +14786,10 @@
     "config_fee_model_none": "Nincs",
     "config_fee_model_per_kwh": "kWh-nként",
     "config_fee_model_tiered": "Sávok éves kWh szerint",
-    "config_fee_model_fixed_monthly": "Fix havi"
+    "config_fee_model_fixed_monthly": "Fix havi",
+    "config_export_value_threshold": "Export leállítása ez alatt",
+    "config_help_export_value_threshold": "Ha egy eladott kWh ennél kevesebbet ér, a SEM leállítja az exportot: az akkumulátor és a fogyasztók kapják először a napot. 0 = csak nulla alatt. Az Export-őr kapcsoló kell hozzá.",
+    "pacing_closed_meter": "export zárva, az akku kapja a napot"
   },
   "it": {
     "% of limit": "% del limite",
@@ -16611,7 +16635,10 @@
     "config_fee_model_none": "Nessuno",
     "config_fee_model_per_kwh": "Per kWh",
     "config_fee_model_tiered": "Scaglioni per kWh all'anno",
-    "config_fee_model_fixed_monthly": "Fisso al mese"
+    "config_fee_model_fixed_monthly": "Fisso al mese",
+    "config_export_value_threshold": "Ferma l'esportazione sotto",
+    "config_help_export_value_threshold": "Se un kWh venduto vale meno, SEM ferma l'esportazione: batteria e carichi prendono prima il sole. 0 = solo sotto zero. Richiede l'interruttore Guardia dell'esportazione.",
+    "pacing_closed_meter": "esportazione chiusa, la batteria prende il sole"
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -18457,7 +18484,10 @@
     "config_fee_model_none": "Geen",
     "config_fee_model_per_kwh": "Per kWh",
     "config_fee_model_tiered": "Staffel naar kWh per jaar",
-    "config_fee_model_fixed_monthly": "Vast per maand"
+    "config_fee_model_fixed_monthly": "Vast per maand",
+    "config_export_value_threshold": "Stop teruglevering onder",
+    "config_help_export_value_threshold": "Is een verkochte kWh minder waard, dan stopt SEM met terugleveren: accu en verbruikers nemen eerst de zon. 0 = alleen onder nul. Vereist de schakelaar Exportwaker.",
+    "pacing_closed_meter": "teruglevering dicht, accu neemt de zon"
   },
   "no": {
     "% of limit": "% av grense",
@@ -20303,7 +20333,10 @@
     "config_fee_model_none": "Ingen",
     "config_fee_model_per_kwh": "Per kWh",
     "config_fee_model_tiered": "Trinn etter kWh per år",
-    "config_fee_model_fixed_monthly": "Fast per måned"
+    "config_fee_model_fixed_monthly": "Fast per måned",
+    "config_export_value_threshold": "Stopp eksport under",
+    "config_help_export_value_threshold": "Er en solgt kWh mindre verdt, stopper SEM eksporten: batteri og forbrukere tar solen først. 0 = bare under null. Krever bryteren Eksportvakt.",
+    "pacing_closed_meter": "eksport stengt, batteriet tar solen"
   },
   "pl": {
     "% of limit": "% limitu",
@@ -22149,7 +22182,10 @@
     "config_fee_model_none": "Brak",
     "config_fee_model_per_kwh": "Za kWh",
     "config_fee_model_tiered": "Progi według kWh rocznie",
-    "config_fee_model_fixed_monthly": "Stała miesięcznie"
+    "config_fee_model_fixed_monthly": "Stała miesięcznie",
+    "config_export_value_threshold": "Zatrzymaj eksport poniżej",
+    "config_help_export_value_threshold": "Gdy sprzedana kWh jest warta mniej, SEM zatrzymuje eksport: bateria i odbiorniki biorą słońce najpierw. 0 = tylko poniżej zera. Wymaga przełącznika Strażnik eksportu.",
+    "pacing_closed_meter": "eksport zamknięty, bateria bierze słońce"
   },
   "pt": {
     "% of limit": "% do limite",
@@ -23995,7 +24031,10 @@
     "config_fee_model_none": "Nenhuma",
     "config_fee_model_per_kwh": "Por kWh",
     "config_fee_model_tiered": "Escalões por kWh por ano",
-    "config_fee_model_fixed_monthly": "Fixo por mês"
+    "config_fee_model_fixed_monthly": "Fixo por mês",
+    "config_export_value_threshold": "Parar exportação abaixo de",
+    "config_help_export_value_threshold": "Se um kWh vendido vale menos, o SEM para a exportação: a bateria e as cargas ficam primeiro com o sol. 0 = só abaixo de zero. Requer o interruptor Guarda de exportação.",
+    "pacing_closed_meter": "exportação fechada, a bateria fica com o sol"
   },
   "ro": {
     "% of limit": "% din limită",
@@ -25841,7 +25880,10 @@
     "config_fee_model_none": "Niciuna",
     "config_fee_model_per_kwh": "Pe kWh",
     "config_fee_model_tiered": "Praguri după kWh pe an",
-    "config_fee_model_fixed_monthly": "Fix pe lună"
+    "config_fee_model_fixed_monthly": "Fix pe lună",
+    "config_export_value_threshold": "Oprește exportul sub",
+    "config_help_export_value_threshold": "Dacă un kWh vândut valorează mai puțin, SEM oprește exportul: bateria și consumatorii iau întâi soarele. 0 = doar sub zero. Necesită comutatorul Gardă de export.",
+    "pacing_closed_meter": "export închis, bateria ia soarele"
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -27687,7 +27729,10 @@
     "config_fee_model_none": "Ingen",
     "config_fee_model_per_kwh": "Per kWh",
     "config_fee_model_tiered": "Steg efter kWh per år",
-    "config_fee_model_fixed_monthly": "Fast per månad"
+    "config_fee_model_fixed_monthly": "Fast per månad",
+    "config_export_value_threshold": "Stoppa export under",
+    "config_help_export_value_threshold": "Är en såld kWh värd mindre stoppar SEM exporten: batteri och laster tar solen först. 0 = bara under noll. Kräver brytaren Exportvakt.",
+    "pacing_closed_meter": "export stängd, batteriet tar solen"
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -29533,6 +29578,9 @@
     "config_fee_model_none": "无",
     "config_fee_model_per_kwh": "按度",
     "config_fee_model_tiered": "按年度度数分阶梯",
-    "config_fee_model_fixed_monthly": "每月固定"
+    "config_fee_model_fixed_monthly": "每月固定",
+    "config_export_value_threshold": "低于此值停止出口",
+    "config_help_export_value_threshold": "售出每 kWh 的价值低于此值时，SEM 停止出口：电池和负载优先使用太阳能。0 = 仅低于零时。需要开启“出口守护”开关。",
+    "pacing_closed_meter": "出口关闭，电池吸收太阳能"
   }
 }

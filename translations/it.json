@@ -266,7 +266,8 @@
           "import_vat_percent": "IVA",
           "feed_in_fee_model": "Costo di immissione",
           "feed_in_fee": "Importo costo di immissione",
-          "feed_in_fee_tiers": "Scaglioni costo di immissione"
+          "feed_in_fee_tiers": "Scaglioni costo di immissione",
+          "export_value_threshold": "Ferma l'esportazione sotto"
         },
         "data_description": {
           "electricity_import_rate": "Tariffa di importazione diurna/fissa (valuta/kWh, IVA inclusa). Usata come ripiego quando il prezzo dinamico non è disponibile.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "IVA sul kWh acquistato, in percentuale.",
           "feed_in_fee_model": "Quanto chiede il fornitore per l'energia immessa in rete: per kWh, a scaglioni secondo i kWh dell'anno, o un importo fisso al mese.",
           "feed_in_fee": "Per kWh: il costo per kWh. Fisso al mese: l'importo mensile.",
-          "feed_in_fee_tiers": "Solo per scaglioni. kWh immessi quest'anno : costo per kWh, ad esempio 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Solo per scaglioni. kWh immessi quest'anno : costo per kWh, ad esempio 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Se un kWh venduto vale meno, SEM ferma l'esportazione: batteria e carichi prendono prima il sole. 0 = solo sotto zero. Richiede l'interruttore Guardia dell'esportazione."
         }
       },
       "load_management": {

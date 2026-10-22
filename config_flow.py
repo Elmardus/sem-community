@@ -61,7 +61,8 @@ from .const import (
 )
 from .consts.bounds import BOUNDS, bounds_selector
 from .tariff.value_layer import (
-    FEE_MODELS, PRESETS, PRICE_BASES, VALUE_DEFAULTS, apply_value_preset,
+    DEFAULT_EXPORT_VALUE_THRESHOLD, FEE_MODELS, PRESETS, PRICE_BASES,
+    VALUE_DEFAULTS, apply_value_preset,
 )
 from .coordinator.ev_taper_detector import resolve_charge_efficiency
 from .coordinator.units import energy_state_to_kwh, normalize_unit
@@ -1528,6 +1529,8 @@ OPTIONS_FLOW_OWNED_KEYS = frozenset({
     "tariff_value_preset", "import_price_basis", "import_markup",
     "import_energy_tax", "import_vat_percent", "feed_in_fee_model",
     "feed_in_fee", "feed_in_fee_tiers",
+    # (#1090) stop exporting below this export value
+    "export_value_threshold",
     "grid_sign_invert",
     "heat_pump_boost_offset",
     "heat_pump_climate_entity",
@@ -3331,6 +3334,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     description={"suggested_value": current_config.get(
                         "feed_in_fee_tiers") or None},
                 ): selector.TextSelector(),
+                # (#1090) Below this export value SEM stops exporting: the
+                # battery and the loads take the sun first. 0 = only when
+                # the value is negative, the rule SEM always had.
+                vol.Optional(
+                    "export_value_threshold",
+                    default=_c("export_value_threshold",
+                               DEFAULT_EXPORT_VALUE_THRESHOLD),
+                ): _value_number("export_value_threshold", f"{currency}/kWh"),
                 vol.Optional(
                     "update_interval",
                     default=_c("update_interval", DEFAULT_UPDATE_INTERVAL),

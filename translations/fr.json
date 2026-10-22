@@ -266,7 +266,8 @@
           "import_vat_percent": "TVA",
           "feed_in_fee_model": "Frais d'injection",
           "feed_in_fee": "Montant des frais d'injection",
-          "feed_in_fee_tiers": "Paliers des frais d'injection"
+          "feed_in_fee_tiers": "Paliers des frais d'injection",
+          "export_value_threshold": "Arrêter l'export sous"
         },
         "data_description": {
           "electricity_import_rate": "Tarif d'import jour/forfaitaire (devise/kWh, TVA incluse). Utilisé en secours lorsque la tarification dynamique est indisponible.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "TVA sur le kWh acheté, en pour cent.",
           "feed_in_fee_model": "Ce que votre fournisseur facture pour l'énergie injectée : par kWh, par paliers selon les kWh de l'année, ou un montant fixe par mois.",
           "feed_in_fee": "Par kWh : les frais par kWh. Fixe par mois : le montant par mois.",
-          "feed_in_fee_tiers": "Pour les paliers seulement. kWh injectés cette année : frais par kWh, par exemple 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Pour les paliers seulement. kWh injectés cette année : frais par kWh, par exemple 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Si un kWh vendu vaut moins, SEM arrête l'export : la batterie et les charges prennent d'abord le soleil. 0 = seulement sous zéro. Nécessite l'interrupteur Garde d'export."
         }
       },
       "load_management": {

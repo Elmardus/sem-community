@@ -1540,6 +1540,8 @@ class SEMConfigCard extends SEMLitBase {
         const model = this._stagedVal('opt:feed_in_fee_model',
             opts.feed_in_fee_model ?? 'none');
         const feeUnit = model === 'fixed_monthly' ? `${currency}/Mt` : `${currency}/kWh`;
+        // (#1090) the export threshold: below this value SEM stops exporting
+        const feeUnitKwh = `${currency}/kWh`;
         return html`
             ${this._renderOptionSelect('tariff_value_preset', 'config_value_preset',
                 presetOptions, opts, 'config_help_value_preset', 'none')}
@@ -1561,6 +1563,8 @@ class SEMConfigCard extends SEMLitBase {
                 ? this._renderOptionTextInput('feed_in_fee_tiers', 'config_feed_in_fee_tiers',
                     opts, 'config_help_feed_in_fee_tiers', '0:0, 1000:0.02, 3000:0.05')
                 : nothing}
+            ${this._renderOptionNumberInput('export_value_threshold', 'config_export_value_threshold',
+                { min: -10000, max: 10000, step: 0.0001, unit: feeUnitKwh, default: 0 }, opts, 'config_help_export_value_threshold')}
         `;
     }
 

@@ -266,7 +266,8 @@
           "import_vat_percent": "Mva",
           "feed_in_fee_model": "Gebyr for innmating",
           "feed_in_fee": "Gebyrets størrelse",
-          "feed_in_fee_tiers": "Trinn for gebyret"
+          "feed_in_fee_tiers": "Trinn for gebyret",
+          "export_value_threshold": "Stopp eksport under"
         },
         "data_description": {
           "electricity_import_rate": "Dag-/fastpris for import (valuta/kWh inkl. mva.). Brukes som reserve når dynamisk prising ikke er tilgjengelig.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "Mva på kjøpt kWh, i prosent.",
           "feed_in_fee_model": "Hva leverandøren tar for strøm du sender ut på nettet: per kWh, i trinn etter kWh i år, eller et fast beløp per måned.",
           "feed_in_fee": "Per kWh: gebyret per kWh. Fast per måned: beløpet per måned.",
-          "feed_in_fee_tiers": "Bare for trinn. kWh sendt ut i år : gebyr per kWh, for eksempel 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Bare for trinn. kWh sendt ut i år : gebyr per kWh, for eksempel 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Er en solgt kWh mindre verdt, stopper SEM eksporten: batteri og forbrukere tar solen først. 0 = bare under null. Krever bryteren Eksportvakt."
         }
       },
       "load_management": {

@@ -451,7 +451,8 @@
           "import_vat_percent": "VAT",
           "feed_in_fee_model": "Feed-in fee",
           "feed_in_fee": "Feed-in fee amount",
-          "feed_in_fee_tiers": "Feed-in fee tiers"
+          "feed_in_fee_tiers": "Feed-in fee tiers",
+          "export_value_threshold": "Stop exporting below"
         },
         "data_description": {
           "tariff_mode": "Choose 'Static' for fixed rates, 'Dynamic' for real-time pricing, or 'Calendar' for time-of-use schedules.",
@@ -478,7 +479,8 @@
           "import_vat_percent": "VAT on the bought kWh, in percent.",
           "feed_in_fee_model": "What your supplier charges for the energy you send to the grid: per kWh, in tiers by kWh sent this year, or a fixed amount per month.",
           "feed_in_fee": "Per kWh: the fee per kWh. Fixed monthly: the amount per month.",
-          "feed_in_fee_tiers": "For tiers only. kWh sent this year : fee per kWh, for example 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "For tiers only. kWh sent this year : fee per kWh, for example 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "When a sold kWh is worth less than this, SEM stops exporting: the battery and loads take the sun first. 0 = only below zero. Needs the Export guard switch."
         }
       },
       "load_management": {

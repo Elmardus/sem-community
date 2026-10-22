@@ -266,7 +266,8 @@
           "import_vat_percent": "IVA",
           "feed_in_fee_model": "Cargo por vertido",
           "feed_in_fee": "Importe del cargo por vertido",
-          "feed_in_fee_tiers": "Tramos del cargo por vertido"
+          "feed_in_fee_tiers": "Tramos del cargo por vertido",
+          "export_value_threshold": "Detener exportación por debajo de"
         },
         "data_description": {
           "electricity_import_rate": "Tarifa de importación diurna/plana (moneda/kWh, IVA incluido). Se utiliza como alternativa cuando el precio dinámico no está disponible.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "IVA sobre el kWh comprado, en porcentaje.",
           "feed_in_fee_model": "Lo que cobra su proveedor por la energía que vierte a la red: por kWh, por tramos según los kWh del año, o un importe fijo al mes.",
           "feed_in_fee": "Por kWh: el cargo por kWh. Fijo al mes: el importe mensual.",
-          "feed_in_fee_tiers": "Solo para tramos. kWh vertidos este año : cargo por kWh, por ejemplo 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Solo para tramos. kWh vertidos este año : cargo por kWh, por ejemplo 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Si un kWh vendido vale menos, SEM detiene la exportación: la batería y las cargas toman el sol primero. 0 = solo por debajo de cero. Requiere el interruptor Guardia de exportación."
         }
       },
       "load_management": {
