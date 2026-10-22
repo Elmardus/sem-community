@@ -205,11 +205,15 @@ class TestTheCoordinatorStatesAndMeasuresIt:
             .coordinator import SEMCoordinator
 
         src = inspect.getsource(SEMCoordinator._shadow_energy_plan)
-        assert "export_rate=self._configured_export_rate()" in src, (
+        # (#1162) per slot now, through the provider; the configured rate
+        # is its fallback.
+        assert "export_rate=self._export_rate_at()" in src, (
             "build_day_slots must be given the feed-in rate, else every "
             "surplus slot prices at 0 and the sun wins by fiat again")
         assert "electricity_export_rate" in inspect.getsource(
             SEMCoordinator._configured_export_rate)
+        assert "_configured_export_rate()" in inspect.getsource(
+            SEMCoordinator._export_rate_at)
 
     def test_the_stamped_plan_states_the_share_it_expects(self, freeze_targets):
         """A prediction nobody wrote down cannot be wrong, which is the same

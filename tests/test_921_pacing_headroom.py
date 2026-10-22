@@ -29,6 +29,7 @@ def _fake(battery_verdict):
         _sink_verdicts={"battery": battery_verdict},
         _day_home_w_at=lambda now: (lambda t: 500.0),
         _configured_export_rate=lambda: 0.075,
+        _export_rate_at=lambda: (lambda ts: 0.075),   # (#1162)
     )
 
 

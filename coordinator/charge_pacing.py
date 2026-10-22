@@ -1016,7 +1016,7 @@ async def async_release_pacing(hass, held: tuple | None, reason: str) -> str | N
 
 def today_remaining_slots(*, now, sunrise, sunset, day_kwh, home_w_at,
                           builder, price_at=None, level_cheap_at=None,
-                          export_rate: float = 0.0):
+                          export_rate=0.0):
     """Today's remaining day, [now, sunset), in the planner's slot shape.
 
     The PROD campaign (26.08 morning) caught pacing hooked to the tomorrow
@@ -1041,8 +1041,10 @@ def today_remaining_slots(*, now, sunrise, sunset, day_kwh, home_w_at,
         # (#924) Pacing reads surplus WATTS and never a price, so this
         # changes nothing today. It is threaded because the builder it
         # calls prices with it, and a builder handed no rate prices the
-        # sun at zero — the #755 defect, one call site over.
-        export_rate=float(export_rate or 0.0),
+        # sun at zero — the #755 defect, one call site over. (#1162) A rate
+        # per slot passes through as a function.
+        export_rate=(export_rate if callable(export_rate)
+                     else float(export_rate or 0.0)),
         **({"price_at": price_at} if price_at else {}),
         **({"level_cheap_at": level_cheap_at} if level_cheap_at else {}),
     )

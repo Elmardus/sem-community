@@ -115,6 +115,9 @@ def _fake_self(devices=()):
     # precisely because a fake could disagree with production silently.
     fake._configured_export_rate = (
         lambda: SEMCoordinator._configured_export_rate(fake))
+    # (#1162) …and the per-slot reader built on it, bound to the real one too.
+    fake._export_rate_at = (
+        lambda: SEMCoordinator._export_rate_at(fake))
     # (#846) per-setpoint sizing — the fake keeps modelling the no-memo
     # case: amps × the nameplate W/A above, same as a coordinator whose
     # learner has never been fed.

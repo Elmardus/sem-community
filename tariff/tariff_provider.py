@@ -137,6 +137,93 @@ def _flat_list_interval(n: int) -> timedelta:
     return timedelta(minutes=15)
 
 
+def _parse_day_keyed(attrs) -> Tuple[List[Tuple[datetime, float]], Optional[str]]:
+    """``(timestamp, price)`` pairs from the day-keyed arrays in ``attrs``,
+    and the first key that yielded any.
+
+    One parser for every curve SEM reads (#1162): the import price and the
+    feed-in price come from the same integrations in the same shapes, so a
+    second copy would drift the day one of them learns a new shape.
+    """
+    out: List[Tuple[datetime, float]] = []
+    first_key: Optional[str] = None
+    for key in DAY_KEYED_PRICE_ATTRS:
+        price_list = attrs.get(key, [])
+        if not isinstance(price_list, list):
+            continue
+        flat_base = _flat_list_base(key)
+        # A flat numeric array is anchored by INDEX from the day's
+        # midnight, so its length must be one day's worth of slots.
+        # >96 (finer than 15-min for a single day) means it
+        # concatenates multiple days or is malformed: the length→
+        # granularity heuristic can't tell "one day, fine" from "many
+        # days, coarse", so refuse to guess rather than silently pack
+        # N days into one (#732 review). Dict items in an over-long
+        # list still parse — they carry their own timestamps.
+        flat_ok = flat_base is not None and len(price_list) <= 96
+        flat_interval = _flat_list_interval(len(price_list))
+        for idx, item in enumerate(price_list):
+            if isinstance(item, dict):
+                # Timestamp key vocabulary — ``time`` (ENTSO-E) and
+                # ``hour`` (NL template sensors) beside ``start`` /
+                # ``startsAt``; price keys ``total`` / ``price`` /
+                # ``value`` (``value`` also covers Nordpool raw_*).
+                ts = (
+                    item.get("start")
+                    or item.get("startsAt")
+                    or item.get("time")
+                    or item.get("hour")
+                )
+                price = _slot_price(item)
+                if ts and price is not None:
+                    try:
+                        dt = datetime.fromisoformat(ts) if isinstance(ts, str) else ts
+                        out.append((dt, float(price)))
+                    except (ValueError, TypeError):
+                        continue
+            elif flat_ok and not isinstance(item, bool):
+                # Flat numeric list (#732): the index IS the slot,
+                # counted from the day's local midnight. ``enumerate``
+                # keeps the positional index so null/gap padding
+                # (Nordpool leaves ``None`` for unpublished hours) is
+                # skipped without shifting the remaining slots.
+                try:
+                    val = float(item)
+                except (ValueError, TypeError):
+                    continue
+                out.append((flat_base + flat_interval * idx, val))
+        if out and first_key is None:
+            first_key = key
+    return out, first_key
+
+
+def _parse_forecast_list(attrs) -> Tuple[List[Tuple[datetime, float]], Optional[str]]:
+    """``(timestamp, price)`` pairs from a ``forecasts`` / ``rates`` array
+    (Amber Electric, Octopus Energy, any array of price dicts), and the key.
+
+    The first non-empty attribute wins, parsed or not — the shape the import
+    reader always had (#1162 moved it here unchanged).
+    """
+    out: List[Tuple[datetime, float]] = []
+    for attr_key in ("forecasts", "rates"):
+        forecast_list = attrs.get(attr_key, [])
+        if isinstance(forecast_list, list) and forecast_list:
+            for item in forecast_list:
+                if not isinstance(item, dict):
+                    continue
+                ts = item.get("start_time", item.get("start", item.get("startsAt")))
+                price = _slot_price(item, ("per_kwh", "all_in", "price",
+                                           "total", "value", "value_inc_vat"))
+                if ts and price is not None:
+                    try:
+                        dt = datetime.fromisoformat(ts) if isinstance(ts, str) else ts
+                        out.append((dt, float(price)))
+                    except (ValueError, TypeError):
+                        continue
+            return out, (attr_key if out else None)
+    return out, None
+
+
 class PriceLevel(Enum):
     """Electricity price classification."""
     NEGATIVE = "negative"
@@ -315,6 +402,15 @@ class TariffProvider(ABC):
     @abstractmethod
     def get_price_at(self, when: datetime) -> Optional[float]:
         """Get price at a specific time (for planning)."""
+
+    def get_export_rate_at(self, when: datetime) -> float:
+        """Export price at a specific time (for planning, #1162).
+
+        Default: the export rate now — a static or calendar tariff pays one
+        feed-in rate all day. ``DynamicTariffProvider`` reads its feed-in
+        entity's curve.
+        """
+        return self.get_current_export_rate()
 
     def effective_import_floor(self, raw_min: float) -> float:
         """All-in equivalent of a raw forecast minimum (#531).
@@ -552,6 +648,9 @@ class DynamicTariffProvider(TariffProvider):
         self._provider_name = "custom" if self._user_configured_price else "unknown"
         self._forecast_entity: Optional[str] = forecast_entity
         self._feedin_entity: Optional[str] = feedin_entity
+        # (#1162) where the feed-in forecast lives when it is not on the
+        # feed-in entity itself; set by provider detection.
+        self._feedin_forecast_entity: Optional[str] = None
         self._prices_cache: List[PricePoint] = []
         self._last_cache_update: Optional[datetime] = None
         # Day-ahead curve fetched via a service action (official Nord
@@ -897,6 +996,10 @@ class DynamicTariffProvider(TariffProvider):
                 feedin_state = self.hass.states.get(feedin_id)
                 if feedin_state and feedin_state.state not in ("unknown", "unavailable"):
                     self._feedin_entity = feedin_id
+                    # (#1162) its forecast lives on a sibling, like the
+                    # import forecast above
+                    self._feedin_forecast_entity = entity_id.replace(
+                        "general_price", "feed_in_forecast")
                 _LOGGER.info("Detected Amber Electric price entity: %s", entity_id)
                 return "amber"
 
@@ -919,6 +1022,11 @@ class DynamicTariffProvider(TariffProvider):
                 export_state = self.hass.states.get(export_id)
                 if export_state and export_state.state not in ("unknown", "unavailable"):
                     self._feedin_entity = export_id
+                    # (#1162) the export day rates sit on an event entity,
+                    # named the way the import ones are
+                    self._feedin_forecast_entity = (
+                        export_id.replace("sensor.", "event.")
+                        .replace("_current_rate", "_current_day_rates"))
                 _LOGGER.info("Detected Octopus Energy price entity: %s", entity_id)
                 return "octopus"
 
@@ -1049,6 +1157,27 @@ class DynamicTariffProvider(TariffProvider):
                 return None
         return None
 
+    @staticmethod
+    def _curve_memo_key(state, fc_state, interval_s: float, *extra) -> tuple:
+        """When a parsed price curve may be reused — ONE rule for the import
+        and the feed-in curve (#1162).
+
+        HA State objects are immutable — a new object (new id +
+        last_updated) appears on every entity update, so identity +
+        last_updated is a free change detector. The trailing slot epoch
+        expires the memo every market slot anyway: an entity that stays
+        silent across midnight keeps its State object, and a flat "today"
+        array is anchored to the CURRENT day, so it must be re-read.
+        """
+        return (
+            id(state),
+            getattr(state, "last_updated", None),
+            id(fc_state),
+            getattr(fc_state, "last_updated", None),
+            *extra,
+            int(dt_util.now().timestamp() // interval_s),
+        )
+
     def _read_prices_list(self) -> List[PricePoint]:
         """Read upcoming prices from entity attributes.
 
@@ -1115,13 +1244,9 @@ class DynamicTariffProvider(TariffProvider):
             if self._forecast_entity else None
         )
         memo_interval_s = getattr(self, "_last_parsed_gap_seconds", None) or 3600.0
-        memo_key = (
-            id(state),
-            getattr(state, "last_updated", None),
-            id(fc_state),
-            getattr(fc_state, "last_updated", None),
+        memo_key = self._curve_memo_key(
+            state, fc_state, memo_interval_s,
             self._service_prices_fetched_at,
-            int(dt_util.now().timestamp() // memo_interval_s),
         )
         if (
             memo_key == getattr(self, "_parse_memo_key", None)
@@ -1169,66 +1294,16 @@ class DynamicTariffProvider(TariffProvider):
         for day_attrs in (attrs, fc_state.attributes if _fc_readable else {}):
             if prices:
                 break
-            for key in DAY_KEYED_PRICE_ATTRS:
-                price_list = day_attrs.get(key, [])
-                if not isinstance(price_list, list):
-                    continue
-                flat_base = _flat_list_base(key)
-                # A flat numeric array is anchored by INDEX from the day's
-                # midnight, so its length must be one day's worth of slots.
-                # >96 (finer than 15-min for a single day) means it
-                # concatenates multiple days or is malformed: the length→
-                # granularity heuristic can't tell "one day, fine" from "many
-                # days, coarse", so refuse to guess rather than silently pack
-                # N days into one (#732 review). Dict items in an over-long
-                # list still parse — they carry their own timestamps.
-                flat_ok = flat_base is not None and len(price_list) <= 96
-                flat_interval = _flat_list_interval(len(price_list))
-                for idx, item in enumerate(price_list):
-                    if isinstance(item, dict):
-                        # Timestamp key vocabulary — ``time`` (ENTSO-E) and
-                        # ``hour`` (NL template sensors) beside ``start`` /
-                        # ``startsAt``; price keys ``total`` / ``price`` /
-                        # ``value`` (``value`` also covers Nordpool raw_*).
-                        ts = (
-                            item.get("start")
-                            or item.get("startsAt")
-                            or item.get("time")
-                            or item.get("hour")
-                        )
-                        price = _slot_price(item)
-                        if ts and price is not None:
-                            try:
-                                if isinstance(ts, str):
-                                    dt = datetime.fromisoformat(ts)
-                                else:
-                                    dt = ts
-                                prices.append(PricePoint(
-                                    timestamp=dt,
-                                    price=float(price),
-                                    currency=self.currency,
-                                    level=self._classify_price(float(price)),
-                                ))
-                            except (ValueError, TypeError):
-                                continue
-                    elif flat_ok and not isinstance(item, bool):
-                        # Flat numeric list (#732): the index IS the slot,
-                        # counted from the day's local midnight. ``enumerate``
-                        # keeps the positional index so null/gap padding
-                        # (Nordpool leaves ``None`` for unpublished hours) is
-                        # skipped without shifting the remaining slots.
-                        try:
-                            val = float(item)
-                        except (ValueError, TypeError):
-                            continue
-                        prices.append(PricePoint(
-                            timestamp=flat_base + flat_interval * idx,
-                            price=val,
-                            currency=self.currency,
-                            level=self._classify_price(val),
-                        ))
-                if prices and not self._last_parsed_attribute:
-                    self._last_parsed_attribute = key
+            pairs, key = _parse_day_keyed(day_attrs)
+            for dt, val in pairs:
+                prices.append(PricePoint(
+                    timestamp=dt,
+                    price=val,
+                    currency=self.currency,
+                    level=self._classify_price(val),
+                ))
+            if prices and not self._last_parsed_attribute:
+                self._last_parsed_attribute = key
 
         # Generic forecast: "forecasts" or "rates" attribute (Amber Electric,
         # Octopus Energy, or any provider that stores an array of price dicts).
@@ -1240,32 +1315,16 @@ class DynamicTariffProvider(TariffProvider):
                 if fc_state:
                     forecast_sources.append(fc_state.attributes)
             for src_attrs in forecast_sources:
-                for attr_key in ("forecasts", "rates"):
-                    forecast_list = src_attrs.get(attr_key, [])
-                    if isinstance(forecast_list, list) and forecast_list:
-                        for item in forecast_list:
-                            if not isinstance(item, dict):
-                                continue
-                            ts = item.get("start_time", item.get("start", item.get("startsAt")))
-                            price = _slot_price(item, ("per_kwh", "all_in", "price",
-                                                       "total", "value", "value_inc_vat"))
-                            if ts and price is not None:
-                                try:
-                                    if isinstance(ts, str):
-                                        dt = datetime.fromisoformat(ts)
-                                    else:
-                                        dt = ts
-                                    prices.append(PricePoint(
-                                        timestamp=dt,
-                                        price=float(price),
-                                        currency=self.currency,
-                                        level=self._classify_price(float(price)),
-                                    ))
-                                except (ValueError, TypeError):
-                                    continue
-                        if prices and not self._last_parsed_attribute:
-                            self._last_parsed_attribute = attr_key
-                        break  # Found data in this attribute, stop
+                pairs, attr_key = _parse_forecast_list(src_attrs)
+                for dt, val in pairs:
+                    prices.append(PricePoint(
+                        timestamp=dt,
+                        price=val,
+                        currency=self.currency,
+                        level=self._classify_price(val),
+                    ))
+                if prices and not self._last_parsed_attribute:
+                    self._last_parsed_attribute = attr_key
                 if prices:
                     break  # Found data in this source, stop
 
@@ -1926,31 +1985,111 @@ class DynamicTariffProvider(TariffProvider):
         # applies once to every imported kWh.
         return float(raw_min) + self._grid_import_surcharge()
 
-    def get_current_export_rate(self) -> float:
-        """Read export rate from feed-in entity if available, else static.
+    def _signed_export(self, val: float) -> float:
+        """The feed-in price as SEM reads it — one sign rule for the live
+        rate and every forecast slot (#1162), so a plan and the sensor can
+        never disagree on which way a price points.
 
         The value is SIGNED (#523): on a dynamic/spot feed-in tariff the
         export price follows EPEX and is regularly NEGATIVE — meaning you
         *pay* to export. The old ``abs()`` turned that cost into a credit,
         which both mis-stated revenue and hid the signal SEM needs to stop
-        exporting (curtail / self-consume) when export is negative. The
-        configured static ``export_rate`` is a credit and stays as-is.
+        exporting (curtail / self-consume) when export is negative.
+        """
+        # Amber's feed-in channel is sign-inverted (a NEGATIVE
+        # value means you EARN); preserve the legacy abs() for
+        # auto-detected Amber so those installs don't regress.
+        # Every other dynamic provider (EPEX / Tibber / Nord
+        # Pool) reports the signed spot price directly, where
+        # negative means you PAY to export — SEM must see that.
+        return abs(val) if self._provider_name == "amber" else val
+
+    def get_current_export_rate(self) -> float:
+        """Read export rate from feed-in entity if available, else static.
+
+        The configured static ``export_rate`` is a credit and stays as-is;
+        a feed-in entity's value goes through ``_signed_export`` (#523).
         """
         if self._feedin_entity:
             state = self.hass.states.get(self._feedin_entity)
             if state and state.state not in ("unknown", "unavailable"):
                 try:
-                    val = float(state.state)
-                    # Amber's feed-in channel is sign-inverted (a NEGATIVE
-                    # value means you EARN); preserve the legacy abs() for
-                    # auto-detected Amber so those installs don't regress.
-                    # Every other dynamic provider (EPEX / Tibber / Nord
-                    # Pool) reports the signed spot price directly, where
-                    # negative means you PAY to export — SEM must see that.
-                    return abs(val) if self._provider_name == "amber" else val
+                    return self._signed_export(float(state.state))
                 except (ValueError, TypeError):
                     pass
         return self.export_rate
+
+    def _read_export_curve(self) -> List[PricePoint]:
+        """The feed-in price curve, raw from the provider (#1162).
+
+        Read from the feed-in entity's own arrays, then from its forecast
+        sibling (Amber's ``feed_in_forecast``, Octopus's export rates
+        event). Same parsers and the same memo rule as the import curve: a
+        plan asks this once per slot.
+        """
+        if not self._feedin_entity:
+            return []
+        fc_id = getattr(self, "_feedin_forecast_entity", None)
+        state = self.hass.states.get(self._feedin_entity)
+        fc_state = self.hass.states.get(fc_id) if fc_id else None
+        # (#1162) the import curve's memo rule, not a copy: a silent entity
+        # keeps one State object across midnight, and a "today" array must
+        # still re-anchor to the new day.
+        prior_gap = getattr(self, "_export_gap_seconds", None) or 3600.0
+        key = self._curve_memo_key(state, fc_state, prior_gap)
+        if key == getattr(self, "_export_memo_key", None):
+            return self._export_memo
+        pairs: List[Tuple[datetime, float]] = []
+        for st in (state, fc_state):
+            # (#994) attributes of an unreadable entity are its last word,
+            # not what it says now.
+            if not st or st.state in ("unknown", "unavailable"):
+                continue
+            pairs, _ = _parse_day_keyed(st.attributes)
+            if not pairs:
+                pairs, _ = _parse_forecast_list(st.attributes)
+            if pairs:
+                break
+        curve: List[PricePoint] = []
+        seen: set = set()
+        try:
+            for dt, val in sorted(pairs, key=lambda p: p[0]):
+                if dt in seen:
+                    continue
+                seen.add(dt)
+                curve.append(PricePoint(timestamp=dt, price=val,
+                                        currency=self.currency, level=None))
+        except TypeError:
+            # naive and aware stamps mixed — no curve beats a wrong one
+            curve = []
+        gap = (self._detect_interval(curve).total_seconds()
+               if len(curve) >= 2 else 3600.0)
+        if gap != prior_gap:
+            # re-key on the curve's real slot length, as the import path does
+            key = self._curve_memo_key(state, fc_state, gap)
+        self._export_gap_seconds = gap
+        self._export_memo_key = key
+        self._export_memo = curve
+        return curve
+
+    def get_export_rate_at(self, when: datetime) -> float:
+        """What a kWh exported at ``when`` earns — for planning (#1162).
+
+        The feed-in curve's slot covering ``when``; else the feed-in
+        entity's value now; else the configured static rate. The same
+        sign rule as the live rate, so the plan prices export at the
+        number the sensors and the export cost use.
+        """
+        curve = self._read_export_curve()
+        if curve:
+            interval = self._detect_interval(curve)
+            for p in curve:
+                try:
+                    if p.timestamp <= when < p.timestamp + interval:
+                        return self._signed_export(p.price)
+                except TypeError:
+                    break  # naive/aware mismatch — fall back to now
+        return self.get_current_export_rate()
 
     def _current_level_and_path(self) -> Tuple[Optional[PriceLevel], str]:
         """This moment's level and the path that produced it, together.

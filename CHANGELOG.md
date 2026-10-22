@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 # [Unreleased]
 
 - 🐛 **Force charge goes back to Auto when the battery is full** (#1131). Force discharge does the same at the reserve.
+- 🐛 **Plans value exported solar at your live feed-in price** (#1162). Each hour uses its own forecast price, not the fixed rate.
 - 🐛 **Charge pacing keeps one limit when the forecast sits right at what the battery needs** (#820). It no longer jumps to full power and back.
 
 # [2.2.0-beta.24] — 21.10.2026

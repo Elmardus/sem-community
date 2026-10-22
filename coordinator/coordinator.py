@@ -8213,7 +8213,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         """(#755/#924) What a kWh earns if it leaves the property, and
         therefore what consuming it here costs.
 
-        Every day-slot builder in SEM prices its surplus slots with this.
+        Every day-slot builder in SEM prices its surplus slots with this
+        when the tariff provider has no feed-in price of its own; a live
+        feed-in tariff is read per slot through ``_export_rate_at`` (#1162).
         At 0 the packer prefers the sun BY FIAT and a night hour cheaper
         than the feed-in can never win; priced, the preference is economic
         and can correctly lose.
@@ -8224,6 +8226,21 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         "which sites are priced?" a question with one answer.
         """
         return float(self.config.get("electricity_export_rate", 0.075) or 0.0)
+
+    def _export_rate_at(self):
+        """(#1162) The feed-in price per slot, for every day-slot builder.
+
+        ``_configured_export_rate`` is the number typed into the config. On
+        a live feed-in tariff that is not what export pays: the sensors and
+        the export cost read the feed-in entity through the tariff provider,
+        and the plans must price the sun with the same reader, at each
+        slot's own hour. The configured rate stays the answer whenever the
+        provider cannot give one, so static installs price as before.
+        """
+        from .day_ledger import tariff_export_rate_at
+        prov = getattr(self, "_tariff_provider", None)
+        fallback = self._configured_export_rate()
+        return lambda ts: tariff_export_rate_at(prov, ts, fallback)
 
     def _daylight_remaining_s_now(self) -> "Optional[float]":
         """(#953) Seconds of daylight left today, or None if we cannot tell.
@@ -8358,7 +8375,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 home_w_at=self._day_home_w_at(now), builder=build_day_slots,
                 price_at=lambda ts: tariff_price_at(prov, ts),
                 level_cheap_at=lambda ts: tariff_cheap_at(prov, ts),
-                export_rate=self._configured_export_rate(),   # (#924)
+                export_rate=self._export_rate_at(),   # (#924)
             )
         except Exception:  # noqa: BLE001 — no frame, no pacing
             return []
@@ -10801,7 +10818,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             price_at=lambda ts: tariff_price_at(prov, ts),
             level_cheap_at=lambda ts: tariff_cheap_at(prov, ts),
             stamps_at=stamps_at,
-            export_rate=self._configured_export_rate(),   # (#924)
+            export_rate=self._export_rate_at(),   # (#924)
         )
         # (08-08: "forecast and home consumption is something we
         # already know") — the preview's real content is what tomorrow
@@ -10900,7 +10917,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     # unpriced it preferred the sun by fiat while the
                     # stamped plan priced it. One forecast, one tariff,
                     # two different answers; the preview was the wrong one.
-                    export_rate=self._configured_export_rate(),
+                    export_rate=self._export_rate_at(),
                 )
                 labels2 = {}
                 demands2 = []
@@ -11744,7 +11761,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     # forgo. At 0 the packer preferred solar by fiat and a
                     # night hour cheaper than the export rate could never
                     # win; priced, the preference is economic and can lose.
-                    export_rate=self._configured_export_rate(),
+                    export_rate=self._export_rate_at(),
                     step_s=_step_s,
                 ))
                 t = day_end

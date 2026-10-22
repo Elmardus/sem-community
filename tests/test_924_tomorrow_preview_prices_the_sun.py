@@ -82,6 +82,8 @@ class TestTomorrowsPreviewPricesTheSun:
         plan's again. It asks the coordinator's single reader."""
         import inspect
         src = inspect.getsource(SEMCoordinator._compose_tomorrow_preview)
-        assert src.count("export_rate=self._configured_export_rate()") == 2, (
+        # (#1162) the one reader is now per slot; it falls back to the
+        # configured rate inside.
+        assert src.count("export_rate=self._export_rate_at()") == 2, (
             "both the window build and the provisional packing inside "
             "_compose_tomorrow_preview must price from the one accessor")
