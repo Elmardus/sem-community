@@ -106,3 +106,60 @@ now. An entity name given in the ENTSO-e setup changes nothing.
     to every imported kWh. VAT on the market price cannot be expressed this
     way, and the level keeps reading the market price: a negative market
     hour reads `negative` even when the fee makes your price positive.
+  - as SEM's tax fields with *What your import price includes* set to
+    *Spot price* (see below). This one can add VAT.
+
+## What a kWh is worth (#1077)
+
+When net metering ends (the Netherlands, 1 January 2027), a bought kWh and a
+sold kWh are different money. SEM can work with both:
+
+    bought kWh = (price + markup + energy tax) × (1 + VAT) + network fee
+    sold kWh   = export price − feed-in fee
+
+Set it under Tariff & Advanced, or on the Config tab (All settings). The
+preset *Netherlands from 2027* fills energy tax (the 2026 rate, 0.0916 per
+kWh excl. VAT — check your bill) and 21 % VAT. Enter your supplier's markup
+and feed-in fee yourself. The preset *None* adds nothing. With every field
+at 0, all prices are exactly what they were.
+
+### Tax is never added twice
+
+*What your import price includes* says what your price already has:
+
+| setting | use it when | SEM adds |
+|---|---|---|
+| **All-in** (default) | Tibber, a rate you typed off your bill, any price that already has tax | nothing |
+| **Spot price incl. VAT** | a market price with VAT on it, but no energy tax | markup and tax, each with VAT |
+| **Spot price** | Nord Pool raw, ENTSO-e | markup, tax, and VAT on the whole sum |
+
+So the default never adds tax. Static and Calendar rates are what you pay,
+so leave them on All-in. Pick a spot setting only when your price sensor
+shows the bare market price. If your price integration adds tax itself
+(ENTSO-e's modifier, Nord Pool's VAT option), use All-in.
+
+The price level (cheap / expensive) does not change: tax and VAT move every
+hour the same way.
+
+### Feed-in fee
+
+| model | what SEM uses to decide | what the fees sensor counts |
+|---|---|---|
+| **Per kWh** | the fee, off every exported kWh | kWh × fee |
+| **Tiers** | the fee of the tier this year's export is in | kWh × that fee |
+| **Fixed per month** | 0 — the month costs the same whatever SEM does | the monthly sum, by the hour |
+
+Tiers are written `kWh this year : fee per kWh`, for example
+`0:0, 1000:0.02, 3000:0.05`. This year's export is the yearly export counter;
+it starts at 0 on 1 January. The yearly fees sensor shows it, the fee now,
+and where the next tier starts.
+
+### Sensors
+
+They appear once a value field is set, daily and yearly:
+
+- **Self-consumption value** — solar used at home or in the car, times
+  (bought price − sold price). What using it was worth over selling it.
+- **Export value** — exported kWh at the export price before the fee.
+- **Feed-in fees** — what the fee took. Export value − fees is your export
+  revenue (fixed monthly fees aside).

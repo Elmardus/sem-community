@@ -1527,6 +1527,43 @@ class SEMConfigCard extends SEMLitBase {
         `;
     }
 
+    // (#1077) The value fields. The fee amount shows for the two models that
+    // use it, the tier list for tiers only, so a row never asks for a number
+    // nothing reads.
+    _renderValueLayer(opts, currency) {
+        const presetOptions = ['none', 'nl_2027', 'custom'].map(v => (
+            { value: v, label: this._t('config_value_preset_' + v) }));
+        const basisOptions = ['all_in', 'spot_incl_vat', 'spot'].map(v => (
+            { value: v, label: this._t('config_price_basis_' + v) }));
+        const feeOptions = ['none', 'per_kwh', 'tiered', 'fixed_monthly'].map(v => (
+            { value: v, label: this._t('config_fee_model_' + v) }));
+        const model = this._stagedVal('opt:feed_in_fee_model',
+            opts.feed_in_fee_model ?? 'none');
+        const feeUnit = model === 'fixed_monthly' ? `${currency}/Mt` : `${currency}/kWh`;
+        return html`
+            ${this._renderOptionSelect('tariff_value_preset', 'config_value_preset',
+                presetOptions, opts, 'config_help_value_preset', 'none')}
+            ${this._renderOptionSelect('import_price_basis', 'config_price_basis',
+                basisOptions, opts, 'config_help_price_basis', 'all_in')}
+            ${this._renderOptionNumberInput('import_markup', 'config_import_markup',
+                { min: 0, max: 10000, step: 0.0001, unit: `${currency}/kWh`, default: 0 }, opts, 'config_help_import_markup')}
+            ${this._renderOptionNumberInput('import_energy_tax', 'config_import_energy_tax',
+                { min: 0, max: 10000, step: 0.0001, unit: `${currency}/kWh`, default: 0 }, opts, 'config_help_import_energy_tax')}
+            ${this._renderOptionNumberInput('import_vat_percent', 'config_import_vat_percent',
+                { min: 0, max: 100, step: 0.1, unit: '%', default: 0 }, opts, 'config_help_import_vat_percent')}
+            ${this._renderOptionSelect('feed_in_fee_model', 'config_fee_model',
+                feeOptions, opts, 'config_help_fee_model', 'none')}
+            ${model === 'per_kwh' || model === 'fixed_monthly'
+                ? this._renderOptionNumberInput('feed_in_fee', 'config_feed_in_fee',
+                    { min: 0, max: 100000, step: 0.0001, unit: feeUnit, default: 0 }, opts, 'config_help_feed_in_fee')
+                : nothing}
+            ${model === 'tiered'
+                ? this._renderOptionTextInput('feed_in_fee_tiers', 'config_feed_in_fee_tiers',
+                    opts, 'config_help_feed_in_fee_tiers', '0:0, 1000:0.02, 3000:0.05')
+                : nothing}
+        `;
+    }
+
     _renderTariff(T) {
         const opts = this._options || {};
         const rateEntity = this._hass?.states['sensor.sem_tariff_current_import_rate'];
@@ -1590,6 +1627,10 @@ class SEMConfigCard extends SEMLitBase {
                 { min: 0, max: 10000, step: 0.001, unit: `${currency}/kWh`, default: 0.075 }, opts, 'config_help_export_rate')}
             ${this._renderOptionNumberInput('grid_import_surcharge', 'config_import_surcharge',
                 { min: 0, max: 10, step: 0.001, unit: `${currency}/kWh`, default: 0 }, opts, 'config_help_import_surcharge')}
+            ${/* (#1077) What a kWh is worth: tax, VAT and markup on a bought
+                  kWh, a fee off a sold one. All settings only; a preset fills
+                  the fields, and with none set every price stays as it was. */ ''}
+            ${this._renderValueLayer(opts, currency)}
             ${this._renderOptionNumberInput('demand_charge_rate', 'config_demand_charge_rate',
                 { min: 0, max: 100000, step: 0.01, unit: `${currency}/kW/Mt`, default: 4.32 }, opts, 'config_help_demand_charge_rate')}
             ${this._renderPicker('grid_import_power_entity', 'config_grid_import_entity',

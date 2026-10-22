@@ -122,6 +122,15 @@ BOUNDS: dict[str, Range] = {
     # (The first draft declared a second, identical row for the pause input;
     # test_828's orphan check caught it — a row nobody reads is a claim.)
     "anti_cycle_window_min": Range(0, 120, step=1, unit="min"),
+
+    # ── What a kWh is worth (#1077) ──────────────────────────────────
+    # Per-kWh amounts in the house currency (the form adds the unit): wide
+    # enough for SEK/HUF prices, fine enough for a Dutch 0.0916. The fee
+    # row is also the €/month of a fixed monthly fee.
+    "import_markup": Range(0, 10000, step=0.0001),
+    "import_energy_tax": Range(0, 10000, step=0.0001),
+    "import_vat_percent": Range(0, 100, step=0.1, unit="%"),
+    "feed_in_fee": Range(0, 100000, step=0.0001),
 }
 
 

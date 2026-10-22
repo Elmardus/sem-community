@@ -59,7 +59,10 @@ from .const import (
     PEAK_LIMIT_STEP_KW,
     DEFAULT_PEAK_LIMIT_UNLIMITED,
 )
-from .consts.bounds import bounds_selector
+from .consts.bounds import BOUNDS, bounds_selector
+from .tariff.value_layer import (
+    FEE_MODELS, PRESETS, PRICE_BASES, VALUE_DEFAULTS, apply_value_preset,
+)
 from .coordinator.ev_taper_detector import resolve_charge_efficiency
 from .coordinator.units import energy_state_to_kwh, normalize_unit
 from .coordinator.install_modules import has_managed_charger
@@ -1521,6 +1524,10 @@ OPTIONS_FLOW_OWNED_KEYS = frozenset({
     "grid_export_power_entity",
     "grid_import_power_entity",
     "grid_import_surcharge",
+    # (#1077) what a kWh is worth: tax, VAT, markup, the feed-in fee
+    "tariff_value_preset", "import_price_basis", "import_markup",
+    "import_energy_tax", "import_vat_percent", "feed_in_fee_model",
+    "feed_in_fee", "feed_in_fee_tiers",
     "grid_sign_invert",
     "heat_pump_boost_offset",
     "heat_pump_climate_entity",
@@ -1657,6 +1664,13 @@ def _suggest_select_with_options(hass, labels) -> str | None:
     except Exception:  # noqa: BLE001 — a suggestion never breaks a form
         return None
     return None
+
+def _value_number(key: str, unit: str):
+    """(#1077) A value field's box, its range from ``consts/bounds.py`` and
+    its unit from the house currency."""
+    return selector.NumberSelector(selector.NumberSelectorConfig(
+        **{**BOUNDS[key].selector_kwargs("box"), "unit_of_measurement": unit}))
+
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for Solar Energy Management."""
@@ -3099,6 +3113,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     and user_input.get("electricity_off_peak_rate") is not None
                     and float(user_input["electricity_off_peak_rate"]) == float(_shown)):
                 user_input.pop("electricity_off_peak_rate")
+            # (#1077) A preset fills the fields it owns; a hand-changed one
+            # of those fields makes the preset "custom". Same rule as the
+            # card's path through set_option.
+            user_input = apply_value_preset(user_input, current_config)
             if not errors:
                 _merge_form_input(self, self._data, user_input)
                 return await self.async_step_load_management()
@@ -3250,6 +3268,66 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         selector.NumberSelectorConfig(min=0.0, max=10000.0, step=0.001, unit_of_measurement=f"{currency}/kWh", mode="box")  # #549 currency-agnostic / SEK/NOK/HUF-safe
                     ),
                 } if _c("tariff_mode", "static") == "dynamic" else {}),
+                # (#1077) What a kWh is worth. A preset fills the fields;
+                # "none" is every country without these charges, and with
+                # it every price stays what it was.
+                vol.Optional(
+                    "tariff_value_preset",
+                    default=_c("tariff_value_preset", VALUE_DEFAULTS["tariff_value_preset"]),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=list(PRESETS),
+                        translation_key="tariff_value_preset",
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                # What the price sensor already holds — the rule that keeps
+                # tax from being added twice (docs/TARIFF_MODELS.md).
+                vol.Optional(
+                    "import_price_basis",
+                    default=_c("import_price_basis",
+                               VALUE_DEFAULTS["import_price_basis"]),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=list(PRICE_BASES),
+                        translation_key="import_price_basis",
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(
+                    "import_markup",
+                    default=_c("import_markup", VALUE_DEFAULTS["import_markup"]),
+                ): _value_number("import_markup", f"{currency}/kWh"),
+                vol.Optional(
+                    "import_energy_tax",
+                    default=_c("import_energy_tax",
+                               VALUE_DEFAULTS["import_energy_tax"]),
+                ): _value_number("import_energy_tax", f"{currency}/kWh"),
+                vol.Optional(
+                    "import_vat_percent",
+                    default=_c("import_vat_percent",
+                               VALUE_DEFAULTS["import_vat_percent"]),
+                ): _value_number("import_vat_percent", "%"),
+                vol.Optional(
+                    "feed_in_fee_model",
+                    default=_c("feed_in_fee_model",
+                               VALUE_DEFAULTS["feed_in_fee_model"]),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=list(FEE_MODELS),
+                        translation_key="feed_in_fee_model",
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(
+                    "feed_in_fee",
+                    default=_c("feed_in_fee", VALUE_DEFAULTS["feed_in_fee"]),
+                ): _value_number("feed_in_fee", currency),
+                vol.Optional(
+                    "feed_in_fee_tiers",
+                    description={"suggested_value": current_config.get(
+                        "feed_in_fee_tiers") or None},
+                ): selector.TextSelector(),
                 vol.Optional(
                     "update_interval",
                     default=_c("update_interval", DEFAULT_UPDATE_INTERVAL),
