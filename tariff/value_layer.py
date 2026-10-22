@@ -281,3 +281,46 @@ def apply_value_preset(submitted: Mapping[str, Any],
             out[CONF_VALUE_PRESET] = PRESET_CUSTOM
             break
     return out
+
+
+# ── Export worth avoiding (#1090) ────────────────────────────────────────
+# Once the export VALUE is below this many currency units per kWh, a kWh
+# sent out is not worth sending: SEM closes the grid sink, so the battery
+# and the loads take the sun first. It never buys for it — grid charging
+# still needs the IMPORT price below zero. At the default 0.0 the rule is
+# the one SEM used before: close on a negative export price, not on zero.
+CONF_EXPORT_VALUE_THRESHOLD = "export_value_threshold"
+DEFAULT_EXPORT_VALUE_THRESHOLD = 0.0
+
+
+def export_value_threshold(config: Mapping[str, Any] | None) -> float:
+    """(#1090) The threshold from the options. Unlike the value fields it
+    may be negative (accept a small loss before closing); anything that
+    does not read as a finite number is the default."""
+    raw = (config or {}).get(CONF_EXPORT_VALUE_THRESHOLD)
+    if isinstance(raw, bool) or raw is None:
+        return DEFAULT_EXPORT_VALUE_THRESHOLD
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_EXPORT_VALUE_THRESHOLD
+    return value if math.isfinite(value) else DEFAULT_EXPORT_VALUE_THRESHOLD
+
+
+def export_not_worth(value: Any,
+                     threshold: float = DEFAULT_EXPORT_VALUE_THRESHOLD) -> Optional[bool]:
+    """(#1090) THE rule for "is export worth avoiding?": the export value is
+    below the threshold. Every consumer asks this, never its own compare.
+
+    Three states: ``None`` when the value cannot be read — an unread price
+    is not a hostile meter (#925), so callers treat it as "no".
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(v):
+        return None
+    return v < float(threshold)

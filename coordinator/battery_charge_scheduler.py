@@ -28,6 +28,8 @@ from typing import Optional
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from ..tariff.value_layer import export_not_worth
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -534,6 +536,7 @@ class BatteryChargeScheduler:
         export_rate: float,
         import_forecast_min: Optional[float],
         enabled_override: Optional[bool] = None,
+        export_threshold: float = 0.0,
     ) -> SchedulerDecision:
         """Per-cycle export-arbitrage check (#523) — the discharge mirror
         of ``evaluate()``'s charge planning, using the SAME economic model
@@ -570,6 +573,16 @@ class BatteryChargeScheduler:
                 reason=(
                     f"SOC {current_soc:.0f}% at/below reserve "
                     f"{cfg.arbitrage_reserve_soc:.0f}%"
+                ),
+            )
+        # (#1090) A sale is an export: below the threshold it is not worth
+        # sending, whatever the spread. The one rule, not a compare here.
+        if export_not_worth(export_rate, export_threshold):
+            return _v(
+                state=SchedulerState.NOT_PROFITABLE,
+                reason=(
+                    f"export value {export_rate:.3f} below "
+                    f"{export_threshold:g}/kWh — not worth exporting"
                 ),
             )
         # Export must clear the configured floor to bother cycling.

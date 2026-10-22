@@ -32,6 +32,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from .battery_charge_scheduler import SchedulerDecision, SchedulerState
+from ..tariff.value_layer import export_not_worth
 
 #: Below this there is nothing worth a discharge cycle.
 MIN_SPEND_KWH: float = 0.2
@@ -102,6 +103,7 @@ def evaluate_forecast_sell(
     reserve_pct: float,
     export_rate: Optional[float] = None,
     export_rate_known: bool = True,
+    export_threshold: float = 0.0,
 ) -> SchedulerDecision:
     """The live WHETHER, in ``evaluate_arbitrage``'s verdict shape.
 
@@ -130,6 +132,12 @@ def evaluate_forecast_sell(
         return _v(state=SchedulerState.IDLE,
                   reason=f"export price is not positive ({float(export_rate):.3f}) "
                          "— selling would pay to give energy away")
+    # (#1090) A positive value below the threshold is not worth sending
+    # either. Zero stays refused above: a sale at nothing earns nothing.
+    if export_not_worth(export_rate, export_threshold):
+        return _v(state=SchedulerState.IDLE,
+                  reason=f"export value {float(export_rate):.3f} below "
+                         f"{export_threshold:g} — not worth exporting")
     kwh = float(spendable_kwh or 0.0)
     if kwh < MIN_SPEND_KWH:
         return _v(state=SchedulerState.NOT_NEEDED,

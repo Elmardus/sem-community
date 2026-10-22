@@ -8319,6 +8319,28 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         fallback = self._configured_export_rate()
         return lambda ts: tariff_export_rate_at(prov, ts, fallback)
 
+    def _export_value_threshold(self) -> float:
+        """(#1090) Below this export value a kWh is not worth sending out.
+        Read from the config every cycle, so a change applies live."""
+        from ..tariff.value_layer import export_value_threshold
+        return export_value_threshold(self.config)
+
+    def _export_value_at_for_verdicts(self, prov, threshold: float):
+        """(#1090) The export value per slot for the closed window, or None.
+
+        None keeps the window on the NEGATIVE level, as before: with no value
+        field set and the default threshold, nothing about the meter moves.
+        A fee or a threshold makes the value the rule, because a Dutch import
+        curve with energy tax never reads negative while the export value
+        does.
+        """
+        from ..tariff.value_layer import DEFAULT_EXPORT_VALUE_THRESHOLD
+        _vs = getattr(prov, "value_settings", None) if prov is not None else None
+        if (getattr(_vs, "configured", False) is not True
+                and threshold == DEFAULT_EXPORT_VALUE_THRESHOLD):
+            return None
+        return self._export_rate_at()
+
     def _daylight_remaining_s_now(self) -> "Optional[float]":
         """(#953) Seconds of daylight left today, or None if we cannot tell.
 
@@ -8885,6 +8907,17 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             self._pacing_full_latched = decision.cap_w is not None and (
                 decision.cap_w >= float(self.config.get(
                     "battery_max_charge_power_w", 5000.0) or 5000.0) - 0.5)
+            # (#1090) While the meter is closed, a kWh the pack is paced away
+            # from is a kWh the export guard clips. The pack takes the sun
+            # first: no cap for as long as the verdict stands. The latches
+            # above are left alone, so the pace resumes where it was.
+            _gv = (getattr(self, "_sink_verdicts", None) or {}).get("grid_export")
+            if getattr(_gv, "state", "open") == "closed":
+                from .charge_pacing import PacingDecision
+                decision = PacingDecision(
+                    None, "export closed — the pack takes the sun first",
+                    code="closed_meter", need_kwh=decision.need_kwh,
+                    fill_kwh=decision.fill_kwh)
         cap = decision.cap_w if (decision and enabled) else None
         code = (decision.code if decision else
                 ("night" if not ledger else
@@ -9150,6 +9183,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     # battery is in allow_arbitrage mode (#523); decide_battery
                     # gates per battery which units actually sell.
                     enabled_override=_any_allow_arb,
+                    export_threshold=self._export_value_threshold(),  # (#1090)
                 )
                 if _arb.state.value == "discharging_arbitrage":
                     scheduler_decision = _arb
@@ -9239,6 +9273,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     reserve_pct=float(self.config.get(
                         "battery_reserve_soc", 20.0) or 20.0),
                     export_rate=_xr, export_rate_known=_xr_known,
+                    export_threshold=self._export_value_threshold(),  # (#1090)
                 )
                 if _fs.state.value == "discharging_arbitrage":
                     scheduler_decision = _fs
@@ -13408,10 +13443,15 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     if _prov is not None else None)
         except Exception:  # noqa: BLE001
             _ups = None
+        # (#1090) the threshold, and the value per slot once there is a value
+        # to read; with neither, the closed window follows the level as before
+        _x_thr = self._export_value_threshold()
+        _x_at = self._export_value_at_for_verdicts(_prov, _x_thr)
         try:
             _verdicts = sink_verdicts(
                 now=dt_util.now(), tariff_level=tariff_level, upcoming=_ups,
                 export_rate=_xr, export_rate_known=_xr_known,
+                export_threshold=_x_thr, export_at=_x_at,
                 export_guard_enabled=bool(self.config.get("export_guard_enabled", False)),
                 house_sink_enabled=bool(self.config.get("battery_house_sink_enabled", False)),
                 morning_window_enabled=bool(self.config.get("ev_morning_window_enabled", False)),
