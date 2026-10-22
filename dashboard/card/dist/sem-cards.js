@@ -8375,12 +8375,14 @@ const e=globalThis,t=e.ShadowRoot&&(void 0===e.ShadyCSS||e.ShadyCSS.nativeShadow
                        @blur=${t=>{const s=t.target.value.trim();s!==String(a)&&this._saveOption(e,s,e)}} />
                 ${"saving"===o?W`<span class="sv">…</span>`:"ok"===o?W`<span class="sv ok">✓</span>`:"err"===o?W`<span class="sv err">!</span>`:K}
             </div>
-        `}_renderValueLayer(e,t){const s=["none","nl_2027","custom"].map(e=>({value:e,label:this._t("config_value_preset_"+e)})),i=["all_in","spot_incl_vat","spot"].map(e=>({value:e,label:this._t("config_price_basis_"+e)})),r=["none","per_kwh","tiered","fixed_monthly"].map(e=>({value:e,label:this._t("config_fee_model_"+e)})),a=this._stagedVal("opt:feed_in_fee_model",e.feed_in_fee_model??"none"),o="fixed_monthly"===a?`${t}/Mt`:`${t}/kWh`;return W`
+        `}_renderValueLayer(e,t){const s=["none","nl_2027","custom"].map(e=>({value:e,label:this._t("config_value_preset_"+e)})),i=["all_in","spot_incl_vat","spot"].map(e=>({value:e,label:this._t("config_price_basis_"+e)})),r=["none","per_kwh","tiered","fixed_monthly"].map(e=>({value:e,label:this._t("config_fee_model_"+e)})),a=this._stagedVal("opt:feed_in_fee_model",e.feed_in_fee_model??"none"),o="fixed_monthly"===a?`${t}/Mt`:`${t}/kWh`,n=this._stagedVal("opt:import_price_basis",e.import_price_basis??"all_in");return W`
             ${this._renderOptionSelect("tariff_value_preset","config_value_preset",s,e,"config_help_value_preset","none")}
             ${this._renderOptionSelect("import_price_basis","config_price_basis",i,e,"config_help_price_basis","all_in")}
+            ${"all_in"!==n?W`
             ${this._renderOptionNumberInput("import_markup","config_import_markup",{min:0,max:1e4,step:1e-4,unit:`${t}/kWh`,default:0},e,"config_help_import_markup")}
             ${this._renderOptionNumberInput("import_energy_tax","config_import_energy_tax",{min:0,max:1e4,step:1e-4,unit:`${t}/kWh`,default:0},e,"config_help_import_energy_tax")}
             ${this._renderOptionNumberInput("import_vat_percent","config_import_vat_percent",{min:0,max:100,step:.1,unit:"%",default:0},e,"config_help_import_vat_percent")}
+            `:K}
             ${this._renderOptionSelect("feed_in_fee_model","config_fee_model",r,e,"config_help_fee_model","none")}
             ${"per_kwh"===a||"fixed_monthly"===a?this._renderOptionNumberInput("feed_in_fee","config_feed_in_fee",{min:0,max:1e5,step:1e-4,unit:o,default:0},e,"config_help_feed_in_fee"):K}
             ${"tiered"===a?this._renderOptionTextInput("feed_in_fee_tiers","config_feed_in_fee_tiers",e,"config_help_feed_in_fee_tiers","0:0, 1000:0.02, 3000:0.05"):K}

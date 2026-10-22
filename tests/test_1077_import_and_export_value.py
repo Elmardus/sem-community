@@ -477,3 +477,31 @@ class TestTheCoordinatorHandsItOver:
         from custom_components.solar_energy_management.coordinator import SEMCoordinator
         coord = SEMCoordinator(mock_hass, {"tariff_mode": "static", "update_interval": 30})
         assert coord._tariff_provider.value_settings == ValueSettings()
+
+
+# ─── review, 23.10 ──────────────────────────────────────────────────────────
+
+def test_a_decimal_comma_in_a_tier_fee_is_one_number():
+    assert vl.parse_tiers("0:0, 1000:0,02, 3000:0,05") == (
+        (0.0, 0.0), (1000.0, 0.02), (3000.0, 0.05))
+    assert vl.parse_tiers("0:0; 1000:0.02") == ((0.0, 0.0), (1000.0, 0.02))
+
+
+def test_the_year_count_starts_at_zero_on_new_year():
+    from custom_components.solar_energy_management.coordinator.energy_calculator import (
+        EnergyCalculator,
+    )
+    calc = EnergyCalculator({}, MagicMock())
+    calc._yearly_accumulators = {"grid_export_2026": 2400.0}
+    assert calc.export_year_to_date_kwh(datetime(2026, 12, 31, 23, 59)) == 2400.0
+    assert calc.export_year_to_date_kwh(datetime(2027, 1, 1, 0, 1)) == 0.0
+
+
+def test_a_failing_log_row_never_stops_the_charger_write():
+    from custom_components.solar_energy_management.coordinator import charger_reconciler as cr
+    rec = cr.ChargerReconciler.__new__(cr.ChargerReconciler)
+    rec.decision_log = object()
+    action = MagicMock(kind=cr.ActionKind.WRITE_CURRENT, amps=10)
+    with patch("custom_components.solar_energy_management.coordinator."
+               "decision_log.record_charger", side_effect=RuntimeError("boom")):
+        rec._log_write(action, MagicMock(), MagicMock())   # must not raise

@@ -22,6 +22,7 @@ Assistant.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Tuple
 
@@ -126,12 +127,15 @@ def parse_tiers(value: Any) -> Tuple[Tuple[float, float], ...]:
     """
     pairs = []
     if isinstance(value, str):
-        items = [p for p in value.replace(";", ",").split(",") if p.strip()]
+        # A new pair starts only where "<kWh>:" follows a separator, so a
+        # decimal comma inside a fee ("1000:0,02") stays one number.
+        items = [p for p in re.split(r"[,;]\s*(?=\d+(?:[.,]\d+)?\s*:)", value)
+                 if p.strip()]
         for item in items:
-            parts = item.split(":")
-            if len(parts) != 2:
-                continue
-            pairs.append((parts[0], parts[1]))
+            m = re.match(r"\s*(\d+(?:[.,]\d+)?)\s*:\s*(-?\d+(?:[.,]\d+)?)", item)
+            if m:
+                pairs.append((m.group(1).replace(",", "."),
+                              m.group(2).replace(",", ".")))
     elif isinstance(value, (list, tuple)):
         for item in value:
             if isinstance(item, Mapping):

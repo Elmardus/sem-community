@@ -1261,8 +1261,11 @@ class ChargerReconciler:
         from .decision_log import record_charger
         observer = getattr(getattr(adapter, "_device", None),
                            "observer_mode", False) is True
-        record_charger(log, decision, verb=verb, value=value,
-                       observer=observer)
+        try:
+            record_charger(log, decision, verb=verb, value=value,
+                           observer=observer)
+        except Exception as e:  # noqa: BLE001 — recording only, never the send
+            _LOGGER.debug("decision log: charger row not written: %s", e)
 
     # ── #627 stop-unenforceable repair plumbing ──────────────────────────
     def _device_and_hass(self, adapter):

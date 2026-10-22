@@ -1540,17 +1540,23 @@ class SEMConfigCard extends SEMLitBase {
         const model = this._stagedVal('opt:feed_in_fee_model',
             opts.feed_in_fee_model ?? 'none');
         const feeUnit = model === 'fixed_monthly' ? `${currency}/Mt` : `${currency}/kWh`;
+        // An all-in price already holds markup, tax and VAT: those rows show
+        // only for a spot price, where SEM adds them.
+        const basis = this._stagedVal('opt:import_price_basis',
+            opts.import_price_basis ?? 'all_in');
         return html`
             ${this._renderOptionSelect('tariff_value_preset', 'config_value_preset',
                 presetOptions, opts, 'config_help_value_preset', 'none')}
             ${this._renderOptionSelect('import_price_basis', 'config_price_basis',
                 basisOptions, opts, 'config_help_price_basis', 'all_in')}
+            ${basis !== 'all_in' ? html`
             ${this._renderOptionNumberInput('import_markup', 'config_import_markup',
                 { min: 0, max: 10000, step: 0.0001, unit: `${currency}/kWh`, default: 0 }, opts, 'config_help_import_markup')}
             ${this._renderOptionNumberInput('import_energy_tax', 'config_import_energy_tax',
                 { min: 0, max: 10000, step: 0.0001, unit: `${currency}/kWh`, default: 0 }, opts, 'config_help_import_energy_tax')}
             ${this._renderOptionNumberInput('import_vat_percent', 'config_import_vat_percent',
                 { min: 0, max: 100, step: 0.1, unit: '%', default: 0 }, opts, 'config_help_import_vat_percent')}
+            ` : nothing}
             ${this._renderOptionSelect('feed_in_fee_model', 'config_fee_model',
                 feeOptions, opts, 'config_help_fee_model', 'none')}
             ${model === 'per_kwh' || model === 'fixed_monthly'
