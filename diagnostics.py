@@ -96,6 +96,18 @@ def _foreign_logs(hass: HomeAssistant) -> list[str]:
     return []
 
 
+def _decision_log_records(coordinator) -> list:
+    """(#1084) The decision log's ring buffer; empty when there is none."""
+    from .coordinator.decision_log import DecisionLog
+    log = getattr(coordinator, "decision_log", None)
+    if not isinstance(log, DecisionLog):
+        return []
+    try:
+        return log.records()
+    except Exception:  # noqa: BLE001 — a dump never fails on a field
+        return []
+
+
 async def _pacing_actuation(hass: HomeAssistant, coordinator) -> dict:
     """(#820) The charge-pacing register truth; never raises."""
     try:
@@ -669,6 +681,9 @@ async def async_get_config_entry_diagnostics(
             "night_targets": _dict_or_none(
                 getattr(coordinator, "_night_target_per_charger_map", None)),
         },
+        # (#1084) why each command changed — the last 200 changes, oldest
+        # first. In memory only, so it starts empty after a restart.
+        "decision_log": _decision_log_records(coordinator),
         "power": {
             "solar_w": data.get("solar_power"),
             "grid_w": data.get("grid_power"),

@@ -22,6 +22,7 @@ import time
 
 from .charger_adapters.base import ChargerAdapter
 from .charger_types import ChargerDecision, ChargerPower, commanded_power_w
+from .decision_log import log_of, record_charger
 from ..utils.log_gate import log_on_change
 
 _LOGGER = logging.getLogger(__name__)
@@ -108,6 +109,10 @@ async def actuate(
     # ``_observe`` still publishes the DECISION surface (would_decisions);
     # the two are complements, not alternatives — one says what SEM decided,
     # the other what would have hit the wire.
+    # (#1084) The decision log's charger seam: every charger command passes
+    # here, live or observed. Recording only — it writes a row when the
+    # command changed and never touches the decision.
+    record_charger(log_of(controller), decision, observer=observer)
     if observer:
         _observe(decision, adapter, controller=controller)
         # Belt and braces. Retiring the gate above means the seam in

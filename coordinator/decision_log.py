@@ -1,0 +1,296 @@
+"""(#1084) The decision log — why a device's command changed.
+
+Recording only. Nothing here feeds back into a decision: the actuators
+hand the log the command they are about to send (or, under observer mode,
+WOULD send) and carry on whatever the log does.
+
+One owner (:class:`DecisionLog`, held by the ``SurplusController`` so the
+three actuator seams — chargers, batteries, loads — already have a handle
+on it) keeps the last command per device and writes a
+:class:`DecisionRecord` only when that command CHANGES: a start, a stop, a
+mode change, a charger current step of at least 1 A, or a battery / load
+setpoint that moved by a meaningful amount. The same command sent again
+every cycle is not news and writes nothing.
+
+Each record is kept in a ring buffer of 200 (diagnostics), fired as the
+``solar_energy_management_decision`` event (the logbook describes it,
+``logbook.py``), and the newest one per device rides an existing state
+sensor as ``last_decision``. Never restored: a restart starts a fresh log.
+"""
+from __future__ import annotations
+
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import datetime
+import logging
+from typing import Any, Deque, Dict, List, Mapping, Optional, Tuple
+
+_LOGGER = logging.getLogger(__name__)
+
+EVENT_DECISION = "solar_energy_management_decision"
+
+DECISION_LOG_SIZE = 200
+
+KIND_CHARGER = "charger"
+KIND_BATTERY = "battery"
+KIND_LOAD = "load"
+
+#: The smallest value change that counts as a new command, per kind. A
+#: charger steps in whole amps (decided: ≥ 1 A). A battery limit is
+#: quantised to 250 W steps by the actuator (#900), so one step is one
+#: change. A watt-setpoint load wobbles with the surplus; 500 W is a change
+#: a person would notice on the meter, the wobble below it is not.
+MIN_STEP: Dict[str, float] = {
+    KIND_CHARGER: 1.0,
+    KIND_BATTERY: 250.0,
+    KIND_LOAD: 500.0,
+}
+
+_UNIT = {KIND_CHARGER: "A", KIND_BATTERY: "W", KIND_LOAD: "W"}
+
+#: Commands that mean "SEM is not driving this device". A device whose
+#: FIRST command is one of these has not changed — it was never started —
+#: so the log stays quiet instead of writing a row per device on every boot.
+RESTING_VERBS = frozenset({"idle", "off", "normal", "release", "disable",
+                           "stop_force_charge", "stop_force_discharge"})
+
+_TEXT_MAX = 120
+_INPUT_KEYS = ("import_price", "export_rate", "price_level", "soc",
+               "surplus_w", "target_kwh", "target_soc")
+
+
+def _clean_inputs(inputs: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    """Keep the record small and JSON-safe: known keys, rounded numbers,
+    no ``None`` (a missing input is simply absent)."""
+    out: Dict[str, Any] = {}
+    if not inputs:
+        return out
+    for key in _INPUT_KEYS:
+        val = inputs.get(key)
+        if val is None:
+            continue
+        if isinstance(val, bool):
+            out[key] = val
+        elif isinstance(val, (int, float)):
+            out[key] = round(float(val), 4 if "price" in key or "rate" in key else 1)
+        else:
+            out[key] = str(val)[:32]
+    return out
+
+
+def format_command(kind: str, verb: str, value: Optional[float]) -> str:
+    """``charge 8 A`` / ``limit_discharge 1500 W`` / ``off``."""
+    if value is None:
+        return verb
+    return f"{verb} {float(value):g} {_UNIT.get(kind, '')}".rstrip()
+
+
+@dataclass(frozen=True)
+class DecisionRecord:
+    """One command change on one device, and why."""
+
+    time: datetime
+    device_id: str
+    device_kind: str
+    old: Optional[str]
+    new: str
+    reason_code: str
+    text: str
+    inputs: Dict[str, Any] = field(default_factory=dict)
+    observer: bool = False
+    name: str = ""
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "time": self.time.isoformat(),
+            "device_id": self.device_id,
+            "device_kind": self.device_kind,
+            "name": self.name or self.device_id,
+            "old": self.old,
+            "new": self.new,
+            "reason_code": self.reason_code,
+            "text": self.text,
+            "inputs": dict(self.inputs),
+            "observer": self.observer,
+        }
+
+
+class DecisionLog:
+    """Ring buffer of :class:`DecisionRecord`, written on command changes."""
+
+    def __init__(self, hass=None, maxlen: int = DECISION_LOG_SIZE) -> None:
+        self.hass = hass
+        self._records: Deque[DecisionRecord] = deque(maxlen=maxlen)
+        # "<kind>:<device_id>" → (verb, value, observer, command string).
+        # Keyed by kind too: a load and a battery may share an id.
+        self._last: Dict[str, Tuple[str, Optional[float], bool, str]] = {}
+        self._last_record: Dict[str, DecisionRecord] = {}
+        self._inputs: Dict[str, Any] = {}
+
+    # ── per-cycle context ────────────────────────────────────────────
+    def set_inputs(self, inputs: Optional[Mapping[str, Any]]) -> None:
+        """What the cycle knew — stamped once by the coordinator, copied
+        into every record this cycle writes."""
+        self._inputs = _clean_inputs(inputs)
+
+    # ── writing ──────────────────────────────────────────────────────
+    def _is_change(self, key: str, kind: str, verb: str,
+                   value: Optional[float], observer: bool) -> bool:
+        last = self._last.get(key)
+        if last is None:
+            return verb not in RESTING_VERBS
+        l_verb, l_value, l_obs, _ = last
+        if verb != l_verb or observer != l_obs:
+            return True
+        if value is None or l_value is None:
+            return (value is None) != (l_value is None)
+        return abs(float(value) - float(l_value)) >= MIN_STEP.get(kind, 1.0)
+
+    def record(self, *, device_id: str, kind: str, verb: str,
+               value: Optional[float] = None, reason_code: str = "",
+               text: str = "", observer: bool = False, name: str = "",
+               inputs: Optional[Mapping[str, Any]] = None,
+               now: Optional[datetime] = None) -> Optional[DecisionRecord]:
+        """Note the command about to leave for ``device_id``.
+
+        Returns the new record, or ``None`` when the command did not change.
+        Never raises: a log that breaks an actuator would be worse than no
+        log at all.
+        """
+        try:
+            device_id = str(device_id)
+            verb = str(verb)
+            if value is not None:
+                value = round(float(value), 1)
+            key = f"{kind}:{device_id}"
+            if not self._is_change(key, kind, verb, value, observer):
+                if key not in self._last:
+                    # a first resting command: no row, but it is the "old"
+                    # the next change reads from
+                    self._last[key] = (verb, value, bool(observer),
+                                       format_command(kind, verb, value))
+                return None
+            old = self._last.get(key)
+            new_cmd = format_command(kind, verb, value)
+            self._last[key] = (verb, value, bool(observer), new_cmd)
+            if now is None:
+                from homeassistant.util import dt as dt_util
+                now = dt_util.now()
+            merged = dict(self._inputs)
+            merged.update(_clean_inputs(inputs))
+            rec = DecisionRecord(
+                time=now,
+                device_id=device_id,
+                device_kind=kind,
+                old=old[3] if old else None,
+                new=new_cmd,
+                reason_code=str(reason_code or verb),
+                text=str(text or "")[:_TEXT_MAX],
+                inputs=merged,
+                observer=bool(observer),
+                name=str(name or device_id),
+            )
+            self._records.append(rec)
+            self._last_record[key] = rec
+            self._fire(rec)
+            return rec
+        except Exception:  # noqa: BLE001 — recording never breaks a seam
+            _LOGGER.debug("decision log: record failed", exc_info=True)
+            return None
+
+    def _fire(self, rec: DecisionRecord) -> None:
+        bus = getattr(self.hass, "bus", None)
+        if bus is None:
+            return
+        try:
+            bus.async_fire(EVENT_DECISION, rec.as_dict())
+        except Exception:  # noqa: BLE001 — the event must never break the seam
+            _LOGGER.debug("decision log: event failed", exc_info=True)
+
+    # ── reading ──────────────────────────────────────────────────────
+    def last(self, kind: str, device_id: str) -> Optional[Dict[str, Any]]:
+        rec = self._last_record.get(f"{kind}:{device_id}")
+        return rec.as_dict() if rec is not None else None
+
+    def last_by_kind(self, kind: str) -> Dict[str, Dict[str, Any]]:
+        return {rec.device_id: rec.as_dict()
+                for rec in self._last_record.values()
+                if rec.device_kind == kind}
+
+    def records(self) -> List[Dict[str, Any]]:
+        return [r.as_dict() for r in self._records]
+
+    def __len__(self) -> int:
+        return len(self._records)
+
+
+# ── the three seams' adapters ────────────────────────────────────────
+# Each actuator calls ONE of these at its single dispatch point. They turn
+# the actuator's own decision type into a command + a stable reason code.
+
+def log_of(controller) -> Optional[DecisionLog]:
+    """The log the ``SurplusController`` owns, or ``None`` for bare callers."""
+    log = getattr(controller, "decision_log", None)
+    return log if isinstance(log, DecisionLog) else None
+
+
+def record_charger(log: Optional[DecisionLog], decision, *,
+                   observer: bool = False) -> Optional[DecisionRecord]:
+    """A :class:`ChargerDecision` at ``actuate()``."""
+    if not isinstance(log, DecisionLog):
+        return None
+    intent = getattr(getattr(decision, "intent", None), "value", "idle")
+    if intent == "charge_at_amps":
+        verb, value = "charge", float(getattr(decision, "commanded_amps", 0) or 0)
+    else:
+        verb, value = intent, None
+    if getattr(decision, "peak_paused", False):
+        code = "peak_paused"
+    elif getattr(decision, "capped_by_limit", False):
+        code = "limit_capped"
+    else:
+        code = f"{getattr(decision, 'mode', '') or 'mode'}_{intent}"
+    return log.record(
+        device_id=str(getattr(decision, "charger_id", "")), kind=KIND_CHARGER,
+        verb=verb, value=value, reason_code=code,
+        text=str(getattr(decision, "reason", "") or ""), observer=observer)
+
+
+def record_battery(log: Optional[DecisionLog], decision, *,
+                   value_w: Optional[float] = None,
+                   observer: bool = False) -> Optional[DecisionRecord]:
+    """A :class:`BatteryDecision` at ``actuate_battery()``. ``value_w`` is the
+    watts the intent actually sends (the quantised limit, the charge power)."""
+    if not isinstance(log, DecisionLog):
+        return None
+    intent = getattr(getattr(decision, "intent", None), "value", "normal")
+    code = "room_capped" if getattr(decision, "room_capped", False) else intent
+    return log.record(
+        device_id=str(getattr(decision, "battery_id", "")), kind=KIND_BATTERY,
+        verb=intent, value=value_w if value_w else None, reason_code=code,
+        text=str(getattr(decision, "reason", "") or ""), observer=observer,
+        inputs={"target_soc": (getattr(decision, "target_soc", None) or None)
+                if intent == "force_charge" else None})
+
+
+def record_load(log: Optional[DecisionLog], device, *, on: bool,
+                watts: Optional[float] = None, reason_code: str = "",
+                text: str = "", observer: bool = False
+                ) -> Optional[DecisionRecord]:
+    """A surplus load's on / off / setpoint at the load choke points."""
+    if not isinstance(log, DecisionLog):
+        return None
+    did = str(getattr(device, "device_id", "") or "")
+    # An on/off load has no setpoint to speak of: only a watt-setpoint load
+    # carries its watts, so a switch re-sent at a new surplus is no change.
+    if on and watts and str(getattr(
+            getattr(device, "device_type", None), "value", "")) in (
+            "setpoint", "current_control"):
+        value = float(watts)
+    else:
+        value = None
+    return log.record(
+        device_id=did, kind=KIND_LOAD, verb="on" if on else "off",
+        value=value, reason_code=reason_code or ("start" if on else "stop"),
+        text=text, observer=observer,
+        name=str(getattr(device, "name", "") or did))

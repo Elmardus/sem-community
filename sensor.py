@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 import json
 import logging
+import re
 import time
 
 from .consts.core import (
@@ -2432,6 +2433,43 @@ async def async_setup_entry(
     await _apply_labels_to_sensors(hass, sensors)
 
 
+def _decision_attributes(coordinator, key: str) -> Dict[str, Any]:
+    """(#1084) ``last_decision`` / ``strategy`` attributes for ``key``.
+
+    ``charging_state`` carries the per-charger maps (there is no per-charger
+    state entity; ``charger_<id>_charging_state`` is a key on it),
+    ``battery_status`` / ``battery_<id>_status`` the battery's, and
+    ``load_management_status`` the loads'.
+    """
+    from .coordinator.decision_log import (
+        KIND_BATTERY, KIND_CHARGER, KIND_LOAD, DecisionLog)
+    try:
+        log = getattr(coordinator, "decision_log", None)
+        if not isinstance(log, DecisionLog):
+            return {}
+        if key == "charging_state":
+            data = getattr(coordinator, "data", None) or {}
+            strategies = {
+                k[len("charger_"):-len("_strategy")]: v
+                for k, v in data.items()
+                if isinstance(k, str) and k.startswith("charger_")
+                and k.endswith("_strategy")}
+            return {"per_charger_last_decision": log.last_by_kind(KIND_CHARGER),
+                    "per_charger_strategy": strategies}
+        if key == "battery_status":
+            return {"per_battery_last_decision": log.last_by_kind(KIND_BATTERY)}
+        if key.startswith("battery_") and key.endswith("_status"):
+            bid = key[len("battery_"):-len("_status")]
+            # per-battery sensors only (b1, b2 …), not battery_priority_status
+            if re.fullmatch(r"b\d+", bid):
+                return {"last_decision": log.last(KIND_BATTERY, bid)}
+        if key == "load_management_status":
+            return {"per_device_last_decision": log.last_by_kind(KIND_LOAD)}
+    except Exception:  # noqa: BLE001 — attributes never break the entity
+        _LOGGER.debug("decision attributes skipped", exc_info=True)
+    return {}
+
+
 class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
     """SEM Solar Energy Management sensor with state persistence."""
 
@@ -2508,6 +2546,11 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         "battery_needs_priority",
         "charging_strategy",
         "strategy_reason",
+        # (#1084) the per-charger twin of the two above — live context
+        "per_charger_strategy",
+        # (#1084) one row per load, rewritten on each change; the event
+        # and the logbook keep the history, the recorder need not
+        "per_device_last_decision",
         "per_charger_phases",
         # (#944) the stand-down's countdown moves every cycle of an episode;
         # the Repair is the record, this is live card context.
@@ -3614,6 +3657,10 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
             if _sr is not None:
                 attrs["string_name"] = _sr.pv_string_display_name(slot)
 
+        # (#1084) The newest command change per device, and the strategy per
+        # charger — on the sensors that already exist, never a new entity.
+        # One record each (not the buffer): the recorder's 16 KB cap.
+        attrs.update(_decision_attributes(self.coordinator, _key))
         return attrs
 
     @property

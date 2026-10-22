@@ -632,6 +632,39 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         health = round(100 - min(30, cycles * 0.02), 1)
         return cycles, health
 
+    def _stamp_decision_inputs(self, power, charging_context) -> None:
+        """(#1084) Hand the decision log this cycle's inputs once, before any
+        actuator runs. Every read is guarded: a missing price or SOC is left
+        out of the record, never a reason to lose the cycle."""
+        log = getattr(getattr(self, "_surplus_controller", None),
+                      "decision_log", None)
+        if log is None:
+            return
+        inputs: Dict[str, Any] = {}
+        try:
+            calc = getattr(self, "_energy_calculator", None)
+            inputs["import_price"] = getattr(calc, "_import_rate", None)
+            inputs["export_rate"] = getattr(calc, "_export_rate", None)
+            provider = getattr(self, "_tariff_provider", None)
+            if provider is not None and getattr(provider, "available", True):
+                from .price_signal import comparative_level
+                level = comparative_level(provider)
+                inputs["price_level"] = getattr(level, "value", level)
+            if (not getattr(power, "battery_soc_unavailable", False)
+                    and getattr(power, "battery_soc_known", True)):
+                inputs["soc"] = getattr(power, "battery_soc", None)
+            inputs["surplus_w"] = getattr(charging_context, "available_power", None)
+            inputs["target_kwh"] = getattr(charging_context, "night_target_kwh", None)
+        except Exception:  # noqa: BLE001 — the log never costs a cycle
+            _LOGGER.debug("decision inputs incomplete", exc_info=True)
+        log.set_inputs(inputs)
+
+    @property
+    def decision_log(self):
+        """(#1084) The decision log, owned by the surplus controller."""
+        return getattr(getattr(self, "_surplus_controller", None),
+                       "decision_log", None)
+
     @staticmethod
     def _resolve_fleet_charging_state(global_state, effective_states):
         """The published fleet ``charging_state`` (#596).
@@ -789,6 +822,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # ring buffer of the management→process→integration chain, dumped by
         # the diagnose service. Never affects a decision; never a recorder row.
         self._trace = TraceCollector(maxlen=30)
+        # (#1084) cid → the reason of this cycle's decision, per charger
+        self._strategy_per_charger: Dict[str, str] = {}
         # (#576) priority-walk inputs for the 3-layer trace, refreshed each
         # cycle in the surplus block (battery slot / reclaim / commanded).
         self._cycle_reclaim: dict = {}
@@ -4081,6 +4116,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             await self._ensure_export_guard()   # (#955) before anything reads it
             charging_context = self._build_charging_context(power, energy)
             charging_state = self._state_machine.update_state(charging_context)
+            # (#1084) what this cycle knew, for every command it changes
+            self._stamp_decision_inputs(power, charging_context)
 
             # Step 7.5a: Unified EV control via CurrentControlDevice
             # (#1130) The pack's assist offered this cycle — read later by
@@ -4676,6 +4713,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                         # charger 1 ("off mode …"). Per-charger detail
                         # lives in ``charger_<id>_charging_state``.
                         _fleet_primary_cid = self.primary_charger_id()
+                        # (#1084) …and every charger's own, published as
+                        # ``charger_<id>_strategy`` beside its state.
+                        if not isinstance(getattr(
+                                self, "_strategy_per_charger", None), dict):
+                            self._strategy_per_charger = {}
+                        self._strategy_per_charger[cid] = decision.reason
                         if cid == _fleet_primary_cid:
                             charging_context.charging_strategy = decision.reason
                             charging_context.charging_strategy_reason = decision.reason
@@ -5388,6 +5431,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 _pcs_entry = (
                     getattr(self, "_effective_states_per_charger", None) or {}
                 ).get(cid)
+                # (#1084) this charger's strategy, not only the primary's
+                _strat = (getattr(self, "_strategy_per_charger", None)
+                          or {}).get(cid)
+                if _strat is not None:
+                    result[f"charger_{cid}_strategy"] = _strat
                 if _pcs_entry is not None:
                     _eff_state, _ = _pcs_entry
                     # ChargingState is a str-enum; store the value for JSON

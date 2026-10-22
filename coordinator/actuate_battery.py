@@ -15,6 +15,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from .charger_types import BatteryIntent
+from .decision_log import log_of, record_battery
 from .power_control import prepare_power_setpoint
 from ..utils.log_gate import log_on_change
 
@@ -212,7 +213,18 @@ async def actuate_battery(
         controller: The :class:`SurplusController` that owns the shared
             ``observer_decisions`` surface. Optional.
     """
+    # (#1084) The decision log's battery seam. Each branch below notes the
+    # command at the point it really leaves (after the holds that send
+    # nothing), with the watts it sends. Recording only.
+    _log = log_of(controller)
     if observer:
+        _would_w = {
+            BatteryIntent.FORCE_CHARGE: decision.charge_power_w,
+            BatteryIntent.FORCE_DISCHARGE: decision.discharge_power_w,
+            BatteryIntent.LIMIT_DISCHARGE: quantise_discharge_limit_w(
+                decision.discharge_limit_w, -1.0),
+        }.get(decision.intent)
+        record_battery(_log, decision, value_w=_would_w, observer=True)
         _observe(decision, controller=controller)
         return
 
@@ -242,6 +254,7 @@ async def actuate_battery(
         return
 
     if decision.intent is BatteryIntent.OFF:
+        record_battery(_log, decision)
         await adapter.command_off()
         log_on_change(   # (#762) transition-gated
             _LOGGER, f"actuate:{decision.battery_id}", logging.DEBUG,
@@ -251,6 +264,7 @@ async def actuate_battery(
         return
 
     if decision.intent is BatteryIntent.NORMAL:
+        record_battery(_log, decision)
         await adapter.command_normal()
         _note_protection_cycle(adapter)
         log_on_change(   # (#762) 1424 identical lines/day on .175
@@ -281,6 +295,7 @@ async def actuate_battery(
             adapter._limit_lower_streak = streak
         except Exception:  # noqa: BLE001 — a read-only stub is not a failure
             pass
+        record_battery(_log, decision, value_w=limit_w)
         await adapter.command_limit_discharge(limit_w)
         _note_protection_cycle(adapter)
         log_on_change(   # (#762) the watts wobble; the gate strips digits
@@ -302,6 +317,7 @@ async def actuate_battery(
                 decision.battery_id, decision.reason,
             )
             return
+        record_battery(_log, decision, value_w=decision.charge_power_w)
         ret = await adapter.command_force_charge(
             decision.target_soc,
             decision.charge_power_w,
@@ -329,6 +345,7 @@ async def actuate_battery(
             _set(adapter, "_room_stopped", True)
         _set(adapter, "_capped_charge_w", None)
         _set(adapter, "_capped_raise_streak", 0)
+        record_battery(_log, decision)
         ret = await adapter.command_stop_force_charge()
         _note_forced_op(adapter, "_sem_forced_charge", ret,
                         BatteryIntent.STOP_FORCE_CHARGE, False)
@@ -346,6 +363,7 @@ async def actuate_battery(
                 decision.battery_id, decision.reason,
             )
             return
+        record_battery(_log, decision, value_w=decision.discharge_power_w)
         ret = await adapter.command_force_discharge(
             decision.discharge_power_w, decision.floor_soc,
         )
@@ -359,6 +377,7 @@ async def actuate_battery(
         return
 
     if decision.intent is BatteryIntent.STOP_FORCE_DISCHARGE:
+        record_battery(_log, decision)
         ret = await adapter.command_stop_force_discharge()
         _note_forced_op(adapter, "_sem_forced_discharge", ret,
                         BatteryIntent.STOP_FORCE_DISCHARGE, False)
