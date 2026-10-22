@@ -365,6 +365,27 @@ class TestThePipelineAsksFirst:
             "the mode must be finished before the VPP override is laid over "
             "it and before the cycle decides")
 
+    async def test_a_failed_mode_write_does_not_end_the_cycle(self, monkeypatch):
+        from custom_components.solar_energy_management.coordinator import (
+            decide_battery as db,
+        )
+        stub = _pipeline_stub()
+        stub._finish_manual_battery_modes = MagicMock(
+            side_effect=RuntimeError("entry gone"))
+        stub._vpp_apply_battery_override = lambda pbc: {}
+        decided = []
+
+        def _decide(view):
+            decided.append(view.runtime.battery_id)
+            raise _Decided
+
+        monkeypatch.setattr(db, "decide_battery", _decide)
+        with pytest.raises(_Decided):
+            await SEMCoordinator._run_battery_pipeline(
+                stub, _single(), SimpleNamespace(), "idle")
+        assert stub._finish_manual_battery_modes.called
+        assert decided == ["primary"], "the battery is still decided this cycle"
+
     async def test_a_held_level_is_not_a_reading(self, monkeypatch):
         order = await _run_pipeline(
             monkeypatch, _single(battery_soc_unavailable=True))

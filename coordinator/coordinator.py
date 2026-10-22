@@ -9311,11 +9311,15 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # (#1131) A manual charge or sale that has done its job hands the
         # battery back to Auto before this cycle decides — on a level that is
         # a reading this cycle (not held, not the never-read 0.0).
-        self._finish_manual_battery_modes(
-            battery_items,
-            {bid: bool(rt.available and soc_seen.get(bid, False))
-             for bid, rt in battery_items},
-            _bat_count)
+        try:
+            self._finish_manual_battery_modes(
+                battery_items,
+                {bid: bool(rt.available and soc_seen.get(bid, False))
+                 for bid, rt in battery_items},
+                _bat_count)
+        except Exception:  # noqa: BLE001 — a mode write must not end a cycle
+            _LOGGER.warning("ending a finished manual battery mode failed "
+                            "(#1131)", exc_info=True)
 
         for batt_idx, (battery_id, runtime) in enumerate(battery_items):
             # Per-battery adapter cache. Each battery gets its OWN control
