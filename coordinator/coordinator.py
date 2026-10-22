@@ -8702,8 +8702,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 day_start=(_day_start() if callable(_day_start := getattr(
                     self, "_pacing_day_start", None)) else None),
                 weak_latched=bool(getattr(self, "_pacing_weak_latched", False)),
+                full_latched=bool(getattr(self, "_pacing_full_latched", False)),
             )
             self._pacing_weak_latched = decision.code == "weak_day"
+            self._pacing_full_latched = decision.cap_w is not None and (
+                decision.cap_w >= float(self.config.get(
+                    "battery_max_charge_power_w", 5000.0) or 5000.0) - 0.5)
         cap = decision.cap_w if (decision and enabled) else None
         code = (decision.code if decision else
                 ("night" if not ledger else

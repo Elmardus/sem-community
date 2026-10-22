@@ -207,6 +207,7 @@ def paced_charge_cap_w(
     end_margin_slots: int = 1,
     day_start=None,
     weak_latched: bool = False,
+    full_latched: bool = False,
 ) -> PacingDecision:
     """The smallest constant charge cap that still fills the pack in time.
 
@@ -295,6 +296,19 @@ def paced_charge_cap_w(
             else:
                 lo = mid
         cap = max(cap, hi)
+    # (#820, 21.10) Full power is held like the weak verdict. A day just
+    # short of the need (or of finish_by) bisects to the hardware maximum,
+    # one SOC step away to its peak surplus: a wobbling forecast wrote
+    # 1100 -> 5000 -> 1100 W. Once at full power, stay there until the day
+    # clearly fills again, 5 % over the need, in time.
+    if full_latched and cap < hw_max_charge_w:
+        lead_kwh = need_kwh * 1.05
+        slot = _full_slot(ledger, hw_max_charge_w, lead_kwh)
+        in_time = slot is not None and slot <= last_ok and (
+            finish_by is None or _full_time(
+                ledger, hw_max_charge_w, lead_kwh, until=finish_by) is not None)
+        if not in_time:
+            cap = hw_max_charge_w
 
     # Clipping guard: any slot whose surplus exceeds the AC limit is energy
     # that cannot leave the roof — open the cap far enough to absorb the
