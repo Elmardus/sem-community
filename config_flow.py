@@ -1667,9 +1667,12 @@ def _suggest_select_with_options(hass, labels) -> str | None:
 
 def _value_number(key: str, unit: str):
     """(#1077) A value field's box, its range from ``consts/bounds.py`` and
-    its unit from the house currency."""
-    return selector.NumberSelector(selector.NumberSelectorConfig(
-        **{**BOUNDS[key].selector_kwargs("box"), "unit_of_measurement": unit}))
+    its unit from the house currency. HA's selector refuses a step below
+    0.001, and a Dutch tax of 0.0916 needs four places: "any" takes it."""
+    kwargs = {**BOUNDS[key].selector_kwargs("box"), "unit_of_measurement": unit}
+    if kwargs["step"] < 0.001:
+        kwargs["step"] = "any"
+    return selector.NumberSelector(selector.NumberSelectorConfig(**kwargs))
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
