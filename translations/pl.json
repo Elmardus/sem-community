@@ -258,7 +258,15 @@
           "tariff_classification_mode": "Tryb klasyfikacji cen",
           "solar_forecast_source": "Źródło prognozy słonecznej",
           "grid_co2_entity": "Czujnik intensywności CO₂ sieci (opcjonalnie)",
-          "outdoor_temperature_entity": "Temperatura zewnętrzna (opcjonalnie)"
+          "outdoor_temperature_entity": "Temperatura zewnętrzna (opcjonalnie)",
+          "tariff_value_preset": "Szablon podatków i opłat",
+          "import_price_basis": "Co zawiera cena zakupu",
+          "import_markup": "Marża sprzedawcy",
+          "import_energy_tax": "Akcyza na energię",
+          "import_vat_percent": "VAT",
+          "feed_in_fee_model": "Opłata za oddawanie energii",
+          "feed_in_fee": "Wysokość opłaty",
+          "feed_in_fee_tiers": "Progi opłaty"
         },
         "data_description": {
           "electricity_import_rate": "Dzienna/jednostrefowa stawka importu (waluta/kWh z VAT). Używana zapasowo, gdy ceny dynamiczne są niedostępne.",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "„Percentyl” klasyfikuje ceny względem dzisiejszego zakresu (zalecane). „Statyczny” używa stałych progów tanio/drogo.",
           "solar_forecast_source": "Którą integrację prognozy odczytuje SEM. Automatyczne wykrywanie preferuje Solcast, potem Forecast.Solar, potem Open-Meteo — wybierz jedną, jeśli używasz kilku naraz.",
           "grid_co2_entity": "SEM sam znajduje czujnik w g lub kg CO₂ na kWh. Wybierz go tylko, jeśli SEM znalazł zły.",
-          "outdoor_temperature_entity": "SEM znajduje termometr zewnętrzny po nazwie lub używa encji pogody. Wybierz tylko, jeśli wybrał źle."
+          "outdoor_temperature_entity": "SEM znajduje termometr zewnętrzny po nazwie lub używa encji pogody. Wybierz tylko, jeśli wybrał źle.",
+          "tariff_value_preset": "Wypełnia pola poniżej. 'Brak' nic nie dodaje: ceny zostają bez zmian. 'Holandia od 2027' ustawia akcyzę i 21 % VAT; marżę i opłatę sprzedawcy wpisz sam.",
+          "import_price_basis": "Wszystko wliczone: podatek i VAT są już w cenie (Tibber, cena z rachunku) — nic nie jest dodawane. Cena spot z VAT: podatek i marża dodane z VAT. Cena spot: podatek, marża i VAT są dodawane.",
+          "import_markup": "Co sprzedawca dolicza do kupionej kWh, bez VAT.",
+          "import_energy_tax": "Akcyza na kupioną kWh, bez VAT.",
+          "import_vat_percent": "VAT od kupionej kWh, w procentach.",
+          "feed_in_fee_model": "Ile sprzedawca pobiera za energię oddaną do sieci: za kWh, progowo według kWh w tym roku, lub stała kwota miesięcznie.",
+          "feed_in_fee": "Za kWh: opłata za kWh. Stała miesięcznie: kwota na miesiąc.",
+          "feed_in_fee_tiers": "Tylko dla progów. kWh oddane w tym roku : opłata za kWh, na przykład 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -1449,6 +1465,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} SOC pojazdu"
+      },
+      "daily_self_consumption_value": {
+        "name": "Wartość autokonsumpcji dziś"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Wartość autokonsumpcji w tym roku"
+      },
+      "daily_export_value": {
+        "name": "Wartość eksportu dziś"
+      },
+      "yearly_export_value": {
+        "name": "Wartość eksportu w tym roku"
+      },
+      "daily_feed_in_fees": {
+        "name": "Opłaty za oddawanie dziś"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Opłaty za oddawanie w tym roku"
       }
     },
     "binary_sensor": {
@@ -1979,6 +2013,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "Brak (bez podatków i opłat)",
+        "nl_2027": "Holandia od 2027",
+        "custom": "Własny"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "Wszystko wliczone (z podatkami)",
+        "spot_incl_vat": "Cena spot z VAT",
+        "spot": "Cena spot (bez podatków)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "Brak",
+        "per_kwh": "Za kWh",
+        "tiered": "Progi według kWh rocznie",
+        "fixed_monthly": "Stała miesięcznie"
       }
     }
   }

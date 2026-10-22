@@ -258,7 +258,15 @@
           "tariff_classification_mode": "Ár-besorolási mód",
           "solar_forecast_source": "Napelemes előrejelzés forrása",
           "grid_co2_entity": "A hálózat CO₂-intenzitás érzékelője (opcionális)",
-          "outdoor_temperature_entity": "Külső hőmérséklet (opcionális)"
+          "outdoor_temperature_entity": "Külső hőmérséklet (opcionális)",
+          "tariff_value_preset": "Adók és díjak sablonja",
+          "import_price_basis": "Mit tartalmaz a vételár",
+          "import_markup": "Szolgáltatói felár",
+          "import_energy_tax": "Energiaadó",
+          "import_vat_percent": "ÁFA",
+          "feed_in_fee_model": "Betáplálási díj",
+          "feed_in_fee": "A díj összege",
+          "feed_in_fee_tiers": "A díj sávjai"
         },
         "data_description": {
           "electricity_import_rate": "Nappali/egységes vételezési ár (pénznem/kWh, áfával). Tartalékként használatos, ha a dinamikus árazás nem érhető el.",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "A „Percentilis” a mai tartományhoz viszonyítva sorolja be az árakat (ajánlott). A „Statikus” rögzített olcsó/drága küszöböket használ.",
           "solar_forecast_source": "Melyik előrejelzés-integrációt olvassa a SEM. Az automatikus felismerés a Solcastot részesíti előnyben, majd a Forecast.Solart, majd az Open-Meteót — válassz egyet, ha többet is használsz.",
           "grid_co2_entity": "A SEM magától megtalálja a g vagy kg CO₂/kWh egységű érzékelőt. Csak akkor válasszon, ha rosszat talált.",
-          "outdoor_temperature_entity": "A SEM név alapján megtalálja a kültéri hőmérőt, vagy az időjárás-entitást használja. Csak akkor válasszon, ha rosszat választott."
+          "outdoor_temperature_entity": "A SEM név alapján megtalálja a kültéri hőmérőt, vagy az időjárás-entitást használja. Csak akkor válasszon, ha rosszat választott.",
+          "tariff_value_preset": "Kitölti a lenti mezőket. 'Nincs' semmit sem ad hozzá: az árak változatlanok. 'Hollandia 2027-től' beállítja az energiaadót és a 21 % ÁFA-t; a szolgáltató felárát és díját Ön adja meg.",
+          "import_price_basis": "Mindent tartalmaz: az adó és az ÁFA már az árban van (Tibber, ár a számláról) — semmi sem adódik hozzá. Spot ár ÁFA-val: adó és felár ÁFA-val adódik hozzá. Spot ár: adó, felár és ÁFA is hozzáadódik.",
+          "import_markup": "Amit a szolgáltató vett kWh-nként felszámol, ÁFA nélkül.",
+          "import_energy_tax": "Energiaadó vett kWh-nként, ÁFA nélkül.",
+          "import_vat_percent": "ÁFA a vett kWh-ra, százalékban.",
+          "feed_in_fee_model": "Mit kér a szolgáltató a hálózatba küldött energiáért: kWh-nként, sávosan az idei kWh szerint, vagy fix havi összeget.",
+          "feed_in_fee": "kWh-nként: a díj kWh-nként. Fix havi: a havi összeg.",
+          "feed_in_fee_tiers": "Csak sávokhoz. Idén betáplált kWh : díj kWh-nként, például 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -1449,6 +1465,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} Jármű SOC"
+      },
+      "daily_self_consumption_value": {
+        "name": "Saját fogyasztás értéke ma"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Saját fogyasztás értéke idén"
+      },
+      "daily_export_value": {
+        "name": "Betáplálás értéke ma"
+      },
+      "yearly_export_value": {
+        "name": "Betáplálás értéke idén"
+      },
+      "daily_feed_in_fees": {
+        "name": "Betáplálási díjak ma"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Betáplálási díjak idén"
       }
     },
     "binary_sensor": {
@@ -1979,6 +2013,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "Nincs (nincs adó vagy díj)",
+        "nl_2027": "Hollandia 2027-től",
+        "custom": "Egyéni"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "Mindent tartalmaz (adókkal)",
+        "spot_incl_vat": "Spot ár ÁFA-val",
+        "spot": "Spot ár (adók nélkül)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "Nincs",
+        "per_kwh": "kWh-nként",
+        "tiered": "Sávok éves kWh szerint",
+        "fixed_monthly": "Fix havi"
       }
     }
   }

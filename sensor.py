@@ -790,6 +790,51 @@ SENSOR_TYPES = [
         native_unit_of_measurement="CHF",
         suggested_display_precision=2,
     ),
+    # (#1077) What a kWh is worth, once tax, VAT and a feed-in fee make a
+    # bought and a sold kWh different money. Created only when a value
+    # field is set (install_modules: VALUE_TARIFF).
+    SensorEntityDescription(
+        key="daily_self_consumption_value",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="yearly_self_consumption_value",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="daily_export_value",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="yearly_export_value",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="daily_feed_in_fees",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="yearly_feed_in_fees",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
     SensorEntityDescription(
         key="yearly_net_cost",
         device_class=SensorDeviceClass.MONETARY,
@@ -3112,6 +3157,15 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 "battery_boost_preview": self.coordinator.data.get(
                     "battery_boost_preview"),
             })
+        elif self.entity_description.key == "yearly_feed_in_fees":
+            # (#1077) Where a tiered fee stands: this year's export, the fee
+            # on the next kWh, and where the next tier starts.
+            attrs["export_this_year_kwh"] = self.coordinator.data.get(
+                "tariff_export_ytd_kwh")
+            attrs["fee_per_kwh_now"] = self.coordinator.data.get(
+                "tariff_feed_in_fee_rate")
+            attrs["next_tier_at_kwh"] = self.coordinator.data.get(
+                "tariff_next_fee_tier_kwh")
         elif self.entity_description.key in (
             "roi_payback_years", "roi_annual_savings",
         ):

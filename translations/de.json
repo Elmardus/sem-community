@@ -258,7 +258,15 @@
           "tariff_classification_mode": "Preis-Klassifizierungsmodus",
           "solar_forecast_source": "Quelle der Solarprognose",
           "grid_co2_entity": "Sensor CO₂-Intensität des Netzes (optional)",
-          "outdoor_temperature_entity": "Aussentemperatur (optional)"
+          "outdoor_temperature_entity": "Aussentemperatur (optional)",
+          "tariff_value_preset": "Vorlage für Steuern und Gebühren",
+          "import_price_basis": "Was Ihr Bezugspreis enthält",
+          "import_markup": "Aufschlag des Lieferanten",
+          "import_energy_tax": "Energiesteuer",
+          "import_vat_percent": "MwSt.",
+          "feed_in_fee": "Höhe der Einspeisegebühr",
+          "feed_in_fee_model": "Einspeisegebühr",
+          "feed_in_fee_tiers": "Stufen der Einspeisegebühr"
         },
         "data_description": {
           "electricity_import_rate": "Tag-/Einheitstarif für den Import (Währung/kWh inkl. MwSt.). Wird als Rückfallwert verwendet, wenn keine dynamische Preisgestaltung verfügbar ist.",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "„Perzentil“ ordnet Preise relativ zur heutigen Spanne ein (empfohlen). „Statisch“ nutzt feste Schwellen für günstig/teuer.",
           "solar_forecast_source": "Welche Prognose-Integration SEM liest. Die automatische Erkennung bevorzugt Solcast, dann Forecast.Solar, dann Open-Meteo — wähle eine aus, wenn du mehrere parallel betreibst.",
           "grid_co2_entity": "SEM findet einen Sensor in g oder kg CO₂ pro kWh selbst. Wähle nur einen, wenn SEM den falschen gefunden hat.",
-          "outdoor_temperature_entity": "SEM findet ein Aussenthermometer über seinen Namen oder nutzt Ihre Wetter-Entität. Wählen Sie nur, wenn es das falsche gewählt hat."
+          "outdoor_temperature_entity": "SEM findet ein Aussenthermometer über seinen Namen oder nutzt Ihre Wetter-Entität. Wählen Sie nur, wenn es das falsche gewählt hat.",
+          "tariff_value_preset": "Füllt die Felder unten. 'Keine' fügt nichts hinzu: die Preise bleiben, wie sie sind. 'Niederlande ab 2027' setzt Energiesteuer und 21 % MwSt.; Aufschlag und Gebühr Ihres Lieferanten tragen Sie selbst ein.",
+          "import_price_basis": "Alles inklusive: Steuer und MwSt. sind schon im Preis (Tibber, Preis von der Rechnung) — nichts wird addiert. Spotpreis inkl. MwSt.: Steuer und Aufschlag werden mit MwSt. addiert. Spotpreis: Steuer, Aufschlag und MwSt. werden addiert.",
+          "import_markup": "Was Ihr Lieferant pro bezogener kWh aufschlägt, ohne MwSt.",
+          "import_energy_tax": "Energiesteuer pro bezogener kWh, ohne MwSt.",
+          "import_vat_percent": "MwSt. auf die bezogene kWh, in Prozent.",
+          "feed_in_fee_model": "Was Ihr Lieferant für eingespeisten Strom verlangt: pro kWh, in Stufen nach kWh dieses Jahr oder ein fester Betrag pro Monat.",
+          "feed_in_fee": "Pro kWh: die Gebühr pro kWh. Fest pro Monat: der Betrag pro Monat.",
+          "feed_in_fee_tiers": "Nur für Stufen. kWh eingespeist dieses Jahr : Gebühr pro kWh, zum Beispiel 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -1449,6 +1465,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} Fahrzeug-SOC"
+      },
+      "daily_self_consumption_value": {
+        "name": "Wert Eigenverbrauch heute"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Wert Eigenverbrauch dieses Jahr"
+      },
+      "daily_export_value": {
+        "name": "Wert Einspeisung heute"
+      },
+      "yearly_export_value": {
+        "name": "Wert Einspeisung dieses Jahr"
+      },
+      "daily_feed_in_fees": {
+        "name": "Einspeisegebühren heute"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Einspeisegebühren dieses Jahr"
       }
     },
     "binary_sensor": {
@@ -1979,6 +2013,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "Keine (keine Steuern oder Gebühren)",
+        "nl_2027": "Niederlande ab 2027",
+        "custom": "Eigene"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "Alles inklusive (mit Steuern)",
+        "spot_incl_vat": "Spotpreis inkl. MwSt.",
+        "spot": "Spotpreis (ohne Steuern)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "Keine",
+        "per_kwh": "Pro kWh",
+        "tiered": "Stufen nach kWh pro Jahr",
+        "fixed_monthly": "Fest pro Monat"
       }
     }
   }

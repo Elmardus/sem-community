@@ -258,7 +258,15 @@
           "tariff_classification_mode": "Hinnan luokittelutila",
           "solar_forecast_source": "Aurinkoennusteen lähde",
           "grid_co2_entity": "Sähköverkon CO₂-intensiteetin anturi (valinnainen)",
-          "outdoor_temperature_entity": "Ulkolämpötila (valinnainen)"
+          "outdoor_temperature_entity": "Ulkolämpötila (valinnainen)",
+          "tariff_value_preset": "Verojen ja maksujen pohja",
+          "import_price_basis": "Mitä ostohintasi sisältää",
+          "import_markup": "Myyjän marginaali",
+          "import_energy_tax": "Sähkövero",
+          "import_vat_percent": "ALV",
+          "feed_in_fee_model": "Verkkoon syötön maksu",
+          "feed_in_fee": "Maksun suuruus",
+          "feed_in_fee_tiers": "Maksun portaat"
         },
         "data_description": {
           "electricity_import_rate": "Päivä- tai kiinteä ostohinta (valuutta/kWh sis. alv). Käytetään varalla, kun dynaaminen hinnoittelu ei ole käytettävissä.",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "Persentiili luokittelee hinnat suhteessa päivän vaihteluväliin (suositus). Staattinen käyttää kiinteitä halpa/kallis-rajoja.",
           "solar_forecast_source": "Mitä ennusteintegraatiota SEM lukee. Automaattinen tunnistus suosii Solcastia, sitten Forecast.Solaria, sitten Open-Meteoa — valitse yksi, jos käytät useita rinnakkain.",
           "grid_co2_entity": "SEM löytää itse anturin, jonka yksikkö on g tai kg CO₂ / kWh. Valitse anturi vain, jos se löysi väärän.",
-          "outdoor_temperature_entity": "SEM löytää ulkolämpömittarin nimen perusteella tai käyttää sääentiteettiäsi. Valitse vain, jos se valitsi väärin."
+          "outdoor_temperature_entity": "SEM löytää ulkolämpömittarin nimen perusteella tai käyttää sääentiteettiäsi. Valitse vain, jos se valitsi väärin.",
+          "tariff_value_preset": "Täyttää alla olevat kentät. 'Ei mitään' ei lisää mitään: hinnat pysyvät ennallaan. 'Alankomaat vuodesta 2027' asettaa sähköveron ja 21 % ALV:n; syötä myyjän marginaali ja maksu itse.",
+          "import_price_basis": "Kaikki mukana: vero ja ALV ovat jo hinnassa (Tibber, hinta laskusta) — mitään ei lisätä. Spot-hinta sis. ALV: vero ja marginaali lisätään ALV:n kanssa. Spot-hinta: vero, marginaali ja ALV lisätään.",
+          "import_markup": "Mitä myyjä lisää ostettua kWh:ta kohden, ilman ALV:tä.",
+          "import_energy_tax": "Sähkövero ostettua kWh:ta kohden, ilman ALV:tä.",
+          "import_vat_percent": "ALV ostetulle kWh:lle, prosentteina.",
+          "feed_in_fee_model": "Mitä myyjä veloittaa verkkoon syötetystä sähköstä: kWh:lta, portaittain tämän vuoden kWh:n mukaan, tai kiinteä summa kuukaudessa.",
+          "feed_in_fee": "kWh:lta: maksu kWh:lta. Kiinteä kuukaudessa: summa kuukaudessa.",
+          "feed_in_fee_tiers": "Vain portaille. Tänä vuonna syötetyt kWh : maksu kWh:lta, esimerkiksi 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -1449,6 +1465,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} Auton SOC"
+      },
+      "daily_self_consumption_value": {
+        "name": "Oman käytön arvo tänään"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Oman käytön arvo tänä vuonna"
+      },
+      "daily_export_value": {
+        "name": "Syötön arvo tänään"
+      },
+      "yearly_export_value": {
+        "name": "Syötön arvo tänä vuonna"
+      },
+      "daily_feed_in_fees": {
+        "name": "Syöttömaksut tänään"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Syöttömaksut tänä vuonna"
       }
     },
     "binary_sensor": {
@@ -1979,6 +2013,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "Ei mitään (ei veroja tai maksuja)",
+        "nl_2027": "Alankomaat vuodesta 2027",
+        "custom": "Oma"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "Kaikki mukana (sis. verot)",
+        "spot_incl_vat": "Spot-hinta sis. ALV",
+        "spot": "Spot-hinta (ilman veroja)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "Ei mitään",
+        "per_kwh": "kWh:lta",
+        "tiered": "Portaat kWh/vuosi mukaan",
+        "fixed_monthly": "Kiinteä kuukaudessa"
       }
     }
   }

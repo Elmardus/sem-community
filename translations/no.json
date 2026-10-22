@@ -258,7 +258,15 @@
           "tariff_classification_mode": "Prisklassifiseringsmodus",
           "solar_forecast_source": "Kilde for solprognose",
           "grid_co2_entity": "Sensor for nettets CO₂-intensitet (valgfri)",
-          "outdoor_temperature_entity": "Utetemperatur (valgfritt)"
+          "outdoor_temperature_entity": "Utetemperatur (valgfritt)",
+          "tariff_value_preset": "Mal for avgifter og gebyrer",
+          "import_price_basis": "Hva kjøpsprisen din inneholder",
+          "import_markup": "Leverandørens påslag",
+          "import_energy_tax": "Elavgift",
+          "import_vat_percent": "Mva",
+          "feed_in_fee_model": "Gebyr for innmating",
+          "feed_in_fee": "Gebyrets størrelse",
+          "feed_in_fee_tiers": "Trinn for gebyret"
         },
         "data_description": {
           "electricity_import_rate": "Dag-/fastpris for import (valuta/kWh inkl. mva.). Brukes som reserve når dynamisk prising ikke er tilgjengelig.",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "Persentil grupperer priser relativt til dagens område (anbefalt). Statisk bruker faste terskler for billig/dyr.",
           "solar_forecast_source": "Hvilken prognoseintegrasjon SEM leser. Automatisk gjenkjenning foretrekker Solcast, så Forecast.Solar, så Open-Meteo — velg én selv om du kjører flere.",
           "grid_co2_entity": "SEM finner selv en sensor i g eller kg CO₂ per kWh. Velg én bare hvis den fant feil.",
-          "outdoor_temperature_entity": "SEM finner et utetermometer ut fra navnet, eller bruker vær-entiteten din. Velg bare hvis den valgte feil."
+          "outdoor_temperature_entity": "SEM finner et utetermometer ut fra navnet, eller bruker vær-entiteten din. Velg bare hvis den valgte feil.",
+          "tariff_value_preset": "Fyller ut feltene under. 'Ingen' legger ikke til noe: prisene er som før. 'Nederland fra 2027' setter elavgift og 21 % mva; skriv inn påslag og gebyr fra leverandøren selv.",
+          "import_price_basis": "Alt inkludert: avgift og mva er allerede i prisen (Tibber, pris fra regningen) — ingenting legges til. Spotpris inkl. mva: avgift og påslag legges til med mva. Spotpris: avgift, påslag og mva legges til.",
+          "import_markup": "Hva leverandøren legger på per kjøpt kWh, eks. mva.",
+          "import_energy_tax": "Elavgift per kjøpt kWh, eks. mva.",
+          "import_vat_percent": "Mva på kjøpt kWh, i prosent.",
+          "feed_in_fee_model": "Hva leverandøren tar for strøm du sender ut på nettet: per kWh, i trinn etter kWh i år, eller et fast beløp per måned.",
+          "feed_in_fee": "Per kWh: gebyret per kWh. Fast per måned: beløpet per måned.",
+          "feed_in_fee_tiers": "Bare for trinn. kWh sendt ut i år : gebyr per kWh, for eksempel 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -1449,6 +1465,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} Bilens SOC"
+      },
+      "daily_self_consumption_value": {
+        "name": "Verdi av eget forbruk i dag"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Verdi av eget forbruk i år"
+      },
+      "daily_export_value": {
+        "name": "Verdi av eksport i dag"
+      },
+      "yearly_export_value": {
+        "name": "Verdi av eksport i år"
+      },
+      "daily_feed_in_fees": {
+        "name": "Innmatingsgebyrer i dag"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Innmatingsgebyrer i år"
       }
     },
     "binary_sensor": {
@@ -1979,6 +2013,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "Ingen (ingen avgifter eller gebyrer)",
+        "nl_2027": "Nederland fra 2027",
+        "custom": "Egen"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "Alt inkludert (med avgifter)",
+        "spot_incl_vat": "Spotpris inkl. mva",
+        "spot": "Spotpris (uten avgifter)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "Ingen",
+        "per_kwh": "Per kWh",
+        "tiered": "Trinn etter kWh per år",
+        "fixed_monthly": "Fast per måned"
       }
     }
   }
