@@ -216,6 +216,8 @@ class ChargerReconciler:
                  enable_retry_interval_s: float = 300.0) -> None:
         self.charger_id = charger_id
         self._heartbeat_s = float(heartbeat_s)
+        # (#1084) set by ``actuate()``; None = record nothing
+        self.decision_log = None
         self._idle_disable_threshold = int(idle_disable_threshold)
         self._last_write_at: float = 0.0
         self._consecutive_idle_count: int = 0
@@ -1077,6 +1079,7 @@ class ChargerReconciler:
         for action in actions:
             if action.kind is ActionKind.NONE:
                 continue
+            self._log_write(action, adapter, decision)
             # (#700) any action other than the unenforceable-report means the
             # intent moved or a mechanism appeared — re-arm the one-shot
             # warning so the NEXT unenforceable episode warns again.
@@ -1231,6 +1234,35 @@ class ChargerReconciler:
             if self._stand_down_quiet < PARK_ON_DISCONNECT_CYCLES:
                 return
         self._retire_stand_down(adapter)
+
+    def _log_write(self, action: Action, adapter, decision) -> None:
+        """(#1084) Hand a write that leaves for the box to the decision log.
+
+        Only the writes that change what the charger does: a current, a
+        start, a stop, a park. ENABLE re-asserts and the REPORT/CLEAR rows
+        send no command. Under observer mode the device's ``send`` withholds
+        the write; the row is the same, flagged ``observer``. The log keeps
+        only changes, so a re-asserted DISABLE or a heartbeat write of the
+        same amps makes no row. Recording only.
+        """
+        log = getattr(self, "decision_log", None)
+        if log is None:
+            return
+        kind = action.kind
+        if kind is ActionKind.DISABLE:
+            verb, value = "disable", None
+        elif kind is ActionKind.PARK_OFF:
+            verb, value = "park_off", None
+        elif kind in (ActionKind.WRITE_CURRENT, ActionKind.START_AND_WRITE):
+            amps = int(action.amps or 0)
+            verb, value = ("charge", float(amps)) if amps > 0 else ("stop", None)
+        else:
+            return
+        from .decision_log import record_charger
+        observer = getattr(getattr(adapter, "_device", None),
+                           "observer_mode", False) is True
+        record_charger(log, decision, verb=verb, value=value,
+                       observer=observer)
 
     # ── #627 stop-unenforceable repair plumbing ──────────────────────────
     def _device_and_hass(self, adapter):

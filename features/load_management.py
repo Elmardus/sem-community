@@ -208,6 +208,9 @@ class LoadManagementCoordinator:
         # Observer mode: skip all hardware control (same merged view — the
         # switch writes options, so options still wins when present)
         self._observer_mode = _cfg.get("observer_mode", False)
+        # (#1084) the decision log, handed over by the coordinator each
+        # cycle; None = record nothing
+        self.decision_log = None
 
         # #433 — telemetry surface mirroring classifier_path /
         # dampening_path / legionella_path. Focus on the high-leverage
@@ -1407,6 +1410,9 @@ class LoadManagementCoordinator:
                 if would_w >= plan["need_w"] or reason != "EMERGENCY":
                     break
             self._shed_path = f"observer:withheld:{len(would)}"
+            # (#1084) the withheld sheds, flagged as observed
+            for device_id in would:
+                self._log_shed(device_id, reason, shed=True, observer=True)
             _LOGGER.info(
                 "Observer mode: %s shedding would turn off %s (need %.0f W)",
                 reason, ", ".join(would), plan["need_w"],
@@ -1982,6 +1988,7 @@ class LoadManagementCoordinator:
                     success = await self._device_discovery.turn_off_device(device_info)
 
             if success:
+                self._log_shed(device_id, reason, shed=True)
                 self._devices_shed.append(device_id)
                 self._devices[device_id]["last_turned_off"] = dt_util.now()
                 self._devices[device_id]["shed_reason"] = reason
@@ -1994,6 +2001,25 @@ class LoadManagementCoordinator:
         except Exception as e:
             _LOGGER.error("Failed to shed device %s: %s", device_id, e)
         return success
+
+    def _log_shed(self, device_id: str, reason: str, *, shed: bool,
+                  observer: bool = False) -> None:
+        """(#1084) A shed or restore that left for the load, to the decision
+        log. Recording only; never raises."""
+        try:
+            from ..coordinator.decision_log import record_shed
+            info = self._devices.get(device_id) or {}
+            code = ("peak_restore" if not shed
+                    else "phase_shed" if reason == "PHASE" else "peak_shed")
+            text = ("peak cleared" if not shed
+                    else "phase over its limit" if reason == "PHASE"
+                    else f"grid peak limit ({str(reason).lower()})")
+            record_shed(self.decision_log, device_id,
+                        name=str(info.get("friendly_name") or device_id),
+                        shed=shed, reason_code=code, text=text,
+                        observer=observer)
+        except Exception:  # noqa: BLE001 — the log never costs a shed
+            _LOGGER.debug("decision log: shed record failed", exc_info=True)
 
     async def _restore_device(self, device_id: str):
         """Restore a device that was shed.
@@ -2155,6 +2181,7 @@ class LoadManagementCoordinator:
                         success = await self._device_discovery.turn_on_device(device_info)
 
             if success:
+                self._log_shed(device_id, "RESTORE", shed=False)
                 self._devices_shed.remove(device_id)
                 self._last_restore_time = dt_util.now()
                 self._devices[device_id]["last_turned_on"] = dt_util.now()

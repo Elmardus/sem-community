@@ -52,6 +52,7 @@ _UNIT = {KIND_CHARGER: "A", KIND_BATTERY: "W", KIND_LOAD: "W"}
 #: FIRST command is one of these has not changed — it was never started —
 #: so the log stays quiet instead of writing a row per device on every boot.
 RESTING_VERBS = frozenset({"idle", "off", "normal", "release", "disable",
+                           "stop", "park_off",
                            "stop_force_charge", "stop_force_discharge"})
 
 _TEXT_MAX = 120
@@ -135,10 +136,11 @@ class DecisionLog:
 
     # ── writing ──────────────────────────────────────────────────────
     def _is_change(self, key: str, kind: str, verb: str,
-                   value: Optional[float], observer: bool) -> bool:
+                   value: Optional[float], observer: bool,
+                   quiet_first_rest: bool = True) -> bool:
         last = self._last.get(key)
         if last is None:
-            return verb not in RESTING_VERBS
+            return not (quiet_first_rest and verb in RESTING_VERBS)
         l_verb, l_value, l_obs, _ = last
         if verb != l_verb or observer != l_obs:
             return True
@@ -150,10 +152,14 @@ class DecisionLog:
                value: Optional[float] = None, reason_code: str = "",
                text: str = "", observer: bool = False, name: str = "",
                inputs: Optional[Mapping[str, Any]] = None,
-               now: Optional[datetime] = None) -> Optional[DecisionRecord]:
+               now: Optional[datetime] = None,
+               quiet_first_rest: bool = True) -> Optional[DecisionRecord]:
         """Note the command about to leave for ``device_id``.
 
         Returns the new record, or ``None`` when the command did not change.
+        ``quiet_first_rest=False`` is for callers whose stop only ever leaves
+        for a RUNNING device (a load stop, a shed): there the first "off"
+        is a real change, not boot noise.
         Never raises: a log that breaks an actuator would be worse than no
         log at all.
         """
@@ -163,7 +169,8 @@ class DecisionLog:
             if value is not None:
                 value = round(float(value), 1)
             key = f"{kind}:{device_id}"
-            if not self._is_change(key, kind, verb, value, observer):
+            if not self._is_change(key, kind, verb, value, observer,
+                                   quiet_first_rest):
                 if key not in self._last:
                     # a first resting command: no row, but it is the "old"
                     # the next change reads from
@@ -225,7 +232,8 @@ class DecisionLog:
 
 
 # ── the three seams' adapters ────────────────────────────────────────
-# Each actuator calls ONE of these at its single dispatch point. They turn
+# Each actuator calls ONE of these at its single dispatch point (chargers:
+# the reconciler's apply loop, where a write really leaves). They turn
 # the actuator's own decision type into a command + a stable reason code.
 
 def log_of(controller) -> Optional[DecisionLog]:
@@ -234,16 +242,15 @@ def log_of(controller) -> Optional[DecisionLog]:
     return log if isinstance(log, DecisionLog) else None
 
 
-def record_charger(log: Optional[DecisionLog], decision, *,
+def record_charger(log: Optional[DecisionLog], decision, *, verb: str,
+                   value: Optional[float] = None,
                    observer: bool = False) -> Optional[DecisionRecord]:
-    """A :class:`ChargerDecision` at ``actuate()``."""
+    """A charger write at the reconciler's apply loop. ``verb`` / ``value``
+    are what was SENT (or withheld under observer); the reason comes from
+    the :class:`ChargerDecision` that asked for it."""
     if not isinstance(log, DecisionLog):
         return None
     intent = getattr(getattr(decision, "intent", None), "value", "idle")
-    if intent == "charge_at_amps":
-        verb, value = "charge", float(getattr(decision, "commanded_amps", 0) or 0)
-    else:
-        verb, value = intent, None
     if getattr(decision, "peak_paused", False):
         code = "peak_paused"
     elif getattr(decision, "capped_by_limit", False):
@@ -273,6 +280,21 @@ def record_battery(log: Optional[DecisionLog], decision, *,
                 if intent == "force_charge" else None})
 
 
+def record_shed(log: Optional[DecisionLog], device_id: str, *, name: str = "",
+                shed: bool, reason_code: str, text: str = "",
+                observer: bool = False) -> Optional[DecisionRecord]:
+    """A peak / phase shed or its restore at the load manager's switch
+    point. Its rows are not ``ControllableDevice`` objects, so this takes an
+    id. ``restore`` hands the load back to how it was before the shed."""
+    if not isinstance(log, DecisionLog):
+        return None
+    return log.record(
+        device_id=str(device_id), kind=KIND_LOAD,
+        verb="off" if shed else "restore", reason_code=reason_code,
+        text=text, observer=observer, name=str(name or device_id),
+        quiet_first_rest=False)
+
+
 def record_load(log: Optional[DecisionLog], device, *, on: bool,
                 watts: Optional[float] = None, reason_code: str = "",
                 text: str = "", observer: bool = False
@@ -293,4 +315,6 @@ def record_load(log: Optional[DecisionLog], device, *, on: bool,
         device_id=did, kind=KIND_LOAD, verb="on" if on else "off",
         value=value, reason_code=reason_code or ("start" if on else "stop"),
         text=text, observer=observer,
-        name=str(getattr(device, "name", "") or did))
+        name=str(getattr(device, "name", "") or did),
+        # a load stop only leaves for a running load: always a change
+        quiet_first_rest=False)

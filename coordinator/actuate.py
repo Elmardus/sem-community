@@ -22,7 +22,7 @@ import time
 
 from .charger_adapters.base import ChargerAdapter
 from .charger_types import ChargerDecision, ChargerPower, commanded_power_w
-from .decision_log import log_of, record_charger
+from .decision_log import log_of
 from ..utils.log_gate import log_on_change
 
 _LOGGER = logging.getLogger(__name__)
@@ -109,10 +109,16 @@ async def actuate(
     # ``_observe`` still publishes the DECISION surface (would_decisions);
     # the two are complements, not alternatives — one says what SEM decided,
     # the other what would have hit the wire.
-    # (#1084) The decision log's charger seam: every charger command passes
-    # here, live or observed. Recording only — it writes a row when the
-    # command changed and never touches the decision.
-    record_charger(log_of(controller), decision, observer=observer)
+    # (#1084) The decision log records in the reconciler's apply loop —
+    # what is really written (or withheld by observer), not the decision. A
+    # write the reconciler holds back makes no row. Hand it the log here,
+    # the one place every charger cycle passes.
+    _log = log_of(controller)
+    if _log is not None:
+        try:
+            reconciler.decision_log = _log
+        except Exception:  # noqa: BLE001 — a read-only stub is not a failure
+            pass
     if observer:
         _observe(decision, adapter, controller=controller)
         # Belt and braces. Retiring the gate above means the seam in

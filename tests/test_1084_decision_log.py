@@ -213,56 +213,91 @@ def _cdec(intent=ChargerIntent.CHARGE_AT_AMPS, amps=10, mode="solar_only",
 
 
 def _adapter():
+    """A charger whose writes land: ``command_current`` moves the setpoint
+    the reconciler reads back, as the real device does."""
+    dev = MagicMock()
+    dev._current_setpoint = 0
+    dev.observer_mode = False
+    dev.contactor_surface = False
+    dev.can_stop_charging = MagicMock(return_value=True)
     a = MagicMock()
-    a.phases, a.voltage, a.max_current_a = 3, 230.0, 32.0
+    a._device = dev
+    a.phases, a.voltage, a.max_current_a = 3, 230.0, 32
+    a.actual_charging = MagicMock(return_value=True)
+    a.is_self_charging = MagicMock(return_value=False)
+    a.enable_state = MagicMock(return_value=(None, True))
+
+    async def _write(amps):
+        dev._current_setpoint = amps
+    a.command_current = AsyncMock(side_effect=_write)
+    for m in ("command_disable", "command_park_off", "arm_failsafe",
+              "ensure_enabled"):
+        setattr(a, m, AsyncMock())
     return a
 
 
-def _reconciler():
+_POWER = ChargerPower(charger_id=CHARGER, power_w=6900.0, connected=True,
+                      charging=True)
+
+
+def _real_reconciler():
+    from custom_components.solar_energy_management.coordinator.charger_reconciler import (
+        ChargerReconciler,
+    )
+    return ChargerReconciler(charger_id=CHARGER, heartbeat_s=3600.0)
+
+
+def _mock_reconciler():
     r = MagicMock()
     r.reconcile_and_apply = AsyncMock()
     return r
 
 
-_POWER = ChargerPower(charger_id=CHARGER, power_w=0.0, connected=True,
-                      charging=False)
-
-
 class TestTheChargerSeam:
+    """The row is written where the write leaves — the reconciler's apply
+    loop — so a write it holds back makes none."""
 
-    async def test_one_row_per_change_live(self):
-        sc = _sc()
-        for _ in range(4):
-            await actuate(_cdec(amps=10), _adapter(), _POWER, _reconciler(),
-                          controller=sc)
-        await actuate(_cdec(amps=11), _adapter(), _POWER, _reconciler(),
-                      controller=sc)
-        await actuate(_cdec(amps=11), _adapter(), _POWER, _reconciler(),
-                      controller=sc)
+    async def test_a_sent_change_records_once(self):
+        sc, ad, rec = _sc(), _adapter(), _real_reconciler()
+        for _ in range(3):
+            await actuate(_cdec(amps=10), ad, _POWER, rec, controller=sc)
+        await actuate(_cdec(amps=11), ad, _POWER, rec, controller=sc)
         rows = sc.decision_log.records()
         assert [r["new"] for r in rows] == ["charge 10 A", "charge 11 A"]
         assert rows[0]["reason_code"] == "solar_only_charge_at_amps"
         assert rows[0]["text"] == "surplus 4200 W"
         assert rows[0]["observer"] is False
+        assert [c.args[0] for c in ad.command_current.await_args_list][-1] == 11
 
-    async def test_observer_records_the_would_command(self):
+    async def test_a_held_back_write_records_nothing(self):
+        """The idle grace holds the setpoint through a solar flicker: SEM
+        decided IDLE, nothing left for the box, so nothing is logged."""
+        sc, ad, rec = _sc(), _adapter(), _real_reconciler()
+        await actuate(_cdec(amps=10), ad, _POWER, rec, controller=sc)
+        writes = ad.command_current.await_count
+        await actuate(_cdec(intent=ChargerIntent.IDLE, amps=0,
+                            reason="no surplus"), ad, _POWER, rec, controller=sc)
+        assert ad.command_current.await_count == writes   # held, not sent
+        ad.command_disable.assert_not_awaited()
+        assert [r["new"] for r in sc.decision_log.records()] == ["charge 10 A"]
+
+    async def test_a_decision_alone_records_nothing(self):
+        """A reconciler that sends nothing (here: a mock) leaves no row."""
         sc = _sc()
-        await actuate(_cdec(amps=10), _adapter(), _POWER, _reconciler(),
-                      observer=True, controller=sc)
-        await actuate(_cdec(amps=10), _adapter(), _POWER, _reconciler(),
-                      observer=True, controller=sc)
+        await actuate(_cdec(amps=10), _adapter(), _POWER, _mock_reconciler(),
+                      controller=sc)
+        assert len(sc.decision_log) == 0
+
+    async def test_observer_records_the_would_write(self):
+        sc, ad, rec = _sc(), _adapter(), _real_reconciler()
+        await actuate(_cdec(amps=10), ad, _POWER, rec, observer=True,
+                      controller=sc)
         rows = sc.decision_log.records()
-        assert len(rows) == 1 and rows[0]["observer"] is True
-
-    async def test_the_log_does_not_change_the_command(self):
-        sc = _sc()
-        rec = _reconciler()
-        d = _cdec(amps=10)
-        await actuate(d, _adapter(), _POWER, rec, controller=sc)
-        assert rec.reconcile_and_apply.await_args.args[0] is d
+        assert len(rows) == 1
+        assert rows[0]["new"] == "charge 10 A" and rows[0]["observer"] is True
 
     async def test_bare_caller_without_a_controller_still_works(self):
-        rec = _reconciler()
+        rec = _mock_reconciler()
         await actuate(_cdec(), _adapter(), _POWER, rec)
         rec.reconcile_and_apply.assert_awaited_once()
 
@@ -511,3 +546,104 @@ class TestSensorAttributes:
         log.record(device_id=CHARGER, kind=KIND_CHARGER, verb="charge",
                    value=16, text="y" * 500, now=T0)
         assert len(json.dumps(log.last(KIND_CHARGER, CHARGER))) < 1000
+
+
+# ─────────────────── the two load paths beside the walk ───────────────────
+
+
+class TestVacationStop:
+    """The vacation stop goes through the logged stop choke point."""
+
+    async def test_vacation_stop_records_once(self):
+        from custom_components.solar_energy_management.coordinator.coordinator import (
+            SEMCoordinator,
+        )
+
+        class _Coord:
+            _compute_vacation_active = SEMCoordinator._compute_vacation_active
+            _apply_vacation_mode = SEMCoordinator._apply_vacation_mode
+
+            def _sync_vacation_mode_from_switch(self):
+                pass
+
+        sc = _sc()
+        hp = _FakeLoad()
+        hp.device_id, hp.name = "heat_pump", "Heat pump"
+        hp._active = True
+        hp._controller = sc
+        c = _Coord()
+        c.config, c._observer_mode = {}, False
+        c._vacation_switch_on, c._vacation_active = True, False
+        c._surplus_controller = SimpleNamespace(_devices={"heat_pump": hp})
+        await c._apply_vacation_mode()
+        await c._apply_vacation_mode()          # already off: nothing new
+        assert not hp.is_active
+        rows = sc.decision_log.records()
+        assert [(r["device_id"], r["new"], r["reason_code"]) for r in rows] == [
+            ("heat_pump", "off", "vacation")]
+
+
+def _load_manager(mock_hass):
+    from unittest.mock import patch
+
+    from custom_components.solar_energy_management.load_management import (
+        LoadManagementCoordinator,
+    )
+    entry = MagicMock()
+    entry.options = {"load_management_enabled": True, "target_peak_limit": 5.0}
+    entry.entry_id = "e1084"
+    with patch(
+        "custom_components.solar_energy_management.features.load_management.LoadDeviceDiscovery"
+    ), patch(
+        "custom_components.solar_energy_management.features.load_management.Store"
+    ) as MockStore:
+        MockStore.return_value = MagicMock(
+            async_load=AsyncMock(return_value=None), async_save=AsyncMock())
+        lm = LoadManagementCoordinator(mock_hass, entry)
+    lm._observer_mode = False
+    lm.hass.services.async_call = AsyncMock()
+    lm.hass.states.get = MagicMock(return_value=SimpleNamespace(
+        state="on", attributes={}))
+    lm._devices["boiler"] = {
+        "friendly_name": "Boiler", "power_entity": "sensor.boiler_power",
+        "power_rating": 2000.0, "is_available": True, "priority": 5,
+        "is_critical": False, "is_controllable": True,
+        "device_type": "individual_device", "control_mode": "peak_only",
+        "surplus_managed": False,
+        "control": {"type": "switch", "entity": "switch.boiler"},
+    }
+    lm.decision_log = _log()
+    return lm
+
+
+class TestPeakShed:
+
+    async def test_shed_and_restore_each_record_once(self, mock_hass):
+        lm = _load_manager(mock_hass)
+        assert await lm._shed_device("boiler", "EMERGENCY") is True
+        lm._can_restore_device = MagicMock(return_value=True)
+        await lm._restore_device("boiler")
+        rows = lm.decision_log.records()
+        assert [(r["new"], r["reason_code"]) for r in rows] == [
+            ("off", "peak_shed"), ("restore", "peak_restore")]
+        assert rows[0]["name"] == "Boiler"
+        assert rows[0]["observer"] is False
+
+    async def test_a_refused_shed_records_nothing(self, mock_hass):
+        lm = _load_manager(mock_hass)
+        lm._can_shed_device = MagicMock(return_value=False)   # anti-flicker
+        assert await lm._shed_device("boiler", "EMERGENCY") is False
+        assert len(lm.decision_log) == 0
+
+    async def test_a_phase_shed_names_the_phase(self, mock_hass):
+        lm = _load_manager(mock_hass)
+        assert await lm._shed_device("boiler", "PHASE") is True
+        assert lm.decision_log.records()[0]["reason_code"] == "phase_shed"
+
+    async def test_observer_records_the_withheld_shed(self, mock_hass):
+        lm = _load_manager(mock_hass)
+        lm._observer_mode = True
+        lm._log_shed("boiler", "EMERGENCY", shed=True, observer=True)
+        rows = lm.decision_log.records()
+        assert rows[0]["observer"] is True and rows[0]["new"] == "off"
+        lm.hass.services.async_call.assert_not_awaited()

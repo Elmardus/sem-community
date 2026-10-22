@@ -2820,6 +2820,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
 
                 _LOGGER.info("Creating LoadManagementCoordinator...")
                 self._load_manager = LoadManagementCoordinator(self.hass, config_entry)
+                # (#1084) from the first cycle, before the phase guard's sheds
+                self._load_manager.decision_log = self.decision_log
                 await self._load_manager.async_initialize()
                 _LOGGER.info("LoadManagementCoordinator initialized with %s devices", len(self._load_manager._devices))
             except Exception as e:
@@ -3617,9 +3619,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             if dump_allowed and was_active:
                 continue
             try:
-                await dev.deactivate()
-                if not dev.is_active:
-                    dev.record_deactivated()
+                # (#1084) through the logged stop choke point — the same
+                # deactivate + record_deactivated it did by hand, plus the
+                # decision log's row
+                from .surplus_controller import _deactivate_owned
+                if await _deactivate_owned(
+                        dev, reason_code="vacation",
+                        text="comfort heating paused while away"):
                     _LOGGER.info(
                         "Vacation mode: deactivated %s (comfort heating "
                         "suspended while away)", dev.name,
@@ -5035,6 +5041,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # Step 7.5b: Load management (peak tracking + device shedding, no EV)
             if self._load_manager:
                 self._load_manager._observer_mode = self._observer_mode
+                # (#1084) its sheds and restores go to the decision log too
+                self._load_manager.decision_log = self.decision_log
                 try:
                     lm_info = self._load_manager.get_load_management_data()
                     current_peak = lm_info.get("consecutive_peak_15min", 0)
