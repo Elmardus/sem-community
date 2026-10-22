@@ -11441,6 +11441,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 ))
             # Load min-runtime deficits eligible for a night source.
             controller = getattr(self, "_surplus_controller", None)
+            # (#812) a device on its own tariff is planned on it (one reader:
+            # the same ``DeviceTariffs`` the live gate stamps from)
+            _dtariffs = getattr(controller, "device_tariffs", None)
+            _plan_tariff = ((lambda d: _dtariffs.plan_tariff(d)) if _dtariffs is not None
+                            else (lambda d: None))
             loads_seen = 0
             loads_eligible = 0
             from ..devices.base import DeviceControlMode as _DCM
@@ -11538,6 +11543,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                         # (#688) the plan quantizes to the anti-cycle window.
                         min_run_s=int(getattr(dev, "min_on_seconds", 0) or 0),
                         min_gap_s=int(getattr(dev, "min_off_seconds", 0) or 0),
+                        # (#812) its own tariff, when it has one — the
+                        # reader the live gate uses
+                        tariff=_plan_tariff(dev),
                     ))
                 except Exception:  # noqa: BLE001 — one bad device won't kill the plan
                     continue
@@ -11573,6 +11581,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                         needs_cheap_level=True,
                         min_run_s=int(getattr(dev, "min_on_seconds", 0) or 0),
                         min_gap_s=int(getattr(dev, "min_off_seconds", 0) or 0),
+                        tariff=_plan_tariff(dev),     # (#812)
                     ))
                 except Exception:  # noqa: BLE001 — one bad band won't kill the plan
                     continue

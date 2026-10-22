@@ -35,7 +35,7 @@ from typing import Any, Dict, Iterable, Optional
 from ..tariff.tariff_provider import (
     DynamicTariffProvider, PriceLevel, StaticTariffProvider,
 )
-from .price_signal import absence_word, comparative_level
+from .price_signal import absence_word, comparative_level, is_cheap
 
 #: The three per-device fields — device attributes and device-goal keys.
 TARIFF_KEYS = ("tariff_rate", "tariff_entity", "tariff_meter")
@@ -133,6 +133,30 @@ def grid_share(grid_to_home_w: Any, home_w: Any) -> float:
     return max(0.0, min(1.0, grid / home))
 
 
+class PlanTariff:
+    """(#812) A device's own tariff as the planner reads it, slot by slot.
+
+    The same provider and the same rule as the live gate: ``cheap_at`` is
+    ``price_signal.is_cheap`` at that hour (a fixed rate is never cheap),
+    ``price_at`` the provider's price there, the fixed rate when it cannot
+    say, else None (the planner then reads the house price).
+    """
+
+    def __init__(self, provider: Any, rate: float = 0.0) -> None:
+        self.provider = provider
+        self.rate = rate
+
+    def price_at(self, when) -> Optional[float]:
+        from .day_ledger import tariff_price_at
+        price = tariff_price_at(self.provider, when)
+        if price is not None:
+            return price
+        return self.rate or None
+
+    def cheap_at(self, when) -> bool:
+        return is_cheap(self.provider, when)
+
+
 class DeviceTariffs:
     """The per-device tariffs of one install: providers, prices, levels."""
 
@@ -215,6 +239,14 @@ class DeviceTariffs:
         if not tariff_of(device).entity:
             return LEVEL_FIXED
         return absence_word(provider)
+
+    def plan_tariff(self, device: Any) -> Optional[PlanTariff]:
+        """(#812) What the energy plan reads for this device; None = the
+        house tariff (no own tariff set)."""
+        provider = self.provider_for(device)
+        if provider is None:
+            return None
+        return PlanTariff(provider, tariff_of(device).rate)
 
     def stamp(self, devices: Iterable[Any]) -> None:
         """Once per cycle: each device's gate level and log inputs.
