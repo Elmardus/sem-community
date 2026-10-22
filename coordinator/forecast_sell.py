@@ -135,6 +135,7 @@ def evaluate_forecast_sell(
     # (#1090) A positive value below the threshold is not worth sending
     # either. Zero stays refused above: a sale at nothing earns nothing.
     if export_not_worth(export_rate, export_threshold):
+        # CAUSE: export_rate < export_threshold, tested on the line above
         return _v(state=SchedulerState.IDLE,
                   reason=f"export value {float(export_rate):.3f} below "
                          f"{export_threshold:g} — not worth exporting")

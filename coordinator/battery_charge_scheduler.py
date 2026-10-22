@@ -578,6 +578,7 @@ class BatteryChargeScheduler:
         # (#1090) A sale is an export: below the threshold it is not worth
         # sending, whatever the spread. The one rule, not a compare here.
         if export_not_worth(export_rate, export_threshold):
+            # CAUSE: export_rate < export_threshold, tested on the line above
             return _v(
                 state=SchedulerState.NOT_PROFITABLE,
                 reason=(
