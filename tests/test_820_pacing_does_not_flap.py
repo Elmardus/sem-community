@@ -89,7 +89,7 @@ def test_no_forecast_ever_stays_none():
 
 
 def _jumps(caps):
-    return sum(1 for a, b in zip(caps, caps[1:]) if abs(b - a) > 0.1 * max(a, b))
+    return sum(1 for a, b in zip(caps, caps[1:], strict=False) if abs(b - a) > 0.1 * max(a, b))
 
 
 def test_the_cap_does_not_jump_back_when_the_forecast_wobbles_around_the_need():
