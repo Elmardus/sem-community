@@ -247,10 +247,10 @@ class TestAPriceEntity:
         assert not pump.activate.called
 
     def test_the_house_classifier_is_reused_not_copied(self):
-        src = (ROOT / "coordinator" / "device_tariff.py").read_text("utf-8")
-        assert "DynamicTariffProvider(" in src
-        assert "comparative_level(" in src
-        assert "percentile" not in re.sub(r'classification_mode="percentile"', "", src)
+        from custom_components.solar_energy_management.tests.ast_contracts import calls
+        assert calls(DeviceTariffs.provider_for, "DynamicTariffProvider")
+        assert calls(DeviceTariffs.level, "comparative_level")
+        assert calls(DeviceTariffs.level, "absence_word")
 
     def test_an_unreadable_entity_is_not_cheap_and_falls_back_to_the_rate(self):
         d = _load(rate=0.19, entity="sensor.hp_price")
@@ -510,3 +510,134 @@ async def test_a_real_setup_gives_the_pump_its_tariff_and_sensor(
     # the sensor: there for the pump on its own rate, absent for the other
     assert sem_real_hass.states.get("sensor.sem_daily_tariff_cost_heat_pump") is not None
     assert sem_real_hass.states.get("sensor.sem_daily_tariff_cost_heat_pump_2") is None
+
+
+# ── 10. the house cost: one total, no double count ───────────────────────
+
+
+@pytest.mark.unit
+class TestTheHouseCostIsOneTotal:
+    @staticmethod
+    def _calc_with_import(kwh, rate):
+        calc = EnergyCalculator({}, MagicMock())
+        calc._import_rate = rate
+        day = dt_util.now().date()
+        mk, yk = calc._month_key(day), str(day.year)
+        calc._accumulate("grid_import", day, mk, yk, kwh)
+        calc._accumulate_cost("cost_import", day, mk, yk, kwh * rate)
+        return calc, day
+
+    def test_no_tariff_is_todays_number(self):
+        calc, day = self._calc_with_import(2.0, 0.30)
+        pump = _load("heat_pump")
+        pump.last_cycle_energy_kwh = 1.0
+        SEMCoordinatorSeam(calc, [pump]).book(grid_to_home=2000.0, home=2000.0)
+        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.60)
+
+    def test_the_device_kwh_move_to_its_own_rate(self):
+        # 2 kWh imported at 0.30; the pump took 1 kWh of it on its 0.20 rate
+        calc, day = self._calc_with_import(2.0, 0.30)
+        pump = _load("heat_pump", rate=0.20)
+        pump.last_cycle_energy_kwh = 1.0
+        out = SEMCoordinatorSeam(calc, [pump]).book(grid_to_home=2000.0, home=2000.0)
+        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.50)
+        assert out["daily_tariff_cost_heat_pump"] == pytest.approx(0.20)
+
+    def test_a_meter_running_ahead_cannot_go_below_zero(self):
+        calc, day = self._calc_with_import(0.5, 0.30)
+        calc.accumulate_device_tariff("heat_pump", 2.0, 0.40, day)
+        # only the 0.5 kWh the house imported move: 0.5 × 0.20
+        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.10)
+
+
+class SEMCoordinatorSeam:
+    """The coordinator's books seam over a real calculator."""
+
+    def __init__(self, calc, devices):
+        self.calc, self.devices = calc, devices
+
+    def book(self, *, grid_to_home, home):
+        from custom_components.solar_energy_management.coordinator.coordinator import (
+            SEMCoordinator,
+        )
+        sc = SimpleNamespace(_devices={d.device_id: d for d in self.devices},
+                             device_tariffs=DeviceTariffs(None))
+        fake = SimpleNamespace(_energy_calculator=self.calc, _surplus_controller=sc)
+        return SEMCoordinator._book_device_tariffs(
+            fake, SimpleNamespace(home_consumption_power=home),
+            SimpleNamespace(grid_to_home=grid_to_home))
+
+
+# ── 11. the plan reads the device's own tariff ───────────────────────────
+
+
+@pytest.mark.unit
+class TestThePlanReadsTheOwnTariff:
+    HOUSE = [0.40, 0.10, 0.40, 0.40, 0.40, 0.40]   # house cheap at slot 1
+
+    def _ledger(self):
+        from custom_components.solar_energy_management.coordinator.energy_planner import (
+            LedgerSlot, build_night_ledger,
+        )
+        t0 = dt_util.now().replace(minute=0, second=0, microsecond=0)
+        slots = [LedgerSlot(start=t0 + timedelta(hours=n),
+                            end=t0 + timedelta(hours=n + 1), price=p,
+                            level_cheap=p < 0.15, home_w=300.0)
+                 for n, p in enumerate(self.HOUSE)]
+        return t0, build_night_ledger(slots, soc_kwh=0.0, floor_kwh=0.0,
+                                      max_discharge_w=5000.0, peak_limit_w=0.0)
+
+    def _pack(self, tariff):
+        from custom_components.solar_energy_management.coordinator.energy_planner import (
+            Demand, pack_night,
+        )
+        t0, ledger = self._ledger()
+        d = Demand(id="load:heat_pump", kind="load", energy_kwh=1.0,
+                   max_power_w=1000.0, min_power_w=1000.0,
+                   deadline=t0 + timedelta(hours=6), needs_cheap_level=True,
+                   tariff=tariff)
+        plan = pack_night([d], ledger)
+        return t0, [a for a in plan.allocations if a.demand_id == d.id], plan
+
+    def test_no_tariff_packs_the_house_cheap_hour(self):
+        t0, allocs, _ = self._pack(None)
+        assert [a.start for a in allocs] == [t0 + timedelta(hours=1)]
+
+    def test_a_fixed_rate_has_no_cheaper_hour(self):
+        d = _load("heat_pump", rate=0.20)
+        tariff = DeviceTariffs(None).plan_tariff(d)
+        _, allocs, plan = self._pack(tariff)
+        assert allocs == []
+        assert "no cheap window" in plan.results[0].note
+
+    def test_a_price_entity_packs_its_own_cheap_hour(self):
+        # the device curve is cheapest at slot 4, dear at the house's slot 1
+        curve = [0.30, 0.50, 0.32, 0.31, 0.05, 0.33] + [0.30] * 18
+        d = _load("heat_pump", entity="sensor.hp_price")
+        tariffs = DeviceTariffs(_hass_with({
+            "sensor.hp_price": _price_state(curve)}))
+        t0, allocs, _ = self._pack(tariffs.plan_tariff(d))
+        assert [a.start for a in allocs] == [t0 + timedelta(hours=4)]
+        assert allocs[0].price == pytest.approx(0.05)
+
+    def test_the_coordinator_builds_load_demands_through_the_one_reader(self):
+        from custom_components.solar_energy_management.tests.ast_contracts import (
+            call_kwargs,
+        )
+        from custom_components.solar_energy_management.coordinator.coordinator import (
+            SEMCoordinator,
+        )
+        # every load and comfort demand names its tariff …
+        plan_fns = [getattr(SEMCoordinator, n) for n in dir(SEMCoordinator)
+                    if callable(getattr(SEMCoordinator, n, None))
+                    and any("_plan_tariff" in str(c) for c in
+                            getattr(getattr(SEMCoordinator, n), "__code__",
+                                    SimpleNamespace(co_varnames=()))
+                            .co_varnames)]
+        assert len(plan_fns) == 1, plan_fns
+        demands = call_kwargs(plan_fns[0], "Demand")
+        named = [kw for kw in demands if "needs_cheap_level" in kw]
+        assert named and all("tariff" in kw for kw in named)
+        # … and that reader is the live gate's DeviceTariffs
+        from custom_components.solar_energy_management.tests.ast_contracts import calls
+        assert calls(plan_fns[0], "plan_tariff")
