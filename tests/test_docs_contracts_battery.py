@@ -153,14 +153,13 @@ class TestBatteryModeTable:
         assert d.target_soc == 100.0
         assert d.charge_power_w == MAX_CHARGE_W
 
-    def test_force_charge_goes_back_to_auto_when_full(self):
-        """USER_GUIDE.md, "Per-Battery Modes": "Force Charge | … When the
-        battery is full (99 % or more), the mode goes back to Auto." (#1131)
+    def test_force_charge_goes_back_to_auto_at_100(self):
+        """USER_GUIDE.md, "Per-Battery Modes": "Force Charge | … At 100 % the
+        mode goes back to Auto." (#1131)
 
         The coordinator writes Auto when ``manual_mode_done`` says so; the
         write itself is pinned in ``test_1131_manual_mode_finishes.py``."""
-        assert not manual_mode_done("force_charge", 98.0, soc_read=True, reserve=20)
-        assert manual_mode_done("force_charge", 99.0, soc_read=True, reserve=20)
+        assert not manual_mode_done("force_charge", 99.0, soc_read=True, reserve=20)
         assert manual_mode_done("force_charge", 100.0, soc_read=True, reserve=20)
 
     def test_force_charge_buys_at_any_price(self):

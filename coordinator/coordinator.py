@@ -1119,6 +1119,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # (#1025) the one battery boost, in memory only — a restart ends it
         self._battery_boost = None
         self._battery_boost_ended: Optional[Dict[str, Any]] = None
+        # (#1131) per mode control: (mode, cycles in a row its job read done)
+        self._manual_done_streaks: Dict[Any, Any] = {}
 
         # Tracking flags
         self._initial_update_done = False
@@ -7714,8 +7716,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # readers resolve it (``reserve_soc_of``, mode → ``auto``).
         return {**cfg, **overrides} if overrides else cfg
 
-    def _finish_manual_battery_mode(
-        self, idx: int, count: int, runtime, soc_read: bool,
+    def _finish_manual_battery_modes(
+        self, battery_items, soc_read: dict, count: int,
     ) -> None:
         """(#1131) Put a battery back on Auto when its manual job is done.
 
@@ -7730,31 +7732,66 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         laid over it: a grid event's force charge is the event's, and never
         moves the select. The store written is the one ``_per_battery_config``
         reads, so the control on screen shows it.
+
+        One control, one job: with a per-battery select each battery ends its
+        own mode; the one shared select ends only when EVERY battery it drives
+        is done (review: b1 full must not stop b2's charge at 60 %). The done
+        state must hold ``BATTERY_SOC_STEP_CONFIRM_READS`` cycles in a row, so
+        one bad read (a unit's 0 % blink) does not end a sale for good.
         """
         from .decide_battery import manual_mode_done
-        if self.config_entry is None:
+        from ..consts.core import BATTERY_SOC_STEP_CONFIRM_READS
+        if self.config_entry is None or not battery_items:
             return          # too early to persist anything
-        cfg = self._per_battery_config(idx, count)
-        mode = str(cfg.get("battery_mode", "auto") or "auto").lower()
-        soc = getattr(runtime, "last_known_soc", None)
-        if not manual_mode_done(mode, soc, soc_read=soc_read,
-                                reserve=reserve_soc_of(cfg)):
+        streaks = getattr(self, "_manual_done_streaks", None)
+        if not isinstance(streaks, dict):
+            streaks = self._manual_done_streaks = {}
+        per_battery = has_per_battery_controls(self, count)
+        if per_battery and count < 2:
+            # A cold start runs one synthetic battery on the fleet level
+            # while the per-battery selects own each unit: no unit's level
+            # is known, so no unit's job is finished.
+            streaks.clear()
             return
-        from .. import persist_global_option, persist_per_battery_option
-        if has_per_battery_controls(self, count):
-            slugs = getattr(self, "battery_control_slugs", None)
-            n = max(count, len(slugs) if isinstance(slugs, tuple) else 0)
-            persist_per_battery_option(
-                self.hass, self.config_entry, self, idx, "battery_modes",
-                DEFAULT_BATTERY_MODE, n)
-        else:
-            persist_global_option(
-                self.hass, self.config_entry, self, "battery_mode",
+        done: list = []
+        for idx, (battery_id, runtime) in enumerate(battery_items):
+            cfg = self._per_battery_config(idx, count)
+            mode = str(cfg.get("battery_mode", "auto") or "auto").lower()
+            done.append((mode, manual_mode_done(
+                mode, getattr(runtime, "last_known_soc", None),
+                soc_read=bool(soc_read.get(battery_id, False)),
+                reserve=reserve_soc_of(cfg))))
+        # Each control and the batteries it drives.
+        groups = ({idx: [idx] for idx in range(len(done))} if per_battery
+                  else {None: list(range(len(done)))})
+        for key, members in groups.items():
+            mode = done[members[0]][0]
+            if not all(done[i][1] for i in members):
+                streaks.pop(key, None)
+                continue
+            prev_mode, prev_n = streaks.get(key, (None, 0))
+            n_reads = prev_n + 1 if prev_mode == mode else 1
+            if n_reads < BATTERY_SOC_STEP_CONFIRM_READS:
+                streaks[key] = (mode, n_reads)
+                continue
+            streaks.pop(key, None)
+            from .. import persist_global_option, persist_per_battery_option
+            if key is None:
+                persist_global_option(
+                    self.hass, self.config_entry, self, "battery_mode",
+                    DEFAULT_BATTERY_MODE)
+            else:
+                slugs = getattr(self, "battery_control_slugs", None)
+                n = max(count, len(slugs) if isinstance(slugs, tuple) else 0)
+                persist_per_battery_option(
+                    self.hass, self.config_entry, self, key, "battery_modes",
+                    DEFAULT_BATTERY_MODE, n)
+            _LOGGER.info(
+                "Battery %s: %s finished at %s — mode back to %s (#1131)",
+                "all" if key is None else battery_items[key][0], mode,
+                ", ".join(f"{float(battery_items[i][1].last_known_soc):.0f}%"
+                          for i in members),
                 DEFAULT_BATTERY_MODE)
-        _LOGGER.info(
-            "Battery %s: %s finished at %.0f%% — mode back to %s (#1131)",
-            getattr(runtime, "battery_id", idx), mode, float(soc),
-            DEFAULT_BATTERY_MODE)
 
     def _arbitrage_enabled(self, battery_count: int = 0) -> bool:
         """(#533 / #638 C6+C7) Can battery→grid arbitrage act on THIS install?
@@ -9271,6 +9308,14 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # synthetic "primary" from the first cycles stays in the cache once
         # b1/b2 exist, and its frozen write ledger is no battery's answer.
         self._live_battery_ids = frozenset(bid for bid, _ in battery_items)
+        # (#1131) A manual charge or sale that has done its job hands the
+        # battery back to Auto before this cycle decides — on a level that is
+        # a reading this cycle (not held, not the never-read 0.0).
+        self._finish_manual_battery_modes(
+            battery_items,
+            {bid: bool(rt.available and soc_seen.get(bid, False))
+             for bid, rt in battery_items},
+            _bat_count)
 
         for batt_idx, (battery_id, runtime) in enumerate(battery_items):
             # Per-battery adapter cache. Each battery gets its OWN control
@@ -9346,11 +9391,6 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                             battery_id, type(adapter).__name__,
                         )
 
-            # (#1131) A manual charge or sale that has done its job hands
-            # the battery back to Auto before this cycle decides.
-            self._finish_manual_battery_mode(
-                batt_idx, _bat_count, runtime,
-                bool(runtime.available and soc_seen.get(battery_id, False)))
             _forced = ((False, False) if self._observer_mode
                        else forced_ops(adapter))
             view = BatteryView(

@@ -617,7 +617,7 @@ When you have multiple batteries (e.g. Huawei + Growatt, or split Huawei units),
 |------|---|---|
 | **Auto** | The inverter runs the battery as usual. SEM steps in only to: charge it from the grid in the planned cheap hours when tonight needs it (or at a negative price); sell in the plan's sell hours when selling is on; hold it to the house while a car is plugged in and the spare sun is under the Solar Gate or the battery is under the Buffer SoC; hold it to the house while grid-funded loads run. | Default |
 | **Self-Consumption** | As Auto, but it never sells to the grid, unless you turn on *Battery may sell to the grid* | Keep the battery for the house |
-| **Force Charge** | Charges to 100 % now, at the maximum charge power, from the sun and the grid, **at any price**. Only the grid peak limit slows or stops it. When the battery is full (99 % or more), the mode goes back to Auto. | Deliberate top-up before heavy use |
+| **Force Charge** | Charges to 100 % now, at the maximum charge power, from the sun and the grid, **at any price**. Only the grid peak limit slows or stops it. At 100 % the mode goes back to Auto. | Deliberate top-up before heavy use |
 | **Force Discharge** | Sells at the maximum discharge power down to this battery's reserve, then the mode goes back to Auto. It does not sell while the battery level cannot be read. | Emergency backup or a manual sale |
 | **Off** | One clean hand-over to the inverter, then SEM sends nothing to this battery | Manual control or testing |
 

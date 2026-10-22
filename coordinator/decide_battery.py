@@ -34,7 +34,6 @@ import logging
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from .battery_night import FULL_SOC
 from .charger_types import BatteryDecision, BatteryIntent
 from .peak_guard import cover_for_peak_w
 from ..consts.battery_modes import arbitrage_allowed_for_mode, reserve_soc_of
@@ -230,15 +229,19 @@ def reserve_stops_peak_cover(view: "BatteryView"):
     return None
 
 
+#: (#1131) What a manual force charge charges to — and where it is done.
+MANUAL_CHARGE_TARGET_SOC = 100.0
+
+
 def manual_mode_done(mode, soc, *, soc_read: bool, reserve: float) -> bool:
     """(#1131) Has a manual charge or sale finished its job?
 
     Force charge and force discharge are one job each, not a place to stay.
     Kept as a mode, a full pack bought from the grid again the moment the
     house took 1 % out of it, and a pack sold down to its reserve sold the
-    next day's sun the same way. Done is: full (``FULL_SOC``, the plateau a
-    BMS can sit on for hours) for a charge, at or under the reserve for a
-    sale — the exact opposite of the test ``decide_battery`` sells on.
+    next day's sun the same way. Done is: at the charge's own target for a
+    charge, at or under the reserve for a sale — the exact opposite of the
+    test ``decide_battery`` sells on.
 
     A level SEM cannot read finishes nothing: a held or never-read SOC is
     not the battery's level (#932, #875)."""
@@ -246,7 +249,7 @@ def manual_mode_done(mode, soc, *, soc_read: bool, reserve: float) -> bool:
         return False
     m = str(mode or "auto").lower()
     if m == "force_charge":
-        return float(soc) >= FULL_SOC
+        return float(soc) >= MANUAL_CHARGE_TARGET_SOC
     if m == "force_discharge":
         return float(soc) <= float(reserve)
     return False
@@ -450,7 +453,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
         return BatteryDecision(
             battery_id=rt.battery_id,
             intent=BatteryIntent.FORCE_CHARGE,
-            target_soc=100.0,
+            target_soc=MANUAL_CHARGE_TARGET_SOC,
             # #523: fall through the two charge-power keys before the 5000 W
             # default. ``battery_max_charge_power_w`` is often present-as-None
             # (so a ``.get(key, 5000)`` returns None, not the default) — with the

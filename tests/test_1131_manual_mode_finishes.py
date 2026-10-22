@@ -9,12 +9,14 @@ Three links, each driven for real:
 
 * ``manual_mode_done`` — the pure rule (full for a charge, at the reserve for
   a sale, never on a level SEM cannot read);
-* ``SEMCoordinator._finish_manual_battery_mode`` — writes Auto into the store
-  the battery's control on screen writes (real config entry, real select
-  platform), and the select shows it;
-* ``_run_battery_pipeline`` — calls it for every battery with the level and
-  whether it is a reading, BEFORE the cycle decides, and before the VPP
-  override is laid over the user's mode.
+* ``SEMCoordinator._finish_manual_battery_modes`` — writes Auto into the
+  store the battery's control on screen writes (real config entry, real
+  select platform), and the select shows it. One shared control ends only
+  when every battery it drives is done; the done state must hold three reads
+  in a row, so one bad read ends nothing;
+* ``_run_battery_pipeline`` — hands it every battery with its level and
+  whether that level is a reading, BEFORE the VPP override is laid over the
+  user's mode and before the cycle decides.
 """
 from __future__ import annotations
 
@@ -24,9 +26,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.solar_energy_management.coordinator.battery_night import (
-    FULL_SOC,
-)
 from custom_components.solar_energy_management.coordinator.charger_types import (
     BatteryPower,
     BatteryRuntime,
@@ -35,7 +34,11 @@ from custom_components.solar_energy_management.coordinator.coordinator import (
     SEMCoordinator,
 )
 from custom_components.solar_energy_management.coordinator.decide_battery import (
+    MANUAL_CHARGE_TARGET_SOC,
     manual_mode_done,
+)
+from custom_components.solar_energy_management.consts.core import (
+    BATTERY_SOC_STEP_CONFIRM_READS as READS,
 )
 from custom_components.solar_energy_management.coordinator.install_modules import (
     Module, Presence,
@@ -48,8 +51,8 @@ _HAS_PHACC = importlib.util.find_spec("pytest_homeassistant_custom_component") i
 
 class TestTheRule:
     @pytest.mark.parametrize("soc,done", [
-        (40.0, False), (98.9, False), (FULL_SOC, True), (100.0, True)])
-    def test_a_charge_is_done_when_the_battery_is_full(self, soc, done):
+        (40.0, False), (99.0, False), (99.9, False), (100.0, True)])
+    def test_a_charge_is_done_when_the_battery_reaches_100(self, soc, done):
         assert manual_mode_done("force_charge", soc, soc_read=True,
                                 reserve=20.0) is done
 
@@ -72,6 +75,19 @@ class TestTheRule:
     def test_the_standing_modes_never_finish(self, mode):
         for soc in (0.0, 20.0, 100.0):
             assert manual_mode_done(mode, soc, soc_read=True, reserve=20.0) is False
+
+    def test_the_charge_ends_where_decide_battery_aims_it(self):
+        from custom_components.solar_energy_management.coordinator.charger_types import (
+            BatteryView, FleetContext,
+        )
+        from custom_components.solar_energy_management.coordinator.decide_battery import (
+            decide_battery,
+        )
+        view = BatteryView(
+            runtime=BatteryRuntime(battery_id="b1", last_known_soc=40.0),
+            config={"battery_mode": "force_charge"}, fleet=FleetContext(),
+            charging_state="idle", ev_charging=False, home_consumption_w=500.0)
+        assert decide_battery(view).target_soc == MANUAL_CHARGE_TARGET_SOC == 100.0
 
     def test_the_sale_ends_exactly_where_decide_battery_stops_selling(self):
         # decide_battery sells while ``soc > reserve``; done is the opposite,
@@ -108,7 +124,7 @@ def _entry(hass, options):
 
 def _coordinator(hass, entry, slugs):
     """A coordinator double with the captured battery controls and the REAL
-    ``_per_battery_config`` / ``_finish_manual_battery_mode``."""
+    ``_per_battery_config`` and VPP override."""
     from custom_components.solar_energy_management.const import DOMAIN
     coordinator = MagicMock()
     coordinator.last_update_success = True
@@ -117,9 +133,13 @@ def _coordinator(hass, entry, slugs):
     coordinator.setup_presence = {m: Presence.PRESENT for m in Module}
     coordinator.config = {**entry.data, **entry.options}
     coordinator.battery_control_slugs = slugs
+    coordinator._manual_done_streaks = {}
+    coordinator._vpp_battery_override = None
     coordinator._sensor_reader._energy_dashboard_config.battery_power_list = []
     coordinator._per_battery_config = (
         lambda i, c=1: SEMCoordinator._per_battery_config(coordinator, i, c))
+    coordinator._vpp_apply_battery_override = (
+        lambda pbc: SEMCoordinator._vpp_apply_battery_override(coordinator, pbc))
     entry.runtime_data = coordinator
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     return coordinator
@@ -139,10 +159,15 @@ async def _selects(hass, entry):
     return out
 
 
-def _finish(coordinator, idx, count, soc, soc_read=True, bid="primary"):
-    SEMCoordinator._finish_manual_battery_mode(
-        coordinator, idx, count,
-        BatteryRuntime(battery_id=bid, last_known_soc=soc), soc_read)
+def _cycles(coordinator, levels, count=None, reads=READS, unread=()):
+    """``reads`` cycles of ``_finish_manual_battery_modes`` on ``levels``
+    ({battery id: SOC}); ids in ``unread`` are not a reading."""
+    items = [(bid, BatteryRuntime(battery_id=bid, last_known_soc=soc))
+             for bid, soc in levels.items()]
+    read = {bid: bid not in unread for bid in levels}
+    for _ in range(reads):
+        SEMCoordinator._finish_manual_battery_modes(
+            coordinator, items, read, count or len(items))
 
 
 def _runs(coordinator, idx, count):
@@ -158,18 +183,21 @@ def _shows(select_entity):
 @pytest.mark.skipif(not _HAS_PHACC, reason="pytest-homeassistant-custom-component not installed")
 class TestTheModeGoesBackToAuto:
     @pytest.mark.asyncio
-    async def test_one_battery_full_goes_back_to_auto(self, hass):
+    async def test_one_battery_at_100_goes_back_to_auto(self, hass):
         entry = _entry(hass, {"battery_mode": "auto"})
         coordinator = _coordinator(hass, entry, ())
         selects = await _selects(hass, entry)
         await selects["battery_mode"].async_select_option("force_charge")
         assert _runs(coordinator, 0, 1) == "force_charge"
 
-        _finish(coordinator, 0, 1, soc=97.0)
+        _cycles(coordinator, {"primary": 99.0}, reads=10)
         assert entry.options["battery_mode"] == "force_charge", (
             "not full yet: the charge goes on")
 
-        _finish(coordinator, 0, 1, soc=100.0)
+        _cycles(coordinator, {"primary": 100.0}, reads=READS - 1)
+        assert entry.options["battery_mode"] == "force_charge", (
+            "full must hold a few reads before the job counts as done")
+        _cycles(coordinator, {"primary": 100.0}, reads=1)
         assert entry.options["battery_mode"] == "auto"
         assert _runs(coordinator, 0, 1) == "auto"
         assert _shows(selects["battery_mode"]) == "auto", (
@@ -179,7 +207,7 @@ class TestTheModeGoesBackToAuto:
     async def test_a_level_sem_cannot_read_keeps_the_mode(self, hass):
         entry = _entry(hass, {"battery_mode": "force_charge"})
         coordinator = _coordinator(hass, entry, ())
-        _finish(coordinator, 0, 1, soc=100.0, soc_read=False)
+        _cycles(coordinator, {"primary": 100.0}, reads=10, unread={"primary"})
         assert entry.options["battery_mode"] == "force_charge"
 
     @pytest.mark.asyncio
@@ -188,14 +216,25 @@ class TestTheModeGoesBackToAuto:
                               "battery_reserve_soc": 30})
         coordinator = _coordinator(hass, entry, ())
         selects = await _selects(hass, entry)
-        _finish(coordinator, 0, 1, soc=31.0)
+        _cycles(coordinator, {"primary": 31.0}, reads=10)
         assert entry.options["battery_mode"] == "force_discharge"
-        _finish(coordinator, 0, 1, soc=30.0)
+        _cycles(coordinator, {"primary": 30.0})
         assert entry.options["battery_mode"] == "auto"
         assert _shows(selects["battery_mode"]) == "auto"
 
     @pytest.mark.asyncio
-    async def test_two_batteries_only_the_full_one_moves(self, hass):
+    async def test_one_bad_read_ends_nothing(self, hass):
+        # A unit's level blinks to 0 % for one cycle (#902's Huawei dropout
+        # shape): the sale goes on, and the count starts again.
+        entry = _entry(hass, {"battery_mode": "force_discharge",
+                              "battery_reserve_soc": 30})
+        coordinator = _coordinator(hass, entry, ())
+        for soc in (60.0, 0.0, 60.0, 0.0, 0.0, 60.0):
+            _cycles(coordinator, {"primary": soc}, reads=1)
+        assert entry.options["battery_mode"] == "force_discharge"
+
+    @pytest.mark.asyncio
+    async def test_two_batteries_only_the_finished_one_moves(self, hass):
         entry = _entry(hass, {"battery_modes": ["force_discharge", "force_charge"],
                               "battery_reserve_socs": [20, 20],
                               # a stale scalar the per-battery controls never read
@@ -204,8 +243,8 @@ class TestTheModeGoesBackToAuto:
         selects = await _selects(hass, entry)
         assert set(selects) == {"battery_b1_mode", "battery_b2_mode"}
 
-        _finish(coordinator, 0, 2, soc=100.0, bid="b1")   # b1 sells: not done
-        _finish(coordinator, 1, 2, soc=100.0, bid="b2")   # b2 charges: done
+        # b1 sells and is full: not done. b2 charges and is full: done.
+        _cycles(coordinator, {"b1": 100.0, "b2": 100.0})
         assert entry.options["battery_modes"] == ["force_discharge", "auto"]
         assert entry.options["battery_mode"] == "force_charge", (
             "the per-battery controls own the mode; the scalar is not theirs")
@@ -215,16 +254,48 @@ class TestTheModeGoesBackToAuto:
         assert _shows(selects["battery_b2_mode"]) == "auto"
 
     @pytest.mark.asyncio
+    async def test_one_control_for_two_batteries_ends_when_both_are_done(self, hass):
+        # (review) An Energy Dashboard that lists each battery as two sensors
+        # gets ONE select for both. b1 full must not stop b2's charge.
+        entry = _entry(hass, {"battery_mode": "force_charge"})
+        coordinator = _coordinator(hass, entry, ())
+        selects = await _selects(hass, entry)
+        assert set(selects) == {"battery_mode"}
+
+        _cycles(coordinator, {"b1": 100.0, "b2": 60.0}, reads=10)
+        assert entry.options["battery_mode"] == "force_charge"
+        assert _runs(coordinator, 1, 2) == "force_charge"
+        _cycles(coordinator, {"b1": 100.0, "b2": 100.0}, unread={"b2"}, reads=10)
+        assert entry.options["battery_mode"] == "force_charge", (
+            "b2's level is not a reading: its job is not known to be done")
+
+        _cycles(coordinator, {"b1": 100.0, "b2": 100.0})
+        assert entry.options["battery_mode"] == "auto"
+        assert _shows(selects["battery_mode"]) == "auto"
+
+    @pytest.mark.asyncio
+    async def test_a_cold_start_on_one_synthetic_battery_ends_no_unit(self, hass):
+        # Two per-battery selects, but this cycle runs one synthetic battery
+        # on the fleet level: no unit's own level is known.
+        entry = _entry(hass, {"battery_modes": ["force_charge", "force_charge"]})
+        coordinator = _coordinator(hass, entry, ("b1", "b2"))
+        _cycles(coordinator, {"primary": 100.0}, count=1, reads=10)
+        assert entry.options["battery_modes"] == ["force_charge", "force_charge"]
+
+    @pytest.mark.asyncio
     async def test_a_grid_event_force_charge_never_moves_the_select(self, hass):
         # The VPP override lays force_charge over an Auto battery for the
-        # event. Full or not, the user's mode is Auto and is not written.
+        # event (the real override is bound on the double). Full or not, the
+        # user's mode is Auto and is not written.
         entry = _entry(hass, {"battery_mode": "auto"})
         coordinator = _coordinator(hass, entry, ())
         coordinator._vpp_battery_override = {"battery_mode": "force_charge"}
+        assert coordinator._vpp_apply_battery_override(
+            coordinator._per_battery_config(0, 1))["battery_mode"] == "force_charge"
         writes = []
         hass.config_entries.async_update_entry = (
             lambda *a, **kw: writes.append(kw))
-        _finish(coordinator, 0, 1, soc=100.0)
+        _cycles(coordinator, {"primary": 100.0}, reads=10)
         assert writes == []
 
     @pytest.mark.asyncio
@@ -254,35 +325,24 @@ def _pipeline_stub():
     return stub
 
 
-async def _run_pipeline(monkeypatch, power, stop_at="primary"):
+async def _run_pipeline(monkeypatch, power):
     from custom_components.solar_energy_management.coordinator import (
-        actuate_battery as ab,
         decide_battery as db,
-    )
-    from custom_components.solar_energy_management.coordinator.charger_types import (
-        BatteryDecision, BatteryIntent,
     )
     order: list = []
     stub = _pipeline_stub()
-    stub._finish_manual_battery_mode = (
-        lambda idx, count, runtime, soc_read:
-        order.append(("finish", idx, count, runtime.battery_id,
-                      runtime.last_known_soc, soc_read)))
+    stub._finish_manual_battery_modes = (
+        lambda items, soc_read, count: order.append((
+            "finish", [(bid, rt.last_known_soc) for bid, rt in items],
+            dict(soc_read), count)))
     stub._vpp_apply_battery_override = (
         lambda pbc: order.append(("vpp",)) or {})
 
     def _decide(view):
         order.append(("decide", view.runtime.battery_id))
-        if view.runtime.battery_id == stop_at:
-            raise _Decided
-        return BatteryDecision(battery_id=view.runtime.battery_id,
-                               intent=BatteryIntent.OFF)
-
-    async def _actuate(*a, **kw):
-        return None
+        raise _Decided
 
     monkeypatch.setattr(db, "decide_battery", _decide)
-    monkeypatch.setattr(ab, "actuate_battery", _actuate)
     with pytest.raises(_Decided):
         await SEMCoordinator._run_battery_pipeline(
             stub, power, SimpleNamespace(), "idle")
@@ -300,7 +360,7 @@ def _single(**kw):
 class TestThePipelineAsksFirst:
     async def test_a_full_battery_is_asked_before_the_cycle_decides(self, monkeypatch):
         order = await _run_pipeline(monkeypatch, _single())
-        assert order[0] == ("finish", 0, 1, "primary", 100.0, True)
+        assert order[0] == ("finish", [("primary", 100.0)], {"primary": True}, 1)
         assert [o[0] for o in order] == ["finish", "vpp", "decide"], (
             "the mode must be finished before the VPP override is laid over "
             "it and before the cycle decides")
@@ -308,20 +368,19 @@ class TestThePipelineAsksFirst:
     async def test_a_held_level_is_not_a_reading(self, monkeypatch):
         order = await _run_pipeline(
             monkeypatch, _single(battery_soc_unavailable=True))
-        assert order[0][-1] is False
+        assert order[0][2] == {"primary": False}
 
     async def test_a_level_never_read_is_not_a_reading(self, monkeypatch):
         order = await _run_pipeline(
             monkeypatch, _single(battery_soc=0.0, battery_soc_known=False))
-        assert order[0][-1] is False
+        assert order[0][2] == {"primary": False}
 
     async def test_each_unit_brings_its_own_level(self, monkeypatch):
         power = _single(batteries={
             "b1": BatteryPower(battery_id="b1", power_w=0.0, soc_pct=None),
             "b2": BatteryPower(battery_id="b2", power_w=0.0, soc_pct=100.0),
         })
-        order = await _run_pipeline(monkeypatch, power, stop_at="b2")
-        finishes = [o for o in order if o[0] == "finish"]
+        order = await _run_pipeline(monkeypatch, power)
         # b1's sensor has not answered: its 0.0 is no reading. b2 is full.
-        assert finishes == [("finish", 0, 2, "b1", 0.0, False),
-                            ("finish", 1, 2, "b2", 100.0, True)]
+        assert order[0] == ("finish", [("b1", 0.0), ("b2", 100.0)],
+                            {"b1": False, "b2": True}, 2)
