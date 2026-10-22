@@ -8679,6 +8679,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             "battery_charge_power_limit_entity") or "")
         if soc is None or capacity_kwh <= 0:
             decision = None
+            # (#820 review) no decision, no memory of one: a dark SOC across
+            # midnight must not carry yesterday's full power or weak day
+            self._pacing_weak_latched = False
+            self._pacing_full_latched = False
             # Constant prose (the age lives in ``soc_stale_s`` below): a
             # counter in the reason would churn the entity's attributes
             # every cycle of an outage — the #762 rule, attribute-side.
