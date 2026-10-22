@@ -258,7 +258,15 @@
           "tariff_classification_mode": "Prisklassificeringsläge",
           "solar_forecast_source": "Källa för solprognos",
           "grid_co2_entity": "Sensor för nätets CO₂-intensitet (valfri)",
-          "outdoor_temperature_entity": "Utomhustemperatur (valfritt)"
+          "outdoor_temperature_entity": "Utomhustemperatur (valfritt)",
+          "tariff_value_preset": "Mall för skatter och avgifter",
+          "import_price_basis": "Vad ditt köppris innehåller",
+          "import_markup": "Leverantörens påslag",
+          "import_energy_tax": "Energiskatt",
+          "import_vat_percent": "Moms",
+          "feed_in_fee_model": "Avgift för inmatning",
+          "feed_in_fee": "Avgiftens storlek",
+          "feed_in_fee_tiers": "Steg för avgiften"
         },
         "data_description": {
           "electricity_import_rate": "Dag-/enhetstariff för import (valuta/kWh inkl. moms). Används som reserv när dynamisk prissättning inte är tillgänglig.",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "Percentil grupperar priser relativt dagens intervall (rekommenderas). Statisk använder fasta trösklar för billigt/dyrt.",
           "solar_forecast_source": "Vilken prognosintegration SEM läser. Automatisk identifiering föredrar Solcast, sedan Forecast.Solar, sedan Open-Meteo — välj en själv om du kör flera parallellt.",
           "grid_co2_entity": "SEM hittar själv en sensor i g eller kg CO₂ per kWh. Välj en bara om den hittade fel.",
-          "outdoor_temperature_entity": "SEM hittar en utomhustermometer via namnet eller använder din väderentitet. Välj bara om den valde fel."
+          "outdoor_temperature_entity": "SEM hittar en utomhustermometer via namnet eller använder din väderentitet. Välj bara om den valde fel.",
+          "tariff_value_preset": "Fyller i fälten nedan. 'Ingen' lägger inte till något: priserna är oförändrade. 'Nederländerna från 2027' sätter energiskatt och 21 % moms; skriv själv in leverantörens påslag och avgift.",
+          "import_price_basis": "Allt inräknat: skatt och moms finns redan i priset (Tibber, pris från fakturan) — inget läggs till. Spotpris inkl. moms: skatt och påslag läggs till med moms. Spotpris: skatt, påslag och moms läggs till.",
+          "import_markup": "Vad leverantören lägger på per köpt kWh, exkl. moms.",
+          "import_energy_tax": "Energiskatt per köpt kWh, exkl. moms.",
+          "import_vat_percent": "Moms på köpt kWh, i procent.",
+          "feed_in_fee_model": "Vad leverantören tar för el du skickar ut på nätet: per kWh, i steg efter kWh i år, eller ett fast belopp per månad.",
+          "feed_in_fee": "Per kWh: avgiften per kWh. Fast per månad: beloppet per månad.",
+          "feed_in_fee_tiers": "Bara för steg. kWh utskickat i år : avgift per kWh, till exempel 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -707,7 +723,8 @@
       "heat_pump_service_invalid": "SG-Ready-tjänsten måste vara domain.service (t.ex. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "SG-Ready-tjänstdatan måste vara ett JSON-objekt.",
       "heat_pump_contact_values_missing": "Den här SG-Ready-kontakten är en text-/number-/select-entitet, så SEM behöver både PÅ- och AV-värdet för att skriva. Fyll i båda, eller välj en switch-entitet.",
-      "calendar_needs_schedule": "Kalenderläget behöver ett schema för högtid. Välj en Schema-hjälpare eller ett annat tariffläge."
+      "calendar_needs_schedule": "Kalenderläget behöver ett schema för högtid. Välj en Schema-hjälpare eller ett annat tariffläge.",
+      "value_needs_spot_basis": "Ett påslag, energiskatt eller moms gäller bara vid ett spotpris. Välj spotgrunden eller sätt dem till 0."
     }
   },
   "entity": {
@@ -1449,6 +1466,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} Bilens SOC"
+      },
+      "daily_self_consumption_value": {
+        "name": "Värde egen förbrukning idag"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Värde egen förbrukning i år"
+      },
+      "daily_export_value": {
+        "name": "Värde export idag"
+      },
+      "yearly_export_value": {
+        "name": "Värde export i år"
+      },
+      "daily_feed_in_fees": {
+        "name": "Inmatningsavgifter idag"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Inmatningsavgifter i år"
       }
     },
     "binary_sensor": {
@@ -1761,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "”{day}: {time}” är ingen avresa: dagarna är mon … sun, tiderna HH:MM från 00:00 till 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Ett påslag, energiskatt eller moms gäller bara vid ett spotpris. Välj spotgrunden eller sätt dem till 0."
     }
   },
   "issues": {
@@ -1979,6 +2017,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "Ingen (inga skatter eller avgifter)",
+        "nl_2027": "Nederländerna från 2027",
+        "custom": "Egen"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "Allt inräknat (med skatter)",
+        "spot_incl_vat": "Spotpris inkl. moms",
+        "spot": "Spotpris (utan skatter)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "Ingen",
+        "per_kwh": "Per kWh",
+        "tiered": "Steg efter kWh per år",
+        "fixed_monthly": "Fast per månad"
       }
     }
   }

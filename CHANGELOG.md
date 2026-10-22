@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **Force charge goes back to Auto when the battery is full** (#1131). Force discharge does the same at the reserve.
 - 🐛 **Plans value exported solar at your live feed-in price** (#1162). Each hour uses its own forecast price, not the fixed rate.
 - 🐛 **Charge pacing keeps one limit when the forecast sits right at what the battery needs** (#820). It no longer jumps to full power and back.
+- ✨ **Energy tax, VAT and a feed-in fee can be set; SEM then decides on what a kWh is worth** (#1077). Preset for the Netherlands 2027.
+- ✨ **The logbook says why SEM changed a device** (#1084). Each start, stop or step names its reason; diagnostics keeps the last 200.
 
 # [2.2.0-beta.24] — 21.10.2026
 

@@ -258,7 +258,15 @@
           "tariff_classification_mode": "Price classification mode",
           "solar_forecast_source": "Solar forecast source",
           "grid_co2_entity": "Grid CO₂ intensity sensor (optional)",
-          "outdoor_temperature_entity": "Outdoor temperature (optional)"
+          "outdoor_temperature_entity": "Outdoor temperature (optional)",
+          "tariff_value_preset": "Taxes and fees preset",
+          "import_price_basis": "What your import price includes",
+          "import_markup": "Supplier markup",
+          "import_energy_tax": "Energy tax",
+          "import_vat_percent": "VAT",
+          "feed_in_fee_model": "Feed-in fee",
+          "feed_in_fee": "Feed-in fee amount",
+          "feed_in_fee_tiers": "Feed-in fee tiers"
         },
         "data_description": {
           "tariff_mode": "Choose 'Static' for fixed rates, 'Dynamic' for real-time pricing, or 'Calendar' for time-of-use schedules.",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "Percentile buckets prices relative to today's range (recommended). Static uses fixed cheap/expensive thresholds.",
           "solar_forecast_source": "Which forecast integration SEM reads. Auto-detect prefers Solcast, then Forecast.Solar, then Open-Meteo — pick one explicitly if you run several side by side.",
           "grid_co2_entity": "SEM finds a sensor in g or kg CO₂ per kWh by itself. Pick one only if it found the wrong one.",
-          "outdoor_temperature_entity": "SEM finds an outdoor thermometer by its name, or uses your weather entity. Pick one only if it chose the wrong one."
+          "outdoor_temperature_entity": "SEM finds an outdoor thermometer by its name, or uses your weather entity. Pick one only if it chose the wrong one.",
+          "tariff_value_preset": "Fills the fields below. 'None' adds nothing: prices stay as they are. 'Netherlands from 2027' sets energy tax and 21 % VAT; enter your supplier's markup and fee yourself.",
+          "import_price_basis": "All-in: the price already has tax and VAT (Tibber, a rate from your bill) — nothing is added. Spot incl. VAT: tax and markup are added with VAT. Spot: tax, markup and VAT are all added.",
+          "import_markup": "What your supplier adds per bought kWh, excl. VAT.",
+          "import_energy_tax": "Energy tax per bought kWh, excl. VAT.",
+          "import_vat_percent": "VAT on the bought kWh, in percent.",
+          "feed_in_fee_model": "What your supplier charges for the energy you send to the grid: per kWh, in tiers by kWh sent this year, or a fixed amount per month.",
+          "feed_in_fee": "Per kWh: the fee per kWh. Fixed monthly: the amount per month.",
+          "feed_in_fee_tiers": "For tiers only. kWh sent this year : fee per kWh, for example 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -707,7 +723,8 @@
       "heat_pump_service_invalid": "The SG-Ready service must be domain.service (e.g. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "The SG-Ready service data must be a JSON object.",
       "heat_pump_contact_values_missing": "This SG-Ready contact is a text/number/select entity, so SEM needs both the ON and the OFF value to write. Fill both, or pick a switch entity.",
-      "calendar_needs_schedule": "Calendar mode needs a peak-time schedule. Pick a Schedule helper or choose another tariff mode."
+      "calendar_needs_schedule": "Calendar mode needs a peak-time schedule. Pick a Schedule helper or choose another tariff mode.",
+      "value_needs_spot_basis": "A markup, energy tax or VAT only applies when your price is a spot price. Pick the spot basis, or set them to 0."
     }
   },
   "entity": {
@@ -1449,6 +1466,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} Vehicle SOC"
+      },
+      "daily_self_consumption_value": {
+        "name": "Self-consumption value today"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Self-consumption value this year"
+      },
+      "daily_export_value": {
+        "name": "Export value today"
+      },
+      "yearly_export_value": {
+        "name": "Export value this year"
+      },
+      "daily_feed_in_fees": {
+        "name": "Feed-in fees today"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Feed-in fees this year"
       }
     },
     "binary_sensor": {
@@ -1761,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "“{day}: {time}” is not a departure: days are mon … sun, times HH:MM from 00:00 to 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "A markup, energy tax or VAT only applies when your price is a spot price. Pick the spot basis, or set them to 0."
     }
   },
   "issues": {
@@ -1979,6 +2017,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "None (no taxes or fees added)",
+        "nl_2027": "Netherlands from 2027",
+        "custom": "Custom"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "All-in (taxes included)",
+        "spot_incl_vat": "Spot price incl. VAT",
+        "spot": "Spot price (no taxes)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "None",
+        "per_kwh": "Per kWh",
+        "tiered": "Tiers by kWh per year",
+        "fixed_monthly": "Fixed per month"
       }
     }
   }

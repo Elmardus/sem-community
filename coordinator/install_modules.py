@@ -47,6 +47,9 @@ class Module(Enum):
     SOLAR_FORECAST = "solar_forecast"
     PV_SIZE = "pv_size"
     INVESTMENT = "investment"
+    # (#1077) Tax, VAT, markup or a feed-in fee set: a bought and a sold
+    # kWh are different money, and the value rows have something to say.
+    VALUE_TARIFF = "value_tariff"
 
 
 class Presence(Enum):
@@ -151,6 +154,9 @@ CAPABILITY_KEYS: tuple[str, ...] = (
     "dynamic_forecast_entity", "solar_forecast_source",
     "system_size_kwp",
     "system_investment_cost",
+    # (#1077) the value fields
+    "import_markup", "import_energy_tax", "import_vat_percent",
+    "feed_in_fee_model",
 )
 
 # Every key the oracle reads. Setting one through set_option must reload the
@@ -283,7 +289,17 @@ def module_verdict(
             _runtime_answer(runtime, "solar_forecast")),
         Module.PV_SIZE: _config_only(_positive(config.get("system_size_kwp"))),
         Module.INVESTMENT: _config_only(_positive(config.get("system_investment_cost"))),
+        Module.VALUE_TARIFF: _config_only(_value_tariff_set(config)),
     }
+
+
+def _value_tariff_set(config: Mapping[str, Any]) -> bool:
+    """(#1077) Any value field set. Read the way the provider reads them,
+    so the rows exist exactly when the books run."""
+    model = str(config.get("feed_in_fee_model") or "none").strip().lower()
+    return (any(_positive(config.get(k)) for k in (
+        "import_markup", "import_energy_tax", "import_vat_percent"))
+        or model in ("per_kwh", "tiered", "fixed_monthly"))
 
 
 _B = frozenset({Module.BATTERY})
@@ -298,6 +314,7 @@ _F = frozenset({Module.SOLAR_FORECAST})
 _BF = frozenset({Module.BATTERY, Module.SOLAR_FORECAST})
 _P = frozenset({Module.PV_SIZE})
 _I = frozenset({Module.INVESTMENT})
+_V = frozenset({Module.VALUE_TARIFF})
 
 
 def _rows(platform: str, modules: frozenset, keys: tuple[str, ...]) -> dict:
@@ -464,6 +481,13 @@ ENTITY_MODULES: Mapping[tuple[str, str], frozenset[Module]] = _table(
     # (#996) ROI divides by the investment; zero investment, no ROI.
     _rows("sensor", _I, (
         "roi_annual_savings", "roi_payback_years", "roi_percentage",
+    )),
+    # (#1077) The value books exist once a value field is set; on every
+    # other install they would be 0 or a copy of the export revenue.
+    _rows("sensor", _V, (
+        "daily_self_consumption_value", "yearly_self_consumption_value",
+        "daily_export_value", "yearly_export_value",
+        "daily_feed_in_fees", "yearly_feed_in_fees",
     )),
 )
 

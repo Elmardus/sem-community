@@ -258,7 +258,15 @@
           "tariff_classification_mode": "Prijsclassificatiemodus",
           "solar_forecast_source": "Bron van de zonneprognose",
           "grid_co2_entity": "Sensor CO₂-intensiteit van het net (optioneel)",
-          "outdoor_temperature_entity": "Buitentemperatuur (optioneel)"
+          "outdoor_temperature_entity": "Buitentemperatuur (optioneel)",
+          "tariff_value_preset": "Voorinstelling belastingen en kosten",
+          "import_price_basis": "Wat uw inkoopprijs bevat",
+          "import_markup": "Opslag leverancier",
+          "import_energy_tax": "Energiebelasting",
+          "import_vat_percent": "Btw",
+          "feed_in_fee_model": "Terugleverkosten",
+          "feed_in_fee": "Bedrag terugleverkosten",
+          "feed_in_fee_tiers": "Staffel terugleverkosten"
         },
         "data_description": {
           "electricity_import_rate": "Dag-/standaard importtarief (valuta/kWh incl. btw). Wordt gebruikt als terugval wanneer dynamische prijzen niet beschikbaar zijn.",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "Percentiel deelt prijzen in ten opzichte van het bereik van vandaag (aanbevolen). Statisch gebruikt vaste drempels voor goedkoop/duur.",
           "solar_forecast_source": "Welke prognose-integratie SEM leest. Automatisch detecteren geeft voorrang aan Solcast, dan Forecast.Solar, dan Open-Meteo — kies er zelf één als je er meerdere naast elkaar draait.",
           "grid_co2_entity": "SEM vindt zelf een sensor in g of kg CO₂ per kWh. Kies er alleen een als SEM de verkeerde vond.",
-          "outdoor_temperature_entity": "SEM vindt een buitenthermometer aan de naam, of gebruikt je weer-entiteit. Kies er alleen een als het de verkeerde koos."
+          "outdoor_temperature_entity": "SEM vindt een buitenthermometer aan de naam, of gebruikt je weer-entiteit. Kies er alleen een als het de verkeerde koos.",
+          "tariff_value_preset": "Vult de velden hieronder. 'Geen' voegt niets toe: prijzen blijven zoals ze zijn. 'Nederland vanaf 2027' zet energiebelasting en 21 % btw; vul opslag en terugleverkosten van uw leverancier zelf in.",
+          "import_price_basis": "All-in: belasting en btw zitten al in de prijs (Tibber, prijs van uw rekening) — er komt niets bij. Spotprijs incl. btw: belasting en opslag komen erbij met btw. Spotprijs: belasting, opslag en btw komen er allemaal bij.",
+          "import_markup": "Wat uw leverancier per gekochte kWh rekent, excl. btw.",
+          "import_energy_tax": "Energiebelasting per gekochte kWh, excl. btw.",
+          "import_vat_percent": "Btw op de gekochte kWh, in procent.",
+          "feed_in_fee_model": "Wat uw leverancier rekent voor stroom die u teruglevert: per kWh, in staffels naar kWh dit jaar, of een vast bedrag per maand.",
+          "feed_in_fee": "Per kWh: de kosten per kWh. Vast per maand: het bedrag per maand.",
+          "feed_in_fee_tiers": "Alleen voor staffels. kWh teruggeleverd dit jaar : kosten per kWh, bijvoorbeeld 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -707,7 +723,8 @@
       "heat_pump_service_invalid": "De SG-Ready-service moet domain.service zijn (bijv. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "De SG-Ready-servicegegevens moeten een JSON-object zijn.",
       "heat_pump_contact_values_missing": "Dit SG-Ready-contact is een tekst-/getal-/select-entiteit, dus SEM heeft zowel de AAN- als de UIT-waarde nodig om te schrijven. Vul beide in, of kies een schakelaar-entiteit.",
-      "calendar_needs_schedule": "Kalendermodus heeft een piekuren-schema nodig. Kies een Schema-helper of een andere tariefmodus."
+      "calendar_needs_schedule": "Kalendermodus heeft een piekuren-schema nodig. Kies een Schema-helper of een andere tariefmodus.",
+      "value_needs_spot_basis": "Een opslag, energiebelasting of btw geldt alleen bij een spotprijs. Kies de spotbasis of zet ze op 0."
     }
   },
   "entity": {
@@ -1449,6 +1466,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} Voertuig SOC"
+      },
+      "daily_self_consumption_value": {
+        "name": "Waarde eigen verbruik vandaag"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Waarde eigen verbruik dit jaar"
+      },
+      "daily_export_value": {
+        "name": "Waarde teruglevering vandaag"
+      },
+      "yearly_export_value": {
+        "name": "Waarde teruglevering dit jaar"
+      },
+      "daily_feed_in_fees": {
+        "name": "Terugleverkosten vandaag"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Terugleverkosten dit jaar"
       }
     },
     "binary_sensor": {
@@ -1761,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "“{day}: {time}” is geen vertrek: dagen zijn mon … sun, tijden HH:MM van 00:00 tot 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Een opslag, energiebelasting of btw geldt alleen bij een spotprijs. Kies de spotbasis of zet ze op 0."
     }
   },
   "issues": {
@@ -1979,6 +2017,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "Geen (geen belastingen of kosten)",
+        "nl_2027": "Nederland vanaf 2027",
+        "custom": "Eigen"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "All-in (incl. belastingen)",
+        "spot_incl_vat": "Spotprijs incl. btw",
+        "spot": "Spotprijs (zonder belastingen)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "Geen",
+        "per_kwh": "Per kWh",
+        "tiered": "Staffel naar kWh per jaar",
+        "fixed_monthly": "Vast per maand"
       }
     }
   }

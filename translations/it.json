@@ -258,7 +258,15 @@
           "tariff_classification_mode": "Modalità di classificazione dei prezzi",
           "solar_forecast_source": "Sorgente della previsione solare",
           "grid_co2_entity": "Sensore intensità CO₂ della rete (facoltativo)",
-          "outdoor_temperature_entity": "Temperatura esterna (facoltativo)"
+          "outdoor_temperature_entity": "Temperatura esterna (facoltativo)",
+          "tariff_value_preset": "Modello tasse e costi",
+          "import_price_basis": "Cosa include il prezzo di acquisto",
+          "import_markup": "Ricarico del fornitore",
+          "import_energy_tax": "Accisa sull'energia",
+          "import_vat_percent": "IVA",
+          "feed_in_fee_model": "Costo di immissione",
+          "feed_in_fee": "Importo costo di immissione",
+          "feed_in_fee_tiers": "Scaglioni costo di immissione"
         },
         "data_description": {
           "electricity_import_rate": "Tariffa di importazione diurna/fissa (valuta/kWh, IVA inclusa). Usata come ripiego quando il prezzo dinamico non è disponibile.",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "Percentile classifica i prezzi rispetto all'intervallo di oggi (consigliato). Statico usa soglie fisse economico/costoso.",
           "solar_forecast_source": "Quale integrazione di previsione legge SEM. Il rilevamento automatico preferisce Solcast, poi Forecast.Solar, poi Open-Meteo — scegline una se ne usi più di una.",
           "grid_co2_entity": "SEM trova da solo un sensore in g o kg di CO₂ per kWh. Sceglierne uno solo se ha trovato quello sbagliato.",
-          "outdoor_temperature_entity": "SEM trova un termometro esterno dal nome, oppure usa la tua entità meteo. Sceglilo solo se ha preso quello sbagliato."
+          "outdoor_temperature_entity": "SEM trova un termometro esterno dal nome, oppure usa la tua entità meteo. Sceglilo solo se ha preso quello sbagliato.",
+          "tariff_value_preset": "Compila i campi sotto. 'Nessuno' non aggiunge nulla: i prezzi restano come sono. 'Paesi Bassi dal 2027' imposta accisa e IVA al 21 %; inserisci tu ricarico e costo del fornitore.",
+          "import_price_basis": "Tutto incluso: tasse e IVA sono già nel prezzo (Tibber, tariffa in bolletta) — non si aggiunge nulla. Prezzo spot IVA inclusa: tasse e ricarico aggiunti con IVA. Prezzo spot: tasse, ricarico e IVA vengono aggiunti.",
+          "import_markup": "Quanto aggiunge il fornitore per kWh acquistato, IVA esclusa.",
+          "import_energy_tax": "Accisa per kWh acquistato, IVA esclusa.",
+          "import_vat_percent": "IVA sul kWh acquistato, in percentuale.",
+          "feed_in_fee_model": "Quanto chiede il fornitore per l'energia immessa in rete: per kWh, a scaglioni secondo i kWh dell'anno, o un importo fisso al mese.",
+          "feed_in_fee": "Per kWh: il costo per kWh. Fisso al mese: l'importo mensile.",
+          "feed_in_fee_tiers": "Solo per scaglioni. kWh immessi quest'anno : costo per kWh, ad esempio 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -707,7 +723,8 @@
       "heat_pump_service_invalid": "Il servizio SG-Ready deve essere nel formato domain.service (ad esempio ems_esp.send_command).",
       "heat_pump_service_data_invalid": "I dati del servizio SG-Ready devono essere un oggetto JSON.",
       "heat_pump_contact_values_missing": "Questo contatto SG-Ready è un'entità testo/numero/selettore, quindi SEM ha bisogno sia del valore ON sia del valore OFF da scrivere. Compila entrambi, oppure scegli un'entità interruttore.",
-      "calendar_needs_schedule": "La modalità Calendario richiede un orario di punta. Scegli un aiutante Pianificazione o un'altra modalità tariffaria."
+      "calendar_needs_schedule": "La modalità Calendario richiede un orario di punta. Scegli un aiutante Pianificazione o un'altra modalità tariffaria.",
+      "value_needs_spot_basis": "Un ricarico, un'accisa o l'IVA valgono solo con un prezzo spot. Scegli la base spot o impostali a 0."
     }
   },
   "entity": {
@@ -1449,6 +1466,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} SOC veicolo"
+      },
+      "daily_self_consumption_value": {
+        "name": "Valore autoconsumo oggi"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Valore autoconsumo quest'anno"
+      },
+      "daily_export_value": {
+        "name": "Valore immissione oggi"
+      },
+      "yearly_export_value": {
+        "name": "Valore immissione quest'anno"
+      },
+      "daily_feed_in_fees": {
+        "name": "Costi di immissione oggi"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Costi di immissione quest'anno"
       }
     },
     "binary_sensor": {
@@ -1761,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "«{day}: {time}» non è una partenza: i giorni sono mon … sun, gli orari HH:MM da 00:00 a 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Un ricarico, un'accisa o l'IVA valgono solo con un prezzo spot. Scegli la base spot o impostali a 0."
     }
   },
   "issues": {
@@ -1979,6 +2017,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "Nessuno (nessuna tassa o costo)",
+        "nl_2027": "Paesi Bassi dal 2027",
+        "custom": "Personalizzato"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "Tutto incluso (tasse incluse)",
+        "spot_incl_vat": "Prezzo spot IVA inclusa",
+        "spot": "Prezzo spot (senza tasse)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "Nessuno",
+        "per_kwh": "Per kWh",
+        "tiered": "Scaglioni per kWh all'anno",
+        "fixed_monthly": "Fisso al mese"
       }
     }
   }

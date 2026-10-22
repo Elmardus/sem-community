@@ -1,6 +1,7 @@
 """Energy calculation module for SEM coordinator."""
 from __future__ import annotations
 
+import calendar
 import inspect
 import logging
 import math
@@ -319,6 +320,13 @@ def _stat_bucket_year_month(row: Dict[str, Any]) -> Optional[tuple[int, int]]:
 GRID_CO2_KG_PER_KWH = 0.128  # Swiss grid average — the fallback (#1088)
 #: (#1088) accumulator category of the live-intensity correction, in kg
 CO2_CORRECTION_CATEGORY = "co2_live_correction"
+
+# (#1077) The value layer's cost categories: what solar used at home was
+# worth over exporting it, what exported kWh fetched before the fee, and the
+# feed-in fees. Booked only while a value field is set.
+VALUE_SELF_CONSUMPTION = "value_self_consumption"
+VALUE_EXPORT = "value_export"
+VALUE_FEED_IN_FEE = "value_feed_in_fee"
 CO2_KG_PER_TREE_PER_YEAR = 22  # EPA estimate
 
 
@@ -355,6 +363,15 @@ class EnergyCalculator:
 
         # Rate history for 7-day averaging (dynamic tariffs)
         self._rate_history: deque = deque(maxlen=30)
+
+        # (#1077) The value layer's books. ``_export_rate`` above is the
+        # export VALUE (net of the per-kWh feed-in fee); these keep the
+        # market price and the fee apart so the bill can show both. Off
+        # (nothing accumulated) until a value field is set.
+        self._value_layer_on: bool = False
+        self._export_spot_rate: Optional[float] = None
+        self._feed_in_fee_rate: float = 0.0
+        self._feed_in_fixed_monthly: float = 0.0
 
         # (#770) Share of the battery's STORED energy that was bought from
         # the grid. Autarky counts battery discharge as own supply; that is
@@ -822,6 +839,22 @@ class EnergyCalculator:
                 self._accumulate("grid_export_negative", today, month_key, year_key, export_increment)
                 self._accumulate_cost("cost_export_negative", today, month_key, year_key,
                                       export_increment * abs(float(self._export_rate)))
+            # (#1077) The bill's two lines: what the kWh fetched on the
+            # market, and the per-kWh feed-in fee taken off it.
+            if self._value_layer_on:
+                spot = (self._export_spot_rate if self._export_spot_rate is not None
+                        else float(self._export_rate or 0.0))
+                self._accumulate_cost(VALUE_EXPORT, today, month_key, year_key,
+                                      export_increment * spot)
+                if self._feed_in_fee_rate:
+                    self._accumulate_cost(VALUE_FEED_IN_FEE, today, month_key, year_key,
+                                          export_increment * self._feed_in_fee_rate)
+        # (#1077) A fixed monthly fee is owed by the hour, whatever flows.
+        if self._value_layer_on and self._feed_in_fixed_monthly > 0:
+            hours_in_month = calendar.monthrange(today.year, today.month)[1] * 24
+            self._accumulate_cost(
+                VALUE_FEED_IN_FEE, today, month_key, year_key,
+                self._feed_in_fixed_monthly * interval_hours / hours_in_month)
         self._reconcile_metered_energy(
             "grid_export", today, month_key, year_key,
             cost_key="cost_export", rate=self._export_rate,
@@ -999,6 +1032,13 @@ class EnergyCalculator:
             solar_self_consumed = max(0.0, (home_incr + ev_incr) - import_incr - discharge_incr)
         if solar_self_consumed > 0.0:
             self._accumulate_cost("cost_savings", today, month_key, year_key, solar_self_consumed * self._import_rate)
+            # (#1077) What using it at home was worth over selling it: the
+            # spread between the import and the export value, per kWh.
+            if self._value_layer_on:
+                self._accumulate_cost(
+                    VALUE_SELF_CONSUMPTION, today, month_key, year_key,
+                    solar_self_consumed * (float(self._import_rate or 0.0)
+                                           - float(self._export_rate or 0.0)))
 
         return energy
 
@@ -3495,6 +3535,14 @@ class EnergyCalculator:
             costs.yearly_savings + costs.yearly_battery_savings, 2,
         )
 
+        # (#1077) The value layer's books — 0 until a value field is set.
+        costs.daily_self_consumption_value = self._get_daily_cost(VALUE_SELF_CONSUMPTION, today)
+        costs.yearly_self_consumption_value = self._get_yearly_cost(VALUE_SELF_CONSUMPTION, year_key)
+        costs.daily_export_value = self._get_daily_cost(VALUE_EXPORT, today)
+        costs.yearly_export_value = self._get_yearly_cost(VALUE_EXPORT, year_key)
+        costs.daily_feed_in_fees = self._get_daily_cost(VALUE_FEED_IN_FEE, today)
+        costs.yearly_feed_in_fees = self._get_yearly_cost(VALUE_FEED_IN_FEE, year_key)
+
         # Environmental impact (CO2 avoided by self-consuming solar)
         daily_self_consumed = max(0, energy.daily_solar - energy.daily_grid_export)
         yearly_self_consumed = max(0, energy.yearly_solar - energy.yearly_grid_export)
@@ -3803,6 +3851,30 @@ class EnergyCalculator:
         """Get yearly accumulated energy."""
         key = f"{category}_{year_key}"
         return round(self._yearly_accumulators.get(key, 0.0), 2)
+
+    def set_value_rates(self, tariff: Any) -> None:
+        """(#1077) This cycle's value-layer numbers, from the tariff
+        snapshot. Anything unreadable switches the books off for the cycle
+        rather than booking a guess."""
+        try:
+            self._value_layer_on = getattr(tariff, "value_layer_on", False) is True
+            spot = getattr(tariff, "current_export_spot_rate", None)
+            self._export_spot_rate = None if spot is None else float(spot)
+            self._feed_in_fee_rate = float(getattr(tariff, "feed_in_fee_rate", 0.0) or 0.0)
+            self._feed_in_fixed_monthly = float(
+                getattr(tariff, "feed_in_fixed_monthly", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            self._value_layer_on = False
+
+    def export_year_to_date_kwh(self, now: Optional[datetime] = None) -> float:
+        """(#1077) kWh exported this calendar year (local time).
+
+        The yearly export accumulator: persisted with the others in SEM's
+        store, seeded from the recorder for a mid-year install, and keyed by
+        the year — so on 1 January it reads 0 without a reset of its own.
+        """
+        now = now or dt_util.now()
+        return self._get_yearly("grid_export", str(now.year))
 
     def set_grid_co2_intensity(self, kg_per_kwh: Optional[float], live: bool) -> None:
         """(#1088) This cycle's grid CO2 intensity (kg/kWh; None = no usable

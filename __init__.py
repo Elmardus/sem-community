@@ -6150,6 +6150,25 @@ async def _async_register_phase_services(
                     existing_list, options["ev_chargers"]),
             }
 
+        # (#1077) The card picks a value preset the way the options flow
+        # does: the preset fills the fields it owns, and a hand-changed one
+        # of those makes it "custom". These keys are read when the tariff
+        # provider is built, so they take the reload path below.
+        from .tariff.value_layer import (
+            VALUE_OPTION_KEYS, apply_value_preset, basis_contradiction,
+        )
+        if any(k in options for k in VALUE_OPTION_KEYS):
+            _stored = {**(target_entry.data or {}), **(target_entry.options or {})}
+            options = apply_value_preset(options, _stored)
+            # (#1077) An all-in price adds nothing: refuse a markup, tax or
+            # VAT beside it, judged on the merged result. Zeroing one is
+            # always allowed.
+            if basis_contradiction({**_stored, **options}, options):
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="value_needs_spot_basis",
+                )
+
         merged = {**(target_entry.options or {}), **options}
         if merged == (target_entry.options or {}):
             _LOGGER.debug(
@@ -6769,11 +6788,18 @@ async def _async_register_phase_services(
         "electricity_export_rate", "demand_charge_rate",
         "grid_import_surcharge",
         "cheap_price_threshold", "expensive_price_threshold",
+        # (#1077) what a kWh is worth
+        "tariff_value_preset", "import_price_basis", "import_markup",
+        "import_energy_tax", "import_vat_percent", "feed_in_fee_model",
+        "feed_in_fee", "feed_in_fee_tiers",
     }
     _DIAGNOSE_TARIFF_STATE = {
         "tariff_provider", "tariff_is_dynamic", "tariff_currency",
         "tariff_price_level", "tariff_classifier_path",
         "tariff_current_import_rate", "tariff_current_export_rate",
+        # (#1077) where the tiered feed-in fee stands
+        "tariff_export_ytd_kwh", "tariff_feed_in_fee_rate",
+        "tariff_next_fee_tier_kwh",
         "tariff_today_min_price", "tariff_today_max_price", "tariff_today_avg_price",
         "tariff_next_cheap_start", "tariff_next_cheap_end",
         "tariff_upcoming", "tariff_schedule_today",

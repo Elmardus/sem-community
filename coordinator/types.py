@@ -655,6 +655,16 @@ class CostData:
     yearly_export_revenue: float = 0.0
     yearly_net_cost: float = 0.0
 
+    # (#1077) What a kWh is worth: solar used at home over selling it
+    # (import value − export value), exported kWh at the market price
+    # before the fee, and the feed-in fees. 0 until a value field is set.
+    daily_self_consumption_value: float = 0.0
+    yearly_self_consumption_value: float = 0.0
+    daily_export_value: float = 0.0
+    yearly_export_value: float = 0.0
+    daily_feed_in_fees: float = 0.0
+    yearly_feed_in_fees: float = 0.0
+
     # Environmental impact
     daily_co2_avoided_kg: float = 0.0
     yearly_co2_avoided_kg: float = 0.0
@@ -819,6 +829,11 @@ class TariffSensorData:
     """Tariff data for coordinator sensors."""
     tariff_current_import_rate: float = 0.0
     tariff_current_export_rate: float = 0.0
+    #: (#1077) where the tiered feed-in fee stands: kWh exported this year,
+    #: the fee on the next kWh, and where the next tier starts (None: none)
+    tariff_export_ytd_kwh: float = 0.0
+    tariff_feed_in_fee_rate: float = 0.0
+    tariff_next_fee_tier_kwh: Optional[float] = None
     #: (#994) the default is the ABSENCE of a level, not a
     #: confident middle one — a cycle that could not classify must
     #: not publish "normal".
@@ -1342,6 +1357,13 @@ class SEMData:
             "yearly_battery_savings": self.costs.yearly_battery_savings,
             "yearly_export_revenue": self.costs.yearly_export_revenue,
             "yearly_net_cost": self.costs.yearly_net_cost,
+            # (#1077) the value layer's books
+            "daily_self_consumption_value": self.costs.daily_self_consumption_value,
+            "yearly_self_consumption_value": self.costs.yearly_self_consumption_value,
+            "daily_export_value": self.costs.daily_export_value,
+            "yearly_export_value": self.costs.yearly_export_value,
+            "daily_feed_in_fees": self.costs.daily_feed_in_fees,
+            "yearly_feed_in_fees": self.costs.yearly_feed_in_fees,
 
             # Environmental impact
             "daily_co2_avoided": self.costs.daily_co2_avoided_kg,
@@ -1483,6 +1505,9 @@ class SEMData:
             # Tariff (Phase 1)
             "tariff_current_import_rate": self.tariff.tariff_current_import_rate,
             "tariff_current_export_rate": self.tariff.tariff_current_export_rate,
+            "tariff_export_ytd_kwh": self.tariff.tariff_export_ytd_kwh,
+            "tariff_feed_in_fee_rate": self.tariff.tariff_feed_in_fee_rate,
+            "tariff_next_fee_tier_kwh": self.tariff.tariff_next_fee_tier_kwh,
             "tariff_price_level": self.tariff.tariff_price_level,
             "tariff_provider": self.tariff.tariff_provider,
             "tariff_is_dynamic": self.tariff.tariff_is_dynamic,

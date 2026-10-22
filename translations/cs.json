@@ -258,7 +258,15 @@
           "tariff_classification_mode": "Režim klasifikace cen",
           "solar_forecast_source": "Zdroj předpovědi výroby",
           "grid_co2_entity": "Senzor intenzity CO₂ sítě (volitelné)",
-          "outdoor_temperature_entity": "Venkovní teplota (volitelné)"
+          "outdoor_temperature_entity": "Venkovní teplota (volitelné)",
+          "tariff_value_preset": "Šablona daní a poplatků",
+          "import_price_basis": "Co obsahuje vaše nákupní cena",
+          "import_markup": "Přirážka dodavatele",
+          "import_energy_tax": "Daň z elektřiny",
+          "import_vat_percent": "DPH",
+          "feed_in_fee_model": "Poplatek za dodávku do sítě",
+          "feed_in_fee": "Výše poplatku",
+          "feed_in_fee_tiers": "Pásma poplatku"
         },
         "data_description": {
           "electricity_import_rate": "Denní/jednotná sazba za odběr (měna/kWh včetně DPH). Používá se jako záloha, když není dynamické ceny.",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "„Percentil“ zařazuje ceny podle dnešního rozpětí (doporučeno). „Statický“ používá pevné prahy levné/drahé.",
           "solar_forecast_source": "Kterou integraci předpovědi SEM čte. Automatická detekce upřednostňuje Solcast, poté Forecast.Solar a poté Open-Meteo — zvolte jednu, pokud jich provozujete více.",
           "grid_co2_entity": "SEM sám najde senzor v g nebo kg CO₂ na kWh. Vyberte jeden jen tehdy, když našel špatný.",
-          "outdoor_temperature_entity": "SEM najde venkovní teploměr podle názvu, nebo použije vaši entitu počasí. Vyberte jen tehdy, když zvolil špatně."
+          "outdoor_temperature_entity": "SEM najde venkovní teploměr podle názvu, nebo použije vaši entitu počasí. Vyberte jen tehdy, když zvolil špatně.",
+          "tariff_value_preset": "Vyplní pole níže. 'Žádná' nic nepřidá: ceny zůstanou stejné. 'Nizozemsko od 2027' nastaví daň a 21 % DPH; přirážku a poplatek dodavatele zadejte sami.",
+          "import_price_basis": "Vše v ceně: daň a DPH už jsou v ceně (Tibber, cena z faktury) — nic se nepřidá. Spotová cena s DPH: daň a přirážka se přidají s DPH. Spotová cena: přidá se daň, přirážka i DPH.",
+          "import_markup": "Co dodavatel přidá za koupenou kWh, bez DPH.",
+          "import_energy_tax": "Daň za koupenou kWh, bez DPH.",
+          "import_vat_percent": "DPH z koupené kWh, v procentech.",
+          "feed_in_fee_model": "Co dodavatel účtuje za energii poslanou do sítě: za kWh, v pásmech podle kWh za tento rok, nebo pevnou částku měsíčně.",
+          "feed_in_fee": "Za kWh: poplatek za kWh. Pevně měsíčně: částka za měsíc.",
+          "feed_in_fee_tiers": "Jen pro pásma. kWh poslané letos : poplatek za kWh, například 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -707,7 +723,8 @@
       "heat_pump_service_invalid": "Služba SG-Ready musí být ve tvaru domain.service (např. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "Data služby SG-Ready musí být objekt JSON.",
       "heat_pump_contact_values_missing": "Tento kontakt SG-Ready je entita text/number/select, takže SEM potřebuje zapsat jak hodnotu ZAP, tak hodnotu VYP. Vyplňte obě, nebo vyberte entitu typu switch.",
-      "calendar_needs_schedule": "Režim Kalendář potřebuje rozvrh špičky. Vyberte pomocníka Plán nebo jiný tarifní režim."
+      "calendar_needs_schedule": "Režim Kalendář potřebuje rozvrh špičky. Vyberte pomocníka Plán nebo jiný tarifní režim.",
+      "value_needs_spot_basis": "Přirážka, daň z energie nebo DPH platí jen u spotové ceny. Zvolte spotový základ, nebo je nastavte na 0."
     }
   },
   "entity": {
@@ -1449,6 +1466,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} SOC vozidla"
+      },
+      "daily_self_consumption_value": {
+        "name": "Hodnota vlastní spotřeby dnes"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Hodnota vlastní spotřeby letos"
+      },
+      "daily_export_value": {
+        "name": "Hodnota dodávky dnes"
+      },
+      "yearly_export_value": {
+        "name": "Hodnota dodávky letos"
+      },
+      "daily_feed_in_fees": {
+        "name": "Poplatky za dodávku dnes"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Poplatky za dodávku letos"
       }
     },
     "binary_sensor": {
@@ -1761,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "„{day}: {time}“ není odjezd: dny jsou mon … sun, časy HH:MM od 00:00 do 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Přirážka, daň z energie nebo DPH platí jen u spotové ceny. Zvolte spotový základ, nebo je nastavte na 0."
     }
   },
   "issues": {
@@ -1979,6 +2017,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "Žádná (bez daní a poplatků)",
+        "nl_2027": "Nizozemsko od 2027",
+        "custom": "Vlastní"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "Vše v ceně (s daněmi)",
+        "spot_incl_vat": "Spotová cena s DPH",
+        "spot": "Spotová cena (bez daní)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "Žádný",
+        "per_kwh": "Za kWh",
+        "tiered": "Pásma podle kWh za rok",
+        "fixed_monthly": "Pevně měsíčně"
       }
     }
   }

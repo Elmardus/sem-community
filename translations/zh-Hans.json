@@ -258,7 +258,15 @@
           "tariff_classification_mode": "电价分类模式",
           "solar_forecast_source": "光伏预测数据源",
           "grid_co2_entity": "电网 CO₂ 强度传感器（可选）",
-          "outdoor_temperature_entity": "室外温度（可选）"
+          "outdoor_temperature_entity": "室外温度（可选）",
+          "tariff_value_preset": "税费预设",
+          "import_price_basis": "购电价格包含什么",
+          "import_markup": "供应商加价",
+          "import_energy_tax": "能源税",
+          "import_vat_percent": "增值税",
+          "feed_in_fee_model": "上网费用",
+          "feed_in_fee": "上网费用金额",
+          "feed_in_fee_tiers": "上网费用阶梯"
         },
         "data_description": {
           "tariff_mode": "选择“静态”代表固定费率，“动态”代表实时计价，或选择“日历”代表分时电价计划。",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "“百分位”相对当天价格区间分类（推荐）。“固定”使用固定的便宜/昂贵阈值。",
           "solar_forecast_source": "SEM 读取哪个预测集成。自动检测优先使用 Solcast，其次 Forecast.Solar，再次 Open-Meteo — 如果同时运行多个，请手动指定一个。",
           "grid_co2_entity": "SEM 会自行找到单位为 g 或 kg CO₂/kWh 的传感器。仅在它找错时才手动选择。",
-          "outdoor_temperature_entity": "SEM 会按名称找到室外温度计，或使用您的天气实体。只有在它选错时才需要手动选择。"
+          "outdoor_temperature_entity": "SEM 会按名称找到室外温度计，或使用您的天气实体。只有在它选错时才需要手动选择。",
+          "tariff_value_preset": "填写下方字段。“无”不加任何费用：价格保持不变。“荷兰（2027 年起）”设置能源税和 21% 增值税；供应商加价和费用请自行填写。",
+          "import_price_basis": "全包：税和增值税已在价格中（Tibber、账单上的电价）——不再增加。现货价含增值税：加上税和加价，并计增值税。现货价：加上税、加价和增值税。",
+          "import_markup": "供应商对每度购电的加价，不含增值税。",
+          "import_energy_tax": "每度购电的能源税，不含增值税。",
+          "import_vat_percent": "购电的增值税，百分比。",
+          "feed_in_fee_model": "供应商对送入电网的电收取的费用：按度、按今年送出度数分阶梯，或每月固定金额。",
+          "feed_in_fee": "按度：每度费用。每月固定：每月金额。",
+          "feed_in_fee_tiers": "仅用于阶梯。今年送出度数 : 每度费用，例如 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -707,7 +723,8 @@
       "heat_pump_service_invalid": "SG-Ready 服务必须是 domain.service 格式（例如 ems_esp.send_command）。",
       "heat_pump_service_data_invalid": "SG-Ready 服务数据必须是一个 JSON 对象。",
       "heat_pump_contact_values_missing": "此 SG-Ready 触点是文本/数字/选择器实体，因此 SEM 需要同时写入开启值和关闭值。请两者都填写，或改选一个开关实体。",
-      "calendar_needs_schedule": "日历模式需要峰时时间表。请选择一个“时间表”辅助元素，或选择其他电价模式。"
+      "calendar_needs_schedule": "日历模式需要峰时时间表。请选择一个“时间表”辅助元素，或选择其他电价模式。",
+      "value_needs_spot_basis": "加价、能源税或增值税仅适用于现货价格。请选择现货价格基础，或将其设为 0。"
     }
   },
   "entity": {
@@ -1449,6 +1466,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} 车辆电量"
+      },
+      "daily_self_consumption_value": {
+        "name": "今日自用价值"
+      },
+      "yearly_self_consumption_value": {
+        "name": "今年自用价值"
+      },
+      "daily_export_value": {
+        "name": "今日上网价值"
+      },
+      "yearly_export_value": {
+        "name": "今年上网价值"
+      },
+      "daily_feed_in_fees": {
+        "name": "今日上网费用"
+      },
+      "yearly_feed_in_fees": {
+        "name": "今年上网费用"
       }
     },
     "binary_sensor": {
@@ -1761,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "“{day}: {time}”不是有效的出发时间：日期为 mon … sun，时间格式为 HH:MM（00:00 至 23:59）。"
+    },
+    "value_needs_spot_basis": {
+      "message": "加价、能源税或增值税仅适用于现货价格。请选择现货价格基础，或将其设为 0。"
     }
   },
   "issues": {
@@ -1979,6 +2017,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "无（不加税费）",
+        "nl_2027": "荷兰（2027 年起）",
+        "custom": "自定义"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "全包（含税）",
+        "spot_incl_vat": "现货价含增值税",
+        "spot": "现货价（不含税）"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "无",
+        "per_kwh": "按度",
+        "tiered": "按年度度数分阶梯",
+        "fixed_monthly": "每月固定"
       }
     }
   }

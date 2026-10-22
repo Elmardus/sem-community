@@ -122,6 +122,7 @@ from .ev_control import EVControlMixin
 from ..tariff import StaticTariffProvider, DynamicTariffProvider
 from ..tariff.calendar_provider import CalendarTariffProvider
 from ..tariff.tariff_provider import _local_date as _tariff_local_date
+from ..tariff.value_layer import settings_from_config as value_settings_from_config
 from ..analytics.pv_performance import PVPerformanceAnalyzer
 from ..analytics.consumption_predictor import ConsumptionPredictor
 from .ev_taper_detector import EVTaperDetector
@@ -632,6 +633,40 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         health = round(100 - min(30, cycles * 0.02), 1)
         return cycles, health
 
+    def _stamp_decision_inputs(self, power, charging_context) -> None:
+        """(#1084) Hand the decision log this cycle's inputs once, before any
+        actuator runs. Every read is guarded: a missing price or SOC is left
+        out of the record, never a reason to lose the cycle."""
+        log = getattr(getattr(self, "_surplus_controller", None),
+                      "decision_log", None)
+        if log is None:
+            return
+        inputs: Dict[str, Any] = {}
+        try:
+            calc = getattr(self, "_energy_calculator", None)
+            inputs["import_price"] = getattr(calc, "_import_rate", None)
+            inputs["export_rate"] = getattr(calc, "_export_rate", None)
+            provider = getattr(self, "_tariff_provider", None)
+            if provider is not None and getattr(provider, "available", True):
+                from .price_signal import comparative_level
+                level = comparative_level(provider)
+                inputs["price_level"] = getattr(level, "value", level)
+            # DARK-SOC: record — a blink leaves the log row without a SOC
+            if (not getattr(power, "battery_soc_unavailable", False)
+                    and getattr(power, "battery_soc_known", True)):
+                inputs["soc"] = getattr(power, "battery_soc", None)
+            inputs["surplus_w"] = getattr(charging_context, "available_power", None)
+            inputs["target_kwh"] = getattr(charging_context, "night_target_kwh", None)
+        except Exception:  # noqa: BLE001 — the log never costs a cycle
+            _LOGGER.debug("decision inputs incomplete", exc_info=True)
+        log.set_inputs(inputs)
+
+    @property
+    def decision_log(self):
+        """(#1084) The decision log, owned by the surplus controller."""
+        return getattr(getattr(self, "_surplus_controller", None),
+                       "decision_log", None)
+
     @staticmethod
     def _resolve_fleet_charging_state(global_state, effective_states):
         """The published fleet ``charging_state`` (#596).
@@ -789,6 +824,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # ring buffer of the management→process→integration chain, dumped by
         # the diagnose service. Never affects a decision; never a recorder row.
         self._trace = TraceCollector(maxlen=30)
+        # (#1084) cid → the reason of this cycle's decision, per charger
+        self._strategy_per_charger: Dict[str, str] = {}
         # (#576) priority-walk inputs for the 3-layer trace, refreshed each
         # cycle in the surplus block (battery slot / reclaim / commanded).
         self._cycle_reclaim: dict = {}
@@ -889,6 +926,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 export_rate=config.get("electricity_export_rate", 0.075),
                 currency=currency,
             )
+        # (#1077) What a kWh is worth — tax, VAT and markup on import, the
+        # feed-in fee off export — for every mode alike. All fields 0 (the
+        # default) leaves every price exactly as it was.
+        self._tariff_provider.value_settings = value_settings_from_config(config)
 
         # Phase 5: PV performance analyzer
         self._pv_analyzer = PVPerformanceAnalyzer(
@@ -2785,6 +2826,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
 
                 _LOGGER.info("Creating LoadManagementCoordinator...")
                 self._load_manager = LoadManagementCoordinator(self.hass, config_entry)
+                # (#1084) from the first cycle, before the phase guard's sheds
+                self._load_manager.decision_log = self.decision_log
                 await self._load_manager.async_initialize()
                 _LOGGER.info("LoadManagementCoordinator initialized with %s devices", len(self._load_manager._devices))
             except Exception as e:
@@ -3582,9 +3625,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             if dump_allowed and was_active:
                 continue
             try:
-                await dev.deactivate()
-                if not dev.is_active:
-                    dev.record_deactivated()
+                # (#1084) through the logged stop choke point — the same
+                # deactivate + record_deactivated it did by hand, plus the
+                # decision log's row
+                from .surplus_controller import _deactivate_owned
+                if await _deactivate_owned(
+                        dev, reason_code="vacation",
+                        text="comfort heating paused while away"):
                     _LOGGER.info(
                         "Vacation mode: deactivated %s (comfort heating "
                         "suspended while away)", dev.name,
@@ -3836,9 +3883,15 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # Update tariff rates before energy/cost calculation so cost accumulators
             # use the current rate for this cycle (fixes dynamic tariff mid-day bug)
             try:
+                # (#1077) The tiered feed-in fee reads where this year's
+                # export stands — the yearly export counter, persisted and
+                # reset on 1 January by the energy calculator.
+                self._tariff_provider.export_ytd_kwh = (
+                    self._energy_calculator.export_year_to_date_kwh())
                 _tariff = self._tariff_provider.get_tariff_data()
                 self._energy_calculator._import_rate = _tariff.current_import_rate
                 self._energy_calculator._export_rate = _tariff.current_export_rate
+                self._energy_calculator.set_value_rates(_tariff)
                 if self._tariff_rate_warned:
                     _LOGGER.info("Tariff rate update recovered")
                     self._tariff_rate_warned = False
@@ -4081,6 +4134,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             await self._ensure_export_guard()   # (#955) before anything reads it
             charging_context = self._build_charging_context(power, energy)
             charging_state = self._state_machine.update_state(charging_context)
+            # (#1084) what this cycle knew, for every command it changes
+            self._stamp_decision_inputs(power, charging_context)
 
             # Step 7.5a: Unified EV control via CurrentControlDevice
             # (#1130) The pack's assist offered this cycle — read later by
@@ -4676,6 +4731,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                         # charger 1 ("off mode …"). Per-charger detail
                         # lives in ``charger_<id>_charging_state``.
                         _fleet_primary_cid = self.primary_charger_id()
+                        # (#1084) …and every charger's own, published as
+                        # ``charger_<id>_strategy`` beside its state.
+                        if not isinstance(getattr(
+                                self, "_strategy_per_charger", None), dict):
+                            self._strategy_per_charger = {}
+                        self._strategy_per_charger[cid] = decision.reason
                         if cid == _fleet_primary_cid:
                             charging_context.charging_strategy = decision.reason
                             charging_context.charging_strategy_reason = decision.reason
@@ -4992,6 +5053,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # Step 7.5b: Load management (peak tracking + device shedding, no EV)
             if self._load_manager:
                 self._load_manager._observer_mode = self._observer_mode
+                # (#1084) its sheds and restores go to the decision log too
+                self._load_manager.decision_log = self.decision_log
                 try:
                     lm_info = self._load_manager.get_load_management_data()
                     current_peak = lm_info.get("consecutive_peak_15min", 0)
@@ -5388,6 +5451,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 _pcs_entry = (
                     getattr(self, "_effective_states_per_charger", None) or {}
                 ).get(cid)
+                # (#1084) this charger's strategy, not only the primary's
+                _strat = (getattr(self, "_strategy_per_charger", None)
+                          or {}).get(cid)
+                if _strat is not None:
+                    result[f"charger_{cid}_strategy"] = _strat
                 if _pcs_entry is not None:
                     _eff_state, _ = _pcs_entry
                     # ChargingState is a str-enum; store the value for JSON
@@ -6761,6 +6829,16 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             tariff = self._tariff_provider.get_tariff_data()
             tariff_data.tariff_current_import_rate = tariff.current_import_rate
             tariff_data.tariff_current_export_rate = tariff.current_export_rate
+            # (#1077) the tiered fee's position, for the fees sensor
+            _ytd = getattr(tariff, "export_ytd_kwh", 0.0)
+            _fee = getattr(tariff, "feed_in_fee_rate", 0.0)
+            tariff_data.tariff_export_ytd_kwh = (
+                round(float(_ytd), 1) if isinstance(_ytd, (int, float)) else 0.0)
+            tariff_data.tariff_feed_in_fee_rate = (
+                float(_fee) if isinstance(_fee, (int, float)) else 0.0)
+            _tier = getattr(tariff, "next_fee_tier_kwh", None)
+            tariff_data.tariff_next_fee_tier_kwh = (
+                float(_tier) if isinstance(_tier, (int, float)) else None)
             # (#994) ``price_level`` is tri-state now. ``.value`` on None
             # raised AttributeError — caught by this block's own except — so
             # a flat or not-yet-loaded tariff silently dropped the WHOLE
@@ -16184,6 +16262,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     # so a new import rate never opens a spread on its own.
                     tp.peak_rate, tp.off_peak_rate = _cfg_tariff_rates(
                         cfg, peak_default=tp.peak_rate)
+                # (#1077) the value fields, pushed live like the rates
+                tp.value_settings = value_settings_from_config(cfg)
             except (TypeError, ValueError):
                 pass
 

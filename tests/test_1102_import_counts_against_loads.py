@@ -512,6 +512,13 @@ class TestAVariableLoadFollowsTheSun:
             and isinstance(n.func.value, ast.Name) and n.func.value.id == "device"
         ]
         args = [ast.unparse(c.args[0]) for c in calls if c.args]
+        # (#1084) the surplus walk adjusts through ``_adjust_owned(device,
+        # watts)`` — the one choke point the decision log reads
+        args += [
+            ast.unparse(n.args[1]) for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id == "_adjust_owned" and len(n.args) > 1
+        ]
         # the pool, plus the Tier-1 battery headroom (0 for a plain load)
         assert "remaining_surplus + self._tier1_headroom_w(device)" in args, args
         assert not any("old_consumption" in a or "get_current_consumption" in a

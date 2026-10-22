@@ -258,7 +258,15 @@
           "tariff_classification_mode": "Mod de clasificare a prețurilor",
           "solar_forecast_source": "Sursa prognozei solare",
           "grid_co2_entity": "Senzor intensitate CO₂ a rețelei (opțional)",
-          "outdoor_temperature_entity": "Temperatura exterioară (opțional)"
+          "outdoor_temperature_entity": "Temperatura exterioară (opțional)",
+          "tariff_value_preset": "Șablon taxe și comisioane",
+          "import_price_basis": "Ce include prețul de cumpărare",
+          "import_markup": "Adaosul furnizorului",
+          "import_energy_tax": "Acciza pe energie",
+          "import_vat_percent": "TVA",
+          "feed_in_fee_model": "Taxă de injecție",
+          "feed_in_fee": "Valoarea taxei de injecție",
+          "feed_in_fee_tiers": "Praguri ale taxei de injecție"
         },
         "data_description": {
           "electricity_import_rate": "Tarif de import de zi/unic (monedă/kWh, cu TVA inclus). Folosit ca rezervă atunci când prețul dinamic este indisponibil.",
@@ -277,7 +285,15 @@
           "tariff_classification_mode": "„Percentilă” încadrează prețurile față de intervalul de azi (recomandat). „Static” folosește praguri fixe ieftin/scump.",
           "solar_forecast_source": "Ce integrare de prognoză citește SEM. Detectarea automată preferă Solcast, apoi Forecast.Solar, apoi Open-Meteo — alege una dacă rulezi mai multe în paralel.",
           "grid_co2_entity": "SEM găsește singur un senzor în g sau kg CO₂ pe kWh. Alegeți unul doar dacă a găsit unul greșit.",
-          "outdoor_temperature_entity": "SEM găsește un termometru exterior după nume sau folosește entitatea meteo. Alegeți doar dacă a ales greșit."
+          "outdoor_temperature_entity": "SEM găsește un termometru exterior după nume sau folosește entitatea meteo. Alegeți doar dacă a ales greșit.",
+          "tariff_value_preset": "Completează câmpurile de mai jos. 'Niciunul' nu adaugă nimic: prețurile rămân la fel. 'Țările de Jos din 2027' setează acciza și TVA de 21 %; introduceți singur adaosul și taxa furnizorului.",
+          "import_price_basis": "Totul inclus: acciza și TVA sunt deja în preț (Tibber, tarif de pe factură) — nu se adaugă nimic. Preț spot cu TVA: acciza și adaosul se adaugă cu TVA. Preț spot: se adaugă acciza, adaosul și TVA.",
+          "import_markup": "Cât adaugă furnizorul pe kWh cumpărat, fără TVA.",
+          "import_energy_tax": "Acciza pe kWh cumpărat, fără TVA.",
+          "import_vat_percent": "TVA pe kWh cumpărat, în procente.",
+          "feed_in_fee_model": "Cât cere furnizorul pentru energia injectată în rețea: pe kWh, pe praguri după kWh din acest an, sau o sumă fixă pe lună.",
+          "feed_in_fee": "Pe kWh: taxa pe kWh. Fix pe lună: suma pe lună.",
+          "feed_in_fee_tiers": "Doar pentru praguri. kWh injectați anul acesta : taxă pe kWh, de exemplu 0:0, 1000:0.02, 3000:0.05"
         }
       },
       "load_management": {
@@ -707,7 +723,8 @@
       "heat_pump_service_invalid": "Serviciul SG-Ready trebuie să fie domain.service (de ex. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "Datele serviciului SG-Ready trebuie să fie un obiect JSON.",
       "heat_pump_contact_values_missing": "Acest contact SG-Ready este o entitate text/number/select, așa că SEM are nevoie să scrie atât valoarea ON cât și OFF. Completați-le pe amândouă, sau alegeți o entitate switch.",
-      "calendar_needs_schedule": "Modul Calendar are nevoie de un program pentru orele de vârf. Alegeți un ajutor Program sau alt mod de tarif."
+      "calendar_needs_schedule": "Modul Calendar are nevoie de un program pentru orele de vârf. Alegeți un ajutor Program sau alt mod de tarif.",
+      "value_needs_spot_basis": "Un adaos, o taxă pe energie sau TVA se aplică doar la un preț spot. Alege baza spot sau setează-le la 0."
     }
   },
   "entity": {
@@ -1449,6 +1466,24 @@
       },
       "per_charger_vehicle_soc": {
         "name": "{charger} SOC vehicul"
+      },
+      "daily_self_consumption_value": {
+        "name": "Valoarea autoconsumului azi"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Valoarea autoconsumului anul acesta"
+      },
+      "daily_export_value": {
+        "name": "Valoarea injecției azi"
+      },
+      "yearly_export_value": {
+        "name": "Valoarea injecției anul acesta"
+      },
+      "daily_feed_in_fees": {
+        "name": "Taxe de injecție azi"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Taxe de injecție anul acesta"
       }
     },
     "binary_sensor": {
@@ -1761,6 +1796,9 @@
     },
     "departure_bad_time": {
       "message": "„{day}: {time}” nu este o plecare: zilele sunt mon … sun, orele HH:MM, de la 00:00 la 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Un adaos, o taxă pe energie sau TVA se aplică doar la un preț spot. Alege baza spot sau setează-le la 0."
     }
   },
   "issues": {
@@ -1979,6 +2017,28 @@
       "options": {
         "load_first": "Load First",
         "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "Niciunul (fără taxe)",
+        "nl_2027": "Țările de Jos din 2027",
+        "custom": "Personalizat"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "Totul inclus (cu taxe)",
+        "spot_incl_vat": "Preț spot cu TVA",
+        "spot": "Preț spot (fără taxe)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "Niciuna",
+        "per_kwh": "Pe kWh",
+        "tiered": "Praguri după kWh pe an",
+        "fixed_monthly": "Fix pe lună"
       }
     }
   }

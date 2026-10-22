@@ -48,12 +48,19 @@ def test_prod_loses_only_what_a_flat_tariff_without_a_plant_size_cannot_use():
         # static tariff: the thresholds feed the dynamic provider only
         "number.sem_cheap_price_threshold",
         "number.sem_expensive_price_threshold",
+        # (#1077) no value field set: the value books stay off
+        "sensor.sem_daily_export_value",
+        "sensor.sem_daily_feed_in_fees",
+        "sensor.sem_daily_self_consumption_value",
         # no plant size set: kWh/kWp was divided by the analyzer's 10 kWp default
         "sensor.sem_pv_daily_specific_yield",
         "sensor.sem_pv_degradation_trend",
         "sensor.sem_pv_estimated_annual_degradation",
         # a flat tariff has no next cheap window
         "sensor.sem_tariff_next_cheap_start",
+        "sensor.sem_yearly_export_value",
+        "sensor.sem_yearly_feed_in_fees",
+        "sensor.sem_yearly_self_consumption_value",
     ]
 
 
@@ -76,10 +83,17 @@ def test_hatest_loses_the_price_knobs_and_the_roi_rows():
     assert _new_drops(result) == [
         "number.sem_cheap_price_threshold",
         "number.sem_expensive_price_threshold",
+        # (#1077) no value field set: the value books stay off
+        "sensor.sem_daily_export_value",
+        "sensor.sem_daily_feed_in_fees",
+        "sensor.sem_daily_self_consumption_value",
         "sensor.sem_roi_annual_savings",
         "sensor.sem_roi_payback_years",
         "sensor.sem_roi_percentage",
         "sensor.sem_tariff_next_cheap_start",
+        "sensor.sem_yearly_export_value",
+        "sensor.sem_yearly_feed_in_fees",
+        "sensor.sem_yearly_self_consumption_value",
     ]
 
 
