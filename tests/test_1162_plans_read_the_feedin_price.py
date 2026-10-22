@@ -197,3 +197,15 @@ class TestASilentEntityAcrossMidnight:
         clock["now"] = DAY + timedelta(days=1, minutes=10)
         assert prov.get_price_at(clock["now"]) == 0.10
         assert prov.get_export_rate_at(clock["now"]) == 0.10
+
+
+def test_a_plan_slot_takes_the_feed_in_fee_off_like_the_live_rate():
+    """(#1077) A plan weighs the export VALUE: with a per-kWh fee, every
+    forecast slot and the live rate lose the same fee."""
+    from custom_components.solar_energy_management.tariff import value_layer as vl
+    prov = _provider({FEEDIN: _state(0.05, {
+        "today": _hourly_curve(lambda h: 0.10 + 0.01 * h)})})
+    prov.value_settings = vl.ValueSettings(fee_model=vl.FEE_PER_KWH, fee=0.03)
+    assert abs(prov.get_export_rate_at(_at(10)) - (0.20 - 0.03)) < 1e-9
+    assert abs(prov.get_current_export_rate()
+               - (prov.get_current_spot_export_rate() - 0.03)) < 1e-9
