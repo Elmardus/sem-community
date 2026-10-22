@@ -281,6 +281,18 @@ class TestTheChargerSeam:
         ad.command_disable.assert_not_awaited()
         assert [r["new"] for r in sc.decision_log.records()] == ["charge 10 A"]
 
+    async def test_a_bad_value_in_the_log_never_stops_the_write(self):
+        """(#1084 review) The log is recording only: a value it cannot
+        read must not raise into the write it describes."""
+        from custom_components.solar_energy_management.coordinator.charger_reconciler import (
+            Action, ActionKind,
+        )
+        sc, ad, rec = _sc(), _adapter(), _real_reconciler()
+        rec.decision_log = sc.decision_log
+        rec._log_write(Action(ActionKind.WRITE_CURRENT, float("nan")), ad,
+                       _cdec(amps=10))
+        assert len(sc.decision_log) == 0
+
     async def test_a_decision_alone_records_nothing(self):
         """A reconciler that sends nothing (here: a mock) leaves no row."""
         sc = _sc()
