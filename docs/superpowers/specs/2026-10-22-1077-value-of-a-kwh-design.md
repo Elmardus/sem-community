@@ -89,9 +89,9 @@ for most users.
   loss.
 - .175: settings, logbook entries, sensors, the card.
 
-## Open questions
+## Decided (22.10)
 
-1. #1090: stop exporting (above) instead of buying at a positive price?
-2. Logbook: commands that change only (start, stop, mode, current step
-   ≥ 1 A), or every command?
-3. Option count +8 — accepted?
+1. #1090: stop exporting when the export value is below the threshold;
+   grid charging still needs `import_value < 0`. Said so on the issue.
+2. Logbook: changes only — start, stop, mode, current step ≥ 1 A.
+3. Option count grows by about 8; baseline updated with the reason.
