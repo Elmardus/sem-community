@@ -319,3 +319,16 @@ class TestPacingHoldsThroughABlink:
         assert st["soc"] == pytest.approx(40.0)
         assert st["cap_w"] is not None
         hass.services.async_call.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_sustained_outage_forgets_full_power_and_weak_day():
+    """(#820 review, 22.10) No decision, no memory of one: a dark SOC across
+    midnight carried yesterday's full power into the next day."""
+    fake, _hass = _coordinator()
+    fake._pacing_full_latched = True
+    fake._pacing_weak_latched = True
+    await SEMCoordinator._run_charge_pacing(
+        fake, _held(stale_s=SENSOR_DARK_READ_GRACE_S + 1))
+    assert fake._pacing_full_latched is False
+    assert fake._pacing_weak_latched is False

@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Charge pacing keeps one limit when the forecast sits right at what the battery needs** (#820). It no longer jumps to full power and back.
+
 # [2.2.0-beta.24] — 21.10.2026
 
 - 🐛 **Charge pacing no longer drops the limit and sets it again when the forecast just fills the battery** (#820). A short forecast gap is bridged.
