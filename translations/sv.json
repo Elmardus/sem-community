@@ -182,7 +182,8 @@
           "diagram_style": "Systemdiagram stil",
           "battery_assist_min_surplus": "Batteristöd – min. solöverskott (W)",
           "grid_sign_invert": "Invertera näteffektens tecken",
-          "battery_operating_mode_entity": "Batteriets driftlägesentitet (bevakad)"
+          "battery_operating_mode_entity": "Batteriets driftlägesentitet (bevakad)",
+          "battery_charge_end_soc_entity": "Batteriets laddstoppnivå (valfritt)"
         },
         "data_description": {
           "update_interval": "Hur ofta koordinatorn läser sensorer och justerar hårdvaran. 10 s ger den mest exakta energiintegrationen; värden över 30 s underskattar energin. Intervall 10–60 s.",
@@ -208,14 +209,19 @@
           "legionella_interval_hours": "Maximalt antal timmar mellan legionelladesinfektionscykler innan SEM tvingar fram en uppvärmning.",
           "battery_assist_min_surplus": "Minsta verkliga solöverskott innan husbatteriet får hjälpa till att ladda EV:n — i alla laddningslägen. Under detta är batteriet reserverat för huset (bilen drar från nätet + sol). Standard 1200 W. Ställ in 0 för att låta batteriet stödja EV:n överallt, även nattetid.",
           "grid_sign_invert": "Slå på endast om nätimport visas som ett positivt värde (t.ex. Enphase). SEM:s konvention är negativ = import; detta negerar råvärdet och kringgår automatisk teckendetektering.",
-          "battery_operating_mode_entity": "Växelriktarens driftpolicyväljare (t.ex. Huaweis 'Working mode'). SEM LÄSER den bara: läget visas bredvid batteriunderlaget, och en engångsreparation varnar när det inte är det egenförbrukningsläge SEM:s planering förutsätter. SEM ändrar den aldrig. Lämna tom för att stänga av bevakningen."
+          "battery_operating_mode_entity": "Växelriktarens driftpolicyväljare (t.ex. Huaweis 'Working mode'). SEM LÄSER den bara: läget visas bredvid batteriunderlaget, och en engångsreparation varnar när det inte är det egenförbrukningsläge SEM:s planering förutsätter. SEM ändrar den aldrig. Lämna tom för att stänga av bevakningen.",
+          "battery_charge_end_soc_entity": "Där växelriktaren själv slutar ladda batteriet, i %. SEM läser den bara och skriver den aldrig. Tvångsladdning slutar då också där när den är under 90 %."
         }
       },
       "settings_battery_limit": {
         "title": "Batteri {battery} — urladdningsgräns",
         "description": "Batteri {battery} är {sensor}.\n\nVälj den number-entitet som begränsar urladdningseffekten för detta batteri. Lämna tomt för att använda den gemensamma entiteten från föregående sida.",
         "data": {
-          "battery_discharge_control_entity": "Entitet för urladdningsgräns — batteri {battery}"
+          "battery_discharge_control_entity": "Entitet för urladdningsgräns — batteri {battery}",
+          "battery_charge_end_soc_entity": "Laddstoppnivå — batteri {battery}"
+        },
+        "data_description": {
+          "battery_charge_end_soc_entity": "Detta batteris egen laddstoppnivå. SEM läser den bara. Lämna tomt för att använda den gemensamma entiteten från föregående sida."
         }
       },
       "settings_ev": {

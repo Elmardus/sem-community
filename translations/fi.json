@@ -182,7 +182,8 @@
           "diagram_style": "Järjestelmäkaavion tyyli",
           "battery_assist_min_surplus": "Akkutuki – vähimmäisaurinkoylijäämä (W)",
           "grid_sign_invert": "Käännä verkkotehon etumerkki",
-          "battery_operating_mode_entity": "Akun käyttötila-entiteetti (tarkkailtu)"
+          "battery_operating_mode_entity": "Akun käyttötila-entiteetti (tarkkailtu)",
+          "battery_charge_end_soc_entity": "Akun latauksen lopetustaso (valinnainen)"
         },
         "data_description": {
           "update_interval": "Kuinka usein koordinaattori lukee anturit ja säätää laitteistoa. 10 s antaa tarkimman energiaintegroinnin; yli 30 s:n arvot aliarvioivat energian. Alue 10–60 s.",
@@ -208,14 +209,19 @@
           "legionella_interval_hours": "Enimmäistuntimäärä legionelladesinfiointijaksojen välillä, ennen kuin SEM pakottaa lämmityksen.",
           "battery_assist_min_surplus": "Pienin todellinen aurinkoylijäämä, ennen kuin kotiakku saa auttaa EV:n lataamisessa — kaikissa lataustiloissa. Tämän alapuolella akku on varattu talolle (auto ottaa verkosta + auringosta). Oletus 1200 W. Aseta arvoon 0, jotta akku tukee EV:tä kaikkialla, myös yöllä.",
           "grid_sign_invert": "Ota käyttöön vain, jos verkosta otto näkyy positiivisena arvona (esim. Enphase). SEM:n käytäntö on negatiivinen = otto; tämä kääntää raakalukeman ja ohittaa etumerkin automaattitunnistuksen.",
-          "battery_operating_mode_entity": "Invertterin käytäntövalitsin (esim. Huawein 'Working mode'). SEM vain LUKEE sitä: tila näytetään akkutietojen vieressä, ja kertaluonteinen korjaus varoittaa, kun se ei ole se omakulutustila, jota SEM:n suunnittelu olettaa. SEM ei koskaan muuta sitä. Jätä tyhjäksi poistaaksesi tarkkailun käytöstä."
+          "battery_operating_mode_entity": "Invertterin käytäntövalitsin (esim. Huawein 'Working mode'). SEM vain LUKEE sitä: tila näytetään akkutietojen vieressä, ja kertaluonteinen korjaus varoittaa, kun se ei ole se omakulutustila, jota SEM:n suunnittelu olettaa. SEM ei koskaan muuta sitä. Jätä tyhjäksi poistaaksesi tarkkailun käytöstä.",
+          "battery_charge_end_soc_entity": "Missä invertteri itse lopettaa akun latauksen, %. SEM vain lukee sen eikä koskaan kirjoita sitä. Pakkolataus päättyy silloin myös siihen, kun se on alle 90 %."
         }
       },
       "settings_battery_limit": {
         "title": "Akku {battery} — purkuraja",
         "description": "Akku {battery} on {sensor}.\n\nValitse Number-entiteetti, joka rajoittaa tämän akun purkutehoa. Jätä tyhjäksi, niin edellisen sivun yhteistä entiteettiä käytetään.",
         "data": {
-          "battery_discharge_control_entity": "Purkurajan entiteetti — akku {battery}"
+          "battery_discharge_control_entity": "Purkurajan entiteetti — akku {battery}",
+          "battery_charge_end_soc_entity": "Latauksen lopetustaso — akku {battery}"
+        },
+        "data_description": {
+          "battery_charge_end_soc_entity": "Tämän akun oma latauksen lopetustaso. SEM vain lukee sen. Jätä tyhjäksi käyttääksesi edellisen sivun yhteistä entiteettiä."
         }
       },
       "settings_ev": {

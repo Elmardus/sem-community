@@ -182,7 +182,8 @@
           "legionella_interval_hours": "消毒周期最大间隔时间 (小时)",
           "diagram_style": "系统图样式",
           "grid_sign_invert": "反转电网功率符号",
-          "battery_operating_mode_entity": "电池运行模式实体（受监测）"
+          "battery_operating_mode_entity": "电池运行模式实体（受监测）",
+          "battery_charge_end_soc_entity": "蓄电池充电截止电量（可选）"
         },
         "data_description": {
           "update_interval": "协调器读取传感器和调整硬件的频率。10 秒可提供最准确的电量统计；超过 30 秒的值会导致电量少计。范围：10–60 秒。",
@@ -208,14 +209,19 @@
           "legionella_target_temp": "热水系统在军团菌消毒周期中必须达到的温度 (°C)。",
           "legionella_interval_hours": "在 SEM 强制启动加热之前，两次军团菌消毒周期之间的最大间隔时间（小时）。",
           "grid_sign_invert": "仅当电网进口显示为正值时开启（例如 Enphase）。SEM 的约定是负值＝进口；此选项会对原始读数取反并跳过符号自动检测。",
-          "battery_operating_mode_entity": "逆变器的运行策略选择器（例如华为的 'Working mode'）。SEM 只【读取】它：该模式会显示在电池证据旁边，当它不是 SEM 规划所假定的自发自用模式时，会触发一次性维修提醒。SEM 绝不会更改它。留空则停用监测。"
+          "battery_operating_mode_entity": "逆变器的运行策略选择器（例如华为的 'Working mode'）。SEM 只【读取】它：该模式会显示在电池证据旁边，当它不是 SEM 规划所假定的自发自用模式时，会触发一次性维修提醒。SEM 绝不会更改它。留空则停用监测。",
+          "battery_charge_end_soc_entity": "逆变器自身停止为蓄电池充电的电量（%）。SEM 只读取它，从不写入。低于 90 % 时，强制充电也在此结束。"
         }
       },
       "settings_battery_limit": {
         "title": "蓄电池 {battery} — 放电限制",
         "description": "蓄电池 {battery} 为 {sensor}。\n\n选择限制此蓄电池放电功率的数字实体。留空则使用上一页的共用实体。",
         "data": {
-          "battery_discharge_control_entity": "放电限制实体 — 蓄电池 {battery}"
+          "battery_discharge_control_entity": "放电限制实体 — 蓄电池 {battery}",
+          "battery_charge_end_soc_entity": "充电截止电量 — 蓄电池 {battery}"
+        },
+        "data_description": {
+          "battery_charge_end_soc_entity": "此蓄电池自己的充电截止电量。SEM 只读取它。留空则使用上一页的共享实体。"
         }
       },
       "settings_ev": {

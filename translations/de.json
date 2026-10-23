@@ -182,7 +182,8 @@
           "legionella_interval_hours": "Max. Stunden zwischen Desinfektionszyklen",
           "diagram_style": "Systemdiagramm-Stil",
           "grid_sign_invert": "Vorzeichen der Netzleistung umkehren",
-          "battery_operating_mode_entity": "Batterie-Betriebsmodus-Entität (beobachtet)"
+          "battery_operating_mode_entity": "Batterie-Betriebsmodus-Entität (beobachtet)",
+          "battery_charge_end_soc_entity": "Ladeende-Stand der Batterie (optional)"
         },
         "data_description": {
           "update_interval": "Wie oft der Koordinator Sensoren ausliest und die Hardware nachregelt. 10 s ergibt die genaueste Energieintegration; Werte über 30 s zählen zu wenig Energie. Bereich 10–60 s.",
@@ -208,14 +209,19 @@
           "legionella_target_temp": "Temperatur (°C), die das Warmwassersystem während eines Legionellen-Desinfektionszyklus erreichen muss.",
           "legionella_interval_hours": "Maximale Anzahl Stunden zwischen Legionellen-Desinfektionszyklen, bevor SEM eine Aufheizung erzwingt.",
           "grid_sign_invert": "Nur aktivieren, wenn Netzbezug als positiver Wert angezeigt wird (z. B. Enphase). SEMs Konvention ist negativ = Bezug; dies kehrt den Rohwert um und umgeht die automatische Vorzeichenerkennung.",
-          "battery_operating_mode_entity": "Die Betriebsmodus-Auswahl des Wechselrichters (z. B. Huaweis 'Working mode'). SEM LIEST sie nur: Der Modus wird neben den Batteriedaten angezeigt, und eine einmalige Reparaturmeldung warnt, wenn es nicht der Eigenverbrauchsmodus ist, den SEMs Planung voraussetzt. SEM ändert ihn nie. Leer lassen, um die Beobachtung zu deaktivieren."
+          "battery_operating_mode_entity": "Die Betriebsmodus-Auswahl des Wechselrichters (z. B. Huaweis 'Working mode'). SEM LIEST sie nur: Der Modus wird neben den Batteriedaten angezeigt, und eine einmalige Reparaturmeldung warnt, wenn es nicht der Eigenverbrauchsmodus ist, den SEMs Planung voraussetzt. SEM ändert ihn nie. Leer lassen, um die Beobachtung zu deaktivieren.",
+          "battery_charge_end_soc_entity": "Wo der Wechselrichter selbst das Laden der Batterie stoppt, in %. SEM liest ihn nur und schreibt ihn nie. Zwangsladen endet dann auch dort, wenn er unter 90 % liegt."
         }
       },
       "settings_battery_limit": {
         "title": "Batterie {battery} — Entladelimit",
         "description": "Batterie {battery} ist {sensor}.\n\nWähle die Number-Entität, die die Entladeleistung dieser Batterie begrenzt. Leer lassen, um die gemeinsame Entität der vorigen Seite zu nutzen.",
         "data": {
-          "battery_discharge_control_entity": "Entladelimit-Entität — Batterie {battery}"
+          "battery_discharge_control_entity": "Entladelimit-Entität — Batterie {battery}",
+          "battery_charge_end_soc_entity": "Ladeende-Stand — Batterie {battery}"
+        },
+        "data_description": {
+          "battery_charge_end_soc_entity": "Der eigene Ladeende-Stand dieser Batterie. SEM liest ihn nur. Leer lassen, um die gemeinsame Entität der vorigen Seite zu nutzen."
         }
       },
       "settings_ev": {

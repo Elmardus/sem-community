@@ -220,9 +220,12 @@ class TestSemDoesNotOfferToWriteTheseRegisters:
     def test_the_real_ones_still_match(self):
         from custom_components.solar_energy_management.consts import (
             role_lexicon as lex)
-        for key in ("ac_charge_soc_limit", "battery_charge_soc_limit",
-                    "soc_upper_limit"):
+        for key in ("ac_charge_soc_limit", "battery_charge_soc_limit"):
             assert lex.role_for("number", key) == "battery_target_soc", key
+        # (#1166) an UPPER limit is where the inverter stops charging, the
+        # user's standing level: SEM reads it and never writes it.
+        assert lex.role_for("number", "soc_upper_limit") == \
+            "battery_charge_end_soc"
 
     @pytest.mark.parametrize("key,role", [
         # s-o-c inside "sockets": SENEC's switchable wall sockets were being

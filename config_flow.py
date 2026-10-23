@@ -1440,6 +1440,10 @@ OPTIONS_FLOW_OWNED_KEYS = frozenset({
     "battery_discharge_control_entity",
     # (#1089) the per-battery discharge limits, one page per battery
     "battery_discharge_control_entities",
+    # (#1166) the pack's own end-of-charge level, read only — shared, and
+    # one per battery on the per-battery page
+    "battery_charge_end_soc_entity",
+    "battery_charge_end_soc_entities",
     "battery_operating_mode_entity",
     "battery_discharge_protection_enabled",
     "battery_force_charge_negative_price",
@@ -2632,6 +2636,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "battery_discharge_control_entity",
                     description={"suggested_value": current_config.get("battery_discharge_control_entity") or None},
                 ): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
+                # (#1166) Read only: the level at which the inverter itself
+                # stops charging. Force charge ends at it when it is below
+                # 90 %. SEM never writes this entity.
+                vol.Optional(
+                    "battery_charge_end_soc_entity",
+                    description={"suggested_value": current_config.get("battery_charge_end_soc_entity") or None},
+                ): selector.EntitySelector(selector.EntitySelectorConfig(
+                    domain=["number", "sensor", "input_number"])),
                 # (#845) Observe-only: the inverter's operating-policy
                 # selector, WATCHED never written. Prefilled by vocabulary
                 # (the Huawei selector identifies itself by its options),
@@ -2705,26 +2717,38 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         list stays as it is.
         """
         list_key = "battery_discharge_control_entities"
+        # (#1166) the same page carries each pack's own end-of-charge level
+        end_key = "battery_charge_end_soc_entities"
         slugs = self._battery_slugs()
         idx = self._battery_limit_idx
         if user_input is not None:
-            # The page's one field is THIS battery's
-            # ``battery_discharge_control_entity`` — the key
-            # ``_per_battery_config`` hands it — so it goes into the list
-            # slot, never the shared key. Absent from the reply = emptied.
-            limits = _draft_list(self, list_key)
-            while len(limits) <= idx:
-                limits.append(None)
-            limits[idx] = user_input.get("battery_discharge_control_entity") or None
-            self._data["battery_discharge_control_entities"] = limits
+            # The page's fields are THIS battery's
+            # ``battery_discharge_control_entity`` and
+            # ``battery_charge_end_soc_entity`` — the keys
+            # ``_per_battery_config`` hands it — so they go into the list
+            # slots, never the shared keys. Absent from the reply = emptied.
+            def _slot(lk, field):
+                slots = _draft_list(self, lk)
+                while len(slots) <= idx:
+                    slots.append(None)
+                slots[idx] = user_input.get(field) or None
+                return slots
+            self._data["battery_discharge_control_entities"] = _slot(
+                list_key, "battery_discharge_control_entity")
+            self._data["battery_charge_end_soc_entities"] = _slot(
+                end_key, "battery_charge_end_soc_entity")
             idx += 1
             self._battery_limit_idx = idx
         if len(slugs) < 2:
             # Skipped (or SEM reloaded with fewer batteries mid-dialog): the
-            # key is owned, so the saved list must reach the final save.
+            # keys are owned, so the saved lists must reach the final save.
             saved = (self.config_entry.options or {}).get(list_key)
             if saved is not None:
                 self._data.setdefault("battery_discharge_control_entities",
+                                      list(saved) if isinstance(saved, list) else saved)
+            saved = (self.config_entry.options or {}).get(end_key)
+            if saved is not None:
+                self._data.setdefault("battery_charge_end_soc_entities",
                                       list(saved) if isinstance(saved, list) else saved)
             return await self.async_step_settings_ev()
         if idx >= len(slugs):
@@ -2732,6 +2756,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         limits = _draft_list(self, list_key)
         current = limits[idx] if idx < len(limits) else None
+        ends = _draft_list(self, end_key)
+        current_end = ends[idx] if idx < len(ends) else None
         return self.async_show_form(
             step_id="settings_battery_limit",
             data_schema=vol.Schema({
@@ -2739,6 +2765,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "battery_discharge_control_entity",
                     description={"suggested_value": current or None},
                 ): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
+                vol.Optional(
+                    "battery_charge_end_soc_entity",
+                    description={"suggested_value": current_end or None},
+                ): selector.EntitySelector(selector.EntitySelectorConfig(
+                    domain=["number", "sensor", "input_number"])),
             }),
             description_placeholders={
                 "battery": slugs[idx].upper(),

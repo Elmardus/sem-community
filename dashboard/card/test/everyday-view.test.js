@@ -168,9 +168,10 @@ test('All settings still shows every row', () => {
     // and tiers show only for their model.
     // (#1090) +1 for the export threshold.
     // (#812) +3 for the heat pump's own tariff (rate, price entity, meter).
+    // (#1166) +1 for the battery's own end-of-charge level.
     const everyday = renderTab(card()).total;
     const { per, total } = renderTab(card({ advanced: true }));
-    assert.equal(total, 107, `All settings drew ${total} rows`);
+    assert.equal(total, 108, `All settings drew ${total} rows`);
     assert.ok(per.battery_zones >= 9, 'battery knobs and pickers');
     assert.ok(per.ev_chargers >= 15, 'every per-charger row');
     assert.ok(total > everyday * 5);
@@ -245,8 +246,9 @@ test('"N more in All settings" counts the hidden rows and turns the switch on', 
     el._renderEverydayMore = (r) => { rows = { ...r }; return real(r); };
     el._renderSection({ id: 'battery_zones', color: '', icon: '', titleKey: 't', subtitleFn: () => '' },
         (T) => el._renderBatteryZones(T), new Proxy({}, { get: () => '' }));
-    // six knobs + three pickers hidden, the protection toggle shown
-    assert.deepEqual(rows, { shown: 1, hidden: 9 });
+    // six knobs + four pickers hidden (#1166: the end-of-charge level),
+    // the protection toggle shown
+    assert.deepEqual(rows, { shown: 1, hidden: 10 });
     const btn = findTemplates(real(rows), 'class="everyday-more-btn"')[0];
     assert.ok(btn);
     store.clear();

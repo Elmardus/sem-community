@@ -250,6 +250,35 @@ MANUAL_CHARGE_STALL_S = 15 * 60.0
 #: (#1164) Two checks further apart than this (three of the slowest 60 s
 #: cycles) start the window again: what happened between them is unseen.
 MANUAL_CHARGE_STALL_GAP_S = 180.0
+#: (#1166) A pack whose inverter is set to stop charging below 90 % (an
+#: end-of-charge level of 80 %, say) never reached the 90 % above, so its
+#: Force charge never ended. When the user has picked that level for the
+#: pack, a stall counts from this many points under it…
+MANUAL_CHARGE_END_MARGIN = 2.0
+#: (#1166) …unless the level is below this. No inverter offers an end of
+#: charge that low; such a reading is a wrong entity (a reserve, a floor),
+#: and trusting it would end the charge of a cold pack. 90 % stands then.
+MANUAL_CHARGE_END_MIN_SOC = 50.0
+
+
+def charge_stall_soc(end_soc) -> float:
+    """(#1166) The level from which a pack that takes no more is full.
+
+    ``end_soc`` is the pack's own end-of-charge level, read from the entity
+    the user picked (``battery_charge_end_soc_entity``), or ``None``. With a
+    level: ``min(90 %, level - margin)``. Without one, or with one that is
+    not a plausible end of charge: ``MANUAL_CHARGE_STALL_SOC``, exactly the
+    rule before. A pack that refuses below its own level (cold, grid charging
+    off on the inverter) still never ends the job."""
+    if end_soc is None or isinstance(end_soc, bool):
+        return MANUAL_CHARGE_STALL_SOC
+    try:
+        end = float(end_soc)
+    except (TypeError, ValueError):
+        return MANUAL_CHARGE_STALL_SOC
+    if not (MANUAL_CHARGE_END_MIN_SOC <= end <= 100.0):   # NaN fails too
+        return MANUAL_CHARGE_STALL_SOC
+    return min(MANUAL_CHARGE_STALL_SOC, end - MANUAL_CHARGE_END_MARGIN)
 
 
 def manual_mode_done(mode, soc, *, soc_read: bool, reserve: float,
@@ -280,21 +309,23 @@ def manual_mode_done(mode, soc, *, soc_read: bool, reserve: float,
 
 
 def charge_stall_read(soc, power_w, *, soc_read: bool, power_read: bool,
-                      asked_w, sem_charging) -> bool:
+                      asked_w, sem_charging,
+                      stall_soc: float = MANUAL_CHARGE_STALL_SOC) -> bool:
     """(#1164) Does this cycle show a pack that takes no more charge?
 
     All of: the level and the pack's own power are readings; SEM's forced
     charge landed and is not stopped (``sem_charging``, from
     :func:`forced_ops`); SEM asked for at least one charge step
     (``asked_w`` — a charge the grid limit cut to nothing asks for none);
-    the level is at or above ``MANUAL_CHARGE_STALL_SOC``; and the pack moves
-    no more than ``MANUAL_CHARGE_STALL_W`` either way. A pack that sends
-    power out is not full, it is not following the charge."""
+    the level is at or above ``stall_soc`` (``MANUAL_CHARGE_STALL_SOC``, or
+    the pack's own end level from :func:`charge_stall_soc`, #1166); and the
+    pack moves no more than ``MANUAL_CHARGE_STALL_W`` either way. A pack that
+    sends power out is not full, it is not following the charge."""
     if not (soc_read and power_read) or soc is None or power_w is None:
         return False
     return (sem_charging is True
             and float(asked_w or 0.0) >= FORCED_CHARGE_STEP_W
-            and float(soc) >= MANUAL_CHARGE_STALL_SOC
+            and float(soc) >= float(stall_soc)
             and abs(float(power_w)) <= MANUAL_CHARGE_STALL_W)
 
 
