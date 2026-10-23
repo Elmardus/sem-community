@@ -1975,7 +1975,9 @@
     "why_reason_export_released": "Dodávka do sítě se zase vyplatí, takže SEM ruší limit dodávky.",
     "why_kind_export": "Dodávka do sítě",
     "why_verb_limit_export": "limit dodávky",
-    "why_verb_release_export": "dodávka volná"
+    "why_verb_release_export": "dodávka volná",
+    "why_reason_export_guard_off": "Vypnuli jste limit dodávky, takže ho SEM ruší.",
+    "why_reason_export_price_unknown": "Cena za dodávku do sítě není známá, takže SEM ruší limit dodávky."
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3953,7 +3955,9 @@
     "why_reason_export_released": "Eksport betaler sig igen, så SEM fjerner eksportgrænsen.",
     "why_kind_export": "Eksport til nettet",
     "why_verb_limit_export": "eksportgrænse",
-    "why_verb_release_export": "eksport fri"
+    "why_verb_release_export": "eksport fri",
+    "why_reason_export_guard_off": "Du har slået eksportgrænsen fra, så SEM fjerner den.",
+    "why_reason_export_price_unknown": "Eksportprisen er ukendt, så SEM fjerner eksportgrænsen."
   },
   "de": {
     "% of limit": "% des Limits",
@@ -5931,7 +5935,9 @@
     "why_reason_export_released": "Einspeisen lohnt sich wieder, darum hebt SEM das Einspeiselimit auf.",
     "why_kind_export": "Netzeinspeisung",
     "why_verb_limit_export": "Einspeiselimit",
-    "why_verb_release_export": "Einspeisung frei"
+    "why_verb_release_export": "Einspeisung frei",
+    "why_reason_export_guard_off": "Du hast das Einspeiselimit ausgeschaltet, darum hebt SEM es auf.",
+    "why_reason_export_price_unknown": "Der Einspeisepreis ist unbekannt, darum hebt SEM das Einspeiselimit auf."
   },
   "en": {
     "% of limit": "% of limit",
@@ -7909,7 +7915,9 @@
     "why_reason_export_released": "Exporting is worth it again, so SEM lifts the export limit.",
     "why_kind_export": "Grid export",
     "why_verb_limit_export": "export limit",
-    "why_verb_release_export": "export free"
+    "why_verb_release_export": "export free",
+    "why_reason_export_guard_off": "You switched off the export limit, so SEM lifts it.",
+    "why_reason_export_price_unknown": "The export price is unknown, so SEM lifts the export limit."
   },
   "es": {
     "% of limit": "% del límite",
@@ -9887,7 +9895,9 @@
     "why_reason_export_released": "Exportar vuelve a compensar, así que SEM quita el límite de exportación.",
     "why_kind_export": "Exportación a red",
     "why_verb_limit_export": "límite de exportación",
-    "why_verb_release_export": "exportación libre"
+    "why_verb_release_export": "exportación libre",
+    "why_reason_export_guard_off": "Desactivaste el límite de exportación, así que SEM lo quita.",
+    "why_reason_export_price_unknown": "El precio de exportación es desconocido, así que SEM quita el límite de exportación."
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -11865,7 +11875,9 @@
     "why_reason_export_released": "Verkkoon syöttö kannattaa taas, joten SEM poistaa syöttörajan.",
     "why_kind_export": "Verkkoon syöttö",
     "why_verb_limit_export": "syöttöraja",
-    "why_verb_release_export": "syöttö vapaa"
+    "why_verb_release_export": "syöttö vapaa",
+    "why_reason_export_guard_off": "Kytkit syöttörajan pois, joten SEM poistaa sen.",
+    "why_reason_export_price_unknown": "Verkkoon syötön hinta on tuntematon, joten SEM poistaa syöttörajan."
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -13843,7 +13855,9 @@
     "why_reason_export_released": "Injecter vaut de nouveau la peine, SEM lève donc la limite d'injection.",
     "why_kind_export": "Injection réseau",
     "why_verb_limit_export": "limite d'injection",
-    "why_verb_release_export": "injection libre"
+    "why_verb_release_export": "injection libre",
+    "why_reason_export_guard_off": "Vous avez désactivé la limite d'injection, SEM la lève donc.",
+    "why_reason_export_price_unknown": "Le prix d'injection est inconnu, SEM lève donc la limite d'injection."
   },
   "hu": {
     "% of limit": "% a határból",
@@ -15821,7 +15835,9 @@
     "why_reason_export_released": "A betáplálás újra megéri, ezért a SEM feloldja a betáplálási korlátot.",
     "why_kind_export": "Hálózati betáplálás",
     "why_verb_limit_export": "betáplálási korlát",
-    "why_verb_release_export": "betáplálás szabad"
+    "why_verb_release_export": "betáplálás szabad",
+    "why_reason_export_guard_off": "Kikapcsoltad a betáplálási korlátot, ezért a SEM feloldja.",
+    "why_reason_export_price_unknown": "A betáplálás ára ismeretlen, ezért a SEM feloldja a betáplálási korlátot."
   },
   "it": {
     "% of limit": "% del limite",
@@ -17799,7 +17815,9 @@
     "why_reason_export_released": "Immettere conviene di nuovo, quindi SEM toglie il limite di immissione.",
     "why_kind_export": "Immissione in rete",
     "why_verb_limit_export": "limite di immissione",
-    "why_verb_release_export": "immissione libera"
+    "why_verb_release_export": "immissione libera",
+    "why_reason_export_guard_off": "Hai disattivato il limite di immissione, quindi SEM lo toglie.",
+    "why_reason_export_price_unknown": "Il prezzo di immissione è sconosciuto, quindi SEM toglie il limite di immissione."
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -19777,7 +19795,9 @@
     "why_reason_export_released": "Terugleveren loont weer, dus SEM heft de teruglevergrens op.",
     "why_kind_export": "Teruglevering",
     "why_verb_limit_export": "teruglevergrens",
-    "why_verb_release_export": "teruglevering vrij"
+    "why_verb_release_export": "teruglevering vrij",
+    "why_reason_export_guard_off": "Je hebt de teruglevergrens uitgezet, dus SEM heft hem op.",
+    "why_reason_export_price_unknown": "De terugleverprijs is onbekend, dus SEM heft de teruglevergrens op."
   },
   "no": {
     "% of limit": "% av grense",
@@ -21755,7 +21775,9 @@
     "why_reason_export_released": "Eksport lønner seg igjen, så SEM fjerner eksportgrensen.",
     "why_kind_export": "Eksport til nettet",
     "why_verb_limit_export": "eksportgrense",
-    "why_verb_release_export": "eksport fri"
+    "why_verb_release_export": "eksport fri",
+    "why_reason_export_guard_off": "Du har slått av eksportgrensen, så SEM fjerner den.",
+    "why_reason_export_price_unknown": "Eksportprisen er ukjent, så SEM fjerner eksportgrensen."
   },
   "pl": {
     "% of limit": "% limitu",
@@ -23733,7 +23755,9 @@
     "why_reason_export_released": "Oddawanie do sieci znów się opłaca, więc SEM znosi limit oddawania.",
     "why_kind_export": "Oddawanie do sieci",
     "why_verb_limit_export": "limit oddawania",
-    "why_verb_release_export": "oddawanie wolne"
+    "why_verb_release_export": "oddawanie wolne",
+    "why_reason_export_guard_off": "Wyłączono limit oddawania, więc SEM go znosi.",
+    "why_reason_export_price_unknown": "Cena oddawania do sieci jest nieznana, więc SEM znosi limit oddawania."
   },
   "pt": {
     "% of limit": "% do limite",
@@ -25711,7 +25735,9 @@
     "why_reason_export_released": "Exportar volta a compensar, por isso o SEM retira o limite de exportação.",
     "why_kind_export": "Exportação para a rede",
     "why_verb_limit_export": "limite de exportação",
-    "why_verb_release_export": "exportação livre"
+    "why_verb_release_export": "exportação livre",
+    "why_reason_export_guard_off": "O limite de exportação foi desligado, por isso o SEM retira-o.",
+    "why_reason_export_price_unknown": "O preço de exportação é desconhecido, por isso o SEM retira o limite de exportação."
   },
   "ro": {
     "% of limit": "% din limită",
@@ -27689,7 +27715,9 @@
     "why_reason_export_released": "Injectarea merită din nou, deci SEM ridică limita de injectare.",
     "why_kind_export": "Injectare în rețea",
     "why_verb_limit_export": "limită de injectare",
-    "why_verb_release_export": "injectare liberă"
+    "why_verb_release_export": "injectare liberă",
+    "why_reason_export_guard_off": "Ai oprit limita de injectare, deci SEM o ridică.",
+    "why_reason_export_price_unknown": "Prețul de injectare este necunoscut, deci SEM ridică limita de injectare."
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -29667,7 +29695,9 @@
     "why_reason_export_released": "Det lönar sig att mata ut igen, så SEM tar bort exportgränsen.",
     "why_kind_export": "Export till nätet",
     "why_verb_limit_export": "exportgräns",
-    "why_verb_release_export": "export fri"
+    "why_verb_release_export": "export fri",
+    "why_reason_export_guard_off": "Du stängde av exportgränsen, så SEM tar bort den.",
+    "why_reason_export_price_unknown": "Exportpriset är okänt, så SEM tar bort exportgränsen."
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -31645,6 +31675,8 @@
     "why_reason_export_released": "上网送电又划算了，所以 SEM 取消送电限制。",
     "why_kind_export": "电网送电",
     "why_verb_limit_export": "送电限制",
-    "why_verb_release_export": "送电不限"
+    "why_verb_release_export": "送电不限",
+    "why_reason_export_guard_off": "你关闭了送电限制，所以 SEM 取消该限制。",
+    "why_reason_export_price_unknown": "上网电价未知，所以 SEM 取消送电限制。"
   }
 }

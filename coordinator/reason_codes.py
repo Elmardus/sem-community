@@ -120,6 +120,8 @@ LOAD_NO_SOURCE = "no_source"
 EXPORT_NEGATIVE_PRICE = "export_negative_price"
 EXPORT_NOT_WORTH = "export_not_worth"
 EXPORT_RELEASED = "export_released"
+EXPORT_GUARD_OFF = "export_guard_off"
+EXPORT_PRICE_UNKNOWN = "export_price_unknown"
 
 #: The placeholders a code's sentence fills, by name. A code not listed
 #: takes none.

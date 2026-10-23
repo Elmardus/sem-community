@@ -81,8 +81,10 @@ class ExportGuard:
     def update(self, now: float, verdict_state: str,
                export_w: Optional[float], *, reason_code: str = "",
                reason_params: Optional[Dict[str, Any]] = None) -> ExportCommand:
-        """``reason_code`` / ``reason_params``: (#1174) why the verdict closed
-        the meter, carried onto the cut so the decision log can say it."""
+        """``reason_code`` / ``reason_params``: (#1174) why the verdict is
+        what it is — closed (the cut) or open (the release: the price came
+        back, the guard was switched off, the price is unknown) — carried
+        onto the command so the decision log can say it."""
         closed = verdict_state == "closed"
         exp = float(export_w or 0.0)          # a BLIND meter is not export
         if closed:
@@ -146,4 +148,5 @@ class ExportGuard:
         self._applied = False
         return ExportCommand(None if (was_refused or not applied) else RELEASE_EXPORT,
                              0.0, "meter open — releasing the cut",
-                             reason_code=RC.EXPORT_RELEASED)
+                             reason_code=reason_code or RC.EXPORT_RELEASED,
+                             reason_params=dict(reason_params or {}))

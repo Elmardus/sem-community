@@ -522,9 +522,10 @@ def _dutch_day_cut(threshold=0.05, rate=0.012):
         export_threshold=threshold)["grid_export"]
     guard = ExportGuard(engage_hold_s=0.0, release_hold_s=0.0)
 
-    def tick(now, state, export_w):
-        cmd = guard.update(now, state, export_w, reason_code=v.reason_code,
-                           reason_params=v.reason_params)
+    def tick(now, state, export_w, code=None, params=None):
+        cmd = guard.update(now, state, export_w,
+                           reason_code=v.reason_code if code is None else code,
+                           reason_params=v.reason_params if params is None else params)
         fleet = type("F", (), {"export_guard_enabled": True, "export_command": cmd})()
         return decide_export(fleet)
     return v, tick
@@ -572,13 +573,14 @@ class TestTheExportLimitIsLogged:
         v, tick = _dutch_day_cut()
         ctl, adapter = self._ctl(), _ExportAdapter()
         asyncio.run(actuate_export(tick(0.0, "closed", 2400.0), adapter, controller=ctl))
-        asyncio.run(actuate_export(tick(10.0, "open", 0.0), adapter, controller=ctl))
-        release = tick(20.0, "open", 0.0)
+        release = tick(10.0, "open", 0.0, code=RC.EXPORT_RELEASED, params={})
         asyncio.run(actuate_export(release, adapter, controller=ctl))
+        asyncio.run(actuate_export(release, adapter, controller=ctl))   # re-sent
         for t in (30.0, 40.0):
-            asyncio.run(actuate_export(tick(t, "open", 0.0), adapter, controller=ctl))
+            asyncio.run(actuate_export(tick(t, "open", 0.0, code=RC.EXPORT_RELEASED,
+                                            params={}), adapter, controller=ctl))
         rows = ctl.decision_log.records()
-        assert adapter.releases == 1
+        assert adapter.releases == 2          # the re-sent one reached the wire
         assert [r["reason_code"] for r in rows] == [RC.EXPORT_NOT_WORTH, RC.EXPORT_RELEASED]
         assert rows[1]["new"] == "release_export"
 
@@ -609,3 +611,99 @@ class TestTheExportLimitIsLogged:
         refused = asyncio.run(actuate_export(tick(0.0, v.state, 2400.0), None,
                                              controller=ctl))
         assert refused and ctl.decision_log.records() == []
+
+
+class TestAReleaseSaysWhyItReleased:
+    """Round 3: a release followed ANY open verdict but always said the
+    price came back. The release now carries the verdict's own reason."""
+
+    def _verdict(self, **kw):
+        from datetime import datetime, timezone
+        from custom_components.solar_energy_management.coordinator.sink_verdicts import (
+            sink_verdicts,
+        )
+        base = dict(now=datetime(2027, 6, 1, 13, tzinfo=timezone.utc),
+                    tariff_level="normal", upcoming=[], export_rate=0.012,
+                    export_rate_known=True, export_guard_enabled=True,
+                    house_sink_enabled=False, morning_window_enabled=False,
+                    departure=None, morning_hours=2.0, forecast_refills_pack=False,
+                    pacing_horizon_end=None, export_threshold=0.05)
+        base.update(kw)
+        return sink_verdicts(**base)["grid_export"]
+
+    def _release_after(self, open_verdict):
+        from custom_components.solar_energy_management.coordinator.export_guard import (
+            RELEASE_EXPORT, ExportGuard,
+        )
+        closed = self._verdict()
+        g = ExportGuard(engage_hold_s=0.0, release_hold_s=0.0)
+        g.update(0.0, closed.state, 2400.0, reason_code=closed.reason_code,
+                 reason_params=closed.reason_params)
+        cmd = g.update(1.0, open_verdict.state, 0.0,
+                       reason_code=open_verdict.reason_code,
+                       reason_params=open_verdict.reason_params)
+        assert cmd.intent == RELEASE_EXPORT
+        return cmd
+
+    def test_the_price_came_back(self):
+        v = self._verdict(export_rate=0.09)
+        assert v.state == "open"
+        assert self._release_after(v).reason_code == RC.EXPORT_RELEASED
+
+    def test_the_price_is_unknown(self):
+        v = self._verdict(export_rate=None, export_rate_known=False)
+        assert v.state == "open"
+        assert self._release_after(v).reason_code == RC.EXPORT_PRICE_UNKNOWN
+
+    def test_the_guard_was_switched_off_in_the_verdict(self):
+        v = self._verdict(export_guard_enabled=False)
+        assert self._release_after(v).reason_code == RC.EXPORT_GUARD_OFF
+
+    def test_the_guard_switched_off_at_the_coordinator(self):
+        """The coordinator forces OPEN when the switch is off, whatever the
+        verdict says; the release names the switch."""
+        from types import SimpleNamespace
+        from custom_components.solar_energy_management.coordinator.coordinator import (
+            SEMCoordinator,
+        )
+        from custom_components.solar_energy_management.coordinator.export_guard import (
+            RELEASE_EXPORT, ExportGuard,
+        )
+        closed = self._verdict()
+        host = SimpleNamespace(
+            config={"export_guard_enabled": True},
+            _sink_verdicts={"grid_export": closed},
+            _export_guard=ExportGuard(engage_hold_s=0.0, release_hold_s=0.0))
+        power = SimpleNamespace(grid_power_unavailable=False, grid_export_power=2400.0)
+        tick = SEMCoordinator._compute_export_command.__get__(host)
+        tick(power, now=0.0)
+        assert host._export_command.reason_code == RC.EXPORT_NOT_WORTH
+        host.config["export_guard_enabled"] = False
+        tick(power, now=1.0)
+        assert host._export_command.intent == RELEASE_EXPORT
+        assert host._export_command.reason_code == RC.EXPORT_GUARD_OFF
+
+    def test_each_release_reason_has_a_true_sentence(self, catalogue):
+        en = catalogue["en"]
+        assert "switched off" in en[RC.catalogue_key(RC.EXPORT_GUARD_OFF)]
+        assert "unknown" in en[RC.catalogue_key(RC.EXPORT_PRICE_UNKNOWN)]
+
+
+class TestANamedDeviceKeepsItsName:
+
+    def test_a_named_charger_is_never_renamed(self):
+        cat = load_plain_reasons(str(TRANSLATIONS))
+        row = {"device_id": "keba_x", "device_kind": "charger", "name": "Garage",
+               "old": "stop", "new": "charge 8 A", "reason_code": RC.CHARGER_SUN,
+               "text": "solar"}
+        assert describe_decision(row, cat, "de")["name"] == "Garage"
+
+    def test_a_charger_known_only_by_its_id_takes_the_kind_word(self):
+        cat = load_plain_reasons(str(TRANSLATIONS))
+        row = {"device_id": "keba_x", "device_kind": "charger", "name": "keba_x",
+               "old": "stop", "new": "charge 8 A", "reason_code": RC.CHARGER_SUN}
+        assert describe_decision(row, cat, "en")["name"] == catalogue_word(cat)
+
+
+def catalogue_word(cat):
+    return cat["en"]["kind:charger"]

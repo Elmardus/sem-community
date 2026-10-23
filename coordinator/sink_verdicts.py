@@ -146,10 +146,12 @@ def sink_verdicts(*, now: datetime, tariff_level: Optional[str], upcoming,
 
     # grid export — CLOSED only on a READ negative level with the guard on
     if not export_guard_enabled:
-        out["grid_export"] = SinkVerdict("grid_export", OPEN, "export guard off")
+        out["grid_export"] = SinkVerdict("grid_export", OPEN, "export guard off",
+                                         reason_code=RC.EXPORT_GUARD_OFF)
     elif not export_rate_known:
         out["grid_export"] = SinkVerdict(
-            "grid_export", OPEN, "export price unknown — not closing on a guess")
+            "grid_export", OPEN, "export price unknown — not closing on a guess",
+            reason_code=RC.EXPORT_PRICE_UNKNOWN)
     elif export_negative:
         out["grid_export"] = SinkVerdict(
             "grid_export", CLOSED,
@@ -166,7 +168,8 @@ def sink_verdicts(*, now: datetime, tariff_level: Optional[str], upcoming,
     else:
         out["grid_export"] = SinkVerdict(
             "grid_export", OPEN, "export price not negative",
-            until=win[0] if win else None)
+            until=win[0] if win else None,
+            reason_code=RC.EXPORT_RELEASED)
 
     # battery — HELD headroom when a CLOSED window starts inside the pacing horizon (#926)
     if win and pacing_horizon_end is not None and win[0] < pacing_horizon_end:

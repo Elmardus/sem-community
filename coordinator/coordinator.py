@@ -13209,6 +13209,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         previous cycle, which under 120 s / 300 s holds is the same statement.
         """
         import time as _time
+        from . import reason_codes as RC
         from .export_guard import ExportGuard
         from .sink_verdicts import OPEN
         if getattr(self, "_export_guard", None) is None:
@@ -13228,8 +13229,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     else float(getattr(power, "grid_export_power", 0.0) or 0.0))
         self._export_command = self._export_guard.update(
             _time.monotonic() if now is None else now, state, export_w,
-            # (#1174) why the meter closed, carried onto the cut
-            reason_code=getattr(verdict, "reason_code", "") if enabled else "",
+            # (#1174) why the meter is closed or open, carried onto the cut
+            # or its release; a guard switched off releases for that reason
+            reason_code=(getattr(verdict, "reason_code", "") if enabled
+                         else RC.EXPORT_GUARD_OFF),
             reason_params=getattr(verdict, "reason_params", None) if enabled else None)
 
     def _publish_export_guard_state(self) -> None:
