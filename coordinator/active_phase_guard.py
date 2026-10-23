@@ -13,6 +13,7 @@ import math
 from typing import Any, Dict
 
 from ..const import DEFAULT_PHASE_GUARD_TOPOLOGY
+from . import reason_codes as RC
 from .charger_types import ChargerDecision, ChargerIntent
 from ..features.phase_shed import CHARGERS_FIRST_CYCLES, over_phases
 
@@ -271,6 +272,7 @@ class ActivePhaseGuard:
                 f"{decision.reason}; phase guard clamped to {target_a}A "
                 f"(headroom {available_increase_a:.2f}A)"
             ),
+            reason_code=RC.CHARGER_PHASE_SLOW, reason_params={},
         )
 
     def filter(self, decision: ChargerDecision, *, adapter: Any = None,
@@ -291,6 +293,7 @@ class ActivePhaseGuard:
             budget_w=0.0,
             bridgeable=False,
             reason=f"phase guard: {reason} — immediate EV stop",
+            reason_code=RC.CHARGER_PHASE_STOP, reason_params={},
         )
 
     @staticmethod

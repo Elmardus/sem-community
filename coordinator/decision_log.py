@@ -25,6 +25,8 @@ from datetime import datetime
 import logging
 from typing import Any, Deque, Dict, List, Mapping, Optional, Tuple
 
+from . import reason_codes as RC
+
 _LOGGER = logging.getLogger(__name__)
 
 EVENT_DECISION = "solar_energy_management_decision"
@@ -80,6 +82,20 @@ def _clean_inputs(inputs: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     return out
 
 
+def _clean_params(params: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    """(#1174) The numbers a reason's plain sentence names — a few short,
+    JSON-safe values, never more than the sentence needs."""
+    out: Dict[str, Any] = {}
+    for key, val in list((params or {}).items())[:4]:
+        if val is None:
+            continue
+        if isinstance(val, (int, float)) and not isinstance(val, bool):
+            out[str(key)[:16]] = round(float(val), 1) if isinstance(val, float) else val
+        else:
+            out[str(key)[:16]] = str(val)[:16]
+    return out
+
+
 def format_command(kind: str, verb: str, value: Optional[float]) -> str:
     """``charge 8 A`` / ``limit_discharge 1500 W`` / ``off``."""
     if value is None:
@@ -101,6 +117,8 @@ class DecisionRecord:
     inputs: Dict[str, Any] = field(default_factory=dict)
     observer: bool = False
     name: str = ""
+    #: (#1174) the numbers the code's plain sentence names
+    params: Dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -111,6 +129,7 @@ class DecisionRecord:
             "old": self.old,
             "new": self.new,
             "reason_code": self.reason_code,
+            "params": dict(self.params),
             "text": self.text,
             "inputs": dict(self.inputs),
             "observer": self.observer,
@@ -160,6 +179,7 @@ class DecisionLog:
     def record(self, *, device_id: str, kind: str, verb: str,
                value: Optional[float] = None, reason_code: str = "",
                text: str = "", observer: bool = False, name: str = "",
+               params: Optional[Mapping[str, Any]] = None,
                inputs: Optional[Mapping[str, Any]] = None,
                now: Optional[datetime] = None,
                quiet_first_rest: bool = True) -> Optional[DecisionRecord]:
@@ -205,6 +225,7 @@ class DecisionLog:
                 inputs=merged,
                 observer=bool(observer),
                 name=str(name or self._names.get(key) or device_id)[:_NAME_MAX],
+                params=_clean_params(params),
             )
             self._records.append(rec)
             self._last_record[key] = rec
@@ -251,6 +272,11 @@ def log_of(controller) -> Optional[DecisionLog]:
     return log if isinstance(log, DecisionLog) else None
 
 
+def _params_of(decision) -> Optional[Mapping[str, Any]]:
+    params = getattr(decision, "reason_params", None)
+    return params if isinstance(params, Mapping) else None
+
+
 def record_charger(log: Optional[DecisionLog], decision, *, verb: str,
                    value: Optional[float] = None,
                    observer: bool = False, name: str = "") -> Optional[DecisionRecord]:
@@ -260,17 +286,20 @@ def record_charger(log: Optional[DecisionLog], decision, *, verb: str,
     if not isinstance(log, DecisionLog):
         return None
     intent = getattr(getattr(decision, "intent", None), "value", "idle")
-    if getattr(decision, "peak_paused", False):
+    # (#1174) the code the decision set where it was made; the composed
+    # one below only for a decision that carries none
+    code = str(getattr(decision, "reason_code", "") or "")
+    if not code and getattr(decision, "peak_paused", False):
         code = "peak_paused"
-    elif getattr(decision, "capped_by_limit", False):
+    elif not code and getattr(decision, "capped_by_limit", False):
         code = "limit_capped"
-    else:
+    elif not code:
         code = f"{getattr(decision, 'mode', '') or 'mode'}_{intent}"
     return log.record(
         device_id=str(getattr(decision, "charger_id", "")), kind=KIND_CHARGER,
         verb=verb, value=value, reason_code=code,
         text=str(getattr(decision, "reason", "") or ""), observer=observer,
-        name=name)
+        name=name, params=_params_of(decision))
 
 
 def record_battery(log: Optional[DecisionLog], decision, *,
@@ -281,11 +310,14 @@ def record_battery(log: Optional[DecisionLog], decision, *,
     if not isinstance(log, DecisionLog):
         return None
     intent = getattr(getattr(decision, "intent", None), "value", "normal")
-    code = "room_capped" if getattr(decision, "room_capped", False) else intent
+    code = (str(getattr(decision, "reason_code", "") or "")   # (#1174)
+            or ("room_capped" if getattr(decision, "room_capped", False)
+                else intent))
     return log.record(
         device_id=str(getattr(decision, "battery_id", "")), kind=KIND_BATTERY,
         verb=intent, value=value_w if value_w else None, reason_code=code,
         text=str(getattr(decision, "reason", "") or ""), observer=observer,
+        params=_params_of(decision),
         inputs={"target_soc": (getattr(decision, "target_soc", None) or None)
                 if intent == "force_charge" else None})
 
@@ -329,7 +361,8 @@ def record_load(log: Optional[DecisionLog], device, *, on: bool,
         value = None
     return log.record(
         device_id=did, kind=KIND_LOAD, verb="on" if on else "off",
-        value=value, reason_code=reason_code or ("start" if on else "stop"),
+        value=value,
+        reason_code=reason_code or (RC.LOAD_START if on else RC.LOAD_STOP),
         text=text, observer=observer,
         name=str(getattr(device, "name", "") or did),
         # (#812) a device on its own tariff: its price and level, not the

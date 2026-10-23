@@ -3672,9 +3672,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # (#1084) through the logged stop choke point — the same
                 # deactivate + record_deactivated it did by hand, plus the
                 # decision log's row
+                from . import reason_codes as RC
                 from .surplus_controller import _deactivate_owned
                 if await _deactivate_owned(
-                        dev, reason_code="vacation",
+                        dev, reason_code=RC.LOAD_VACATION,
                         text="comfort heating paused while away"):
                     _LOGGER.info(
                         "Vacation mode: deactivated %s (comfort heating "

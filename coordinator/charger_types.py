@@ -406,6 +406,11 @@ class BatteryDecision:
     """(#1069) FORCE_CHARGE / STOP_FORCE_CHARGE shaped by the room under the
     grid limit: actuation lowers it at once, raises it only after the room
     held, and restarts after a no-room stop only with clear room."""
+    # (#1174) The reason as a stable code and its sentence's numbers —
+    # recorded only, left out of equality (see ChargerDecision).
+    reason_code: str = field(default="", compare=False)
+    reason_params: Mapping[str, Any] = field(
+        default_factory=dict, compare=False)
 
 
 @dataclass(frozen=True)
@@ -657,6 +662,13 @@ class ChargerDecision:
     Deliberately NOT derived from ``bridgeable``: that field answers "is
     this dip transient", which a max-SOC stop also answers False, and a
     full car is not an emergency. One flag, one meaning."""
+
+    # (#1174) The reason as a stable code (``reason_codes``) and the few
+    # numbers its plain sentence names. Recorded only — never read by a
+    # decider, and left out of equality so no comparison moves.
+    reason_code: str = field(default="", compare=False)
+    reason_params: Mapping[str, Any] = field(
+        default_factory=dict, compare=False)
 
 
 def solar_commitment_w(

@@ -2007,10 +2007,12 @@ class LoadManagementCoordinator:
         """(#1084) A shed or restore that left for the load, to the decision
         log. Recording only; never raises."""
         try:
+            from ..coordinator import reason_codes as RC
             from ..coordinator.decision_log import record_shed
             info = self._devices.get(device_id) or {}
-            code = ("peak_restore" if not shed
-                    else "phase_shed" if reason == "PHASE" else "peak_shed")
+            code = (RC.LOAD_PEAK_RESTORE if not shed
+                    else RC.LOAD_PHASE_SHED if reason == "PHASE"
+                    else RC.LOAD_PEAK_SHED)
             text = ("peak cleared" if not shed
                     else "phase over its limit" if reason == "PHASE"
                     else f"grid peak limit ({str(reason).lower()})")

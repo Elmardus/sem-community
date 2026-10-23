@@ -53,6 +53,7 @@ from dataclasses import replace
 from typing import Dict, List, Optional, TYPE_CHECKING
 
 from ..const import DEFAULT_MAX_CHARGING_CURRENT
+from . import reason_codes as RC
 from .charger_types import ChargerDecision, ChargerIntent, ChargerView
 from .decide import effective_min_amps
 
@@ -703,6 +704,7 @@ class ChargeStability:
                     commanded_amps=held,
                     reason=(f"inputs degraded ({_dark_inputs_phrase(view)}) "
                             f"— holding {held}A"),
+                    reason_code=RC.CHARGER_INPUTS_MISSING, reason_params={},
                 )
 
         # #610 — declined-start backoff gate. MUST sit ABOVE the ``charge_wanted``
@@ -743,6 +745,7 @@ class ChargeStability:
                         f"{max(0.0, backoff_until - now) / 60.0:.0f} min"
                         f"{_meanwhile(decision)} — {decision.reason}"
                     ),
+                    reason_code=RC.CHARGER_CAR_DECLINED, reason_params={},
                 )
             self._giveup_backoff_until.pop(cid, None)
 
@@ -793,6 +796,7 @@ class ChargeStability:
                         f"instead of cycling the contactor (#893) — "
                         f"{decision.reason}"
                     ),
+                    reason_code=RC.CHARGER_LOW_SUN, reason_params={},
                 )
             # Latch hysteresis: once a car has drawn, a single low/zero power
             # reading is almost always a transient (the car blips, a sensor
@@ -852,11 +856,13 @@ class ChargeStability:
                         commanded_amps=start_a,
                         reason=(f"stability: starting at {start_a}A "
                                 f"(auto-raises if no draw) — {decision.reason}"),
+                        reason_code=RC.CHARGER_START, reason_params={},
                     )
                 return replace(
                     decision, intent=ChargerIntent.IDLE, commanded_amps=0,
                     reason=(f"stability: surplus must hold {enable_delay_s:.0f}s "
                             f"before start ({held:.0f}s elapsed) — {decision.reason}"),
+                    reason_code=RC.CHARGER_WAIT_STEADY, reason_params={},
                 )
             # Commanded a charge but the car is NOT drawing. Some
             # vehicles refuse a gentle 6 A handshake and need a brief
@@ -934,6 +940,7 @@ class ChargeStability:
                         f"{backoff_note}{_meanwhile(decision)} — "
                         f"{decision.reason}"
                     ),
+                    reason_code=RC.CHARGER_CAR_DECLINED, reason_params={},
                 )
             self._commit_amps(cid, offer, now)
             if offer > min_amps:
@@ -951,6 +958,7 @@ class ChargeStability:
                 intent=ChargerIntent.CHARGE_AT_AMPS,
                 commanded_amps=offer,
                 reason=reason,
+                reason_code=RC.CHARGER_START, reason_params={},
             )
 
         # charge no longer wanted (smoothed target below the floor).
@@ -1104,6 +1112,7 @@ class ChargeStability:
             return replace(
                 decision, intent=ChargerIntent.IDLE, commanded_amps=0,
                 reason=f"stability: deficit persisted — {decision.reason}",
+                reason_code=RC.CHARGER_DIP_STOP, reason_params={},
             )
         # Hold the session: ramp down toward and hold minimum current
         # until the deficit outlives the disable window. (Transient dip,
@@ -1119,6 +1128,7 @@ class ChargeStability:
                 f"stability: deficit {held:.0f}s/{disable_delay_s:.0f}s — "
                 f"holding {hold}A before stop — {decision.reason}"
             ),
+            reason_code=RC.CHARGER_DIP_HOLD, reason_params={},
         )
 
     def _adjust(

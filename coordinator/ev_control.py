@@ -29,6 +29,7 @@ from ..const import (
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_VOLTAGE_PER_PHASE,
 )
+from . import reason_codes as RC  # (#1174)
 from .types import PowerReadings, PowerFlows, SessionData
 from .departure import departure_for, departure_hhmm
 from .ev_tariff_planner import NightChargePlan, plan_night_charge
@@ -914,6 +915,8 @@ class EVControlMixin:
             intent=intent,
             reason=f"night gate — {mode} opts out of night charging; "
                    "policing only (#740)",
+            reason_code=(RC.CHARGER_OFF if mode == "off"
+                         else RC.CHARGER_NO_NIGHT),
             bridgeable=False,
         )
         # (#1150) build_view's resolution for the car too: in a fleet, a
@@ -1150,7 +1153,8 @@ class EVControlMixin:
                 ChargerIntent.CHARGE_AT_AMPS, ChargerIntent.CHARGE_MAX):
             return replace(
                 decision, intent=ChargerIntent.DISABLE, commanded_amps=0,
-                reason=f"phase switch: {r.state} (#804)", bridgeable=False)
+                reason=f"phase switch: {r.state} (#804)", bridgeable=False,
+                reason_code=RC.CHARGER_PHASE_SWITCH, reason_params={})
         return decision
 
     def _this_charger_power(self, ev, power) -> float:

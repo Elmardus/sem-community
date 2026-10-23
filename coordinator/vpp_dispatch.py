@@ -382,6 +382,7 @@ def vpp_pause_override(decision, paused: bool):
         return decision
     from dataclasses import replace
     from .charger_types import ChargerIntent
+    from . import reason_codes
     if decision.intent in (ChargerIntent.CHARGE_AT_AMPS, ChargerIntent.CHARGE_MAX,
                            ChargerIntent.IDLE):
         return replace(
@@ -391,6 +392,7 @@ def vpp_pause_override(decision, paused: bool):
             # bypasses the contactor's minimum-ON floor.
             safety_stop=True,
             reason=f"VPP export pause — EV stopped for the event (#580) — {decision.reason}",
+            reason_code=reason_codes.CHARGER_GRID_EVENT, reason_params={},
         )
     return decision
 
