@@ -221,6 +221,13 @@ class BatteryPower:
 
     name: str = ""
 
+    power_read: bool = False
+    """(#1167) True only when THIS unit's power sensor answered with a
+    number this cycle (both sides for a two-sensor pair) and the number is
+    one a battery can produce. ``power_w`` is 0.0 on a dark read, which is
+    also what an idle pack reads. The fleet's flag cannot stand in for it:
+    one dark unit would make every other unit's 0 W no reading too."""
+
 
 # ─────────────────────────────────────────────────────────────────
 # Per-device RUNTIME state (Group A + B of the arch follow-up)
