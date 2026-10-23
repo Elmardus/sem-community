@@ -117,7 +117,8 @@ class FakeStats:
         self.hold = dict(hold or {})
 
     async def __call__(self, _hass, start, end, entity_ids, types):
-        date = start.date().isoformat()
+        # (#1176) the read starts in the last hour of the day before
+        date = (start + timedelta(hours=1)).date().isoformat()
         self.calls.append((date, end - start, set(entity_ids), set(types)))
         if self.gate is not None:
             await self.gate.wait()
@@ -181,8 +182,8 @@ async def test_three_days_three_rows_progress_done_and_stored():
         False, "done", 3, 3, run_id)
     # oldest first, one read per day, the whole local day, both statistics
     assert [c[0] for c in stats.calls] == DATES
-    assert all(c[1] == timedelta(days=1) for c in stats.calls)
-    assert all(c[3] == {"change", "mean"} for c in stats.calls)
+    assert all(c[1] == timedelta(days=1, hours=1) for c in stats.calls)
+    assert all(c[3] == {"change", "mean", "state"} for c in stats.calls)
     assert "sensor.sem_solar" in stats.calls[0][2]
     runs = storage.get_simulation_runs()
     assert len(runs) == 1 and storage.saves == 1

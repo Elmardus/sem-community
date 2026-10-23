@@ -16,7 +16,8 @@ drops it at 07:00; netting forward put that phantom charge at midnight
 and took the real one out of the morning (#1083 accuracy). A row
 that exists counts, even at 0 or with no change; only an absent row is a
 missing hour. Measurements (SOC, prices, forecast) come from the hourly
-``mean``.
+``mean``. (#1176) The car's counter resets at the car day's start; days
+recorded before its ``last_reset`` said so are read by ``_car_day_reset``.
 """
 from __future__ import annotations
 
@@ -189,6 +190,7 @@ class HourlyDay:
         date: Any,
         tags: Iterable[str] = (),
         tz: Optional[tzinfo] = None,
+        ev_day_start_hour: Optional[int] = None,
     ) -> "HourlyDay":
         """Build a day from a recorder hourly-statistics read.
 
@@ -199,6 +201,13 @@ class HourlyDay:
         seconds need ``tz`` (ValueError without it — never read as UTC). A row of
         another day is ignored. Two rows on one hour (the autumn clock
         change) add up for a flow; the later mean wins for a measurement.
+
+        (#1176) ``ev_day_start_hour`` is the hour the car's daily counter
+        falls to 0 (the car day's start). Days recorded while the sensor
+        said it reset at midnight show a drop in that hour: it is read as
+        the reset it is (``_car_day_reset``), not as a step back. A car
+        row may carry the hour's end ``state``; the last row of the day
+        before, when given, says what the counter carried over midnight.
         """
         day = _as_date(date)
         out: Dict[str, Any] = {role: _zeros() for role in FLOW_ROLES}
@@ -214,17 +223,27 @@ class HourlyDay:
                 continue
             raw = _zeros()
             seen = set()
+            states: List[Optional[float]] = _nones()
+            carried: Optional[float] = None
             for row in rows:
                 hour = _hour_of(row.get("start"), day, tz)
                 if hour is None:
+                    if _is_day_before(row.get("start"), day, tz):
+                        carried = _num(row.get("state"), carried)
                     continue
                 seen.add(hour)      # the row is there: a value, even 0
+                states[hour] = _num(row.get("state"), states[hour])
                 change = row.get("change")
                 try:
                     raw[hour] += 0.0 if change is None else float(change)
                 except (TypeError, ValueError):
                     pass
             missing.update(h for h in range(HOURS) if h not in seen)
+            if (role == EV and ev_day_start_hour is not None
+                    and 0 < ev_day_start_hour < HOURS
+                    and raw[ev_day_start_hour] < 0):
+                raw = _car_day_reset(raw, ev_day_start_hour,
+                                     states[ev_day_start_hour], carried)
             out[role] = _net_step_backs(raw)
             for hour, kwh in enumerate(raw):
                 if kwh < -STEP_BACK_NOTE_KWH:
@@ -260,6 +279,40 @@ class HourlyDay:
         return day_obj
 
 
+def _car_day_reset(raw: List[float], hour: int, end_state: Optional[float],
+                   carried: Optional[float]) -> List[float]:
+    """(#1176) Read a car-day reset recorded under a midnight ``last_reset``.
+
+    The recorder restarted the counter's cycle at 00:00, so it booked what
+    the counter carried over midnight (``carried``, the last car day's
+    evening) as new energy in the first hour, and everything up to the
+    reset adds up to the value that fell to 0. The reset hour is booked
+    from its end ``state`` (or its change plus that value); the carried
+    kWh are taken out of the first hours. Without ``carried`` the night
+    cannot be told from it, and the hours before the reset are dropped,
+    as the netting did before.
+    """
+    fixed = list(raw)
+    before = sum(raw[:hour])
+    fixed[hour] = max(0.0, end_state if end_state is not None
+                      else raw[hour] + before)
+    phantom = before if carried is None else min(before, max(0.0, carried))
+    for h in range(hour):
+        if phantom <= 0:
+            break
+        take = min(max(0.0, fixed[h]), phantom)
+        fixed[h] -= take
+        phantom -= take
+    return fixed
+
+
+def _num(value: Any, default: Optional[float]) -> Optional[float]:
+    try:
+        return default if value is None else float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _net_step_backs(raw: List[float]) -> List[float]:
     """Hourly kWh with no negative hour, adding up to ``sum(raw)`` (0 if
     that is below 0). A step back undoes what the counter counted before
@@ -293,8 +346,22 @@ def _as_date(value: Any) -> _date:
     return _date.fromisoformat(str(value))
 
 
+def _is_day_before(start: Any, day: _date, tz: Optional[tzinfo]) -> bool:
+    """(#1176) The row starts on the day before ``day``."""
+    dt = _local(start, tz)
+    return dt is not None and (day - dt.date()).days == 1
+
+
 def _hour_of(start: Any, day: _date, tz: Optional[tzinfo]) -> Optional[int]:
     """The local hour a statistics row starts in, or None (another day)."""
+    dt = _local(start, tz)
+    if dt is None or dt.date() != day:
+        return None
+    return dt.hour
+
+
+def _local(start: Any, tz: Optional[tzinfo]) -> Optional[datetime]:
+    """A statistics row's start as a local datetime, or None."""
     if start is None:
         return None
     if isinstance(start, (int, float)):
@@ -310,6 +377,4 @@ def _hour_of(start: Any, day: _date, tz: Optional[tzinfo]) -> Optional[int]:
             return None
     if tz is not None and dt.tzinfo is not None:
         dt = dt.astimezone(tz)
-    if dt.date() != day:
-        return None
-    return dt.hour
+    return dt

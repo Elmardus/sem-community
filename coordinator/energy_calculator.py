@@ -3854,6 +3854,26 @@ class EnergyCalculator:
             for _, category in EV_DAY_FLOW_CATEGORIES
         )
 
+    def ev_day_start(self) -> Optional[datetime]:
+        """(#1176) When the running car day began: its day key at the
+        boundary that opened it — the moment ``daily_ev`` last fell to 0.
+
+        The one answer for every car-day reading (the sensor's
+        ``last_reset``, the simulation's rollover hour). It reads the day
+        memo, which moves only at a rollover and survives a restart, so the
+        answer holds still all day. None on the sunrise fallback (no
+        ``Charge by`` at all): that boundary is no fixed time.
+        """
+        if not (_valid_hhmm(self._ev_day_offset)
+                and self._ev_day_key is not None):
+            self._ev_reset_day(dt_util.now())
+        offset, key = self._ev_day_offset, self._ev_day_key
+        if not _valid_hhmm(offset) or key is None:
+            return None
+        hour, minute = (int(p) for p in str(offset).split(":"))
+        return datetime(key.year, key.month, key.day, hour, minute,
+                        tzinfo=dt_util.get_default_time_zone())
+
     def _get_daily(self, category: str, today: date) -> float:
         """Get daily accumulated energy."""
         key = f"{category}_{today}"

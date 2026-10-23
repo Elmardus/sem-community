@@ -56,6 +56,11 @@ type SEMConfigEntry = ConfigEntry[SEMCoordinator]
 
 _LOGGER = logging.getLogger(__name__)
 
+#: (#1176) TOTAL sensors that count by the car day, not the calendar day:
+#: their ``last_reset`` is the car day's start. The per-charger daily rows
+#: are TOTAL_INCREASING: no last_reset, a drop starts a new cycle.
+CAR_DAY_SENSOR_KEYS = frozenset({"daily_ev_energy"})
+
 PARALLEL_UPDATES = 0  # Coordinator handles all updates
 
 
@@ -3846,6 +3851,16 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         yearly_reset_patterns = [
             "yearly_",  # All yearly_* sensors
         ]
+
+        # (#1176) The car's daily energy falls to 0 at the car day's start
+        # (the Charge-by time), not at midnight. Saying midnight made the
+        # recorder book the night's kWh again at 00:00 and a drop at the
+        # car day's start.
+        if sensor_key in CAR_DAY_SENSOR_KEYS:
+            calc = getattr(self.coordinator, "_energy_calculator", None)
+            start = calc.ev_day_start() if calc is not None else None
+            if start is not None:
+                return start
 
         # Check if sensor resets daily
         if any(pattern in sensor_key for pattern in daily_reset_patterns):
