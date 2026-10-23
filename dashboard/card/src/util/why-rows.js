@@ -3,8 +3,8 @@
  *
  * A record is one command change from the decision log, as the websocket
  * command `solar_energy_management/decision_log` hands it: newest first,
- * { time, device_id, device_kind, name, old, new, reason_code, text,
- *   inputs, observer }.
+ * { time, device_id, device_kind, name, old, new, reason_code, params,
+ *   text, inputs, observer }.
  */
 
 /** How many rows Everyday keeps open; the rest sit in the fold. */
@@ -76,6 +76,28 @@ export function commandLabel(cmd, t) {
 export function changeLabel(rec, t) {
     const now = commandLabel(rec?.new, t);
     return rec?.old ? `${commandLabel(rec.old, t)} → ${now}` : now;
+}
+
+/**
+ * (#1174) The row's reason as a plain sentence: the record's code looked
+ * up as `why_reason_<code>`, its `{name}` placeholders filled from
+ * `rec.params`. Null when the code has no sentence or a number it names
+ * is missing; the card then shows the internal text instead.
+ */
+export function plainReason(rec, t) {
+    const code = rec?.reason_code;
+    if (!code) return null;
+    const key = `why_reason_${code}`;
+    const sentence = t(key);
+    if (!sentence || sentence === key) return null;
+    const params = rec.params || {};
+    let missing = false;
+    const out = String(sentence).replace(/\{(\w+)\}/g, (m, name) => {
+        const v = params[name];
+        if (v === undefined || v === null || v === '') { missing = true; return m; }
+        return String(v);
+    });
+    return missing ? null : out;
 }
 
 const _num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);

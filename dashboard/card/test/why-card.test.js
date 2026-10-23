@@ -299,3 +299,42 @@ test('a failed read is tried again on a later update, not before 30 s', async ()
     assert.equal(c._error, false);
     assert.equal(c._records.length, 6);
 });
+
+// ── (#1174) plain sentences ─────────────────────────────────────────────
+
+const PLAIN = {
+    why_reason_battery_car_below_floor:
+        'A car is plugged in. The battery is below the {floor}% tonight needs, so it powers only the house.',
+    why_reason_charger_low_sun: 'There is not enough spare sun to charge the car.',
+};
+const tp = (k) => PLAIN[k] || t(k);
+
+test('a code with a sentence reads the sentence, its numbers filled in', () => {
+    const rec = REC('b1', 'battery', { reason_code: 'battery_car_below_floor', params: { floor: 80 },
+        text: 'ev plugged in + battery SoC 21% < tonight\'s floor 80.3% → discharge limit 2667 W' });
+    assert.equal(rows.plainReason(rec, tp),
+        'A car is plugged in. The battery is below the 80% tonight needs, so it powers only the house.');
+});
+
+test('no sentence, or a number missing: no plain reason', () => {
+    assert.equal(rows.plainReason(REC('x', 'load', { reason_code: 'not_a_code' }), tp), null);
+    assert.equal(rows.plainReason(REC('x', 'load', { reason_code: '' }), tp), null);
+    assert.equal(rows.plainReason(REC('b1', 'battery', { reason_code: 'battery_car_below_floor' }), tp), null);
+});
+
+test('the row shows the sentence, the internal text as its tooltip', () => {
+    globalThis.semLocalize = (k) => tp(k);
+    const c = new Card();
+    c.setConfig({});
+    c._hass = { states: {}, language: 'en', config: { time_zone: 'UTC' } };
+    c._records = [REC('box', 'charger', { reason_code: 'charger_low_sun', new: 'stop',
+        text: 'solar_only: solar=0W < 400W threshold', inputs: { solar_w: 0 } })];
+    const out = text(c.render());
+    assert.match(out, /There is not enough spare sun to charge the car\./);
+    assert.match(out, /title=solar_only: solar=0W < 400W threshold/);
+});
+
+test('a code without a sentence falls back to the internal text', () => {
+    const out = text(card([REC('box', 'charger', { reason_code: 'mode_idle', text: 'Internal words.' })]).render());
+    assert.match(out, /Internal words\./);
+});

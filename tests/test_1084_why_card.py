@@ -17,7 +17,7 @@ from custom_components.solar_energy_management.decision_ws import (
 
 T0 = datetime(2026, 10, 23, 14, 10, tzinfo=timezone.utc)
 RECORD_KEYS = {"time", "device_id", "device_kind", "name", "old", "new",
-               "reason_code", "text", "inputs", "observer"}
+               "reason_code", "params", "text", "inputs", "observer"}
 
 
 def _log():
