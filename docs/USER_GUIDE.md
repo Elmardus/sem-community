@@ -1685,6 +1685,32 @@ Any HA integration that exposes a price sensor works with SEM. If the sensor has
 
 Set tariff mode to "Calendar" for a fixed time-of-use tariff, then pick a HA Schedule helper in **Peak-time schedule** (Settings → Configure → Tariff). The helper's time blocks are the peak (HT) hours at the import rate; all other hours use the night rate. For "HT weekdays 07:00–20:00, NT otherwise", add a 07:00–20:00 block on Monday to Friday. Edit the helper to change the times. A holiday follows the schedule like any other day.
 
+### Taxes, markup and feed-in fee
+
+SEM can add tax and a supplier markup to the price you buy at, and
+take a feed-in fee off the price you sell at. Nothing changes until you set
+one of these fields.
+
+Where: the Configuration card, section **Tariff & pricing**, under **All
+settings**. Or **Configure → Tariff & Advanced**.
+
+| Field | What to enter |
+|---|---|
+| Taxes and fees preset | *None* adds nothing. *Netherlands from 2027* fills energy tax and 21 % VAT, and sets the price to spot. |
+| What your import price includes | *All-in*: your price already has tax and VAT (Tibber, a rate from your bill). SEM adds nothing. *Spot price incl. VAT*: a market price with VAT on it. *Spot price*: a bare market price (Nord Pool, ENTSO-e). |
+| Supplier markup | per bought kWh, without VAT |
+| Energy tax | per bought kWh, without VAT |
+| VAT | in percent |
+| Feed-in fee | *Per kWh*, *Tiers by kWh per year* or *Fixed per month* |
+| Feed-in fee amount / tiers | the fee; tiers as `0:0, 1000:0.02, 3000:0.05` (kWh exported this year : fee per kWh) |
+
+Markup, tax and VAT only work with a spot price. Beside *All-in* they are
+greyed out, and the options flow refuses them.
+
+Once a field is set, six sensors appear: **Self-consumption value**, **Export
+value** and **Feed-in fees**, each for today and this year.
+[Tariff models](TARIFF_MODELS.md#what-a-kwh-is-worth-1077) has the formulas.
+
 ---
 
 ## Solar Forecast
