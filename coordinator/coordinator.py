@@ -7852,7 +7852,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
 
     def _finish_manual_battery_modes(
         self, battery_items, soc_read: dict, count: int,
-        power_read: bool = False,
+        power_read: "dict | None" = None,
     ) -> None:
         """(#1131) Put a battery back on Auto when its manual job is done.
 
@@ -7880,9 +7880,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         while SEM's charge was on (``charge_stall_read``). The window runs
         on this cycle's readings against what the actuator last sent: the
         command before this cycle is what the pack was answering.
-        ``power_read`` is False unless a battery power sensor was read; the
-        window then ends. So does a gap of more than
-        ``MANUAL_CHARGE_STALL_GAP_S`` between two checks.
+        ``power_read`` says, per battery id, whether that battery's own
+        power sensor was read; the window ends on any other answer. So does
+        a gap of more than ``MANUAL_CHARGE_STALL_GAP_S`` between two checks.
+        (#1167) It is a map and nothing else: one fleet flag let a dark
+        sensor on one pack stop the check of every pack.
         """
         from .decide_battery import (
             charge_stall_read, charge_stall_step, forced_ops, manual_mode_done,
@@ -7904,6 +7906,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             return
         stalls = getattr(self, "_manual_charge_stalls", None)
         stalls = stalls if isinstance(stalls, dict) else {}
+        power_read = power_read if isinstance(power_read, dict) else {}
         adapters = getattr(self, "_battery_adapters", None)
         adapters = adapters if isinstance(adapters, dict) else {}
         # Observer sends nothing, so nothing was asked of the pack.
@@ -7929,7 +7932,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 window, stalled = charge_stall_step(
                     stalls.get(battery_id), now_s, soc, charge_stall_read(
                         soc, getattr(runtime, "last_known_w", None),
-                        soc_read=is_read, power_read=bool(power_read),
+                        soc_read=is_read,
+                        power_read=power_read.get(battery_id) is True,
                         asked_w=asked_w,
                         sem_charging=(forced_ops(adapter)[0]
                                       if commands else None)))
@@ -9494,12 +9498,22 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # behaviour to v1.7.0.
         battery_items: list[tuple[str, BatteryRuntime]] = []
         # (#1131) Which units have a level at all: one whose SOC sensor has
-        # not answered yet carries 0.0, which is no level. With ``available``
-        # (not a held value) this is what may end a manual mode.
+        # not answered yet carries 0.0, which is no level. Not a held value
+        # either: this is what may end a manual mode. (#1167) Each unit on
+        # its own read — a unit's ``soc_pct`` is never held, and the fleet's
+        # SOC flag is the average's (one dark unit moves it, and the #902
+        # step hold then darkens every unit).
         soc_seen: dict[str, bool] = {}
+        # (#1167) …and which have a power that is a reading, each on its own
+        # sensor: one dark unit must not make another unit's 0 W unread.
+        power_seen: dict[str, bool] = {}
         if power.batteries:
             for battery_id, bp in power.batteries.items():
-                soc_seen[battery_id] = bp.soc_pct is not None
+                soc_seen[battery_id] = bool(
+                    bp.soc_pct is not None
+                    and not getattr(bp, "soc_unavailable", False)
+                    and not getattr(bp, "unavailable", False))
+                power_seen[battery_id] = getattr(bp, "power_read", False) is True
                 battery_items.append((battery_id, BatteryRuntime(
                     battery_id=battery_id,
                     last_known_soc=float(bp.soc_pct or 0.0),
@@ -9522,7 +9536,15 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 )))
         else:
             # Legacy single-battery fallback — synthesise one runtime.
-            soc_seen["primary"] = bool(getattr(power, "battery_soc_known", True))
+            soc_seen["primary"] = bool(
+                getattr(power, "battery_soc_known", True)
+                and not getattr(power, "battery_soc_unavailable", False))  # DARK-SOC: action — a held level ends no manual mode (#1131)
+            # (#1164) one battery, so the fleet's flags are its own: a dark
+            # or impossible power is no reading, and neither is the 0.0 of
+            # a battery with no power sensor
+            power_seen["primary"] = (
+                bool(getattr(power, "battery_power_read", False))
+                and not bool(getattr(power, "battery_power_unavailable", False)))
             battery_items.append(("primary", BatteryRuntime(
                 battery_id="primary",
                 last_known_soc=float(getattr(power, "battery_soc", 0.0) or 0.0),
@@ -9549,14 +9571,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # a reading this cycle (not held, not the never-read 0.0).
         try:
             self._finish_manual_battery_modes(
-                battery_items,
-                {bid: bool(rt.available and soc_seen.get(bid, False))
-                 for bid, rt in battery_items},
-                _bat_count,
-                # (#1164) a dark or impossible battery power is no reading,
-                # and neither is the 0.0 of a battery with no power sensor
-                power_read=bool(getattr(power, "battery_power_read", False))
-                and not bool(getattr(power, "battery_power_unavailable", False)))
+                battery_items, soc_seen, _bat_count, power_read=power_seen)
         except Exception:  # noqa: BLE001 — a mode write must not end a cycle
             _LOGGER.warning("ending a finished manual battery mode failed "
                             "(#1131)", exc_info=True)

@@ -235,11 +235,13 @@ def _run(coordinator, clock, packs, minutes, *, step_s=30.0, count=None,
                                   last_known_w=w))
              for bid, (soc, w) in packs.items()]
     read = {bid: bid not in unread for bid in packs}
+    # (#1167) each battery's own power flag; a bool here sets every one
+    power = {bid: bool(power_read) for bid in packs}
     for _ in range(int(minutes * 60 / step_s)):
         clock.t += step_s
         SEMCoordinator._finish_manual_battery_modes(
             coordinator, items, read, count or len(items),
-            power_read=power_read)
+            power_read=power)
 
 
 def _shows(select_entity):
@@ -625,7 +627,8 @@ async def _pipeline(monkeypatch, power):
     stub.config = {}
     stub._vpp_apply_battery_override = lambda pbc: {}
 
-    def _finish(items, soc_read, count, power_read=False):
+    def _finish(items, soc_read, count, power_read=None):
+        seen["soc_read"] = soc_read
         seen["power_read"] = power_read
         seen["power"] = [(bid, rt.last_known_w) for bid, rt in items]
 
@@ -644,16 +647,17 @@ async def _pipeline(monkeypatch, power):
 class TestThePipeline:
     async def test_a_readable_power_is_a_reading(self, monkeypatch):
         seen = await _pipeline(monkeypatch, _single(battery_power=12.0))
-        assert seen == {"power_read": True, "power": [("primary", 12.0)]}
+        assert seen["power_read"] == {"primary": True}
+        assert seen["power"] == [("primary", 12.0)]
 
     @pytest.mark.parametrize("change", [
         {"battery_power_unavailable": True}, {"battery_power_read": False}])
     async def test_a_dark_or_missing_power_is_not(self, monkeypatch, change):
         seen = await _pipeline(monkeypatch, _single(**change))
-        assert seen["power_read"] is False
+        assert seen["power_read"] == {"primary": False}
 
     async def test_a_reading_without_the_flag_is_not(self, monkeypatch):
         power = _single()
         del power.battery_power_read
         seen = await _pipeline(monkeypatch, power)
-        assert seen["power_read"] is False
+        assert seen["power_read"] == {"primary": False}
