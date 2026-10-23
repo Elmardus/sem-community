@@ -34,7 +34,31 @@ BRANDS = (
     "chargepoint", "juicebox", "garo", "tesla", "deye", "huawei", "fronius",
     "solaredge", "sma", "solax", "goodwe", "sungrow", "growatt", "enphase",
     "powerwall", "kostal", "sonnen", "victron", "marstek", "nibe", "buderus",
+    # tariff and forecast sources: found by role, not by name (#855 layers)
+    "tibber", "amber", "octopus", "nordpool", "entsoe", "energyzero",
+    "awattar", "zonneplan", "solcast",
 )
+
+# (#855, layers) Where brand knowledge MAY live: the per-brand charger and
+# battery adapters and the crawler (its roster and its vocabulary). Everything else is a generic
+# layer and may only lose brand mentions. ``tests``, ``scripts`` and
+# ``tools`` hold fixtures, not runtime code.
+ALLOWED = ("coordinator/charger_adapters/", "coordinator/battery_adapters/",
+           "hardware_detection.py", "consts/", "tests/", "scripts/", "tools/")
+LAYERS_BASELINE = ROOT / "tests" / "brand_footprint_layers_baseline.json"
+
+
+def count_layers(root: pathlib.Path = ROOT) -> dict[str, int]:
+    """Brand mentions per generic-layer file (files with none left out)."""
+    out: dict[str, int] = {}
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root).as_posix()
+        if rel.startswith(ALLOWED) or "/node_modules/" in rel or rel.startswith("."):
+            continue
+        n = sum(count_brands(path.read_text(encoding="utf-8")).values())
+        if n:
+            out[rel] = n
+    return out
 
 
 def count_brands(text: str) -> dict[str, int]:
@@ -54,6 +78,17 @@ def count_brands(text: str) -> dict[str, int]:
 
 
 def main() -> int:
+    if "--layers-baseline" in sys.argv:
+        layers = count_layers()
+        LAYERS_BASELINE.write_text(json.dumps(
+            {"_comment": "#855 layers: brand mentions per generic file; may "
+                         "only shrink. Regenerate: scripts/audit_brand_"
+                         "footprint.py --layers-baseline",
+             "total": sum(layers.values()), "per_file": layers},
+            indent=2) + "\n")
+        print(f"layers baseline: {sum(layers.values())} mentions in "
+              f"{len(layers)} files")
+        return 0
     counts = count_brands(TARGET.read_text())
     total = sum(counts.values())
     if "--baseline" in sys.argv:

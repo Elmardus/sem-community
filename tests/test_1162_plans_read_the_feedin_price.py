@@ -101,26 +101,19 @@ class TestOneSignRule:
         assert prov.get_export_rate_at(_at(13)) == -0.03
         assert prov.get_current_export_rate() == -0.02
 
-    def test_amber_flips_both_the_live_rate_and_its_forecast(self):
-        """Amber's feed-in channel is sign-inverted; the live rate and the
-        forecast sibling go through the same rule."""
+    def test_amber_flips_the_live_rate_and_the_plan_follows_it(self):
+        """Amber's feed-in channel is sign-inverted. With no forecast found
+        by role, the plan prices every slot at the live (flipped) rate."""
         price = "sensor.amber_general_price"
         feed = "sensor.amber_feed_in_price"
-        fc = "sensor.amber_feed_in_forecast"
-        states = {
-            price: _state(0.30),
-            feed: _state(-0.08),
-            fc: _state(-0.08, {"forecasts": [
-                {"start_time": _at(h).isoformat(), "per_kwh": -0.01 * h}
-                for h in range(24)]}),
-        }
+        states = {price: _state(0.30), feed: _state(-0.08)}
         hass = _hass(states)
         hass.states.async_all = MagicMock(
             return_value=[SimpleNamespace(entity_id=price)])
         prov = DynamicTariffProvider(hass, export_rate=STATIC)
         assert prov.detect_provider() == "amber"
         assert prov.get_current_export_rate() == 0.08
-        assert prov.get_export_rate_at(_at(12)) == 0.12
+        assert prov.get_export_rate_at(_at(12)) == 0.08
 
     def test_without_a_curve_the_plan_rate_is_the_live_rate(self):
         for val in (0.04, -0.04):
