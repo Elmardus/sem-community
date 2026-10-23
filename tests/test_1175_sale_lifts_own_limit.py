@@ -238,24 +238,66 @@ async def test_huawei_sells_at_once_with_no_limit_of_sems():
 
 
 @pytest.mark.asyncio
-async def test_huawei_failed_hand_back_does_not_block_the_sale():
+@pytest.mark.parametrize("service", [True, False], ids=["service", "number"])
+async def test_huawei_failed_hand_back_does_not_block_the_sale(service):
     """The try is the cycle's only command; the sale goes out on the next
     cycle anyway, and the write is tried again only after it."""
     hass = _Hass(limit_w=0.0, fail={("number", "set_value", LIMIT)})
-    a = _huawei(hass)
+    a = _huawei(hass, service=service)
     a._last_discharge_limit_w = 0.0
+    sale = (("huawei_solar", "forcible_discharge_soc") if service
+            else ("number", "set_value", SETPOINT))
     per_cycle = []
     for _ in range(4):
         hass.calls.clear()
         await a.command_force_discharge(3000.0, 20.0)
-        per_cycle.append([(c[0], c[1]) for c in hass.calls])
+        per_cycle.append([c[:2] if c[0] == "huawei_solar"
+                          else (c[0], c[1], c[2]["entity_id"])
+                          for c in hass.calls])
     assert per_cycle == [
-        [("number", "set_value")],                      # try, fails
-        [("huawei_solar", "forcible_discharge_soc")],   # the sale anyway
-        [("number", "set_value")],                      # try again, fails
+        [("number", "set_value", LIMIT)],               # try, fails
+        [sale],                                         # the sale anyway
+        [("number", "set_value", LIMIT)],               # try again, fails
         [],                                             # the sale stands
     ]
     assert a.last_intent is BatteryIntent.FORCE_DISCHARGE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("brand", ["huawei", "generic_sale_fails"])
+async def test_a_hold_after_a_hand_back_goes_back_at_once(brand):
+    """Hold, one sale cycle that only handed the limit back (Huawei's first
+    cycle, or a sale write that failed), then the hold again: the 0 W goes
+    back that cycle. Left at LIMIT_DISCHARGE, the max read as a limit in
+    force and the hold waited out the 6-cycle lowering dwell (review)."""
+    if brand == "huawei":
+        hass = _Hass()
+        a = _huawei(hass)
+    else:
+        hass = _Hass(fail={("number", "set_value", SETPOINT)})
+        a = _generic(hass)
+    hold = BatteryDecision(battery_id="b1", intent=BatteryIntent.LIMIT_DISCHARGE,
+                           discharge_limit_w=0.0, reason="hold")
+    sale = BatteryDecision(battery_id="b1", intent=BatteryIntent.FORCE_DISCHARGE,
+                           discharge_power_w=2500.0, floor_soc=20.0, reason="sale")
+    await actuate_battery(hold, a)
+    await actuate_battery(sale, a)
+    assert hass.value(LIMIT) == MAX_W
+    assert a.last_intent is None
+    await actuate_battery(hold, a)
+    assert hass.value(LIMIT) == 0.0
+    assert a.last_intent is BatteryIntent.LIMIT_DISCHARGE
+
+
+@pytest.mark.asyncio
+async def test_a_failed_hand_back_keeps_the_limit_in_force():
+    """The write did not land: the limit is still there, and says so."""
+    hass = _Hass(limit_w=0.0, fail={("number", "set_value", LIMIT)})
+    a = _huawei(hass)
+    a._last_discharge_limit_w = 0.0
+    a._last_intent = BatteryIntent.LIMIT_DISCHARGE
+    await a.command_force_discharge(3000.0, 20.0)
+    assert a.last_intent is BatteryIntent.LIMIT_DISCHARGE
 
 
 @pytest.mark.asyncio

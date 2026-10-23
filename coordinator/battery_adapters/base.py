@@ -520,6 +520,13 @@ class BatteryControlAdapter(ABC):
         if apply is None:
             return
         await apply(float(self.max_discharge_power_w), force=True)
+        if (not self._own_limit_held()
+                and self._last_intent is BatteryIntent.LIMIT_DISCHARGE):
+            # The limit is gone. Left as the last command, LIMIT_DISCHARGE at
+            # the max reads as a limit in force, and a hold that comes back
+            # next cycle waits out the lowering dwell (review). A sale that
+            # goes out this cycle records its own intent after this.
+            self._last_intent = None
 
     async def _send_sale(self, power_w: float) -> None:
         """The sale's own write: the forcible-discharge power, clamped to
