@@ -239,32 +239,96 @@ async def test_huawei_sells_at_once_with_no_limit_of_sems():
 
 @pytest.mark.asyncio
 async def test_huawei_failed_hand_back_does_not_block_the_sale():
+    """The try is the cycle's only command; the sale goes out on the next
+    cycle anyway, and the write is tried again only after it."""
     hass = _Hass(limit_w=0.0, fail={("number", "set_value", LIMIT)})
     a = _huawei(hass)
     a._last_discharge_limit_w = 0.0
-    for _ in range(3):
+    per_cycle = []
+    for _ in range(4):
+        hass.calls.clear()
         await a.command_force_discharge(3000.0, 20.0)
-    assert len(_sales(hass)) == 1
+        per_cycle.append([(c[0], c[1]) for c in hass.calls])
+    assert per_cycle == [
+        [("number", "set_value")],                      # try, fails
+        [("huawei_solar", "forcible_discharge_soc")],   # the sale anyway
+        [("number", "set_value")],                      # try again, fails
+        [],                                             # the sale stands
+    ]
     assert a.last_intent is BatteryIntent.FORCE_DISCHARGE
 
 
 @pytest.mark.asyncio
 async def test_huawei_late_hand_back_keeps_the_standing_sale():
-    """The hand-back failed on the sale's first cycle and lands later: that
-    cycle sends only the limit, and the sale SEM started still stands."""
+    """The write failed before the sale and lands later: that cycle sends
+    only the limit, the sale SEM started stands, and then all is quiet."""
     hass = _Hass(limit_w=0.0, fail={("number", "set_value", LIMIT)})
     a = _huawei(hass)
     a._last_discharge_limit_w = 0.0
-    await a.command_force_discharge(3000.0, 20.0)
+    await a.command_force_discharge(3000.0, 20.0)       # try, fails
+    await a.command_force_discharge(3000.0, 20.0)       # the sale
     assert len(_sales(hass)) == 1
     hass.fail.clear()
     hass.calls.clear()
-    a._last_error = "an earlier error"
     await a.command_force_discharge(3000.0, 20.0)
     assert hass.calls == [("number", "set_value",
                            {"entity_id": LIMIT, "value": MAX_W})]
     assert a.last_intent is BatteryIntent.FORCE_DISCHARGE
-    assert a.last_error is None
+    hass.calls.clear()
+    for _ in range(3):
+        await a.command_force_discharge(3000.0, 20.0)
+    assert hass.calls == []
+
+
+# ── the entity may still show the max from before SEM's own hold ──
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("build", [_generic, _goodwe, _huawei],
+                         ids=["generic", "goodwe", "huawei"])
+async def test_the_hand_back_writes_even_when_the_entity_still_reads_max(build):
+    """SEM wrote 0 W; the integration has not read the register since, so
+    the entity still shows 5000. The same-value check would skip the
+    write and record a hand-back that never happened (review M1)."""
+    hass = _Hass(limit_w=MAX_W)
+    a = build(hass)
+    a._last_discharge_limit_w = 0.0
+    await a.command_force_discharge(3000.0, 20.0)
+    assert hass.writes_to(LIMIT) == [MAX_W]
+    assert a.last_discharge_limit_w == MAX_W
+
+
+@pytest.mark.asyncio
+async def test_the_hand_back_is_checked_like_any_limit_write():
+    """The #915 read-back judges the hand-back's write, as it does NORMAL's."""
+    from unittest.mock import patch
+    hass = _Hass()
+    a = _ac_coupled(hass)
+    t = [1000.0]
+    with patch("time.monotonic", side_effect=lambda: t[0]):
+        await _hold_at_zero(a, hass)
+        await a.command_force_discharge(3000.0, 20.0)
+        assert a._pending_write[:2] == (LIMIT, MAX_W)
+        t[0] += 10.0
+        assert a.verify_pending_write() is True
+    assert a.write_not_taken_strikes == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("build", [_generic, _huawei], ids=["generic", "huawei"])
+async def test_one_entity_for_limit_and_sale_is_the_sales_own(build):
+    """A setup that names one entity for both: the max would be sold."""
+    hass = _Hass()
+    if build is _huawei:
+        a = HuaweiBatteryAdapter(hass, {
+            "battery_discharge_control_entity": SETPOINT,
+            "battery_force_discharge_control_entity": SETPOINT,
+            "battery_max_discharge_power": MAX_W})
+        a._inverter_device_id = ""
+    else:
+        a = _generic(hass, battery_discharge_control_entity=SETPOINT)
+    a._last_discharge_limit_w = 0.0
+    await a.command_force_discharge(3000.0, 20.0)
+    assert hass.writes_to(SETPOINT) == [3000.0]
 
 
 # ── Off on an AC-coupled pack: hands off, SEM's limit included ──
@@ -325,7 +389,7 @@ def test_deye_holds_no_limit_to_leak():
     a = DeyeBatteryAdapter(_Hass(), {"battery_max_discharge_power": MAX_W})
     asyncio.run(a.command_limit_discharge(0.0))
     assert a.last_discharge_limit_w == -1.0
-    assert asyncio.run(a._hand_back_own_limit()) is False
+    assert a._own_limit_held() is False
 
 
 # ── every adapter class answers the question ──

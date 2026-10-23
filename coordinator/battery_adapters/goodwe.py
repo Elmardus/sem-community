@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 
 from ..charger_types import BatteryIntent
-from ..power_control import async_write_power_setpoint_verbose
+from ..power_control import async_write_power_setpoint
 from .base import BatteryControlAdapter
 
 _LOGGER = logging.getLogger(__name__)
@@ -95,17 +95,16 @@ class GoodWeBatteryAdapter(BatteryControlAdapter):
         self._last_error = None
         self._last_intent = BatteryIntent.STOP_FORCE_CHARGE
 
-    async def _apply_discharge_limit(self, watts: float) -> bool:
-        """True when a write went out (not the same-value skip, #538)."""
+    async def _apply_discharge_limit(self, watts: float, *,
+                                     force: bool = False) -> None:
         if not self._discharge_control_entity:
             self._last_discharge_limit_w = watts
-            return False
-        ok, wrote = await async_write_power_setpoint_verbose(
+            return
+        if await async_write_power_setpoint(
             self._hass,
             self._discharge_control_entity,
             watts,
             context="GoodWe battery discharge limit",
-        )
-        if ok:
+            force=force,
+        ):
             self._last_discharge_limit_w = watts
-        return bool(ok and wrote)

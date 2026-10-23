@@ -448,6 +448,9 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
         # every transition issues exactly ONE command and defers the rest to
         # the next cycle. This flag is the state that makes that possible.
         self._forcible_discharging = False
+        # (#1175) The last sale cycle was spent on handing back SEM's limit,
+        # so this one sends the sale, whether that write landed or not.
+        self._sale_limit_tried = False
         # Whether a forcible CHARGE is currently active (started by SEM this
         # lifetime). Guards the startup orphan-clear from wrongly stopping a
         # charge that SEM itself issued this run (#589 Part C).
@@ -512,12 +515,15 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
         watts = max(0.0, min(float(power_w), self._max_discharge_w))
         # (#1175) SEM's own discharge limit (a 0 W hold) would cap the sale.
         # It goes back to the max first, as this cycle's only command (one
-        # write per cycle, see __init__); the sale goes out on the next.
-        if await self._hand_back_own_limit():
-            if self._forcible_discharging:
-                self._last_error = None
-                self._last_intent = BatteryIntent.FORCE_DISCHARGE
+        # write per cycle, see __init__); the sale goes out on the next. If
+        # that write failed, the sale still goes out next, and the write is
+        # tried again after it, so a register that refuses it never holds
+        # the sale back.
+        if self._own_limit_held() and not self._sale_limit_tried:
+            self._sale_limit_tried = True
+            await self._hand_back_own_limit()
             return
+        self._sale_limit_tried = False
         if not self._inverter_device_id:
             # No service → number-entity fallback (a user who wired one).
             await self._send_sale(power_w)
@@ -844,8 +850,8 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
 
     # ─── Helpers ───────────────────────────────────────────────
 
-    async def _apply_discharge_limit(self, watts: float) -> bool:
-        """True when a write went out (not the same-value skip, #538)."""
+    async def _apply_discharge_limit(self, watts: float, *,
+                                     force: bool = False) -> None:
         if not self._discharge_control_entity:
             log_on_change(   # (#762) a standing config gap is one line, not 806/day
                 _LOGGER, "no_discharge_entity", logging.DEBUG,
@@ -853,7 +859,7 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
                 "configured — skipping limit %.0f W", watts,
             )
             self._last_discharge_limit_w = watts
-            return False
+            return
         # Idempotency (#538): skip the Modbus write when the control entity
         # is already at this value. ``command_normal`` re-issues max every
         # cycle, and a redundant write on the single serial Modbus
@@ -873,6 +879,7 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
             self._discharge_control_entity,
             watts,
             context="Huawei battery discharge limit",
+            force=force,
         )
         if ok:
             self._last_discharge_limit_w = watts
@@ -884,7 +891,6 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
                 "Huawei battery: discharge limit %.0f W → %s",
                 watts, self._discharge_control_entity,
             )
-        return bool(ok and wrote)
 
     def _autodetect_battery_device(self) -> str | None:
         """Find the huawei_solar BATTERY device id that the

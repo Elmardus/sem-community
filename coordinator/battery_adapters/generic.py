@@ -612,16 +612,17 @@ class GenericBatteryAdapter(BatteryControlAdapter):
         self._last_error = None
         self._last_intent = BatteryIntent.STOP_FORCE_CHARGE
 
-    async def _apply_discharge_limit(self, watts: float) -> bool:
-        """True when a write went out (not the same-value skip, #538)."""
+    async def _apply_discharge_limit(self, watts: float, *,
+                                     force: bool = False) -> None:
         if not self._discharge_control_entity:
             self._last_discharge_limit_w = watts
-            return False
+            return
         ok, wrote = await async_write_power_setpoint_verbose(
             self._hass,
             self._discharge_control_entity,
             watts,
             context="Generic battery discharge limit",
+            force=force,
         )
         if ok:
             self._last_discharge_limit_w = watts
@@ -629,4 +630,3 @@ class GenericBatteryAdapter(BatteryControlAdapter):
                 # only a write that went OUT is judged; the same-value skip
                 # is not a write and must not re-arm the grace (06.09 audit)
                 self._note_pending_write(self._discharge_control_entity, watts)
-        return bool(ok and wrote)

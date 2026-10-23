@@ -491,24 +491,35 @@ class BatteryControlAdapter(ABC):
         await self._hand_back_own_limit()
         await self._send_sale(power_w)
 
-    async def _hand_back_own_limit(self) -> bool:
+    def _own_limit_held(self) -> bool:
+        """(#1175) Is the last discharge limit SEM wrote below the pack's
+        max? −1 (SEM wrote none) is no. So is one entity for both the limit
+        and the sale power: that register is the sale's own."""
+        if getattr(self, "_discharge_control_entity", "") == self._force_discharge_entity:
+            return False
+        return 0.0 <= self.last_discharge_limit_w < float(self.max_discharge_power_w)
+
+    async def _hand_back_own_limit(self) -> None:
         """(#1175) Before a sale: put back the pack's max discharge when the
-        last limit SEM wrote is below it. True when a write went out.
+        last limit SEM wrote is below it.
 
         A limit SEM wrote to keep the pack for the house (the 0 W cheap-hour
         hold, the EV clamp) stays in the register until a command writes it
         again, and only NORMAL did. On a brand where that limit also caps a
         forced discharge, the sale then sends nothing. A limit SEM did not
         write (``last_discharge_limit_w`` is −1) is left as it is (#936).
+
+        The write skips the same-value check: SEM knows it wrote a lower
+        limit, and the entity can still show the max from before that write
+        until the integration reads it again (review). A failed write leaves
+        the record low, so the next sale cycle asks again.
         """
-        last = self.last_discharge_limit_w
-        top = float(self.max_discharge_power_w)
-        if last < 0 or last >= top:
-            return False
+        if not self._own_limit_held():
+            return
         apply = getattr(self, "_apply_discharge_limit", None)
         if apply is None:
-            return False
-        return bool(await apply(top))
+            return
+        await apply(float(self.max_discharge_power_w), force=True)
 
     async def _send_sale(self, power_w: float) -> None:
         """The sale's own write: the forcible-discharge power, clamped to
