@@ -1062,10 +1062,6 @@ class DynamicTariffProvider(TariffProvider):
                 feedin_state = self.hass.states.get(feedin_id)
                 if feedin_state and feedin_state.state not in ("unknown", "unavailable"):
                     self._feedin_entity = feedin_id
-                    # (#1162) its forecast lives on a sibling, like the
-                    # import forecast above
-                    self._feedin_forecast_entity = entity_id.replace(
-                        "general_price", "feed_in_forecast")
                 _LOGGER.info("Detected Amber Electric price entity: %s", entity_id)
                 return "amber"
 
@@ -1088,11 +1084,6 @@ class DynamicTariffProvider(TariffProvider):
                 export_state = self.hass.states.get(export_id)
                 if export_state and export_state.state not in ("unknown", "unavailable"):
                     self._feedin_entity = export_id
-                    # (#1162) the export day rates sit on an event entity,
-                    # named the way the import ones are
-                    self._feedin_forecast_entity = (
-                        export_id.replace("sensor.", "event.")
-                        .replace("_current_rate", "_current_day_rates"))
                 _LOGGER.info("Detected Octopus Energy price entity: %s", entity_id)
                 return "octopus"
 
@@ -2099,10 +2090,10 @@ class DynamicTariffProvider(TariffProvider):
     def _read_export_curve(self) -> List[PricePoint]:
         """The feed-in price curve, raw from the provider (#1162).
 
-        Read from the feed-in entity's own arrays, then from its forecast
-        sibling (Amber's ``feed_in_forecast``, Octopus's export rates
-        event). Same parsers and the same memo rule as the import curve: a
-        plan asks this once per slot.
+        Read from the feed-in entity's own arrays, then from a forecast
+        sibling when one is known. No brand names a sibling here: finding
+        one is the crawler's job, by role. Same parsers and the same memo
+        rule as the import curve: a plan asks this once per slot.
         """
         if not self._feedin_entity:
             return []
