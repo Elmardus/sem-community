@@ -344,10 +344,12 @@ async def actuate_battery(
         # "lowering" and the pack fed a newly plugged-in car for six cycles.
         streak = int(getattr(adapter, "_limit_lower_streak", 0) or 0)
         _in_force = getattr(adapter, "last_intent", None) is BatteryIntent.LIMIT_DISCHARGE
-        if (decision.follows_load is True and _in_force and last_w >= 0
-                and limit_w > last_w):
-            # (#1173) …except a limit that follows the house: it rises only
-            # to a level the house has held.
+        # (#1173) …except a limit that follows the house: it rises only to
+        # a level the house has held — when the limit in force is one too.
+        # Out of a target (the 0 W hold, a cover) the clamp lands at once.
+        _following = getattr(adapter, "_limit_follows", None) is True
+        if (decision.follows_load is True and _following and _in_force
+                and last_w >= 0 and limit_w > last_w):
             limit_w = _settled_rise_w(decision.discharge_limit_w, last_w, adapter)
             streak = 0
         elif last_w >= 0 and limit_w < last_w and _in_force:
@@ -364,6 +366,10 @@ async def actuate_battery(
             pass
         record_battery(_log, decision, value_w=limit_w)
         await adapter.command_limit_discharge(limit_w)
+        # (#1173) what the limit in force is; a write that did not land
+        # leaves the old one, which this cannot vouch for
+        _set(adapter, "_limit_follows", decision.follows_load is True and getattr(
+            adapter, "last_discharge_limit_w", None) == limit_w)
         _note_protection_cycle(adapter)
         log_on_change(   # (#762) the watts wobble; the gate strips digits
             _LOGGER, f"actuate:{decision.battery_id}", logging.DEBUG,

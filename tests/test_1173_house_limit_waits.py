@@ -24,7 +24,8 @@ While it waits the grid covers the rest of the house; the pack never gets
 more room than before. Lowering keeps #900's rule: it is the side that
 keeps the pack out of the car (review: a long wait there let the pack feed
 the car for minutes). A target — a peak cover owed, the hold, the blind
-release, the cars' share — still rises at once.
+release, the cars' share, a meter at its peak limit — still rises at once,
+and so does the first clamp out of one.
 """
 from __future__ import annotations
 
@@ -285,6 +286,37 @@ class TestTargetsStillRiseAtOnce:
         assert hass.writes == [2750.0]
 
 
+class TestOutOfATargetTheClampIsAtOnce:
+    @pytest.mark.asyncio
+    async def test_from_the_0_w_hold_the_clamp_lands_on_the_first_cycle(self):
+        """(review 2) The cheap hour's hold ends with a car plugged in: the
+        pack covers the house again now, not after the wait."""
+        hass, a = await _in_force_at(0.0, follows=False)
+        await _run(a, [600.0])
+        assert hass.writes == [750.0]
+
+    @pytest.mark.asyncio
+    async def test_from_a_cover_the_clamp_lands_on_the_first_cycle(self):
+        hass, a = await _in_force_at(700.0, follows=False)
+        await _run(a, [2600.0])
+        assert hass.writes == [2750.0]
+
+    @pytest.mark.asyncio
+    async def test_once_the_clamp_is_in_force_its_rises_wait(self):
+        hass, a = await _in_force_at(0.0, follows=False)
+        await _run(a, [600.0] + [2600.0])
+        assert hass.writes == [750.0]
+
+    @pytest.mark.asyncio
+    async def test_a_clamp_write_that_failed_is_not_waited_on(self):
+        hass, a = await _in_force_at(0.0, follows=False)
+        hass.fail = 1
+        await _run(a, [600.0])
+        assert hass.writes == []
+        await _run(a, [600.0])
+        assert hass.writes == [750.0]
+
+
 class TestTheFirstClampIsAtOnce:
     @pytest.mark.asyncio
     async def test_from_normal_the_clamp_lands_on_the_first_cycle(self):
@@ -333,12 +365,14 @@ class TestObserverStartsNoWait:
 # ─── 4. the decider sets the flag where the watts are the house ────────────
 
 def _view(*, allowed_w=None, home_w=800.0, held=False, ev=True, soc=40.0,
-          grid_funded_w=0.0, degraded=False, shared_w=None):
+          grid_funded_w=0.0, degraded=False, shared_w=None, cars_w=0.0,
+          clamped_w=0.0):
     cfg = {"battery_max_discharge_power": MAX_W, "battery_mode": "auto"}
     fleet = FleetContext(
         solar_w=0.0, home_w=home_w, battery_soc=soc, battery_soc_known=True,
         battery_count=1, peak_slot_allowed_w=allowed_w,
         inputs_degraded=degraded, dark_inputs=(("grid",) if degraded else ()),
+        peak_committed_w=cars_w, home_residual_clamped_w=clamped_w,
     )
     extra = {}
     if shared_w is not None:
@@ -375,6 +409,28 @@ class TestTheDeciderMarksTheHouseClamps:
         assert d.discharge_limit_w == pytest.approx(3800.0)
         assert d.follows_load is False
 
+    def test_the_cars_offer_counts_toward_the_meter(self):
+        """(review 2) 4 kW allowance, 3.5 kW offered to the car, a kettle
+        takes the house to 1.5 kW: the meter is over, the rise is at once."""
+        d = decide_battery(_view(allowed_w=4000.0, cars_w=3500.0, home_w=1500.0))
+        assert d.follows_load is False
+        d = decide_battery(_view(allowed_w=4000.0, cars_w=2000.0, home_w=1500.0))
+        assert d.follows_load is True
+
+    def test_a_house_figure_that_is_no_measurement_does_not_wait(self):
+        """(review 2) A balance that did not close cannot show the meter
+        is under its limit."""
+        d = decide_battery(_view(allowed_w=6000.0, home_w=800.0, clamped_w=4000.0))
+        assert d.intent is BatteryIntent.LIMIT_DISCHARGE
+        assert d.follows_load is False
+
+    def test_a_pack_at_its_reserve_still_rises_in_time_for_the_meter(self):
+        """(review 2) The cover is not paid at the reserve, but the clamp
+        still rises with the house — and must not wait at a full meter."""
+        d = decide_battery(_view(allowed_w=0.0, home_w=3800.0, soc=15.0))
+        assert d.intent is BatteryIntent.LIMIT_DISCHARGE
+        assert d.follows_load is False
+
     def test_the_ev_clamp_raised_by_the_peak_lands_at_once(self):
         d = decide_battery(_view(allowed_w=0.0, home_w=2000.0, grid_funded_w=1500.0))
         assert "may buy only" in d.reason
@@ -397,6 +453,15 @@ class TestTheDeciderMarksTheHouseClamps:
         d = decide_battery(_view(ev=False, allowed_w=1000.0, home_w=4000.0,
                                  grid_funded_w=3000.0))
         assert "may buy only" in d.reason
+        assert d.follows_load is False
+
+    def test_the_grid_funded_clamp_with_the_meter_over_but_not_raised(self):
+        """(review 2) House 4 kW, 0.5 kW grid-funded, 1 kW allowance: the
+        floor equals the house share, nothing reads as raised — the meter is
+        still over."""
+        d = decide_battery(_view(ev=False, allowed_w=1000.0, home_w=4000.0,
+                                 grid_funded_w=500.0))
+        assert "grid-funded" in d.reason
         assert d.follows_load is False
 
     def test_the_hold_is_a_target(self):
