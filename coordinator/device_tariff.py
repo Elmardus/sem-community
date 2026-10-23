@@ -397,32 +397,3 @@ class DeviceTariffs:
                       "this cycle (#812)", getattr(device, "name", did),
                       tariff.meter, why)
         return None, baseline
-        day = now.date().isoformat()
-        last = store.get(did) if isinstance(store.get(did), dict) else None
-        store[did] = {"entity": tariff.meter, "date": day, "value": value,
-                      "at": now.isoformat()}
-        why = None
-        if last is None:
-            why = "first reading"
-        elif last.get("entity") != tariff.meter:
-            why = "a different meter"
-        elif last.get("date") != day:
-            why = "a new day"
-        else:
-            try:
-                elapsed_h = max(0.0, (now - datetime.fromisoformat(
-                    str(last.get("at")))).total_seconds() / 3600.0)
-                step = value - float(last.get("value"))
-            except (TypeError, ValueError):
-                elapsed_h, step = 0.0, -1.0
-            limit = top_power_w(device) / 1000.0 * elapsed_h
-            if step < 0 or step > limit + METER_RESOLUTION_KWH:
-                why = (f"a step of {step:.3f} kWh in {elapsed_h * 60:.1f} min "
-                       "is not possible for this device")
-            else:
-                return step
-        log_on_change(_LOGGER, f"device_meter:{did}", logging.INFO,
-                      "%s: own meter %s re-baselined (%s) — nothing booked "
-                      "this cycle (#812)", getattr(device, "name", did),
-                      tariff.meter, why)
-        return None
