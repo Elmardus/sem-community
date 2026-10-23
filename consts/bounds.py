@@ -134,6 +134,8 @@ BOUNDS: dict[str, Range] = {
     # (#1090) Stop exporting below this export value. May be negative: a
     # small loss per kWh accepted before the meter closes.
     "export_value_threshold": Range(-10000, 10000, step=0.0001),
+    # (#812) A device's own fixed rate (per kWh, house currency); 0 = none.
+    "heat_pump_tariff_rate": Range(0, 10000, step=0.0001),
 }
 
 

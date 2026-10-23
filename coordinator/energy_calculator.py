@@ -374,6 +374,9 @@ class EnergyCalculator:
         self.device_meter_last: Dict[str, Dict[str, Any]] = {}
         #: (#812) this cycle's own-tariff devices, staged by the coordinator
         self._device_tariff_cycle: list = []
+        #: (#812) the calendar day the last cycle booked under — the day the
+        #: per-device cost sensors read, so they need no clock of their own
+        self.booking_day: Optional[date] = None
 
         # (#1077) The value layer's books. ``_export_rate`` above is the
         # export VALUE (net of the per-kWh feed-in fee); these keep the
@@ -741,6 +744,7 @@ class EnergyCalculator:
 
         # Check for day/month/year rollover and reset accumulators
         self._check_rollover(today, month_key, year_key)
+        self.booking_day = today   # (#812)
 
         # (#628) This cycle's counter-backing starts empty — each reconciler
         # below records its own category only when it actually read a COMPLETE

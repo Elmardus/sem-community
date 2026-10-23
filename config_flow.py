@@ -3496,9 +3496,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             vol.Optional(
                 "heat_pump_tariff_rate",
                 description={"suggested_value": current("heat_pump_tariff_rate")},
-            ): selector.NumberSelector(selector.NumberSelectorConfig(
-                min=0.0, max=10000.0, step=0.001,
-                unit_of_measurement=f"{currency}/kWh", mode="box")),
+            ): _value_number("heat_pump_tariff_rate", f"{currency}/kWh"),
             vol.Optional(
                 "heat_pump_tariff_entity",
                 description={"suggested_value": current("heat_pump_tariff_entity")},
@@ -3662,7 +3660,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain=["sensor", "select", "input_select"])
                 ),
-                **self._heat_pump_tariff_fields(_opt),
+                **OptionsFlowHandler._heat_pump_tariff_fields(self, _opt),
             }),
             errors=errors,
         )
@@ -3875,7 +3873,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain=["sensor", "select", "input_select"])
                 ),
-                **self._heat_pump_tariff_fields(_row),
+                **OptionsFlowHandler._heat_pump_tariff_fields(self, _row),
             }),
             errors=errors,
         )

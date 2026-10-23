@@ -15986,7 +15986,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         tariffs = getattr(self._surplus_controller, "device_tariffs", None)
         if calc is None or tariffs is None:
             return {}
-        day = dt_util.now().date()
+        # the day the calculator booked this cycle under — not a clock here
+        day = getattr(calc, "booking_day", None)
+        if day is None:
+            return {}
         out: Dict[str, Any] = {}
         for device in list(self._surplus_controller._devices.values()):
             if not tariff_of(device).configured:

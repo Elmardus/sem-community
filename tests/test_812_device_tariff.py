@@ -575,7 +575,7 @@ class TestTheSettingsAreEverywhere:
             SimpleNamespace(hass=None), lambda k: None)
         assert {str(k) for k in fields} == set(FLOW_KEYS)
         src = (ROOT / "config_flow.py").read_text("utf-8")
-        assert src.count("**self._heat_pump_tariff_fields(") == 2
+        assert src.count("OptionsFlowHandler._heat_pump_tariff_fields(self, ") == 2
         assert set(FLOW_KEYS) <= OPTIONS_FLOW_OWNED_KEYS
 
     def test_they_reload_like_the_rest_of_the_pump(self):
