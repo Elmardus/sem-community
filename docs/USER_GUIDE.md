@@ -1619,6 +1619,13 @@ Everything below is **off by default** and lives on the Config tab under
 
 SEM never curtails what the battery, the car and the loads could still take.
 
+**Stop exporting below a price.** Set **Stop exporting below** under
+**Configure → Tariff & Advanced**. When a sold kWh is worth less than this
+(export price minus feed-in fee), SEM stops exporting: the battery and the
+loads take the sun first. SEM never buys from the grid for it. It needs the
+**Export guard** switch on. Default 0: only a negative price stops export.
+More in [Tariff models](TARIFF_MODELS.md#stop-exporting-below-1090).
+
 Proven end to end on real hardware on 17.09.2026: with the price held negative
 and 2 kW of export on the meter, SEM's guard engaged after its delay, wrote the
 cut, the inverter's register read *Zero Power*, and on the price turning
