@@ -1339,8 +1339,8 @@ used. The EV tab shows it per session and in the totals; the CSV has it as
 
 During night charging, the home battery should only power home consumption — not the EV. SEM enforces this by setting the inverter's discharge limit to match real-time home consumption.
 
-- Updated every 10 seconds to track actual home load
-- 100W hysteresis to avoid frequent changes
+- Set in 250 W steps, just above the home load
+- A change of 500 W or more is followed once it has lasted about a minute; a one-step change once it has lasted about five minutes. A short burst, such as a kettle, does not change it, so the inverter is not written every few minutes
 - Full discharge capability restored when night charging ends or EV disconnects
 - Requires a Huawei Solar inverter (or compatible) with a `number` entity for discharge limit control
 

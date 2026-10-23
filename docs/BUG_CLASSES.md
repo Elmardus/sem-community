@@ -3428,8 +3428,10 @@ see: SEM had four steadiness mechanisms on this path (the 4-cycle idle grace, #9
 **Where it lives:** any actuator with a wear budget and two opposite commands —
 `charger_reconciler` (the instance), `ev_phase_sequencer` (`MIN_SWITCH_GAP_S` /
 `AUTO_MIN_INTERVAL_S`: symmetric, already closed), `actuate_battery`
-(`DISCHARGE_LIMIT_LOWER_DWELL_CYCLES`: deliberately asymmetric — *raise fast, lower slow* — but it
-is a LIMIT with a 250 W + 50 W hysteresis band, so its up/down cycle IS bounded; not this class),
+(`DISCHARGE_LIMIT_LOWER_DWELL_CYCLES`: *raise fast, lower slow*. First judged "not this class",
+because the 250 W + 50 W band seemed to bound the up/down cycle. PROD showed it does not (#1173):
+the band is 50 W wide at a step edge and a raise waited for nothing, so every burst of the house
+was a write pair — **fixed**, see round 2 below),
 `device_reconciler` (`EXTERNAL_OFF_COOLDOWN_S`, whose opposite direction is the load's own
 `min_on`), and the LOAD side, which is the closed example: `SwitchDevice` / `ClimateDevice` /
 `load_management` all carry **both** `min_on` and `min_off`. The charger inherited
@@ -3481,6 +3483,33 @@ a new brand cannot teach one of them about a mechanism and not the other. The #6
 deliberately does NOT arm the clock: `stop_controllable=False` means that `DISABLE` moves no
 relay, and arming a five-minute close floor off a doomed command would lock the CHARGE rows — and
 every current correction with them — out while the car keeps drawing.
+**Round 2 (#1173) — the battery discharge limit.** PROD, 15.–23.10.2026: 48–143 limit writes a
+night, mostly 750 ↔ 1000 W, one or two minutes apart. Under the EV clamp the limit is the house
+load, and the house has bursts: a kettle or a hob for 10–60 s, a base load hovering 690–800 W across
+the 750 W step, and the house figure's own one-cycle jump after SEM moved the pack (the grid meter
+sees the change at once, the pack's power sensor a poll later). Up at once and down a minute later
+made each burst two writes. **Closure:** `BatteryDecision.follows_load` marks a limit whose watts
+ARE the house (the EV clamp and the #620 grid-funded clamp, unless the #1003 peak cover raised
+them). For those, `_settled_house_limit_w` moves the limit, up or down, only after the house held
+the new level `DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES` (6, ~1 min) in a row for a move of two steps or
+more, `DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES` (30, ~5 min) for one step. The new level is the run's
+lowest house going up and its highest going down, so a spike at the end of a run does not set it.
+While it waits, the grid covers the rest of the house (up), or the pack may give up to a step more
+than the house (down). A target (the #879 hold, its peak cover, the #1120 blind release, a
+peak-raised clamp) keeps the old rule: up at once (class 59 — a limit is not a preference), down
+after six cycles. The first clamp after NORMAL still goes out at once (#1066). The real actuator,
+run offline over six PROD nights' house figure (15.–22.10): 14–31 writes a night, against 93–143
+for the old rule on the same figure.
+**Guard:** `tests/test_1173_house_limit_waits.py` — a one-cycle kettle writes nothing and was two
+writes before; a burst shorter than the wait and a run broken by one cycle write nothing; a big
+move lands after the short wait at the run's held level; a one-step move and a hover across the
+step wait the long one; targets still rise at once; the first clamp is at once; the decider sets
+the flag on exactly the house clamps (not the hold, its cover, the blind release or a peak raise);
+a retried stop keeps it; and an oracle over a synthetic ten-hour night: at most a quarter of the
+old rule's writes, and no up or down run ever outlasts the long wait. Swept: the export guard (#955)
+already holds both ways (120 s / 300 s); charge pacing (#820) has a deadband both ways and a cap
+from the plan, not from the house; the forced charge under the meter limit (#1069) must lower at
+once (class 59), so its raise wait is the only one it can have (assessed).
 **Guard:** `tests/test_940_contactor_anticycle.py` — an **invariant oracle**, not a row test:
 4000 cycles of randomised desired states against a *coherent simulated relay* (SEM's own commands
 move it, plus a 2 %/cycle external flip, and `observed.enabled` reports it), asserting that no
@@ -3509,8 +3538,10 @@ war snapshot — but no CARD renders it yet; the "holding on for another 2 min �
 #940 asks for needs a card change plus its translation keys. (4) Whether a switch-only charger
 should be offered the amp-shaped modes at all is still open. (5) Observer mode stamps the clocks
 for commands `ControllableDevice.send` withholds — the same pre-existing shape as `_last_disable_at`,
-so an observer rig's holds are real while its writes are not.
-Refs #940 #939 #763 #536 #627 #688 #392 #804.
+so an observer rig's holds are real while its writes are not. (6) (#1173) A pack at its own
+lowest level cannot discharge, yet its limit still follows the house (rarer now, not gone): SEM does
+not know the inverter's own floor, and its reserve is not always that number (#1179).
+Refs #940 #939 #763 #536 #627 #688 #392 #804 #1173 #1179 #900.
 
 ### 82. A deliberate stand-down announced only in the log — GUARDED
 **Symptom:** a backoff makes exactly the right call — stop acting, because acting harder does
@@ -5173,7 +5204,8 @@ six cycles and resets the streak on every raise, so an input that blips once a m
 motivation names 8-15 % of cycles on a Huawei modbus) pins the limit at the release value and the
 #879 hold never comes back. Safe direction, dead feature; the seam that would fix it is a
 `follows_load` flag on `BatteryDecision` read by `actuate_battery` — a change to the actuator's
-contract, so it is a call, not a sweep. (2) The #531 fleet split divides the cover by the battery
+contract, so it is a call, not a sweep. (#1173 added that flag for the house clamps, which now wait
+both ways; the hold is a target and still lowers after six cycles, so this residual stands.) (2) The #531 fleet split divides the cover by the battery
 count, so an empty or unreachable pack silently under-covers — the split's failure mode is
 over-injection, and on a floor it is a breached limit. (3) The cover is not bounded by
 `battery_max_discharge_power`: a 12 kW house under a 3 kW allowance asks 9 kW of a 5 kW pack, the
