@@ -1977,7 +1977,10 @@
     "why_verb_limit_export": "limit dodávky",
     "why_verb_release_export": "dodávka volná",
     "why_reason_export_guard_off": "Vypnuli jste limit dodávky, takže ho SEM ruší.",
-    "why_reason_export_price_unknown": "Cena za dodávku do sítě není známá, takže SEM ruší limit dodávky."
+    "why_reason_export_price_unknown": "Cena za dodávku do sítě není známá, takže SEM ruší limit dodávky.",
+    "config_batt_charge_end_entity": "Úroveň konce nabíjení",
+    "config_help_batt_charge_end_entity": "Kde střídač sám ukončí nabíjení, v %. SEM ji jen čte. Vynucené nabíjení tam skončí, když je pod 90 %.",
+    "config_help_batt_charge_end_entity_each": "Vlastní úroveň konce nabíjení této baterie. Prázdné: SEM použije entitu výše."
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3957,7 +3960,10 @@
     "why_verb_limit_export": "eksportgrænse",
     "why_verb_release_export": "eksport fri",
     "why_reason_export_guard_off": "Du har slået eksportgrænsen fra, så SEM fjerner den.",
-    "why_reason_export_price_unknown": "Eksportprisen er ukendt, så SEM fjerner eksportgrænsen."
+    "why_reason_export_price_unknown": "Eksportprisen er ukendt, så SEM fjerner eksportgrænsen.",
+    "config_batt_charge_end_entity": "Ladestopniveau",
+    "config_help_batt_charge_end_entity": "Hvor inverteren selv stopper opladningen, i %. SEM læser det kun. Tvungen opladning slutter der, når det er under 90 %.",
+    "config_help_batt_charge_end_entity_each": "Dette batteris eget ladestopniveau. Tom: SEM bruger entiteten ovenfor."
   },
   "de": {
     "% of limit": "% des Limits",
@@ -5937,7 +5943,10 @@
     "why_verb_limit_export": "Einspeiselimit",
     "why_verb_release_export": "Einspeisung frei",
     "why_reason_export_guard_off": "Du hast das Einspeiselimit ausgeschaltet, darum hebt SEM es auf.",
-    "why_reason_export_price_unknown": "Der Einspeisepreis ist unbekannt, darum hebt SEM das Einspeiselimit auf."
+    "why_reason_export_price_unknown": "Der Einspeisepreis ist unbekannt, darum hebt SEM das Einspeiselimit auf.",
+    "config_batt_charge_end_entity": "Ladeende-Stand",
+    "config_help_batt_charge_end_entity": "Wo der Wechselrichter selbst das Laden stoppt, in %. SEM liest ihn nur. Zwangsladen endet dort, wenn er unter 90 % liegt.",
+    "config_help_batt_charge_end_entity_each": "Der eigene Ladeende-Stand dieser Batterie. Leer: SEM nutzt die Entität oben."
   },
   "en": {
     "% of limit": "% of limit",
@@ -7917,7 +7926,10 @@
     "why_verb_limit_export": "export limit",
     "why_verb_release_export": "export free",
     "why_reason_export_guard_off": "You switched off the export limit, so SEM lifts it.",
-    "why_reason_export_price_unknown": "The export price is unknown, so SEM lifts the export limit."
+    "why_reason_export_price_unknown": "The export price is unknown, so SEM lifts the export limit.",
+    "config_batt_charge_end_entity": "End-of-charge level",
+    "config_help_batt_charge_end_entity": "Where the inverter itself stops charging, in %. SEM only reads it. Force charge ends there when it is below 90 %.",
+    "config_help_batt_charge_end_entity_each": "This battery's own end-of-charge level. Empty: SEM uses the entity above."
   },
   "es": {
     "% of limit": "% del límite",
@@ -9897,7 +9909,10 @@
     "why_verb_limit_export": "límite de exportación",
     "why_verb_release_export": "exportación libre",
     "why_reason_export_guard_off": "Desactivaste el límite de exportación, así que SEM lo quita.",
-    "why_reason_export_price_unknown": "El precio de exportación es desconocido, así que SEM quita el límite de exportación."
+    "why_reason_export_price_unknown": "El precio de exportación es desconocido, así que SEM quita el límite de exportación.",
+    "config_batt_charge_end_entity": "Nivel de fin de carga",
+    "config_help_batt_charge_end_entity": "Donde el inversor deja de cargar por sí mismo, en %. SEM solo lo lee. La carga forzada termina ahí cuando está por debajo del 90 %.",
+    "config_help_batt_charge_end_entity_each": "El nivel de fin de carga propio de esta batería. Vacío: SEM usa la entidad de arriba."
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -11877,7 +11892,10 @@
     "why_verb_limit_export": "syöttöraja",
     "why_verb_release_export": "syöttö vapaa",
     "why_reason_export_guard_off": "Kytkit syöttörajan pois, joten SEM poistaa sen.",
-    "why_reason_export_price_unknown": "Verkkoon syötön hinta on tuntematon, joten SEM poistaa syöttörajan."
+    "why_reason_export_price_unknown": "Verkkoon syötön hinta on tuntematon, joten SEM poistaa syöttörajan.",
+    "config_batt_charge_end_entity": "Latauksen lopetustaso",
+    "config_help_batt_charge_end_entity": "Missä invertteri itse lopettaa latauksen, %. SEM vain lukee sen. Pakkolataus päättyy siihen, kun se on alle 90 %.",
+    "config_help_batt_charge_end_entity_each": "Tämän akun oma latauksen lopetustaso. Tyhjä: SEM käyttää yllä olevaa entiteettiä."
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -13857,7 +13875,10 @@
     "why_verb_limit_export": "limite d'injection",
     "why_verb_release_export": "injection libre",
     "why_reason_export_guard_off": "Vous avez désactivé la limite d'injection, SEM la lève donc.",
-    "why_reason_export_price_unknown": "Le prix d'injection est inconnu, SEM lève donc la limite d'injection."
+    "why_reason_export_price_unknown": "Le prix d'injection est inconnu, SEM lève donc la limite d'injection.",
+    "config_batt_charge_end_entity": "Niveau de fin de charge",
+    "config_help_batt_charge_end_entity": "Là où l'onduleur arrête lui-même la charge, en %. SEM le lit seulement. La charge forcée s'arrête là quand il est sous 90 %.",
+    "config_help_batt_charge_end_entity_each": "Le niveau de fin de charge propre à cette batterie. Vide : SEM utilise l'entité ci-dessus."
   },
   "hu": {
     "% of limit": "% a határból",
@@ -15837,7 +15858,10 @@
     "why_verb_limit_export": "betáplálási korlát",
     "why_verb_release_export": "betáplálás szabad",
     "why_reason_export_guard_off": "Kikapcsoltad a betáplálási korlátot, ezért a SEM feloldja.",
-    "why_reason_export_price_unknown": "A betáplálás ára ismeretlen, ezért a SEM feloldja a betáplálási korlátot."
+    "why_reason_export_price_unknown": "A betáplálás ára ismeretlen, ezért a SEM feloldja a betáplálási korlátot.",
+    "config_batt_charge_end_entity": "Töltés vége szint",
+    "config_help_batt_charge_end_entity": "Ahol az inverter maga leállítja a töltést, %-ban. A SEM csak olvassa. A kényszertöltés ott véget ér, ha 90 % alatt van.",
+    "config_help_batt_charge_end_entity_each": "Ennek az akkumulátornak a saját töltés vége szintje. Üres: a SEM a fenti entitást használja."
   },
   "it": {
     "% of limit": "% del limite",
@@ -17817,7 +17841,10 @@
     "why_verb_limit_export": "limite di immissione",
     "why_verb_release_export": "immissione libera",
     "why_reason_export_guard_off": "Hai disattivato il limite di immissione, quindi SEM lo toglie.",
-    "why_reason_export_price_unknown": "Il prezzo di immissione è sconosciuto, quindi SEM toglie il limite di immissione."
+    "why_reason_export_price_unknown": "Il prezzo di immissione è sconosciuto, quindi SEM toglie il limite di immissione.",
+    "config_batt_charge_end_entity": "Livello di fine carica",
+    "config_help_batt_charge_end_entity": "Dove l'inverter stesso smette di caricare, in %. SEM lo legge soltanto. La carica forzata finisce lì quando è sotto il 90 %.",
+    "config_help_batt_charge_end_entity_each": "Il livello di fine carica proprio di questa batteria. Vuoto: SEM usa l'entità sopra."
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -19797,7 +19824,10 @@
     "why_verb_limit_export": "teruglevergrens",
     "why_verb_release_export": "teruglevering vrij",
     "why_reason_export_guard_off": "Je hebt de teruglevergrens uitgezet, dus SEM heft hem op.",
-    "why_reason_export_price_unknown": "De terugleverprijs is onbekend, dus SEM heft de teruglevergrens op."
+    "why_reason_export_price_unknown": "De terugleverprijs is onbekend, dus SEM heft de teruglevergrens op.",
+    "config_batt_charge_end_entity": "Laadeinde-niveau",
+    "config_help_batt_charge_end_entity": "Waar de omvormer zelf stopt met laden, in %. SEM leest het alleen. Geforceerd laden stopt daar als het onder 90 % ligt.",
+    "config_help_batt_charge_end_entity_each": "Het eigen laadeinde-niveau van deze batterij. Leeg: SEM gebruikt de entiteit hierboven."
   },
   "no": {
     "% of limit": "% av grense",
@@ -21777,7 +21807,10 @@
     "why_verb_limit_export": "eksportgrense",
     "why_verb_release_export": "eksport fri",
     "why_reason_export_guard_off": "Du har slått av eksportgrensen, så SEM fjerner den.",
-    "why_reason_export_price_unknown": "Eksportprisen er ukjent, så SEM fjerner eksportgrensen."
+    "why_reason_export_price_unknown": "Eksportprisen er ukjent, så SEM fjerner eksportgrensen.",
+    "config_batt_charge_end_entity": "Ladestoppnivå",
+    "config_help_batt_charge_end_entity": "Hvor vekselretteren selv stopper ladingen, i %. SEM leser det bare. Tvungen lading slutter der når det er under 90 %.",
+    "config_help_batt_charge_end_entity_each": "Dette batteriets eget ladestoppnivå. Tom: SEM bruker enheten ovenfor."
   },
   "pl": {
     "% of limit": "% limitu",
@@ -23757,7 +23790,10 @@
     "why_verb_limit_export": "limit oddawania",
     "why_verb_release_export": "oddawanie wolne",
     "why_reason_export_guard_off": "Wyłączono limit oddawania, więc SEM go znosi.",
-    "why_reason_export_price_unknown": "Cena oddawania do sieci jest nieznana, więc SEM znosi limit oddawania."
+    "why_reason_export_price_unknown": "Cena oddawania do sieci jest nieznana, więc SEM znosi limit oddawania.",
+    "config_batt_charge_end_entity": "Poziom końca ładowania",
+    "config_help_batt_charge_end_entity": "Gdzie falownik sam kończy ładowanie, w %. SEM tylko go odczytuje. Wymuszone ładowanie kończy się tam, gdy jest poniżej 90 %.",
+    "config_help_batt_charge_end_entity_each": "Własny poziom końca ładowania tej baterii. Puste: SEM używa encji powyżej."
   },
   "pt": {
     "% of limit": "% do limite",
@@ -25737,7 +25773,10 @@
     "why_verb_limit_export": "limite de exportação",
     "why_verb_release_export": "exportação livre",
     "why_reason_export_guard_off": "O limite de exportação foi desligado, por isso o SEM retira-o.",
-    "why_reason_export_price_unknown": "O preço de exportação é desconhecido, por isso o SEM retira o limite de exportação."
+    "why_reason_export_price_unknown": "O preço de exportação é desconhecido, por isso o SEM retira o limite de exportação.",
+    "config_batt_charge_end_entity": "Nível de fim de carga",
+    "config_help_batt_charge_end_entity": "Onde o inversor para de carregar por si, em %. O SEM apenas o lê. A carga forçada termina aí quando está abaixo de 90 %.",
+    "config_help_batt_charge_end_entity_each": "O nível de fim de carga próprio desta bateria. Vazio: o SEM usa a entidade acima."
   },
   "ro": {
     "% of limit": "% din limită",
@@ -27717,7 +27756,10 @@
     "why_verb_limit_export": "limită de injectare",
     "why_verb_release_export": "injectare liberă",
     "why_reason_export_guard_off": "Ai oprit limita de injectare, deci SEM o ridică.",
-    "why_reason_export_price_unknown": "Prețul de injectare este necunoscut, deci SEM ridică limita de injectare."
+    "why_reason_export_price_unknown": "Prețul de injectare este necunoscut, deci SEM ridică limita de injectare.",
+    "config_batt_charge_end_entity": "Nivel de final de încărcare",
+    "config_help_batt_charge_end_entity": "Unde invertorul oprește singur încărcarea, în %. SEM doar îl citește. Încărcarea forțată se termină acolo când este sub 90 %.",
+    "config_help_batt_charge_end_entity_each": "Nivelul propriu de final de încărcare al acestei baterii. Gol: SEM folosește entitatea de mai sus."
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -29697,7 +29739,10 @@
     "why_verb_limit_export": "exportgräns",
     "why_verb_release_export": "export fri",
     "why_reason_export_guard_off": "Du stängde av exportgränsen, så SEM tar bort den.",
-    "why_reason_export_price_unknown": "Exportpriset är okänt, så SEM tar bort exportgränsen."
+    "why_reason_export_price_unknown": "Exportpriset är okänt, så SEM tar bort exportgränsen.",
+    "config_batt_charge_end_entity": "Laddstoppnivå",
+    "config_help_batt_charge_end_entity": "Där växelriktaren själv slutar ladda, i %. SEM läser den bara. Tvångsladdning slutar där när den är under 90 %.",
+    "config_help_batt_charge_end_entity_each": "Detta batteris egen laddstoppnivå. Tom: SEM använder entiteten ovan."
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -31677,6 +31722,9 @@
     "why_verb_limit_export": "送电限制",
     "why_verb_release_export": "送电不限",
     "why_reason_export_guard_off": "你关闭了送电限制，所以 SEM 取消该限制。",
-    "why_reason_export_price_unknown": "上网电价未知，所以 SEM 取消送电限制。"
+    "why_reason_export_price_unknown": "上网电价未知，所以 SEM 取消送电限制。",
+    "config_batt_charge_end_entity": "充电截止电量",
+    "config_help_batt_charge_end_entity": "逆变器自身停止充电的电量（%）。SEM 只读取它。低于 90 % 时，强制充电在此结束。",
+    "config_help_batt_charge_end_entity_each": "此蓄电池自己的充电截止电量。留空：SEM 使用上方的实体。"
   }
 }

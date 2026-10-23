@@ -321,6 +321,9 @@ const STRUCTURAL_KEYS = new Set([
     'hot_water_entity', 'hot_water_power_sensor', 'hot_water_temperature_sensor',
     'battery_force_discharge_control_entity', 'battery_strategy_control_entity',
     'battery_discharge_control_entity',  // #528 — discharge-limit (protection) entity
+    // (#1166) the end-of-charge level of the battery: read from the config
+    // snapshot, which only a reload rebuilds.
+    'battery_charge_end_soc_entity',
     // #550 — structural TOGGLES: reload the entry too, so they stage + commit on
     // Apply like the pickers (a live flip would reload and discard staged edits).
     'battery_discharge_protection_enabled', 'battery_setpoint_bidirectional',
@@ -1501,6 +1504,20 @@ class SEMConfigCard extends SEMLitBase {
                 return html`${Array.from({ length: n }, (_, i) => this._renderBatteryListPicker(
                     'battery_discharge_control_entities', 'config_batt_discharge_entity',
                     ['number'], i, n, opts, 'config_help_batt_discharge_entity_each'))}`;
+            })()}
+            ${/* (#1166) read only: where the inverter itself stops charging.
+                  Force charge ends there when it is below 90 %. One per
+                  battery when there are two or more; an empty row uses the
+                  entity above. */ ''}
+            ${this._renderPicker('battery_charge_end_soc_entity', 'config_batt_charge_end_entity',
+                ['number', 'sensor', 'input_number'], null, opts, 'config_help_batt_charge_end_entity')}
+            ${(() => {
+                const n = this._batteryCount();
+                if (n < 2 || !this._showsControl('battery_charge_end_soc_entity')) return nothing;
+                return html`${Array.from({ length: n }, (_, i) => this._renderBatteryListPicker(
+                    'battery_charge_end_soc_entities', 'config_batt_charge_end_entity',
+                    ['number', 'sensor', 'input_number'], i, n, opts,
+                    'config_help_batt_charge_end_entity_each'))}`;
             })()}
         `;
     }

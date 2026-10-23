@@ -320,6 +320,10 @@ _SET_OPTION_STRUCTURAL_KEYS: frozenset[str] = frozenset({
     # adapter construction too, so a change must reload.
     "battery_force_discharge_entities",
     "battery_discharge_control_entities",
+    # (#1166) the pack's own end-of-charge level is read from the config
+    # snapshot, which only a reload rebuilds — shared and per battery.
+    "battery_charge_end_soc_entity",
+    "battery_charge_end_soc_entities",
     # #523 Sessy / AC-coupled: per-battery power-strategy selects, also read
     # at adapter construction.
     "battery_strategy_entities",

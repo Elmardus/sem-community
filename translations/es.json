@@ -182,7 +182,8 @@
           "diagram_style": "Estilo del diagrama del sistema",
           "battery_assist_min_surplus": "Asistencia batería – mín. excedente solar (W)",
           "grid_sign_invert": "Invertir el signo de la potencia de red",
-          "battery_operating_mode_entity": "Entidad de modo de funcionamiento de la batería (observada)"
+          "battery_operating_mode_entity": "Entidad de modo de funcionamiento de la batería (observada)",
+          "battery_charge_end_soc_entity": "Nivel de fin de carga de la batería (opcional)"
         },
         "data_description": {
           "update_interval": "Con qué frecuencia el coordinador lee los sensores y ajusta el hardware. 10 s da la integración de energía más precisa; valores por encima de 30 s subestiman la energía. Rango 10–60 s.",
@@ -208,14 +209,19 @@
           "legionella_interval_hours": "Horas máximas entre ciclos de desinfección antilegionela antes de que SEM fuerce un calentamiento.",
           "battery_assist_min_surplus": "Excedente solar real mínimo antes de que la batería doméstica pueda ayudar a cargar el VE — en cualquier modo de carga. Por debajo de este valor la batería queda reservada para la casa (el coche toma de la red + solar). Por defecto 1200 W. Ponlo a 0 para que la batería apoye al VE en todo momento, incluso de noche.",
           "grid_sign_invert": "Actívalo solo si la importación de red aparece como valor positivo (p. ej. Enphase). La convención de SEM es negativo = importación; esto niega la lectura bruta y omite la detección automática del signo.",
-          "battery_operating_mode_entity": "El selector de política de funcionamiento del inversor (p. ej. 'Working mode' de Huawei). SEM solo LEE esta entidad: el modo se muestra junto a la evidencia de la batería, y una reparación puntual avisa cuando no es el modo de autoconsumo que la planificación de SEM asume. SEM nunca lo cambia. Déjelo vacío para desactivar la observación."
+          "battery_operating_mode_entity": "El selector de política de funcionamiento del inversor (p. ej. 'Working mode' de Huawei). SEM solo LEE esta entidad: el modo se muestra junto a la evidencia de la batería, y una reparación puntual avisa cuando no es el modo de autoconsumo que la planificación de SEM asume. SEM nunca lo cambia. Déjelo vacío para desactivar la observación.",
+          "battery_charge_end_soc_entity": "Donde el inversor deja de cargar la batería por sí mismo, en %. SEM solo lo lee, nunca lo escribe. La carga forzada también termina ahí cuando está por debajo del 90 %."
         }
       },
       "settings_battery_limit": {
         "title": "Batería {battery} — límite de descarga",
         "description": "La batería {battery} es {sensor}.\n\nElija la entidad Number que limita la potencia de descarga de esta batería. Déjela vacía para usar la entidad común de la página anterior.",
         "data": {
-          "battery_discharge_control_entity": "Entidad de límite de descarga — batería {battery}"
+          "battery_discharge_control_entity": "Entidad de límite de descarga — batería {battery}",
+          "battery_charge_end_soc_entity": "Nivel de fin de carga — batería {battery}"
+        },
+        "data_description": {
+          "battery_charge_end_soc_entity": "El nivel de fin de carga propio de esta batería. SEM solo lo lee. Déjelo vacío para usar la entidad compartida de la página anterior."
         }
       },
       "settings_ev": {
