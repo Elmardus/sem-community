@@ -17,7 +17,7 @@ and took the real one out of the morning (#1083 accuracy). A row
 that exists counts, even at 0 or with no change; only an absent row is a
 missing hour. Measurements (SOC, prices, forecast) come from the hourly
 ``mean``. (#1176) The car's counter resets at the car day's start; days
-recorded before its ``last_reset`` said so are read by ``_car_day_reset``.
+recorded before its ``last_reset`` said so are read by ``_car_changes``.
 """
 from __future__ import annotations
 
@@ -190,7 +190,6 @@ class HourlyDay:
         date: Any,
         tags: Iterable[str] = (),
         tz: Optional[tzinfo] = None,
-        ev_day_start_hour: Optional[int] = None,
     ) -> "HourlyDay":
         """Build a day from a recorder hourly-statistics read.
 
@@ -202,12 +201,9 @@ class HourlyDay:
         another day is ignored. Two rows on one hour (the autumn clock
         change) add up for a flow; the later mean wins for a measurement.
 
-        (#1176) ``ev_day_start_hour`` is the hour the car's daily counter
-        falls to 0 (the car day's start). Days recorded while the sensor
-        said it reset at midnight show a drop in that hour: it is read as
-        the reset it is (``_car_day_reset``), not as a step back. A car
-        row may carry the hour's end ``state``; the last row of the day
-        before, when given, says what the counter carried over midnight.
+        (#1176) A car row may carry the hour's end ``state``, and the last
+        row of the day before what the counter held at midnight. With them
+        ``_car_changes`` reads the car counter's resets by their shape.
         """
         day = _as_date(date)
         out: Dict[str, Any] = {role: _zeros() for role in FLOW_ROLES}
@@ -223,35 +219,18 @@ class HourlyDay:
                 continue
             raw = _zeros()
             seen = set()
-            states: List[Optional[float]] = _nones()
-            carried: Optional[float] = None
-            for row in rows:
+            changes = _car_changes(rows, day, tz) if role == EV else None
+            for i, row in enumerate(rows):
                 hour = _hour_of(row.get("start"), day, tz)
                 if hour is None:
-                    if _is_day_before(row.get("start"), day, tz):
-                        carried = _num(row.get("state"), carried)
                     continue
                 seen.add(hour)      # the row is there: a value, even 0
-                states[hour] = _num(row.get("state"), states[hour])
-                change = row.get("change")
+                change = row.get("change") if changes is None else changes[i]
                 try:
                     raw[hour] += 0.0 if change is None else float(change)
                 except (TypeError, ValueError):
                     pass
             missing.update(h for h in range(HOURS) if h not in seen)
-            if (role == EV and ev_day_start_hour is not None
-                    and 0 < ev_day_start_hour < HOURS
-                    and raw[ev_day_start_hour] < 0):
-                if carried is None:
-                    # (#1176) what the counter carried over midnight is
-                    # unknown, so the night cannot be told from it
-                    notes.append(
-                        f"ev counter stepped back "
-                        f"{-raw[ev_day_start_hour]:.2f} kWh at "
-                        f"{ev_day_start_hour:02d}:00 — the car day's reset; "
-                        f"the night before it could not be read")
-                raw = _car_day_reset(raw, ev_day_start_hour,
-                                     states[ev_day_start_hour], carried)
             out[role] = _net_step_backs(raw)
             for hour, kwh in enumerate(raw):
                 if kwh < -STEP_BACK_NOTE_KWH:
@@ -287,31 +266,61 @@ class HourlyDay:
         return day_obj
 
 
-def _car_day_reset(raw: List[float], hour: int, end_state: Optional[float],
-                   carried: Optional[float]) -> List[float]:
-    """(#1176) Read a car-day reset recorded under a midnight ``last_reset``.
+def _car_changes(rows: List[Mapping[str, Any]], day: _date,
+                 tz: Optional[tzinfo]) -> Optional[List[Any]]:
+    """(#1176) The car rows' changes, with its resets read by their shape.
 
-    The recorder restarted the counter's cycle at 00:00, so it booked what
-    the counter carried over midnight (``carried``, the last car day's
-    evening) as new energy in the first hour, and everything up to the
-    reset adds up to the value that fell to 0. The reset hour is booked
-    from its end ``state`` (or its change plus that value); the carried
-    kWh are taken out of the first hours. Without ``carried`` the night
-    cannot be told from it: the hours before the reset are dropped, as
-    the netting did before, and the caller marks the day.
+    The car's daily counter falls to 0 at the car day's start. Recorded
+    under a ``last_reset`` of midnight, that fall is a negative change, and
+    the recorder restarted the counter's cycle at 00:00 — booking what the
+    counter held then as new energy. Each row is read against the end
+    ``state`` of the row before it (the day before's last row for 00:00):
+
+    - a fall whose start was at least the fall and whose end is below it
+      restarted from 0: the hour's kWh are its end state, at any hour;
+    - the 00:00 row whose change is its whole end state, on a counter that
+      held kWh and did not fall: only the rise is new.
+
+    Any other fall stays a step back and is noted. None when the 00:00 row
+    looks restarted but the day before cannot be read: the carry-over is
+    unknown, and the day is read as before, its fall noted.
     """
-    fixed = list(raw)
-    before = sum(raw[:hour])
-    fixed[hour] = max(0.0, end_state if end_state is not None
-                      else raw[hour] + before)
-    phantom = before if carried is None else min(before, max(0.0, carried))
-    for h in range(hour):
-        if phantom <= 0:
+    order = sorted(
+        (i for i in range(len(rows)) if _local(rows[i].get("start"), tz)),
+        key=lambda i: _local(rows[i].get("start"), tz))
+    out: List[Any] = [row.get("change") for row in rows]
+    prev: Optional[float] = None
+    first = True
+    for i in order:
+        start = _local(rows[i].get("start"), tz)
+        if start.date() < day:
+            prev = _num(rows[i].get("state"), None)
+            continue
+        if start.date() > day:
             break
-        take = min(max(0.0, fixed[h]), phantom)
-        fixed[h] -= take
-        phantom -= take
-    return fixed
+        change = _num(rows[i].get("change"), None)
+        end = _num(rows[i].get("state"), None)
+        midnight = first and start.hour == 0
+        first = False
+        if (midnight and prev is None and change is not None
+                and end is not None and end > _CAR_TOL
+                and abs(change - end) <= _CAR_TOL):
+            return None
+        if change is not None and end is not None and prev is not None:
+            drop = -change
+            if (drop > _CAR_TOL and prev >= drop - _CAR_TOL
+                    and end < drop):
+                out[i] = end
+            elif (midnight and prev > _CAR_TOL
+                  and abs(change - end) <= _CAR_TOL
+                  and end >= prev - _CAR_TOL):
+                out[i] = end - prev
+        prev = end
+    return out
+
+
+#: (#1176) kWh a counter's change and state may differ by in rounding
+_CAR_TOL = 0.01
 
 
 def _num(value: Any, default: Optional[float]) -> Optional[float]:
@@ -352,12 +361,6 @@ def _as_date(value: Any) -> _date:
     if isinstance(value, _date):
         return value
     return _date.fromisoformat(str(value))
-
-
-def _is_day_before(start: Any, day: _date, tz: Optional[tzinfo]) -> bool:
-    """(#1176) The row starts on the day before ``day``."""
-    dt = _local(start, tz)
-    return dt is not None and (day - dt.date()).days == 1
 
 
 def _hour_of(start: Any, day: _date, tz: Optional[tzinfo]) -> Optional[int]:

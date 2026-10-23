@@ -13,7 +13,8 @@ reset it is; a step back at any other hour is still noted.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -32,9 +33,6 @@ from custom_components.solar_energy_management.analytics.simulation.hourly_day i
 from custom_components.solar_energy_management.coordinator.energy_calculator import (
     EnergyCalculator,
 )
-from custom_components.solar_energy_management.coordinator.simulation_job import (
-    SimulationJob,
-)
 from custom_components.solar_energy_management.coordinator.types import PowerReadings
 from custom_components.solar_energy_management.sensor import (
     CAR_DAY_SENSOR_KEYS,
@@ -48,19 +46,15 @@ CHARGE_BY = "07:00"
 # ── the sensor's last_reset ─────────────────────────────────────────
 
 
-def _calc(charge_by: str = CHARGE_BY, *, upgraded=True) -> EnergyCalculator:
-    """``upgraded``: the install is past the car day this code first ran on."""
+def _calc(charge_by: str = CHARGE_BY) -> EnergyCalculator:
     hass = Mock()
     hass.data = {}
     hass.states.get = lambda _eid: None
-    calc = EnergyCalculator(
+    return EnergyCalculator(
         {"update_interval": 10, "ev_target_time": charge_by,
          "ev_chargers": [{"id": "box"}]},
         TimeManager(hass),
     )
-    if upgraded:
-        calc._ev_reset_since = date(2026, 10, 1)
-    return calc
 
 
 def _cycle(calc: EnergyCalculator, ev_w: float = 0.0) -> None:
@@ -83,16 +77,32 @@ def _local(y, mo, d, h, mi=0):
     return datetime(y, mo, d, h, mi, tzinfo=dt_util.get_default_time_zone())
 
 
+def _run(calc, clock, until, step=timedelta(minutes=10), ev_w=3_000.0):
+    """Cycle until ``until``; (time, last_reset) per cycle."""
+    sensor = _sensor("daily_ev_energy", calc)
+    seen = []
+    while dt_util.now() <= until:
+        _cycle(calc, ev_w)
+        seen.append((dt_util.now(), sensor.last_reset))
+        clock.tick(step)
+    return seen
+
+
+def _moves(seen):
+    return [t for (t, r), (_, prev) in zip(seen[1:], seen[:-1], strict=True)
+            if r != prev]
+
+
 def test_the_car_day_sensor_is_the_house_wide_daily_ev_energy():
     assert CAR_DAY_SENSOR_KEYS == {"daily_ev_energy"}
 
 
-def test_last_reset_is_the_car_day_start_and_midnight_for_the_rest():
-    with freeze_time(_local(2026, 10, 23, 6, 0)):
+def test_last_reset_is_the_rollover_and_midnight_for_the_rest():
+    with freeze_time(_local(2026, 10, 22, 23, 0)) as clock:
         calc = _calc()
-        _cycle(calc)
+        _run(calc, clock, _local(2026, 10, 23, 8))
         assert _sensor("daily_ev_energy", calc).last_reset == _local(
-            2026, 10, 22, 7)
+            2026, 10, 23, 7)
         for key in ("daily_solar_energy", "daily_home_energy",
                     "daily_grid_import_energy", "flow_solar_to_ev_energy"):
             assert _sensor(key, calc).last_reset == _local(2026, 10, 23, 0)
@@ -101,29 +111,31 @@ def test_last_reset_is_the_car_day_start_and_midnight_for_the_rest():
                        SensorStateClass.TOTAL_INCREASING).last_reset is None
 
 
-def test_last_reset_moves_once_at_the_rollover():
-    seen = []
-    with freeze_time(_local(2026, 10, 22, 23, 0)) as clock:
+def test_last_reset_moves_once_per_rollover_and_not_at_midnight():
+    with freeze_time(_local(2026, 10, 22, 8, 0)) as clock:
         calc = _calc()
-        sensor = _sensor("daily_ev_energy", calc)
-        for _ in range(10 * 6):          # 23:00 → 09:00, every 10 minutes
-            _cycle(calc, 3_000.0)
-            seen.append((dt_util.now(), sensor.last_reset))
-            clock.tick(timedelta(minutes=10))
-    resets = sorted({r for _, r in seen})
-    assert resets == [_local(2026, 10, 22, 7), _local(2026, 10, 23, 7)]
-    moved = [t for (t, r), (_, prev) in zip(seen[1:], seen[:-1], strict=True) if r != prev]
-    assert moved == [_local(2026, 10, 23, 7)]
-    # midnight leaves it where it is
-    assert all(r == _local(2026, 10, 22, 7) for t, r in seen
-               if t < _local(2026, 10, 23, 7))
+        seen = _run(calc, clock, _local(2026, 10, 25, 8))
+    # the first car day this code saw keeps midnight, as before
+    assert _moves(seen) == [_local(2026, 10, 23, 0), _local(2026, 10, 23, 7),
+                            _local(2026, 10, 24, 7), _local(2026, 10, 25, 7)]
 
 
-def test_a_restart_keeps_the_car_day_start():
-    with freeze_time(_local(2026, 10, 23, 6, 0)):
+def test_the_upgrade_day_keeps_midnight_until_the_next_car_day():
+    """New code first running at 12:00: moving last_reset to 07:00 now
+    would make the recorder count the morning's kWh again."""
+    with freeze_time(_local(2026, 10, 23, 12, 0)) as clock:
+        seen = _run(_calc(), clock, _local(2026, 10, 24, 8))
+    assert {r for t, r in seen if t < _local(2026, 10, 24, 0)} == {
+        _local(2026, 10, 23, 0)}
+    assert _moves(seen) == [_local(2026, 10, 24, 0), _local(2026, 10, 24, 7)]
+
+
+def test_a_restart_keeps_the_rollover_moment():
+    with freeze_time(_local(2026, 10, 23, 6, 0)) as clock:
         before = _calc()
-        _cycle(before, 3_000.0)
+        _run(before, clock, _local(2026, 10, 23, 8))
         expected = _sensor("daily_ev_energy", before).last_reset
+        assert expected == _local(2026, 10, 23, 7)
         saved = before.get_state()
         # restart with the Charge-by moved: the running day keeps its start
         after = _calc("09:00")
@@ -131,66 +143,42 @@ def test_a_restart_keeps_the_car_day_start():
         assert _sensor("daily_ev_energy", after).last_reset == expected
         _cycle(after)
         assert _sensor("daily_ev_energy", after).last_reset == expected
-        assert expected == _local(2026, 10, 22, 7)
-
-
-def test_the_upgrade_day_keeps_midnight_until_the_next_car_day():
-    """New code first running at 12:00: moving last_reset to 07:00 now
-    would make the recorder count the morning's kWh again."""
-    seen = []
-    with freeze_time(_local(2026, 10, 23, 12, 0)) as clock:
-        calc = _calc(upgraded=False)
-        sensor = _sensor("daily_ev_energy", calc)
-        for _ in range(20 * 6):          # 12:00 → 08:00 next day
-            _cycle(calc, 3_000.0)
-            seen.append((dt_util.now(), sensor.last_reset))
-            clock.tick(timedelta(minutes=10))
-    first_day = [r for t, r in seen if t < _local(2026, 10, 24, 0)]
-    assert set(first_day) == {_local(2026, 10, 23, 0)}
-    assert seen[-1][1] == _local(2026, 10, 24, 7)
-    moved = [t for (t, r), (_, prev) in zip(seen[1:], seen[:-1], strict=True)
-             if r != prev]
-    # midnight as before, then the car day's start from its first rollover
-    assert moved == [_local(2026, 10, 24, 0), _local(2026, 10, 24, 7)]
 
 
 def test_the_upgrade_mark_survives_a_restart():
-    with freeze_time(_local(2026, 10, 23, 12, 0)):
-        before = _calc(upgraded=False)
+    with freeze_time(_local(2026, 10, 23, 12, 0)) as clock:
+        before = _calc()
         _cycle(before)
-        assert _sensor("daily_ev_energy", before).last_reset == _local(
-            2026, 10, 23, 0)
         saved = before.get_state()
-    with freeze_time(_local(2026, 10, 24, 8, 0)):
-        after = _calc(upgraded=False)
+        after = _calc()
         after.restore_state(saved)
         _cycle(after)
+        assert _sensor("daily_ev_energy", after).last_reset == _local(
+            2026, 10, 23, 0)
+        _run(after, clock, _local(2026, 10, 24, 8))
         assert _sensor("daily_ev_energy", after).last_reset == _local(
             2026, 10, 24, 7)
 
 
-def test_the_upgrade_mark_is_stored():
+def test_the_rollover_moment_is_stored():
     from custom_components.solar_energy_management.coordinator import storage
-    assert "ev_reset_since" in storage.CALCULATOR_STATE_KEYS
+    assert {"ev_seen_day", "ev_rolled_at"} <= set(
+        storage.CALCULATOR_STATE_KEYS)
 
 
-def test_a_fleet_on_different_deadlines_resets_at_midnight():
-    with freeze_time(_local(2026, 10, 23, 6, 0)):
+def test_a_sunrise_rollover_is_recorded_too():
+    """No Charge-by rule: the car day rolls at sunrise. The sensor reports
+    the moment it rolled, not a rule re-derived."""
+    sunrise = _local(2026, 10, 24, 7, 43)
+    with freeze_time(_local(2026, 10, 23, 12, 0)) as clock:
         calc = _calc()
-        calc.config["ev_chargers"] = [{"id": "a", "ev_target_time": "06:00"},
-                                      {"id": "b", "ev_target_time": "08:00"}]
-        calc._ev_day_offset = calc._ev_day_key = None
-        assert calc.ev_day_start() == _local(2026, 10, 23, 0)
-
-
-def test_the_simulation_reads_the_reset_hour_from_the_same_rule():
-    with freeze_time(_local(2026, 10, 23, 12, 0)):
-        calc = _calc("07:30")
-        job = SimulationJob(Mock(), SimpleNamespace(_energy_calculator=calc,
-                                                    config={}))
-        assert job._ev_day_start_hour() == 7
-        assert SimulationJob(Mock(), SimpleNamespace(config={})
-                             )._ev_day_start_hour() is None
+        calc._ev_deadlines = lambda: []
+        calc._time_manager.get_current_meter_day_sunrise_based = lambda: (
+            dt_util.now().date() if dt_util.now() >= dt_util.now().replace(
+                hour=7, minute=43, second=0, microsecond=0)
+            else dt_util.now().date() - timedelta(days=1))
+        _run(calc, clock, _local(2026, 10, 24, 9), step=timedelta(minutes=1))
+    assert _sensor("daily_ev_energy", calc).last_reset == sunrise
 
 
 # ── days already recorded ───────────────────────────────────────────
@@ -241,9 +229,11 @@ def _prod_ev_rows(with_carried=True, after_reset=0.0):
 
 
 def test_the_prod_rollover_drop_is_a_reset_not_a_step_back():
+    """No Charge-by is passed: the reset is read by its shape, so a day
+    recorded under 07:00 reads right after a move to 06:00 too."""
     ev_true = NIGHT + [0.0] * 18
     day = HourlyDay.from_statistics(_flows(_prod_ev_rows(), ev_true),
-                                    date=DAY, tz=TZ, ev_day_start_hour=7)
+                                    date=DAY, tz=TZ)
     assert day.ev[:6] == pytest.approx(NIGHT)
     assert day.ev[6] == day.ev[7] == 0.0
     assert day.total("ev") == pytest.approx(3.72)
@@ -255,7 +245,7 @@ def test_the_rollover_hour_books_its_own_charge():
     ev_true = NIGHT + [0.0, 1.2] + [0.0] * 16
     day = HourlyDay.from_statistics(
         _flows(_prod_ev_rows(after_reset=1.2), ev_true),
-        date=DAY, tz=TZ, ev_day_start_hour=7)
+        date=DAY, tz=TZ)
     assert day.ev[7] == pytest.approx(1.2)
     assert day.total("ev") == pytest.approx(3.72 + 1.2)
     assert not day.counter_jumped
@@ -267,37 +257,82 @@ def test_without_the_carried_value_the_day_is_marked():
     ev_true = [0.0] * 24
     day = HourlyDay.from_statistics(
         _flows(_prod_ev_rows(with_carried=False), ev_true),
-        date=DAY, tz=TZ, ev_day_start_hour=7)
+        date=DAY, tz=TZ)
     assert day.ev[:8] == pytest.approx([0.0] * 8)
-    assert any("ev counter stepped back 14.67 kWh at 07:00" in n
-               and "could not be read" in n for n in day.notes)
-    assert day.counter_jumped
-
-
-def test_without_the_reset_hour_the_drop_is_still_a_step_back():
-    ev_true = NIGHT + [0.0] * 18
-    day = HourlyDay.from_statistics(_flows(_prod_ev_rows(), ev_true),
-                                    date=DAY, tz=TZ)
     assert any("ev counter stepped back 14.67 kWh at 07:00" in n
                for n in day.notes)
     assert day.counter_jumped
 
 
 def test_a_real_step_back_at_another_hour_is_still_noted():
-    changes = [0.0] * 12 + [3.0, 0.0, -2.0] + [0.0] * 9
-    ev_true = [0.0] * 12 + [1.0] + [0.0] * 11
-    day = HourlyDay.from_statistics(_flows(_rows(DAY, changes), ev_true),
-                                    date=DAY, tz=TZ, ev_day_start_hour=7)
+    # 14.67 → 12.67 at 14:00: a fall that did not restart from 0
+    states = [CARRIED] * 12 + [14.67, 14.67, 12.67] + [12.67] * 9
+    changes = [0.0] * 12 + [3.72, 0.0, -2.0] + [0.0] * 9
+    rows = _rows(DAY, changes, states=states)
+    rows.insert(0, {"start": "2026-10-22T23:00:00+02:00",
+                    "change": 0.0, "state": CARRIED})
+    ev_true = [0.0] * 12 + [1.72] + [0.0] * 11
+    day = HourlyDay.from_statistics(_flows(rows, ev_true), date=DAY, tz=TZ)
     assert any("ev counter stepped back 2.00 kWh at 14:00" in n
                for n in day.notes)
     assert day.counter_jumped
+
+
+def test_a_step_back_without_states_is_still_noted():
+    changes = [0.0] * 12 + [3.0, 0.0, -2.0] + [0.0] * 9
+    ev_true = [0.0] * 12 + [1.0] + [0.0] * 11
+    day = HourlyDay.from_statistics(_flows(_rows(DAY, changes), ev_true),
+                                    date=DAY, tz=TZ)
+    assert any("ev counter stepped back 2.00 kWh at 14:00" in n
+               for n in day.notes)
+
+
+def test_a_car_day_starting_at_half_past_midnight():
+    # the recorder restarted at 00:00 on 10.95; the counter fell to 0 at
+    # 00:30 and counted 0.4 kWh by 01:00
+    states = [0.4] + [0.4] * 23
+    changes = [0.4] + [0.0] * 23
+    rows = _rows(DAY, changes, states=states)
+    rows.insert(0, {"start": "2026-10-22T23:00:00+02:00",
+                    "change": 0.0, "state": CARRIED})
+    ev_true = [0.4] + [0.0] * 23
+    day = HourlyDay.from_statistics(_flows(rows, ev_true), date=DAY, tz=TZ)
+    assert day.ev[0] == pytest.approx(0.4)
+    assert day.total("ev") == pytest.approx(0.4)
+    assert not day.counter_jumped
+
+
+def test_a_spring_forward_day():
+    """29.03.2026 has no 02:00: the row before 03:00 is 01:00."""
+    zone = ZoneInfo("Europe/Zurich")
+    first = datetime(2026, 3, 28, 22, 0, tzinfo=timezone.utc)  # 23:00 local
+    starts = [first + timedelta(hours=h) for h in range(24)]  # real hours
+    starts = [s.astimezone(zone) for s in starts]
+    value, carry = CARRIED, CARRIED
+    rows = [{"start": starts[0].isoformat(), "change": 0.0, "state": carry}]
+    for s in starts[1:]:
+        if s.hour < 7:
+            change = 0.62 if s.hour else value + 0.62
+            value += 0.62
+        elif s.hour == 7:
+            change, value = -value, 0.0
+        else:
+            change = 0.0
+        rows.append({"start": s.isoformat(), "change": round(change, 2),
+                     "state": round(value, 2)})
+    flows = {role: [] for role in FLOW_ROLES}
+    flows["ev"] = rows
+    day = HourlyDay.from_statistics(flows, date="2026-03-29", tz=zone)
+    night = [h for h in range(7) if h != 2]
+    assert [day.ev[h] for h in night] == pytest.approx([0.62] * 6)
+    assert day.ev[7] == 0.0
+    assert not any("stepped back" in n for n in day.notes)
 
 
 def test_only_the_car_counter_is_read_this_way():
     flows = _flows(_rows(DAY, [0.0] * 24), [0.0] * 24)
     flows["solar"] = _rows(DAY, [0.0] * 7 + [-2.0] + [0.0] * 16)
     flows["solar"][0]["change"] = 2.0
-    day = HourlyDay.from_statistics(flows, date=DAY, tz=TZ,
-                                    ev_day_start_hour=7)
+    day = HourlyDay.from_statistics(flows, date=DAY, tz=TZ)
     assert any("solar counter stepped back 2.00 kWh at 07:00" in n
                for n in day.notes)

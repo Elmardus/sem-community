@@ -33,7 +33,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import date as _date, datetime, timedelta
+from datetime import date as _date, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from ..analytics.simulation.battery_sim import (
@@ -462,13 +462,6 @@ class SimulationJob:
         self._finish(run, progress, "done")
         await self._save()
 
-    def _ev_day_start_hour(self) -> Optional[int]:
-        """(#1176) The hour the car's daily counter resets in, by the same
-        rule the counter uses; None when it has no fixed time."""
-        calc = getattr(self.coordinator, "_energy_calculator", None)
-        start = calc.ev_day_start() if calc is not None else None
-        return start.hour if isinstance(start, datetime) else None
-
     def _entity_ids(self) -> Dict[str, str]:
         out = {}
         for role, (key, _stat) in BACKFILL_ROLES.items():
@@ -507,9 +500,7 @@ class SimulationJob:
         empty = [r for r in CORE_ROLES if not rows.get(r)]
         if empty:
             return "no hourly statistics for this day: " + ", ".join(empty)
-        hourly = HourlyDay.from_statistics(
-            rows, date=d, tags=tags, tz=tz,
-            ev_day_start_hour=self._ev_day_start_hour())
+        hourly = HourlyDay.from_statistics(rows, date=d, tags=tags, tz=tz)
         del rows, stats
         chain, own, calib = run["_chains"]
         result = chain.add(hourly)
