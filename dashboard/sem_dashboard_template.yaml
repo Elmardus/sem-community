@@ -28,6 +28,7 @@
 #   sem-solar-summary-card   — solar yield summary
 #   sem-weather-card         — weather + clock header
 #   sem-chart-card           — cost / savings charts (vendored Chart.js, offline-capable)
+#   sem-why-card             — why SEM changed a device, row by row (#1084)
 #   sem-period-selector-card — period selector for Costs tab
 #   sem-load-priority-card   — drag-and-drop device priority (inlined SortableJS)
 # ============================================================
@@ -327,6 +328,12 @@ views:
           # decision (2026-08-05) — it belongs with the control surfaces, not
           # the diagnostics.
           - type: custom:sem-energy-plan-card
+
+          # ── Why? (#1084) ── each command SEM changed on a device, the
+          # reason in plain words and the numbers behind it. Below the plan
+          # (what SEM means to do), above the devices it acted on.
+          - type: custom:sem-why-card
+            entity_prefix: sensor.sem_
 
           # ── Load Priority (drag-and-drop device management) ──
           - type: custom:sem-title-card
