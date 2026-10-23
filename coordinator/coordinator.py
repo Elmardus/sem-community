@@ -3672,9 +3672,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # (#1084) through the logged stop choke point — the same
                 # deactivate + record_deactivated it did by hand, plus the
                 # decision log's row
+                from . import reason_codes as RC
                 from .surplus_controller import _deactivate_owned
                 if await _deactivate_owned(
-                        dev, reason_code="vacation",
+                        dev, reason_code=RC.LOAD_VACATION,
                         text="comfort heating paused while away"):
                     _LOGGER.info(
                         "Vacation mode: deactivated %s (comfort heating "
@@ -13208,6 +13209,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         previous cycle, which under 120 s / 300 s holds is the same statement.
         """
         import time as _time
+        from . import reason_codes as RC
         from .export_guard import ExportGuard
         from .sink_verdicts import OPEN
         if getattr(self, "_export_guard", None) is None:
@@ -13226,7 +13228,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         export_w = (None if getattr(power, "grid_power_unavailable", False)
                     else float(getattr(power, "grid_export_power", 0.0) or 0.0))
         self._export_command = self._export_guard.update(
-            _time.monotonic() if now is None else now, state, export_w)
+            _time.monotonic() if now is None else now, state, export_w,
+            # (#1174) why the meter is closed or open, carried onto the cut
+            # or its release; a guard switched off releases for that reason
+            reason_code=(getattr(verdict, "reason_code", "") if enabled
+                         else RC.EXPORT_GUARD_OFF),
+            reason_params=getattr(verdict, "reason_params", None) if enabled else None)
 
     def _publish_export_guard_state(self) -> None:
         """(#955) What the card and ``sensor.sem_export_guard_state`` read.

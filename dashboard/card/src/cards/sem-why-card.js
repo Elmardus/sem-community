@@ -2,8 +2,10 @@
  * SEM Why? card (#1084) — why SEM changed a device's command.
  *
  * One row per recorded command change: time, a round device icon, the
- * device and its old and new command, the reason in plain words (from the
- * record), and a small line of what SEM decided on. Rows SEM only would
+ * device and its old and new command, the reason in plain words (#1174:
+ * the sentence for the record's reason code, in the user's language; the
+ * internal text is its tooltip and the fallback), and a small line of
+ * what SEM decided on. Rows SEM only would
  * have sent (observer mode) carry a tag. Chips filter by device.
  *
  * Everyday shows the newest few; the rest sit in a fold. All settings
@@ -22,7 +24,7 @@ import { semDefineCard } from '../base/sem-shared.js';
 import { getAllSettings, setAllSettings, VIEW_MODE_EVENT } from '../util/view-mode.js';
 import {
     WHY_KINDS, changeLabel, chipKey, deviceName, earlierKey, filterRecords,
-    inputChips, lastDecisionStamp, rowTime, splitRows, whyChips,
+    inputChips, lastDecisionStamp, plainReason, rowTime, splitRows, whyChips,
 } from '../util/why-rows.js';
 
 export const WS_DECISION_LOG = 'solar_energy_management/decision_log';
@@ -152,6 +154,10 @@ class SEMWhyCard extends SEMLitBase {
         const lang = this._hass?.language || 'en';
         const currency = this._hass?.config?.currency || '';
         const inputs = inputChips(rec.inputs, t, currency);
+        // (#1174) the plain sentence for the code; the internal text is
+        // its tooltip, and the row's text when the code has no sentence
+        const plain = plainReason(rec, t);
+        const why = plain || rec.text;
         return html`
             <div class="row" data-key=${chipKey(rec)}>
                 <div class="time">${rowTime(rec.time, lang, new Date(), tz)}</div>
@@ -164,7 +170,7 @@ class SEMWhyCard extends SEMLitBase {
                         <span class="change">${changeLabel(rec, t)}</span>
                         ${rec.observer ? html`<span class="tag">${t('why_observer')}</span>` : nothing}
                     </div>
-                    ${rec.text ? html`<div class="why">${rec.text}</div>` : nothing}
+                    ${why ? html`<div class="why" title=${plain ? rec.text || '' : ''}>${why}</div>` : nothing}
                     ${inputs.length ? html`
                         <div class="in">
                             ${inputs.map((c) => html`<span>${c.icon ? html`<ha-icon icon=${c.icon}

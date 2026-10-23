@@ -1943,7 +1943,10 @@ command, the new one and the reason:
 
     <device>: <old command> → <new command> — <reason>
 
-A command reads like `charge 8 A`, `off` or `limit_discharge 1500 W`.
+A command reads like `charge 8 A`, `off` or `limit_discharge 1500 W`. The
+reason is a short sentence in your Home Assistant language, for example
+*A car is plugged in. The battery is below the 80% tonight needs, so it
+powers only the house.*
 
 - A line appears only on a change: a start, a stop, a new mode, a charger
   step of 1 A or more, a battery limit that moved by 250 W or more, a load
@@ -1960,7 +1963,8 @@ A command reads like `charge 8 A`, `off` or `limit_discharge 1500 W`.
   `sensor.sem_battery_status`, `per_device_last_decision` on
   `sensor.sem_load_management_status`.
 
-The log starts empty after a restart. The reason text is in English.
+The log starts empty after a restart. The diagnostics keep SEM's own
+reason text (in English) and its code beside each sentence.
 
 ---
 

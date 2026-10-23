@@ -22,6 +22,7 @@ import logging
 from typing import TYPE_CHECKING, Optional
 
 from .charger_types import ExportIntent
+from .decision_log import log_of, record_export
 from ..utils.log_gate import log_on_change
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -86,6 +87,8 @@ async def actuate_export(decision: "ExportDecision",
             row = _dry_run(adapter, decision.intent, watts)
             row["standing"] = False          # the command itself, this cycle
             withheld.append(row)
+        # (#1174) the decision log's export row, flagged as observed
+        record_export(log_of(controller), decision, observer=True)
         log_on_change(   # (#762) transition-gated
             _LOGGER, OBSERVER_KEY, logging.INFO,
             "OBSERVER · WOULD %s at %.0f W — %s",
@@ -103,6 +106,8 @@ async def actuate_export(decision: "ExportDecision",
         return f"export control not available: {exc}"
     except Exception as exc:  # noqa: BLE001 — a refused cut is a state, not a crash
         return f"export control failed: {exc}"
+    # (#1174) the write left: the decision log's export row
+    record_export(log_of(controller), decision)
     log_on_change(   # (#762) transition-gated
         _LOGGER, OBSERVER_KEY, logging.INFO,
         "export %s at %.0f W — %s", decision.intent.value, watts, decision.reason)

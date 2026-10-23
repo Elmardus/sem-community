@@ -7,13 +7,13 @@ threshold before EV control is authorised again.
 """
 from __future__ import annotations
 
-from dataclasses import replace
 import logging
 import math
 from typing import Any, Dict
 
 from ..const import DEFAULT_PHASE_GUARD_TOPOLOGY
-from .charger_types import ChargerDecision, ChargerIntent
+from . import reason_codes as RC
+from .charger_types import ChargerDecision, ChargerIntent, rewrite
 from ..features.phase_shed import CHARGERS_FIRST_CYCLES, over_phases
 
 _LOGGER = logging.getLogger(__name__)
@@ -261,7 +261,7 @@ class ActivePhaseGuard:
         # Preserve the original immutable decision when no clamp is needed.
         if desired_a <= max_safe_a:
             return decision
-        return replace(
+        return rewrite(
             decision,
             intent=ChargerIntent.CHARGE_AT_AMPS,
             commanded_amps=target_a,
@@ -271,6 +271,7 @@ class ActivePhaseGuard:
                 f"{decision.reason}; phase guard clamped to {target_a}A "
                 f"(headroom {available_increase_a:.2f}A)"
             ),
+            reason_code=RC.CHARGER_PHASE_SLOW, reason_params={},
         )
 
     def filter(self, decision: ChargerDecision, *, adapter: Any = None,
@@ -284,13 +285,14 @@ class ActivePhaseGuard:
 
     @staticmethod
     def _disable_decision(decision: ChargerDecision, reason: str) -> ChargerDecision:
-        return replace(
+        return rewrite(
             decision,
             intent=ChargerIntent.DISABLE,
             commanded_amps=0,
             budget_w=0.0,
             bridgeable=False,
             reason=f"phase guard: {reason} — immediate EV stop",
+            reason_code=RC.CHARGER_PHASE_STOP, reason_params={},
         )
 
     @staticmethod
