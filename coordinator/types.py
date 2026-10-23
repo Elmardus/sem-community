@@ -207,6 +207,11 @@ class PowerReadings:
     # morning verdict) has to know which of the two it is looking at. The
     # SOC twin above is ``battery_soc_unavailable``; this is the power side.
     battery_power_unavailable: bool = False
+    #: (#1164) …and the other half: True only when a battery power sensor
+    #: answered with a number this cycle and none was dark. A battery wired
+    #: by SOC alone has no power sensor, so its 0.0 is not "unavailable"
+    #: either — it is no reading at all. Off unless the reader says so.
+    battery_power_read: bool = False
 
     # (#818) Two questions about the same outage, deliberately separate.
     #

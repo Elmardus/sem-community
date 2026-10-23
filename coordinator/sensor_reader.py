@@ -935,6 +935,11 @@ class SensorReader:
         # (#758) An unreadable battery power sensor reads as 0.0 W, which is
         # also what an idle battery reads. Say which one this is, once, here.
         readings.battery_power_unavailable = self._battery_power_missing
+        # (#1164) …and whether there was a reading at all: no sensor (SOC
+        # only) reads 0.0 with nothing dark.
+        readings.battery_power_read = (
+            self._input_reads.get("battery", 0) > 0
+            and not self._battery_power_missing)
         # (#818) Two questions, two answers. ``inputs_degraded`` gates
         # WRITING (any dark read means this cycle cannot be steered on);
         # the per-input flags gate PUBLISHING (only a total with nothing
@@ -4539,12 +4544,6 @@ class SensorReader:
                     self._sensor_repair_raised.add(entity_id)
             return None if allow_none else 0.0
 
-        if name in _DEGRADABLE_POWER_INPUTS:
-            # (#818) The denominator for ``_all_dark``: this read reached a
-            # live state. Counted here, after the unavailable branch has
-            # returned, so the two tallies can never double-count.
-            self._input_reads[name] = self._input_reads.get(name, 0) + 1
-
         try:
             # #641 — one shared rule (this copy was ``.lower() == "kw"``, no
             # strip; four other spellings lived elsewhere). The bare ``float()``
@@ -4556,6 +4555,13 @@ class SensorReader:
             # the bare ``float()`` has succeeded on the same string).
             value = float(state.state)
             value = power_state_to_watts(state, default=value)
+            if name in _DEGRADABLE_POWER_INPUTS:
+                # (#818) The denominator for ``_all_dark``: this read reached
+                # a live state. Counted here, after the unavailable branch has
+                # returned, so the two tallies can never double-count — and
+                # (#1164 review) after the parse, so a state that is no
+                # number ("none") is no reading.
+                self._input_reads[name] = self._input_reads.get(name, 0) + 1
 
             # Detect transition from unavailable → available. Demoted
             # to DEBUG so a flapping upstream sensor (e.g. Huawei

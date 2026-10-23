@@ -432,6 +432,17 @@ armed — and every per-device setting that goes through the device registry
 
 ---
 
+## SEM did something I did not expect — look in the Logbook first
+
+Open **Settings → Logbook** and find the time. SEM writes one line each
+time it changes a command to a charger, battery or load, with the reason.
+Lines ending in *(observer: not sent)* were not sent: Observer Mode was on.
+The diagnostics download keeps the last 200 lines under `decision_log`. Add
+them to a bug report. See
+[Why did SEM do that?](USER_GUIDE.md#why-did-sem-do-that).
+
+---
+
 ## "Why did SEM touch that device?" — reading a load row in diagnostics
 
 Every load in the diagnostics download (**Settings → Devices & Services → Solar

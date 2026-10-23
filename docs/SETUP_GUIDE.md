@@ -451,6 +451,18 @@ Night charging and smart night charging are **not settings here** — since v1.6
 | Export rate | 0.08 per kWh | What you receive for feeding into the grid (minimum: 0.00). Used in savings calculations. Set it to your actual feed-in tariff. Set to 0 if you have no feed-in compensation. |
 | Dynamic price sensor | None | When tariff mode is Dynamic, point this at a sensor that reports the current price per kWh. SEM uses it to find the cheapest hours for overnight charging. |
 | Demand charge (per kW) | 0 | Some utility contracts charge monthly for peak demand (your highest 15-minute average). If yours does, enter the rate here. SEM factors it into the peak management calculation. |
+| Taxes and fees preset | None | *None* adds nothing. *Netherlands from 2027* fills energy tax and 21 % VAT and sets the price to spot. Enter your markup and feed-in fee yourself. |
+| What your import price includes | All-in | *All-in*: the price already has tax and VAT (Tibber, a rate from your bill); SEM adds nothing. *Spot price incl. VAT*: SEM adds markup and tax, each with VAT. *Spot price*: SEM adds markup, tax and VAT. |
+| Supplier markup / Energy tax | 0 | Per bought kWh, without VAT. Spot price only. |
+| VAT | 0 % | On the bought kWh. Spot price only. |
+| Feed-in fee | None | What your supplier charges for exported energy: *Per kWh*, *Tiers by kWh per year* (`0:0, 1000:0.02, 3000:0.05`) or *Fixed per month*. |
+
+With these fields at their defaults, every price stays as it was. Set any of
+them and six value sensors appear (self-consumption value, export value,
+feed-in fees; today and this year). On the Configuration card they are in
+**Tariff & pricing** under **All settings**. More in
+[User Guide](USER_GUIDE.md#taxes-markup-and-feed-in-fee) and
+[Tariff models](TARIFF_MODELS.md#what-a-kwh-is-worth-1077).
 
 **Tariff mode details:**
 
