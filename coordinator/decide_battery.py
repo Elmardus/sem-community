@@ -966,6 +966,9 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
             # figure, so this never feeds the car.
             _floored_w = peak_cover_floor_w(view, home_w, n)
             _peak_raised = _floored_w > home_w
+            # (#1173) a cover is owed whenever the house buys more than the
+            # meter may, even when the house figure already covers it
+            _cover_owed = peak_cover_floor_w(view, 0.0, n) > 0.0
             home_w = _floored_w
             _cars_w = (_cars_total_w / n
                        if (_cars_total_w > 0 and not below_buffer and _assist_ok)
@@ -1020,9 +1023,9 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                 reason_code=code,
                 reason_params=({"floor": round(floor_soc)}
                                if code == RC.BATTERY_CAR_BELOW_FLOOR else {}),
-                # (#1173) the house's own figure, so it waits out a short
-                # burst; a peak cover must land at once
-                follows_load=not _peak_raised,
+                # (#1173) the house's own figure, so a rise waits out a short
+                # burst; a peak cover and the cars' share land at once
+                follows_load=not (_peak_raised or _cover_owed or _cars_w > 0),
             )
 
     if _blind_release is not None:
@@ -1047,6 +1050,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
             # loads to save cents, and the peak limit outranks that.
             _floored_w = peak_cover_floor_w(view, home_w, n)
             _peak_raised = _floored_w > home_w
+            _cover_owed = peak_cover_floor_w(view, 0.0, n) > 0.0   # (#1173)
             home_w = _floored_w
             return BatteryDecision(
                 battery_id=rt.battery_id,
@@ -1062,7 +1066,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                        f"(home/{n} across fleet) so the grid feeds them")
                 ),
                 reason_code=RC.BATTERY_GRID_LOADS,
-                follows_load=not _peak_raised,   # (#1173) as the EV clamp
+                follows_load=not (_peak_raised or _cover_owed),   # (#1173)
             )
 
     # ─── NORMAL ───

@@ -90,11 +90,13 @@ DISCHARGE_LIMIT_LOWER_DWELL_CYCLES: int = 6
 # minute later. PROD, 15.–23.10: 48–143 writes a night, from a kettle or a
 # hob for 10–60 s, a house hovering 700–800 W across the 750 W step, and
 # the house figure's own jump right after SEM moved the pack. A limit that
-# follows the house (``BatteryDecision.follows_load``) now moves, up or
-# down, only once the house held the new level this many cycles in a row:
-# a move of two steps or more after ~1 min, a one-step move after ~5 min.
-# While it waits the grid covers the rest of the house (up) or the pack
-# may give a step more than the house (down) — never more than that.
+# follows the house (``BatteryDecision.follows_load``) now RISES only to a
+# level the house has held: for the last ~1 min when that is two steps or
+# more above the limit, for the last ~5 min when it is one step. While it
+# waits the grid covers the rest of the house, so the pack still never
+# feeds the car. Lowering is the side that keeps the pack out of the car,
+# so it keeps the rule above. A target (a peak cover, the hold, the blind
+# release, the cars' share) still rises at once.
 DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES: int = 6
 DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES: int = 30
 
@@ -126,39 +128,36 @@ def quantise_discharge_limit_w(raw_w: float, last_w: float) -> float:
     return float(last_w)                      # noise — hold
 
 
-def _settled_house_limit_w(raw_w: float, last_w: float, adapter) -> float:
-    """(#1173) The limit for a ``follows_load`` decision already in force.
+def _settled_rise_w(raw_w: float, last_w: float, adapter) -> float:
+    """(#1173) The limit for a ``follows_load`` decision whose house is above
+    the limit in force (``last_w``).
 
-    Counts the cycles in a row the house sits above ``last_w`` (up) or a
-    step and the leak below it (down), and keeps the run's extreme: the
-    LOWEST house of an up-run, the HIGHEST of a down-run. That is the level
-    the house held the whole time, so a burst at the end of a run does not
-    set the limit. The limit moves to it once the run is long enough for
-    the size of the move; until then it stays ``last_w``.
+    Keeps the houses of this rise on the adapter: the cycles in a row above
+    ``last_w``, at most ``DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES`` of them.
+    After a rise only the cycles still above the new limit stay in it, and
+    a write that failed leaves it whole, so the next cycle tries again at
+    once. The limit rises to the level the house held over the last short
+    wait if that is two steps or more, else to the level it held over the
+    long wait; until then it stays ``last_w``.
     """
     import math
     raw = max(0.0, float(raw_w or 0.0))
-    if raw > last_w:
-        way = "up"
-    elif last_w - raw >= DISCHARGE_LIMIT_STEP_W + DISCHARGE_LIMIT_LEAK_W:
-        way = "down"
-    else:
-        _set(adapter, "_limit_run", None)
-        return last_w
-    run = getattr(adapter, "_limit_run", None)
-    if isinstance(run, tuple) and len(run) == 3 and run[0] == way:
-        count = int(run[1]) + 1
-        edge = min(run[2], raw) if way == "up" else max(run[2], raw)
-    else:
-        count, edge = 1, raw
-    level = math.ceil(edge / DISCHARGE_LIMIT_STEP_W) * DISCHARGE_LIMIT_STEP_W
-    one_step = abs(level - last_w) < 2 * DISCHARGE_LIMIT_STEP_W
-    need = (DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES if one_step
-            else DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES)
-    if count >= need and level != last_w:
-        _set(adapter, "_limit_run", None)
-        return float(level)
-    _set(adapter, "_limit_run", (way, count, edge))
+    kept = getattr(adapter, "_limit_rise", None)
+    houses: list = []
+    for h in reversed(kept if isinstance(kept, tuple) else ()):
+        if not h > last_w:
+            break
+        houses.insert(0, h)
+    houses = (houses + [raw])[-DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES:]
+    _set(adapter, "_limit_rise", tuple(houses))
+    step = DISCHARGE_LIMIT_STEP_W
+    if len(houses) >= DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES:
+        held = math.ceil(
+            min(houses[-DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES:]) / step) * step
+        if held - last_w >= 2 * step:
+            return float(held)
+    if len(houses) >= DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES:
+        return float(math.ceil(min(houses) / step) * step)
     return last_w
 
 
@@ -274,6 +273,7 @@ async def actuate_battery(
     # none, so a pack SEM did not ask to charge is never read as full.
     _set(adapter, "_sem_charge_asked_w", 0.0)
     if observer:
+        _set(adapter, "_limit_rise", None)   # (#1173) a wait is for real cycles
         _would_w = {
             BatteryIntent.FORCE_CHARGE: decision.charge_power_w,
             BatteryIntent.FORCE_DISCHARGE: decision.discharge_power_w,
@@ -333,7 +333,10 @@ async def actuate_battery(
     if decision.intent is BatteryIntent.LIMIT_DISCHARGE:
         # (#900) quantised against what the adapter last commanded, so the
         # register follows the load's trend and not the fridge.
-        last_w = float(getattr(adapter, "last_discharge_limit_w", -1.0) or -1.0)
+        # (#1173) A 0 W limit is a limit: ``or -1.0`` read it as none, so
+        # the next one went out at once whatever it was (class 105).
+        _last = getattr(adapter, "last_discharge_limit_w", None)
+        last_w = -1.0 if _last is None else float(_last)
         limit_w = quantise_discharge_limit_w(decision.discharge_limit_w, last_w)
         # Lowering waits for the drop to persist; raising never waits.
         # (#1066) …and the wait is for a limit already in force. Coming from
@@ -341,18 +344,19 @@ async def actuate_battery(
         # "lowering" and the pack fed a newly plugged-in car for six cycles.
         streak = int(getattr(adapter, "_limit_lower_streak", 0) or 0)
         _in_force = getattr(adapter, "last_intent", None) is BatteryIntent.LIMIT_DISCHARGE
-        if decision.follows_load is True and _in_force and last_w >= 0:
-            # (#1173) A limit that follows the house waits both ways.
-            limit_w = _settled_house_limit_w(
-                decision.discharge_limit_w, last_w, adapter)
+        if (decision.follows_load is True and _in_force and last_w >= 0
+                and limit_w > last_w):
+            # (#1173) …except a limit that follows the house: it rises only
+            # to a level the house has held.
+            limit_w = _settled_rise_w(decision.discharge_limit_w, last_w, adapter)
             streak = 0
         elif last_w >= 0 and limit_w < last_w and _in_force:
-            _set(adapter, "_limit_run", None)
+            _set(adapter, "_limit_rise", None)
             streak += 1
             if streak < DISCHARGE_LIMIT_LOWER_DWELL_CYCLES:
                 limit_w = last_w
         else:
-            _set(adapter, "_limit_run", None)
+            _set(adapter, "_limit_rise", None)
             streak = 0
         try:
             adapter._limit_lower_streak = streak

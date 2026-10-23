@@ -17,10 +17,14 @@ The bursts in the recorded nights:
   grid meter sees the change at once, the pack's power sensor a poll later.
 
 The fix: a limit that follows the house (``BatteryDecision.follows_load``)
-moves only once the house has held the new level — up as well as down — for
-``DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES`` when the move is two steps or more,
-``DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES`` when it is one step. A target
-(the hold, a peak cover, the blind release) still rises at once.
+RISES only to a level the house has held — over the last
+``DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES`` when that is two steps or more,
+over the last ``DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES`` when it is one.
+While it waits the grid covers the rest of the house; the pack never gets
+more room than before. Lowering keeps #900's rule: it is the side that
+keeps the pack out of the car (review: a long wait there let the pack feed
+the car for minutes). A target — a peak cover owed, the hold, the blind
+release, the cars' share — still rises at once.
 """
 from __future__ import annotations
 
@@ -64,10 +68,12 @@ SMALL = DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES
 
 
 class _Hass:
-    """A number entity that takes what is written; every write is kept."""
+    """A number entity that takes what is written; every write is kept.
+    ``fail`` writes raise first, the way a refused service call does."""
 
-    def __init__(self):
+    def __init__(self, fail: int = 0):
         self.writes: list = []
+        self.fail = fail
         self._state = self._num(MAX_W)
         self.states = SimpleNamespace(get=lambda e: self._state if e == LIMIT else None,
                                       async_all=lambda *a, **k: [])
@@ -80,6 +86,9 @@ class _Hass:
 
     async def _call(self, domain, service, data=None, **kw):
         if service == "set_value" and (data or {}).get("entity_id") == LIMIT:
+            if self.fail:
+                self.fail -= 1
+                raise RuntimeError("write refused")
             self.writes.append(float(data["value"]))
             self._state = self._num(float(data["value"]))
 
@@ -112,7 +121,7 @@ async def _in_force_at(house_w, *, follows=True):
     return hass, a
 
 
-# ─── 1. the rule, one move at a time ───────────────────────────────────────
+# ─── 1. a rise waits for the house to hold it ──────────────────────────────
 
 class TestABurstIsNotATrend:
     @pytest.mark.asyncio
@@ -143,7 +152,7 @@ class TestABurstIsNotATrend:
         assert hass.writes == []
 
 
-class TestABigMoveIsFollowedAfterAMinute:
+class TestABigRiseIsFollowedAfterTheShortWait:
     @pytest.mark.asyncio
     async def test_a_big_rise_that_holds_is_written_once(self):
         hass, a = await _in_force_at(700.0)
@@ -163,23 +172,26 @@ class TestABigMoveIsFollowedAfterAMinute:
         assert hass.writes == [1750.0]
 
     @pytest.mark.asyncio
-    async def test_a_big_fall_that_holds_is_written_once(self):
-        hass, a = await _in_force_at(2600.0)
-        await _run(a, [700.0] * (BIG - 1))
-        assert hass.writes == []
-        await _run(a, [700.0])
-        assert hass.writes == [750.0]
+    async def test_a_small_first_cycle_does_not_hold_up_a_big_rise(self):
+        """(review) 790 W for one cycle, then 3 kW: the house held 3 kW for
+        the short wait, so the limit follows then, not five minutes later."""
+        hass, a = await _in_force_at(700.0)
+        await _run(a, [790.0] + [3000.0] * BIG)
+        assert hass.writes == [3000.0]
 
     @pytest.mark.asyncio
-    async def test_the_fall_keeps_the_highest_house_of_the_wait(self):
-        """600 W, then 1.4 kW on the last cycle (still far below 2750): the
-        limit covers the 1.4 kW the house reached, not the 600 W."""
-        hass, a = await _in_force_at(2600.0)
-        await _run(a, [600.0] * (BIG - 1) + [1400.0])
-        assert hass.writes == [1500.0]
+    async def test_a_failed_write_is_tried_again_the_next_cycle(self):
+        """(review) The wait is not started again after a write that did
+        not land: the house still held the level."""
+        hass, a = await _in_force_at(700.0)
+        hass.fail = 1
+        await _run(a, [2600.0] * BIG)
+        assert hass.writes == []
+        await _run(a, [2600.0])
+        assert hass.writes == [2750.0]
 
 
-class TestAOneStepMoveWaitsLonger:
+class TestAOneStepRiseWaitsTheLongWait:
     """The hover: a house at 690–800 W crosses the 750 W step all night."""
 
     @pytest.mark.asyncio
@@ -191,12 +203,24 @@ class TestAOneStepMoveWaitsLonger:
         assert hass.writes == [1000.0]
 
     @pytest.mark.asyncio
-    async def test_one_step_down_waits_the_long_wait(self):
-        hass, a = await _in_force_at(900.0)
-        await _run(a, [690.0] * (SMALL - 1))
+    async def test_a_big_start_does_not_make_a_one_step_rise_big(self):
+        """1240 W for less than the short wait, then 990 W: the house held
+        one step, so the long wait applies and the limit rises one step."""
+        hass, a = await _in_force_at(700.0)
+        await _run(a, [1240.0] * (BIG - 1) + [990.0] * (SMALL - BIG))
         assert hass.writes == []
-        await _run(a, [690.0])
-        assert hass.writes == [750.0]
+        await _run(a, [990.0])
+        assert hass.writes == [1000.0]
+
+    @pytest.mark.asyncio
+    async def test_a_second_rise_counts_the_cycles_already_above_it(self):
+        """2.6 kW then 3.1 kW: the first rise lands on the short wait; the
+        house had already held 3.1 kW that long, so the next is at once."""
+        hass, a = await _in_force_at(700.0)
+        await _run(a, [2600.0] + [3100.0] * (BIG - 1))
+        assert hass.writes == [2750.0]
+        await _run(a, [3100.0])
+        assert hass.writes == [2750.0, 3250.0]
 
     @pytest.mark.asyncio
     async def test_a_hover_across_the_step_writes_nothing(self):
@@ -210,21 +234,39 @@ class TestAOneStepMoveWaitsLonger:
         await _run(b, hover, follows=False)
         assert hass2.writes == [1000.0, 750.0] * 30
 
-    @pytest.mark.asyncio
-    async def test_a_run_that_grows_to_two_steps_needs_only_the_short_wait(self):
-        """One step for a while, then two: the size is read each cycle."""
-        hass, a = await _in_force_at(700.0)
-        await _run(a, [790.0] * 3 + [1300.0] * (BIG - 3))
-        assert hass.writes == []        # the run's lowest is still 790
-        hass, a = await _in_force_at(700.0)
-        await _run(a, [1300.0] * BIG)
-        assert hass.writes == [1500.0]
-
     def test_the_long_wait_is_longer_than_the_short_one(self):
         assert SMALL > BIG >= DISCHARGE_LIMIT_LOWER_DWELL_CYCLES
 
 
-# ─── 2. what keeps the old rule ────────────────────────────────────────────
+# ─── 2. lowering keeps #900's rule — it keeps the pack out of the car ──────
+
+class TestLoweringIsUnchanged:
+    @pytest.mark.parametrize("follows", [True, False])
+    @pytest.mark.asyncio
+    async def test_a_fall_lands_after_the_lowering_wait(self, follows):
+        hass, a = await _in_force_at(2600.0, follows=follows)
+        await _run(a, [700.0] * (DISCHARGE_LIMIT_LOWER_DWELL_CYCLES - 1), follows=follows)
+        assert hass.writes == []
+        await _run(a, [700.0], follows=follows)
+        assert hass.writes == [750.0]
+
+    @pytest.mark.asyncio
+    async def test_a_fall_that_starts_one_step_down_is_not_held_longer(self):
+        """(review) 1000 W limit, the house at 700 once and then 100 W: the
+        first cut lowered to 750 W after five minutes and the pack could
+        give 900 W more than the house meanwhile. Now: six cycles, 250 W."""
+        hass, a = await _in_force_at(900.0)
+        await _run(a, [700.0] + [100.0] * (DISCHARGE_LIMIT_LOWER_DWELL_CYCLES - 1))
+        assert hass.writes == [250.0]
+
+    @pytest.mark.asyncio
+    async def test_a_rise_that_waits_does_not_block_a_fall(self):
+        hass, a = await _in_force_at(1600.0)
+        await _run(a, [2600.0] * (BIG - 1) + [300.0] * DISCHARGE_LIMIT_LOWER_DWELL_CYCLES)
+        assert hass.writes == [500.0]
+
+
+# ─── 3. what rises at once ─────────────────────────────────────────────────
 
 class TestTargetsStillRiseAtOnce:
     @pytest.mark.asyncio
@@ -235,22 +277,11 @@ class TestTargetsStillRiseAtOnce:
         assert hass.writes == [2750.0]
 
     @pytest.mark.asyncio
-    async def test_a_target_falls_after_the_old_wait(self):
-        hass, a = await _in_force_at(2600.0, follows=False)
-        await _run(a, [700.0] * (DISCHARGE_LIMIT_LOWER_DWELL_CYCLES - 1), follows=False)
-        assert hass.writes == []
-        await _run(a, [700.0], follows=False)
-        assert hass.writes == [750.0]
-
-    @pytest.mark.asyncio
     async def test_a_peak_cover_after_a_waiting_clamp_lands_at_once(self):
         """The clamp is waiting out a rise; then the meter needs the pack."""
         hass, a = await _in_force_at(700.0)
         await _run(a, [2600.0] * (BIG - 2))
         await _run(a, [2600.0], follows=False)
-        assert hass.writes == [2750.0]
-        # the clamp's half-done wait did not survive the cover
-        await _run(a, [700.0] * (BIG - 1))
         assert hass.writes == [2750.0]
 
 
@@ -272,16 +303,47 @@ class TestTheFirstClampIsAtOnce:
         assert hass.writes == [1000.0]
 
 
-# ─── 3. the decider sets the flag where the watts are the house ────────────
+class TestAZeroLimitIsALimit:
+    @pytest.mark.asyncio
+    async def test_a_burst_over_a_0_w_limit_waits_too(self):
+        """(review, class 105) ``or -1.0`` read a 0 W limit as none, so a
+        one-cycle burst over it was a write pair again."""
+        hass, a = await _in_force_at(0.0)
+        assert a.last_discharge_limit_w == 0.0
+        await _run(a, [600.0] + [0.0] * 20)
+        assert hass.writes == []
+
+    @pytest.mark.asyncio
+    async def test_a_target_from_0_w_still_rises_at_once(self):
+        hass, a = await _in_force_at(0.0, follows=False)
+        await _run(a, [600.0], follows=False)
+        assert hass.writes == [750.0]
+
+
+class TestObserverStartsNoWait:
+    @pytest.mark.asyncio
+    async def test_observer_cycles_do_not_count_toward_a_rise(self):
+        hass, a = await _in_force_at(700.0)
+        await _run(a, [2600.0] * (BIG - 1))
+        await actuate_battery(_clamp(2600.0), a, observer=True)
+        await _run(a, [2600.0] * (BIG - 1))
+        assert hass.writes == []
+
+
+# ─── 4. the decider sets the flag where the watts are the house ────────────
 
 def _view(*, allowed_w=None, home_w=800.0, held=False, ev=True, soc=40.0,
-          grid_funded_w=0.0, degraded=False):
+          grid_funded_w=0.0, degraded=False, shared_w=None):
     cfg = {"battery_max_discharge_power": MAX_W, "battery_mode": "auto"}
     fleet = FleetContext(
         solar_w=0.0, home_w=home_w, battery_soc=soc, battery_soc_known=True,
         battery_count=1, peak_slot_allowed_w=allowed_w,
         inputs_degraded=degraded, dark_inputs=(("grid",) if degraded else ()),
     )
+    extra = {}
+    if shared_w is not None:
+        extra = {"ev_wants_pack": True, "battery_spendable_kwh": 5.0,
+                 "ev_pack_shared_w": shared_w}
     return BatteryView(
         runtime=BatteryRuntime(battery_id="b1", last_known_soc=soc), config=cfg,
         fleet=fleet, charging_state="idle", ev_charging=ev, ev_connected=ev,
@@ -289,6 +351,7 @@ def _view(*, allowed_w=None, home_w=800.0, held=False, ev=True, soc=40.0,
         grid_funded_load_w=grid_funded_w,
         sink_verdicts=({"house": SinkVerdict("house", HELD, "cheap hour")}
                        if held else {}),
+        **extra,
     )
 
 
@@ -299,9 +362,30 @@ class TestTheDeciderMarksTheHouseClamps:
         assert "ev plugged in" in d.reason
         assert d.follows_load is True
 
+    def test_under_a_limit_with_room_the_ev_clamp_still_follows(self):
+        d = decide_battery(_view(allowed_w=6000.0, home_w=3800.0))
+        assert d.follows_load is True
+
+    @pytest.mark.parametrize("allowed_w", [0.0, 500.0, 3000.0])
+    def test_a_house_over_the_meter_limit_makes_the_ev_clamp_a_target(self, allowed_w):
+        """(review BLOCKER) No grid-funded load: the house figure already
+        equals the cover, so nothing read as "raised" — but the meter is
+        over its limit, and the rise must not wait."""
+        d = decide_battery(_view(allowed_w=allowed_w, home_w=3800.0))
+        assert d.discharge_limit_w == pytest.approx(3800.0)
+        assert d.follows_load is False
+
     def test_the_ev_clamp_raised_by_the_peak_lands_at_once(self):
         d = decide_battery(_view(allowed_w=0.0, home_w=2000.0, grid_funded_w=1500.0))
         assert "may buy only" in d.reason
+        assert d.follows_load is False
+
+    def test_the_cars_share_is_a_target(self):
+        """(review, #1130) house + what the cars were offered: the offer is
+        what the charger plans with, so it lands at once."""
+        d = decide_battery(_view(soc=90.0, shared_w=2000.0))
+        assert "offered to the cars" in d.reason, d.reason
+        assert d.discharge_limit_w == pytest.approx(2800.0)
         assert d.follows_load is False
 
     def test_the_grid_funded_clamp_follows_the_house(self):
@@ -309,7 +393,7 @@ class TestTheDeciderMarksTheHouseClamps:
         assert "grid-funded" in d.reason
         assert d.follows_load is True
 
-    def test_the_grid_funded_clamp_raised_by_the_peak_lands_at_once(self):
+    def test_the_grid_funded_clamp_over_the_meter_limit_is_a_target(self):
         d = decide_battery(_view(ev=False, allowed_w=1000.0, home_w=4000.0,
                                  grid_funded_w=3000.0))
         assert "may buy only" in d.reason
@@ -340,8 +424,16 @@ class TestTheDeciderMarksTheHouseClamps:
         assert out.intent is BatteryIntent.LIMIT_DISCHARGE
         assert out.follows_load is True
 
+    @pytest.mark.asyncio
+    async def test_a_house_over_the_meter_limit_is_covered_on_the_first_cycle(self):
+        """(review BLOCKER) end to end: a 1000 W clamp in force, the house
+        jumps to 3.8 kW under a 0 W allowance — the pack covers it now."""
+        hass, a = await _in_force_at(800.0)
+        await actuate_battery(decide_battery(_view(allowed_w=0.0, home_w=3800.0)), a)
+        assert hass.writes == [4000.0]
 
-# ─── 4. a night shaped like PROD's, end to end ─────────────────────────────
+
+# ─── 5. a night shaped like PROD's, end to end ─────────────────────────────
 
 def _night(seed: int = 1173, cycles: int = 3600):
     """Ten hours at 10 s: a base load hovering 690–800 W with a fridge
@@ -366,39 +458,56 @@ def _night(seed: int = 1173, cycles: int = 3600):
     return out
 
 
+def _late_moves(houses, limits):
+    """Cycles where the limit should already have moved and had not.
+
+    ``limits[i]`` is the limit in force after cycle ``i``. A rise is owed
+    once the last short wait of houses held two steps or more above it, or
+    the last long wait held above it at all; a fall once the last lowering
+    wait sat a step and the leak below it."""
+    late = []
+    step = DISCHARGE_LIMIT_STEP_W
+    for i, lim in enumerate(limits):
+        short = houses[max(0, i - BIG + 1): i + 1]
+        long_ = houses[max(0, i - SMALL + 1): i + 1]
+        low = houses[max(0, i - DISCHARGE_LIMIT_LOWER_DWELL_CYCLES + 1): i + 1]
+        if len(short) == BIG and math.ceil(min(short) / step) * step - lim >= 2 * step:
+            late.append((i, "big rise"))
+        elif len(long_) == SMALL and min(long_) > lim:
+            late.append((i, "rise"))
+        elif (len(low) == DISCHARGE_LIMIT_LOWER_DWELL_CYCLES
+              and all(lim - h >= step + DISCHARGE_LIMIT_LEAK_W for h in low)):
+            late.append((i, "fall"))
+    return late
+
+
 class TestARecordedShapedNight:
     @pytest.mark.asyncio
-    async def test_the_night_is_a_few_writes_not_dozens(self):
+    async def test_the_night_is_far_fewer_writes(self):
         houses = _night()
         old_hass, old = _adapter()
         await _run(old, houses, follows=False)
         new_hass, new = _adapter()
         await _run(new, houses)
         # the trace exercises the bug: the old rule writes dozens of times
-        assert len(old_hass.writes) >= 80, len(old_hass.writes)
-        assert len(new_hass.writes) <= len(old_hass.writes) // 4, (
+        assert len(old_hass.writes) >= 150, len(old_hass.writes)
+        assert len(new_hass.writes) <= len(old_hass.writes) // 3, (
             len(new_hass.writes), len(old_hass.writes))
 
     @pytest.mark.asyncio
-    async def test_no_wait_outlasts_its_bound(self):
-        """The cost side, on every cycle of the night: the house never sits
-        above the limit, or a step and the leak below it, for longer than
-        the wait for that move — the limit always follows a held move."""
+    async def test_no_move_is_later_than_its_wait(self):
+        """The cost side, on every cycle of the night: the limit follows a
+        held rise within its wait and a fall within the lowering wait."""
         houses = _night()
         hass, a = _adapter()
-        up = down = 0
+        limits = []
         for h in houses:
-            before = a.last_discharge_limit_w
             await _run(a, [h])
-            after = a.last_discharge_limit_w
-            if after != before:
-                up = down = 0
-                continue
-            if h > before:
-                up, down = up + 1, 0
-            elif before - h >= DISCHARGE_LIMIT_STEP_W + DISCHARGE_LIMIT_LEAK_W:
-                up, down = 0, down + 1
-            else:
-                up = down = 0
-            assert up < SMALL and down < SMALL, (h, before, up, down)
-        assert len(hass.writes) > 1          # the oracle saw moves at all
+            limits.append(a.last_discharge_limit_w)
+        assert _late_moves(houses, limits) == []
+        assert len(hass.writes) > 10          # the night did move it
+
+    def test_the_oracle_can_fail(self):
+        """A limit that never moves is late all night (class 8)."""
+        houses = _night()
+        assert len(_late_moves(houses, [1000.0] * len(houses))) > 20

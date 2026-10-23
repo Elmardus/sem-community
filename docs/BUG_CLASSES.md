@@ -3489,27 +3489,37 @@ load, and the house has bursts: a kettle or a hob for 10–60 s, a base load hov
 the 750 W step, and the house figure's own one-cycle jump after SEM moved the pack (the grid meter
 sees the change at once, the pack's power sensor a poll later). Up at once and down a minute later
 made each burst two writes. **Closure:** `BatteryDecision.follows_load` marks a limit whose watts
-ARE the house (the EV clamp and the #620 grid-funded clamp, unless the #1003 peak cover raised
-them). For those, `_settled_house_limit_w` moves the limit, up or down, only after the house held
-the new level `DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES` (6, ~1 min) in a row for a move of two steps or
-more, `DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES` (30, ~5 min) for one step. The new level is the run's
-lowest house going up and its highest going down, so a spike at the end of a run does not set it.
-While it waits, the grid covers the rest of the house (up), or the pack may give up to a step more
-than the house (down). A target (the #879 hold, its peak cover, the #1120 blind release, a
-peak-raised clamp) keeps the old rule: up at once (class 59 — a limit is not a preference), down
-after six cycles. The first clamp after NORMAL still goes out at once (#1066). The real actuator,
-run offline over six PROD nights' house figure (15.–22.10): 14–31 writes a night, against 93–143
-for the old rule on the same figure.
+ARE the house: the EV clamp and the #620 grid-funded clamp, unless a #1003 peak cover is owed (the
+house buys more than the meter may — checked on its own, because with no grid-funded load the house
+figure already equals the cover and nothing reads as "raised") or the #1130 cars' share is in it.
+For those, `_settled_rise_w` RAISES the limit only to a level the house has held: over the last
+`DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES` (6, ~1 min) when that is two steps or more above, over the
+last `DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES` (30, ~5 min) when it is one step (the run's lowest
+house, so a spike at the end does not set it). While it waits the grid covers the rest of the
+house; the pack gets no more room than before. Lowering keeps #900's rule for every limit: it is the
+side that keeps the pack out of the car (review: a first cut that also made falls wait let the pack
+give up to 900 W more than the house for five minutes). A target (the #879 hold, its cover, the
+#1120 blind release, a cover owed, the cars' share) rises at once (class 59 — a limit is not a
+preference). The first clamp after NORMAL still goes out at once (#1066). The cycles of a rise
+survive a failed write (tried again next cycle) and, after a rise, only the cycles still above the
+new limit stay in it. A 0 W limit is a limit: `or -1.0` had read it as none (class 105). The real
+actuator, run offline over six PROD nights' house figure (15.–22.10): 23–45 writes a night,
+against 93–143 for the old rule on the same figure.
 **Guard:** `tests/test_1173_house_limit_waits.py` — a one-cycle kettle writes nothing and was two
 writes before; a burst shorter than the wait and a run broken by one cycle write nothing; a big
-move lands after the short wait at the run's held level; a one-step move and a hover across the
-step wait the long one; targets still rise at once; the first clamp is at once; the decider sets
-the flag on exactly the house clamps (not the hold, its cover, the blind release or a peak raise);
-a retried stop keeps it; and an oracle over a synthetic ten-hour night: at most a quarter of the
-old rule's writes, and no up or down run ever outlasts the long wait. Swept: the export guard (#955)
-already holds both ways (120 s / 300 s); charge pacing (#820) has a deadband both ways and a cap
-from the plan, not from the house; the forced charge under the meter limit (#1069) must lower at
-once (class 59), so its raise wait is the only one it can have (assessed).
+rise lands after the short wait at the held level, a small first cycle does not delay it, a second
+rise counts the cycles already above it, a failed write is tried again the next cycle; a one-step
+rise and a hover across the step wait the long one; a fall lands after the same six cycles as
+before, also when it starts one step down; targets, a 0 W limit's target and the first clamp rise at
+once, a burst over a 0 W clamp waits; observer cycles count for nothing; the decider sets the flag
+on exactly the house clamps (not with a cover owed — 0, 500 and 3000 W allowances under a 3.8 kW
+house — nor the cars' share, the hold, its cover or the blind release), a retried stop keeps it, and
+a 3.8 kW house over a 0 W allowance is covered on the first cycle end to end; over a synthetic
+ten-hour night at most a third of the old rule's writes, and an oracle that no rise or fall is later
+than its wait (a frozen limit fails it). 15 tests fail if the flag is ignored. Swept: the export
+guard (#955) already holds both ways (120 s / 300 s); charge pacing (#820) has a deadband both ways
+and a cap from the plan, not the house; the forced charge under the meter limit (#1069) must lower
+at once (class 59), so its raise wait is the only one it can have (assessed).
 **Guard:** `tests/test_940_contactor_anticycle.py` — an **invariant oracle**, not a row test:
 4000 cycles of randomised desired states against a *coherent simulated relay* (SEM's own commands
 move it, plus a 2 %/cycle external flip, and `observed.enabled` reports it), asserting that no
@@ -5204,8 +5214,8 @@ six cycles and resets the streak on every raise, so an input that blips once a m
 motivation names 8-15 % of cycles on a Huawei modbus) pins the limit at the release value and the
 #879 hold never comes back. Safe direction, dead feature; the seam that would fix it is a
 `follows_load` flag on `BatteryDecision` read by `actuate_battery` — a change to the actuator's
-contract, so it is a call, not a sweep. (#1173 added that flag for the house clamps, which now wait
-both ways; the hold is a target and still lowers after six cycles, so this residual stands.) (2) The #531 fleet split divides the cover by the battery
+contract, so it is a call, not a sweep. (#1173 added that flag for the house clamps, whose rises now
+wait; the hold is a target and still lowers after six cycles, so this residual stands.) (2) The #531 fleet split divides the cover by the battery
 count, so an empty or unreachable pack silently under-covers — the split's failure mode is
 over-injection, and on a floor it is a breached limit. (3) The cover is not bounded by
 `battery_max_discharge_power`: a 12 kW house under a 3 kW allowance asks 9 kW of a 5 kW pack, the
