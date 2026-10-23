@@ -358,14 +358,16 @@ def test_every_adapter_is_covered():
 
 
 def test_every_sale_override_hands_back_or_writes_no_limit():
-    """An override of the sale must reach the hand-back, or belong to a
-    brand that writes no discharge limit at all."""
+    """An override of the sale must reach the hand-back (itself or through
+    the base), or belong to a brand that writes no discharge limit at all."""
+    from .ast_contracts import calls
+    assert calls(BatteryControlAdapter.command_force_discharge,
+                 "_hand_back_own_limit")
     for cls in _concrete_adapters():
         own = cls.__dict__.get("command_force_discharge")
         if own is None:
             continue
-        src = inspect.getsource(own)
-        writes_limit = "_apply_discharge_limit" in inspect.getsource(cls)
-        assert ("_hand_back_own_limit" in src
-                or "super().command_force_discharge" in src
+        writes_limit = getattr(cls, "_apply_discharge_limit", None) is not None
+        assert (calls(own, "_hand_back_own_limit")
+                or calls(own, "command_force_discharge")
                 or not writes_limit), cls.__name__
