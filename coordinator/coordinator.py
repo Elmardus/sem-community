@@ -8346,12 +8346,20 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         curve with energy tax never reads negative while the export value
         does.
         """
-        from ..tariff.value_layer import DEFAULT_EXPORT_VALUE_THRESHOLD
+        from ..tariff.value_layer import value_rules_active
         _vs = getattr(prov, "value_settings", None) if prov is not None else None
-        if (getattr(_vs, "configured", False) is not True
-                and threshold == DEFAULT_EXPORT_VALUE_THRESHOLD):
+        if not value_rules_active(_vs, threshold):
             return None
         return self._export_rate_at()
+
+    def _active_export_threshold(self) -> "Optional[float]":
+        """(#1090) The export threshold while the value rules are in force,
+        else None — the consumer then keeps its pre-#1090 behaviour."""
+        from ..tariff.value_layer import value_rules_active
+        threshold = self._export_value_threshold()
+        _vs = getattr(getattr(self, "_tariff_provider", None),
+                      "value_settings", None)
+        return threshold if value_rules_active(_vs, threshold) else None
 
     def _daylight_remaining_s_now(self) -> "Optional[float]":
         """(#953) Seconds of daylight left today, or None if we cannot tell.
@@ -8923,8 +8931,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # from is a kWh the export guard clips. The pack takes the sun
             # first: no cap for as long as the verdict stands. The latches
             # above are left alone, so the pace resumes where it was.
+            # Only while the value rules are in force (``value_rules_active``):
+            # the old negative-PRICE close keeps the pace it always had.
             _gv = (getattr(self, "_sink_verdicts", None) or {}).get("grid_export")
-            if getattr(_gv, "state", "open") == "closed":
+            if (getattr(_gv, "state", "open") == "closed"
+                    and self._active_export_threshold() is not None):
                 from .charge_pacing import PacingDecision
                 decision = PacingDecision(
                     None, "export closed — the pack takes the sun first",
@@ -9195,7 +9206,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     # battery is in allow_arbitrage mode (#523); decide_battery
                     # gates per battery which units actually sell.
                     enabled_override=_any_allow_arb,
-                    export_threshold=self._export_value_threshold(),  # (#1090)
+                    # (#1090) None while the value rules are off: the
+                    # arbitrage floor alone decides, as before
+                    export_threshold=self._active_export_threshold(),
                 )
                 if _arb.state.value == "discharging_arbitrage":
                     scheduler_decision = _arb
@@ -15972,14 +15985,32 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             did = device.device_id
             kwh = tariffs.grid_kwh(
                 device, getattr(device, "last_cycle_energy_kwh", 0.0) or 0.0,
-                share)
+                share,
+                # the own meter's last reading lives with the energy state,
+                # so a restart does not drop the first step
+                store=getattr(calc, "device_meter_last", None))
             price = tariffs.price_now(device)
-            if kwh and price is not None:
-                calc.accumulate_device_tariff(did, kwh, kwh * price, day)
+            source = "own"
+            if price is None:
+                # The device's price cannot be read and it has no fixed rate
+                # to fall back on: its kWh stay at the house rate — the
+                # honest answer — rather than going unbooked. Said once.
+                price, source = float(getattr(calc, "_import_rate", 0.0) or 0.0), "house"
+                log_on_change(
+                    _LOGGER, f"device_tariff_fallback:{did}", logging.INFO,
+                    "%s: own price unreadable — its grid kWh are priced at the "
+                    "house rate until it reads again (#812)", device.name)
+            else:
+                log_on_change(_LOGGER, f"device_tariff_fallback:{did}",
+                              logging.DEBUG, "%s: own price readable (#812)",
+                              device.name)
+            if kwh:
+                calc.accumulate_device_tariff(did, kwh, price, day)
             books = calc.get_device_tariff(did, day)
             out[f"daily_tariff_cost_{did}"] = books["daily_cost"]
             out[f"daily_tariff_grid_kwh_{did}"] = books["daily_grid_kwh"]
             out[f"tariff_price_{did}"] = price
+            out[f"tariff_price_source_{did}"] = source
             out[f"tariff_level_{did}"] = getattr(device, "_tariff_level", None)
         return out
 

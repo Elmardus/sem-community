@@ -329,6 +329,19 @@ CONF_EXPORT_VALUE_THRESHOLD = "export_value_threshold"
 DEFAULT_EXPORT_VALUE_THRESHOLD = 0.0
 
 
+def value_rules_active(value_settings: Any, threshold: float) -> bool:
+    """(#1090) Are the value rules in force? A value field is set, or the
+    export threshold is not the default. THE one test: with neither, every
+    consumer keeps the behaviour SEM had before the value layer (a negative
+    PRICE closes the meter; pacing, arbitrage and the plan are untouched)."""
+    if getattr(value_settings, "configured", False) is True:
+        return True
+    try:
+        return float(threshold) != DEFAULT_EXPORT_VALUE_THRESHOLD
+    except (TypeError, ValueError):
+        return False
+
+
 def export_value_threshold(config: Mapping[str, Any] | None) -> float:
     """(#1090) The threshold from the options. Unlike the value fields it
     may be negative (accept a small loss before closing); anything that

@@ -254,3 +254,56 @@ class TestTheSetting:
             for k in ("config_export_value_threshold",
                       "config_help_export_value_threshold", "pacing_closed_meter"):
                 assert table.get(k), (lang, k)
+
+
+# ── value rules off = develop's behaviour (review, 23.10) ───────────────
+
+class TestValueRulesActiveIsOneTest:
+    def test_off_with_no_field_and_the_default_threshold(self):
+        assert vl.value_rules_active(vl.NO_VALUE, 0.0) is False
+        assert vl.value_rules_active(None, vl.DEFAULT_EXPORT_VALUE_THRESHOLD) is False
+
+    def test_on_with_a_field_or_a_threshold(self):
+        assert vl.value_rules_active(SimpleNamespace(configured=True), 0.0)
+        assert vl.value_rules_active(None, 0.05)
+        assert vl.value_rules_active(None, -0.02)
+
+    def test_the_coordinator_passes_none_while_off(self):
+        from custom_components.solar_energy_management.coordinator.coordinator import (
+            SEMCoordinator,
+        )
+        off = SimpleNamespace(config={}, _tariff_provider=SimpleNamespace(
+            value_settings=vl.NO_VALUE))
+        off._export_value_threshold = lambda: SEMCoordinator._export_value_threshold(off)
+        assert SEMCoordinator._active_export_threshold(off) is None
+        on = SimpleNamespace(config={KEY: 0.05}, _tariff_provider=None)
+        on._export_value_threshold = lambda: SEMCoordinator._export_value_threshold(on)
+        assert SEMCoordinator._active_export_threshold(on) == pytest.approx(0.05)
+
+
+class TestArbitrageDefaultIsDevelop:
+    def _s(self):
+        return BatteryChargeScheduler(MagicMock(), SchedulerConfig(
+            arbitrage_enabled=True, arbitrage_min_export_price=-0.05,
+            arbitrage_reserve_soc=50.0, roundtrip_efficiency=0.9))
+
+    def test_a_rate_between_a_negative_floor_and_zero_is_not_refused_by_value(self):
+        # develop: only the floor (-0.05) judged -0.01; no value rule
+        d = self._s().evaluate_arbitrage(80.0, -0.01, -0.30)
+        assert "not worth exporting" not in d.reason
+        assert d.state is SchedulerState.DISCHARGING_ARBITRAGE
+
+    def test_with_the_value_rules_on_it_is(self):
+        d = self._s().evaluate_arbitrage(80.0, -0.01, -0.30, export_threshold=0.0)
+        assert d.state is SchedulerState.NOT_PROFITABLE
+        assert "not worth exporting" in d.reason
+
+
+class TestPacingKeepsItsPaceOnTheOldClose:
+    @pytest.mark.asyncio
+    async def test_a_negative_price_without_value_rules_still_paces(self):
+        """No value field, default threshold, a negative feed-in PRICE: the
+        meter closes the old way, and pacing behaves as on develop."""
+        out = await _two_cycles({**WIRED, **SPOT}, _states(feedin=-0.02))
+        assert out["sink_verdicts"]["grid_export"]["state"] == "closed"
+        assert out["charge_pacing"]["reason_code"] != "closed_meter"

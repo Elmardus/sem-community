@@ -536,7 +536,7 @@ class BatteryChargeScheduler:
         export_rate: float,
         import_forecast_min: Optional[float],
         enabled_override: Optional[bool] = None,
-        export_threshold: float = 0.0,
+        export_threshold: Optional[float] = None,
     ) -> SchedulerDecision:
         """Per-cycle export-arbitrage check (#523) — the discharge mirror
         of ``evaluate()``'s charge planning, using the SAME economic model
@@ -577,7 +577,10 @@ class BatteryChargeScheduler:
             )
         # (#1090) A sale is an export: below the threshold it is not worth
         # sending, whatever the spread. The one rule, not a compare here.
-        if export_not_worth(export_rate, export_threshold):
+        # None = the value rules are off (``value_rules_active``): the floor
+        # below alone decides, exactly as before.
+        if (export_threshold is not None
+                and export_not_worth(export_rate, export_threshold)):
             # CAUSE: export_rate < export_threshold, tested on the line above
             return _v(
                 state=SchedulerState.NOT_PROFITABLE,
