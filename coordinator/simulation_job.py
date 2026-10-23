@@ -48,7 +48,15 @@ from ..analytics.simulation.battery_sim import (
 from ..consts.battery_permissions import may_assist_ev
 from ..analytics.simulation.hourly_day import CORE_ROLES, HourlyDay
 from ..analytics.simulation.summary import summarise
-from .day_tag_store import BACKFILL_DAYS, BACKFILL_ROLES, simulation_tab_on
+from .day_tag_store import (
+    BACKFILL_DAYS,
+    BACKFILL_ROLES,
+    car_daily_entities,
+    car_day_notes,
+    car_rows,
+    car_spans,
+    simulation_tab_on,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -462,6 +470,32 @@ class SimulationJob:
         self._finish(run, progress, "done")
         await self._save()
 
+    async def _car_spans(self, run, live: Dict[str, bool]):
+        """(#1176) Each charger's first and last hour with a row over the
+        run's period — read once per run. None when it cannot be read: the
+        day's own rows decide then."""
+        if not live or not isinstance(run, dict):
+            return None
+        if "_car_spans" in run:
+            return run["_car_spans"]
+        spans = None
+        period = run.get("period") or {}
+        try:
+            from homeassistant.util import dt as dt_util
+            first, last = sorted((_date.fromisoformat(str(period["from"])),
+                                  _date.fromisoformat(str(period["to"]))))
+            got = await self._read_stats(
+                self.hass, dt_util.start_of_local_day(first),
+                dt_util.start_of_local_day(last + timedelta(days=1)),
+                set(live), {"change"})
+            if got is not None:
+                spans = car_spans(got, list(live))
+            del got
+        except (KeyError, ValueError, TypeError):
+            spans = None
+        run["_car_spans"] = spans
+        return spans
+
     def _entity_ids(self) -> Dict[str, str]:
         out = {}
         for role, (key, _stat) in BACKFILL_ROLES.items():
@@ -489,15 +523,23 @@ class SimulationJob:
         day = _date.fromisoformat(d)
         start = dt_util.start_of_local_day(day)
         end = dt_util.start_of_local_day(day + timedelta(days=1))
+        live = car_daily_entities(self.hass)
+        car_ids = list(live)
+        spans = await self._car_spans(run, live)
         stats = await self._read_stats(self.hass, start, end,
-                                       set(ids.values()), {"change", "mean"})
+                                       set(ids.values()) | set(car_ids),
+                                       {"change", "mean"})
         if stats is None:
             return "the recorder could not answer"
         rows = {role: stats.get(eid) or [] for role, eid in ids.items()}
+        # (#1176) the car from its chargers' daily rows, which hold no reset
+        rows["ev"] = car_rows(stats, car_ids, ids.get("ev"))
+        doubt = car_day_notes(stats, live, start, end, spans)
         empty = [r for r in CORE_ROLES if not rows.get(r)]
         if empty:
             return "no hourly statistics for this day: " + ", ".join(empty)
-        hourly = HourlyDay.from_statistics(rows, date=d, tags=tags, tz=tz)
+        hourly = HourlyDay.from_statistics(rows, date=d, tags=tags, tz=tz,
+                                           notes=doubt)
         del rows, stats
         chain, own, calib = run["_chains"]
         result = chain.add(hourly)
@@ -518,6 +560,7 @@ class SimulationJob:
             return
         run["status"] = status
         chains = run.pop("_chains", None)
+        run.pop("_car_spans", None)     # (#1176) working data, not stored
         if chains is not None:
             chain, own, calib = chains
             chain.finish()

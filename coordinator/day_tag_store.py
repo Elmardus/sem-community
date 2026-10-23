@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import date as _date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ..analytics.day_tags import CAR_MIN_KWH, clear_sky_envelope, tag_day
+from ..analytics.simulation.hourly_day import CAR_DOUBT
 from ..consts.core import CONF_DAY_TAGS, CONF_SIMULATION_TAB, DEFAULT_DAY_TAGS
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,6 +70,138 @@ BACKFILL_ROLES: Dict[str, Tuple[str, str]] = {
 #: session day (``day_tags.CAR_MIN_KWH``)
 BACKFILL_CAR_MIN_KWH = CAR_MIN_KWH
 _COULD_NOT_ASK = object()
+#: (#1176) unique id of a charger's daily-energy sensor
+_CAR_DAILY_UID = re.compile(r"^sem_charger_(.+)_daily_energy$")
+
+
+def car_daily_entities(hass) -> Dict[str, bool]:
+    """(#1176) Every charger's daily-energy sensor → is it live. A removed
+    charger's sensor is listed (False) while the entity registry still
+    remembers it.
+
+    The car's hours are read from these, not from ``daily_ev_energy``. They
+    are TOTAL_INCREASING, so the recorder takes a fall as a new cycle and
+    their hourly ``change`` holds no reset. ``daily_ev_energy`` said it
+    reset at midnight while it fell at the car day's start, so its older
+    hours carry a phantom night and a fall that cannot be told apart from
+    a real one."""
+    try:
+        from homeassistant.helpers import entity_registry as er
+        from ..const import DOMAIN
+        reg = er.async_get(hass)
+        entries = ([(e, True) for e in reg.entities.values()]
+                   + [(e, False) for e in getattr(
+                       reg, "deleted_entities", {}).values()])
+    except Exception:  # noqa: BLE001 — no registry, no charger rows
+        return {}
+    found: Dict[str, bool] = {}
+    for entry, live in entries:
+        eid = str(getattr(entry, "entity_id", "") or "")
+        if (getattr(entry, "platform", None) == DOMAIN
+                and eid.startswith("sensor.")
+                and _CAR_DAILY_UID.match(str(getattr(entry, "unique_id", "")))):
+            found[eid] = found.get(eid, False) or live
+    return dict(sorted(found.items()))
+
+
+def car_daily_entity_ids(hass) -> List[str]:
+    """(#1176) The ids of ``car_daily_entities``, live and removed."""
+    return list(car_daily_entities(hass))
+
+
+def car_rows(stats: Dict[str, Any], car_ids: Sequence[str],
+             fallback_id: Optional[str]) -> List[Any]:
+    """(#1176) The car's hourly rows: every charger's daily-energy rows
+    together, or — on a day none of them recorded — ``daily_ev_energy``'s,
+    read as before."""
+    rows = [row for eid in car_ids for row in (stats.get(eid) or [])]
+    if rows:
+        return rows
+    return list(stats.get(fallback_id) or []) if fallback_id else []
+
+
+def car_spans(stats: Dict[str, Any], car_ids: Sequence[str]
+              ) -> Dict[str, Tuple[datetime, datetime]]:
+    """(#1176) Each charger's first and last hour with a row in ``stats``."""
+    out: Dict[str, Tuple[datetime, datetime]] = {}
+    for eid in car_ids:
+        times = [t for t in (_row_time(r) for r in stats.get(eid) or [])
+                 if t is not None]
+        if times:
+            out[eid] = (min(times), max(times))
+    return out
+
+
+def car_day_notes(stats: Dict[str, Any], live: Dict[str, bool],
+                  day_start: datetime, day_end: datetime,
+                  spans: Optional[Dict[str, Tuple[datetime, datetime]]] = None,
+                  ) -> List[str]:
+    """(#1176) What makes a day's car sum from its chargers doubtful.
+
+    - A charger with rows in the period (``spans``; without them, on this
+      day) but none for some hour of this day inside its span: the sum is
+      short.
+    - A removed charger's rows on the same hours as a live one's: a renamed
+      charger counts twice, a removed one does not — no way to tell.
+
+    Each note starts with ``CAR_DOUBT``; such a day is not exact. Nothing
+    when no charger has a row on the day (the fleet row is read instead)."""
+    start, end = _utc(day_start), _utc(day_end)
+    hours: Dict[str, set] = {}
+    for eid in live:
+        hours[eid] = {t for t in (_row_time(r) for r in stats.get(eid) or [])
+                      if t is not None and start <= t < end}
+    if not any(hours.values()):
+        return []
+    notes: List[str] = []
+    for eid in live:
+        got = hours[eid]
+        span = (spans or {}).get(eid)
+        if span is None:
+            if not got:
+                continue
+            span = (min(got), max(got))
+        lo = max(start, span[0])
+        hi = min(end - timedelta(hours=1), span[1])
+        want = set()
+        t = lo
+        while t <= hi:
+            want.add(t)
+            t += timedelta(hours=1)
+        short = len(want - got)
+        if short:
+            notes.append(f"{CAR_DOUBT}: a charger's car energy is missing for "
+                         f"{short} hours of this day ({eid})")
+    live_hours = set().union(*(hours[e] for e, on in live.items() if on))
+    for eid, on in live.items():
+        both = len(hours[eid] & live_hours) if not on else 0
+        if both:
+            notes.append(f"{CAR_DOUBT}: a removed charger's car energy "
+                         f"overlaps a live one for {both} hours — it may "
+                         f"count twice ({eid})")
+    return notes
+
+
+def _utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _row_time(row) -> Optional[datetime]:
+    """A statistics row's start in UTC (a UNIX timestamp on current Home
+    Assistant, a datetime or ISO text on older ones)."""
+    start = (row or {}).get("start")
+    if isinstance(start, (int, float)):
+        return datetime.fromtimestamp(float(start), tz=timezone.utc)
+    if isinstance(start, str):
+        try:
+            start = datetime.fromisoformat(start)
+        except ValueError:
+            return None
+    if not isinstance(start, datetime):
+        return None
+    return _utc(start)
 
 
 def simulation_tab_on(owner) -> bool:
@@ -409,13 +543,17 @@ class DayTagger:
         the recorder could not answer."""
         from homeassistant.util import dt as dt_util
         day_start = dt_util.start_of_local_day(day)
+        car_ids = car_daily_entity_ids(self.hass)
         stats = await self._read_stats(
             self.hass, day_start, day_start + timedelta(days=1),
-            set(ids.values()), {"change", "mean"})
+            set(ids.values()) | set(car_ids), {"change", "mean"})
         if stats is None:
             return _COULD_NOT_ASK
         hourly = {role: _hourly(stats.get(eid), BACKFILL_ROLES[role][1], day_start)
                   for role, eid in ids.items()}
+        # (#1176) the car from its chargers' rows, summed per hour
+        hourly["ev"] = _hourly(car_rows(stats, car_ids, ids.get("ev")),
+                               "change", day_start, add=True)
         return hourly if hourly.get("solar") else {}
 
     def _hourly_record(self, day: _date, hourly: Dict[str, Dict[int, float]],
@@ -470,9 +608,11 @@ class DayTagger:
         return async_track_time_change(self.hass, _run, hour=0, minute=15, second=0)
 
 
-def _hourly(rows, stat: str, day_start: datetime) -> Dict[int, float]:
+def _hourly(rows, stat: str, day_start: datetime,
+            add: bool = False) -> Dict[int, float]:
     """``{hour of day: value}`` from statistics rows. A row's ``start`` is a
-    UNIX timestamp on current Home Assistant, a datetime on older ones."""
+    UNIX timestamp on current Home Assistant, a datetime on older ones.
+    ``add``: rows on one hour add up (#1176: several chargers)."""
     out: Dict[int, float] = {}
     for row in rows or []:
         start = (row or {}).get("start")
@@ -485,7 +625,7 @@ def _hourly(rows, stat: str, day_start: datetime) -> Dict[int, float]:
         h = int((start - day_start).total_seconds() // 3600)
         val = _float(row.get(stat))
         if 0 <= h < 24 and val is not None:
-            out[h] = val
+            out[h] = out.get(h, 0.0) + val if add else val
     return out
 
 
