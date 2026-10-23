@@ -380,12 +380,11 @@ def vpp_pause_override(decision, paused: bool):
     the same object)."""
     if not paused:
         return decision
-    from dataclasses import replace
-    from .charger_types import ChargerIntent
+    from .charger_types import ChargerIntent, rewrite
     from . import reason_codes
     if decision.intent in (ChargerIntent.CHARGE_AT_AMPS, ChargerIntent.CHARGE_MAX,
                            ChargerIntent.IDLE):
-        return replace(
+        return rewrite(
             decision, intent=ChargerIntent.DISABLE, commanded_amps=0,
             budget_w=0.0, bridgeable=False,
             # (#940) a dispatched grid event is not a preference — the stop

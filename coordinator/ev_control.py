@@ -973,9 +973,7 @@ class EVControlMixin:
         if not charger_cfg.get("ev_phase_switching_enabled", False):
             return decision
 
-        from dataclasses import replace
-
-        from .charger_types import ChargerIntent
+        from .charger_types import ChargerIntent, rewrite
         from .ev_phase_sequencer import (
             STOP_WAIT_S, PhaseAutoPlanner, PhaseSwitchSequencer,
         )
@@ -1151,7 +1149,7 @@ class EVControlMixin:
         # ~5 minutes after the command.
         if r.hold_charging and decision.intent in (
                 ChargerIntent.CHARGE_AT_AMPS, ChargerIntent.CHARGE_MAX):
-            return replace(
+            return rewrite(
                 decision, intent=ChargerIntent.DISABLE, commanded_amps=0,
                 reason=f"phase switch: {r.state} (#804)", bridgeable=False,
                 reason_code=RC.CHARGER_PHASE_SWITCH, reason_params={})

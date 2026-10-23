@@ -620,7 +620,8 @@ def test_the_peak_emergency_shed_bypasses_the_contactor_floor():
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        if getattr(node.func, "id", "") != "replace":
+        # (#1174) a decision rewrite goes through ``rewrite``
+        if getattr(node.func, "id", "") not in ("replace", "rewrite"):
             continue
         kw = {k.arg: k.value for k in node.keywords if k.arg}
         reason = kw.get("reason")

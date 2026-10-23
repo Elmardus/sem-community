@@ -45,6 +45,7 @@ from .charger_types import (
     ChargerIntent,
     ChargerView,
     FleetContext,
+    rewrite,
 )
 from .energy_reclaim import ev_reclaims_battery_charge
 from .price_signal import (
@@ -425,8 +426,11 @@ def _relabel(decision: ChargerDecision, mode: str, prefix: str) -> ChargerDecisi
     mode was ignored. The relabel keeps the inner detail but names
     the configured mode and why it delegated.
     """
-    return replace(
+    # (#1174) a new label, not a new decision: the inner why stands
+    return rewrite(
         decision, mode=mode, reason=f"{prefix} — {decision.reason}",
+        reason_code=decision.reason_code,
+        reason_params=decision.reason_params,
     )
 
 
@@ -1383,7 +1387,7 @@ def clamp_to_peak_slot(result, view):
     _hyst_w = 0.0 if _drawing else 1000.0 * float(
         view.config.get("peak_hysteresis", DEFAULT_PEAK_HYSTERESIS) or 0.0)
     if _ev_allow_w < _min_w + _hyst_w:
-        return replace(
+        return rewrite(
             result, intent=ChargerIntent.IDLE, commanded_amps=0,
             budget_w=0.0, capped_by_limit=True, peak_paused=True,
             bridgeable=True,
@@ -1400,7 +1404,7 @@ def clamp_to_peak_slot(result, view):
     if _cap_a < _max_a and (
             result.intent is ChargerIntent.CHARGE_MAX
             or result.commanded_amps > _cap_a):
-        return replace(
+        return rewrite(
             result, intent=ChargerIntent.CHARGE_AT_AMPS,
             commanded_amps=_cap_a,
             budget_w=predict_watts(view.wpa_table, _cap_a, _wpa),
@@ -1495,7 +1499,7 @@ def decide(view: ChargerView) -> ChargerDecision:
     if peak in ("shedding", "emergency") and result.intent in (
             ChargerIntent.CHARGE_AT_AMPS, ChargerIntent.CHARGE_MAX):
         if peak == "emergency":
-            return replace(
+            return rewrite(
                 result, intent=ChargerIntent.IDLE, commanded_amps=0,
                 budget_w=0.0, bridgeable=False,
                 # (#940) senior to the contactor's minimum ON: the peak
@@ -1509,7 +1513,7 @@ def decide(view: ChargerView) -> ChargerDecision:
                 or result.commanded_amps > min_a):
             wpa = (float(view.config.get("ev_phases") or 3)
                    * float(view.config.get("ev_voltage") or 230))
-            return replace(
+            return rewrite(
                 result, intent=ChargerIntent.CHARGE_AT_AMPS,
                 commanded_amps=min_a,
                 budget_w=predict_watts(view.wpa_table, min_a, wpa),

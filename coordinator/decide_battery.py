@@ -31,11 +31,10 @@ Decision tree (precedence top-down):
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from . import reason_codes as RC
-from .charger_types import BatteryDecision, BatteryIntent
+from .charger_types import BatteryDecision, BatteryIntent, rewrite
 from .peak_guard import cover_for_peak_w
 from ..consts.battery_modes import arbitrage_allowed_for_mode, reserve_soc_of
 from ..consts.battery_permissions import effective_permissions, may_assist_ev
@@ -413,7 +412,7 @@ def _cap_forced_charge(view, decision: BatteryDecision) -> BatteryDecision:
                     "the house and the car)"),
             reason_code=RC.BATTERY_CHARGE_NO_ROOM,
         )
-    return replace(
+    return rewrite(
         decision, charge_power_w=stepped_w, room_capped=True,
         # CAUSE: `stepped_w` is `room_w` from forced_charge_room_w, floored to
         # a step, and the branch runs only when the decision asked for more.

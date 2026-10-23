@@ -51,6 +51,9 @@ CHARGER_DIP_HOLD = "charger_dip_hold"
 CHARGER_DIP_STOP = "charger_dip_stop"
 CHARGER_PHASE_SWITCH = "charger_phase_switch"
 CHARGER_GRID_EVENT = "charger_grid_event"
+CHARGER_STOP_NOW = "charger_stop_now"
+CHARGER_RAMP = "charger_ramp"
+CHARGER_HOLD_STEADY = "charger_hold_steady"
 
 # ── batteries ────────────────────────────────────────────────────────
 BATTERY_OFF = "battery_off"

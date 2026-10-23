@@ -54,7 +54,7 @@ from typing import Dict, List, Optional, TYPE_CHECKING
 
 from ..const import DEFAULT_MAX_CHARGING_CURRENT
 from . import reason_codes as RC
-from .charger_types import ChargerDecision, ChargerIntent, ChargerView
+from .charger_types import ChargerDecision, ChargerIntent, ChargerView, rewrite
 from .decide import effective_min_amps
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -698,7 +698,7 @@ class ChargeStability:
                 # hole for the median to snap through on recovery.
                 self._median_amps(cid, held, smooth_window)
                 self._commit_amps(cid, held, now)
-                return replace(
+                return rewrite(
                     decision,
                     intent=ChargerIntent.CHARGE_AT_AMPS,
                     commanded_amps=held,
@@ -734,7 +734,7 @@ class ChargeStability:
         backoff_until = self._giveup_backoff_until.get(cid)
         if backoff_until is not None and not drawing:
             if now < backoff_until:
-                return replace(
+                return rewrite(
                     decision,
                     intent=ChargerIntent.IDLE,
                     commanded_amps=0,
@@ -784,7 +784,7 @@ class ChargeStability:
                 # _adjust's job, and the ease-below-floor is the one probe
                 # that lets the floor DECAY when the car's appetite changes.
                 self._reset(cid)
-                return replace(
+                return rewrite(
                     decision, intent=ChargerIntent.IDLE, commanded_amps=0,
                     # CAUSE: the guard above is `target < _floor and not
                     # drawing`, so both halves of this sentence — below the
@@ -851,14 +851,14 @@ class ChargeStability:
                     self._start_since[cid] = now
                     self._start_offer[cid] = start_a
                     self._commit_amps(cid, start_a, now)
-                    return replace(
+                    return rewrite(
                         decision, intent=ChargerIntent.CHARGE_AT_AMPS,
                         commanded_amps=start_a,
                         reason=(f"stability: starting at {start_a}A "
                                 f"(auto-raises if no draw) — {decision.reason}"),
                         reason_code=RC.CHARGER_START, reason_params={},
                     )
-                return replace(
+                return rewrite(
                     decision, intent=ChargerIntent.IDLE, commanded_amps=0,
                     reason=(f"stability: surplus must hold {enable_delay_s:.0f}s "
                             f"before start ({held:.0f}s elapsed) — {decision.reason}"),
@@ -920,7 +920,7 @@ class ChargeStability:
                         f" — backing off {backoff_s / 60.0:.0f} min "
                         f"after {streak} declined ladders"
                     )
-                return replace(
+                return rewrite(
                     decision,
                     intent=ChargerIntent.IDLE,
                     commanded_amps=0,
@@ -953,7 +953,7 @@ class ChargeStability:
                     f"stability: starting at {offer}A "
                     f"(auto-raises if no draw) — {decision.reason}"
                 )
-            return replace(
+            return rewrite(
                 decision,
                 intent=ChargerIntent.CHARGE_AT_AMPS,
                 commanded_amps=offer,
@@ -1096,7 +1096,7 @@ class ChargeStability:
             if stop_for_short:
                 # Re-stamp so the strategy sensor shows SEM CHOSE to stop;
                 # decision.reason already carries the structural cause.
-                return replace(
+                return rewrite(
                     decision, intent=ChargerIntent.IDLE, commanded_amps=0,
                     # CAUSE: `stop_for_short` is this scope's own variable
                     # (short_grace and deep_held past the floor), so "not
@@ -1106,10 +1106,11 @@ class ChargeStability:
                     # that evaluated it.
                     reason=f"stability: structural idle — not bridging — "
                            f"{decision.reason}",
+                    reason_code=RC.CHARGER_STOP_NOW,
                 )
             if decision.intent is ChargerIntent.IDLE:
                 return decision
-            return replace(
+            return rewrite(
                 decision, intent=ChargerIntent.IDLE, commanded_amps=0,
                 reason=f"stability: deficit persisted — {decision.reason}",
                 reason_code=RC.CHARGER_DIP_STOP, reason_params={},
@@ -1120,7 +1121,7 @@ class ChargeStability:
         last = self._last_amps.get(cid)
         hold = min_amps if last is None else max(min_amps, last - max(1, int(ramp_amps)))
         self._commit_amps(cid, hold, now)
-        return replace(
+        return rewrite(
             decision,
             intent=ChargerIntent.CHARGE_AT_AMPS,
             commanded_amps=hold,
@@ -1154,10 +1155,11 @@ class ChargeStability:
             if decision.intent is ChargerIntent.CHARGE_AT_AMPS \
                     and decision.commanded_amps == target:
                 return decision
-            return replace(
+            return rewrite(
                 decision, intent=ChargerIntent.CHARGE_AT_AMPS,
                 commanded_amps=target,
                 reason=f"stability: smoothed → {target}A — {decision.reason}",
+                reason_code=RC.CHARGER_RAMP,
             )
 
         # (#905) A LIMIT lowering the current lands NOW. The ramp and the
@@ -1174,10 +1176,12 @@ class ChargeStability:
                     decision,
                     reason=f"stability: limit clamp → {target}A — {decision.reason}",
                 )
-            return replace(
+            return rewrite(
                 decision, intent=ChargerIntent.CHARGE_AT_AMPS,
                 commanded_amps=target,
                 reason=f"stability: limit clamp → {target}A — {decision.reason}",
+                # only the peak guard and the peak shed set capped_by_limit
+                reason_code=RC.CHARGER_PEAK_SLOW,
             )
         ramp = max(1, int(ramp_amps))
         ramped = max(last - ramp, min(last + ramp, target))
@@ -1203,9 +1207,11 @@ class ChargeStability:
             note = f"stability: ramping {amps}A toward {target}A"
         else:
             note = f"stability: smoothed → {amps}A"
-        return replace(
+        return rewrite(
             decision,
             intent=ChargerIntent.CHARGE_AT_AMPS,
             commanded_amps=amps,
             reason=f"{note} — {decision.reason}",
+            reason_code=(RC.CHARGER_HOLD_STEADY if suppressed
+                         else RC.CHARGER_RAMP),
         )

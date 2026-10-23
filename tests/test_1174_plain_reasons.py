@@ -339,3 +339,86 @@ class TestTheLogbook:
 
     def test_an_unreadable_catalogue_is_empty(self, tmp_path):
         assert load_plain_reasons(str(tmp_path / "nope.json")) == {}
+
+
+# ── a rewrite names its own why ──────────────────────────────────────
+
+#: The fields that change what a device does. A decision rewritten in one
+#: of these after it was made must say why it was rewritten.
+_DOES = {"intent", "commanded_amps", "mode", "charge_power_w",
+         "discharge_limit_w", "discharge_power_w", "target_soc", "floor_soc"}
+
+
+def _source_files():
+    paths = [*_PKG.glob("*.py")]
+    for sub in ("coordinator", "features", "devices"):
+        paths += _PKG.glob(f"{sub}/**/*.py")
+    return sorted(paths)
+
+
+class TestARewriteNamesItsWhy:
+    """Review of the first cut: ``replace(decision, intent=IDLE, …)`` kept
+    the inner code, so the card could say "The car charges with spare sun"
+    over a stop. Every such rewrite goes through ``charger_types.rewrite``,
+    which takes the code as a required argument."""
+
+    def test_no_bare_replace_changes_what_a_device_does(self):
+        bad = []
+        for path in _source_files():
+            rel = path.relative_to(_PKG).as_posix()
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+                if name not in ("replace", "_dc_replace"):
+                    continue
+                kws = {k.arg for k in node.keywords}
+                if kws & _DOES and "reason_code" not in kws:
+                    bad.append(f"{rel}:{node.lineno} {sorted(kws & _DOES)}")
+        assert not bad, ("use charger_types.rewrite(..., reason_code=…): "
+                         + ", ".join(bad))
+
+    def test_every_rewrite_names_a_code(self):
+        calls = 0
+        for path in _source_files():
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "rewrite":
+                    calls += 1
+                    assert "reason_code" in {k.arg for k in node.keywords}, (
+                        path.name, node.lineno)
+        assert calls >= 20, "the scan found too few rewrites — is it blind?"
+
+    def test_rewrite_needs_the_code(self):
+        from custom_components.solar_energy_management.coordinator.charger_types import (
+            rewrite,
+        )
+        d = ChargerDecision(charger_id="c", mode="solar_only",
+                            intent=ChargerIntent.CHARGE_AT_AMPS, commanded_amps=10,
+                            reason_code=RC.CHARGER_SUN, reason_params={"x": 1})
+        with pytest.raises(TypeError):
+            rewrite(d, intent=ChargerIntent.IDLE)
+        r = rewrite(d, intent=ChargerIntent.IDLE, commanded_amps=0,
+                    reason_code=RC.CHARGER_DIP_STOP)
+        assert (r.intent, r.reason_code, r.reason_params) == (
+            ChargerIntent.IDLE, RC.CHARGER_DIP_STOP, {})
+
+    def test_the_stability_ramp_says_ramp_not_sun(self):
+        from custom_components.solar_energy_management.coordinator.charge_stability import (
+            ChargeStability,
+        )
+        cs = ChargeStability()
+        d = ChargerDecision(charger_id="c", mode="solar_only",
+                            intent=ChargerIntent.CHARGE_AT_AMPS, commanded_amps=16,
+                            reason_code=RC.CHARGER_SUN)
+        cs._last_amps["c"] = 8
+        out = cs._adjust(d, "c", 16, 1000.0, min_change_amps=1,
+                         min_change_interval_s=0.0, ramp_amps=2)
+        assert out.commanded_amps == 10
+        assert out.reason_code == RC.CHARGER_RAMP
+
+
+class TestBatteryNormalSaysWhatItDoes:
+
+    def test_the_fall_through_is_no_limit(self, catalogue):
+        """NORMAL writes the pack's own maximum discharge: SEM sets no limit."""
+        assert "no limit" in catalogue["en"][RC.catalogue_key(RC.BATTERY_NORMAL)]
