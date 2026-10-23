@@ -57,6 +57,23 @@ ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
                 r"storage_maximum_charging", r"ac_charge_power"),
         "not": (r"discharg", r"current", r"soc", r"percent", r"voltage"),
     },
+    # (#1166) The level at which the inverter itself stops charging the pack
+    # (an end-of-charge or charge cut-off SOC, an "upper limit"). SEM only
+    # READS it: Force charge ends on a pack that takes no more at its own
+    # level, which may sit below 90 %. It stands BEFORE the target rule on
+    # purpose — the rules are first-match, and these names are the user's
+    # standing limit, never a target SEM may write.
+    "battery_charge_end_soc": {
+        "platform": "number",
+        "any": (r"(?:^|_)soc_upper_limit",
+                r"(?:^|_)(max|maximum|upper)_(\w+_)?charg\w*_soc(?:_|$)",
+                r"charg\w*_cut_?off_(soc|capacity)",
+                r"end_of_charge", r"(?:^|_)charge_end_soc"),
+        "not": (r"power", r"current", r"voltage", r"^system_", r"global",
+                r"discharg", r"(?:^|_)(min|minimum|lower)", r"couple",
+                r"backup", r"off_?grid", r"eps", r"peak_shaving",
+                r"smart_load", r"generator", r"grid_peak", r"^charge_state_"),
+    },
     "battery_target_soc": {
         "platform": "number",
         # ``soc`` must be a whole SEGMENT. Unanchored, it matched SENEC's
@@ -437,6 +454,8 @@ SEM_CONFIG_KEY_FOR_ROLE: Final[Dict[str, str]] = {
     "battery_discharge_limit": "battery_discharge_control_entity",
     "battery_charge_limit": "battery_charge_power_limit_entity",
     "battery_target_soc": "battery_target_soc_entity",
+    # (#1166) read only — see READ_ONLY_CONTROL_ROLES
+    "battery_charge_end_soc": "battery_charge_end_soc_entity",
     "battery_power_strategy": "battery_strategy_control_entity",
     "battery_force_charge": "battery_force_charge_switch",
     "battery_power_setpoint": "battery_force_discharge_control_entity",
@@ -494,6 +513,11 @@ PER_CHARGER_ROLES: Final[frozenset] = frozenset({
 #: can tell a Victron owner "this is your ESS mode; SEM reads it, you set it".
 OBSERVE_ONLY_ROLES: Final[frozenset] = frozenset({"battery_strategy"})
 
+#: (#1166) Roles bound with the same one-click accept as a control, whose
+#: entity SEM only READS. Not observe-only: the user picks it, so it has a
+#: config key. Nothing in SEM may write it; a test walks every service call.
+READ_ONLY_CONTROL_ROLES: Final[frozenset] = frozenset({"battery_charge_end_soc"})
+
 #: What the entity behind a role has to MEASURE for SEM to write or read it
 #: correctly. Checked against the live state at proposal time: a key can be
 #: named exactly like a power limit and be in amps, and the button used to
@@ -509,6 +533,7 @@ ROLE_EXPECTED_UNIT: Final[Dict[str, str]] = {
     "battery_charge_limit": "power",
     "battery_discharge_limit": "power",
     "battery_target_soc": "percent",
+    "battery_charge_end_soc": "percent",       # (#1166)
     "battery_power": "power",
     "battery_soc": "percent",
     "solar_power": "power",

@@ -30,7 +30,7 @@ from typing import Any, Dict, Final
 SCHEMA: Final = 1
 
 
-ROSTER_META: Final[Dict[str, Any]] = {'generated_at': '2026-09-24T22:33:37Z', 'sources': {'core_analytics': 'https://analytics.home-assistant.io/data.json', 'core_index': 'https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/generated/integrations.json', 'custom_installs': 'https://analytics.home-assistant.io/custom_integrations.json', 'hacs': 'https://data-v2.hacs.xyz/integration/data.json', 'website': 'https://www.home-assistant.io/integrations.json'}, 'install_floor': 50, 'candidates': 1365, 'kept': 198, 'with_roles': 64, 'roles_mined': 181}
+ROSTER_META: Final[Dict[str, Any]] = {'generated_at': '2026-10-23T20:24:56Z', 'sources': {'core_analytics': 'https://analytics.home-assistant.io/data.json', 'core_index': 'https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/generated/integrations.json', 'custom_installs': 'https://analytics.home-assistant.io/custom_integrations.json', 'hacs': 'https://data-v2.hacs.xyz/integration/data.json', 'website': 'https://www.home-assistant.io/integrations.json'}, 'install_floor': 50, 'candidates': 1365, 'kept': 198, 'with_roles': 64, 'roles_mined': 185}
 
 #: domain -> what the ecosystem says this integration is.
 ROSTER: Final[Dict[str, Dict[str, Any]]] = {
@@ -304,8 +304,8 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'ev_current_control': {'platform': 'number', 'keys': ('amp',), 'options': (), 'exact_only': ('amp',)},
     },
     'goodwe': {
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('soc_upper_limit',), 'options': ()},
         'battery_strategy': {'platform': 'select', 'keys': ('operation_mode',), 'options': ('backup', 'eco', 'eco_charge', 'eco_discharge', 'general', 'off_grid', 'peak_shaving')},
-        'battery_target_soc': {'platform': 'number', 'keys': ('soc_upper_limit',), 'options': ()},
     },
     'growatt_modbus': {
         'battery_power': {'platform': 'sensor', 'keys': ('battery_power',), 'options': ()},
@@ -326,6 +326,7 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
     },
     'huawei_solar': {
         'battery_capacity_spec': {'platform': 'sensor', 'keys': ('rated_ess_capacity', 'storage_rated_capacity'), 'options': ()},
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('storage_charging_cutoff_capacity',), 'options': ()},
         'battery_charge_limit': {'platform': 'number', 'keys': ('storage_maximum_charging_power',), 'options': ()},
         'battery_discharge_limit': {'platform': 'number', 'keys': ('storage_maximum_discharging_power',), 'options': ()},
         'battery_power': {'platform': 'sensor', 'keys': ('battery_charge_discharge_power', 'storage_charge_discharge_power'), 'options': ()},
@@ -348,6 +349,7 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'ev_current_control': {'platform': 'service', 'keys': ('keba.set_current',), 'options': (), 'services': {'keba.set_current': {'fields': ('current',), 'target': None}}},
     },
     'marstek_venus_energy_manager': {
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('charging_cutoff_capacity',), 'options': ()},
         'battery_charge_limit': {'platform': 'number', 'keys': ('max_charge_power', 'system_max_charge_power'), 'options': (), 'exact_only': ('max_charge_power',)},
         'battery_discharge_limit': {'platform': 'number', 'keys': ('max_discharge_power', 'system_max_discharge_power'), 'options': (), 'exact_only': ('max_discharge_power',)},
         'battery_power': {'platform': 'sensor', 'keys': ('battery_power',), 'options': ()},
@@ -400,9 +402,9 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'battery_power_strategy': {'platform': 'select', 'keys': ('battery_strategy',), 'options': ('api', 'eco', 'idle', 'nom', 'roi', 'sessy_connect')},
     },
     'sigen': {
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('plant_charge_cut_off_soc',), 'options': ()},
         'battery_charge_limit': {'platform': 'number', 'keys': ('dc_charger_max_charging_power_limit',), 'options': ()},
         'battery_discharge_limit': {'platform': 'number', 'keys': ('dc_charger_max_discharging_power_limit',), 'options': ()},
-        'battery_target_soc': {'platform': 'number', 'keys': ('plant_charge_cut_off_soc',), 'options': ()},
         'ev_current_control': {'platform': 'number', 'keys': ('ac_charger_output_current',), 'options': ()},
     },
     'silla_prism': {
@@ -428,7 +430,8 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'solar_power': {'platform': 'sensor', 'keys': ('pv_power',), 'options': ()},
     },
     'solis_cloud_control': {
-        'battery_target_soc': {'platform': 'number', 'keys': ('battery_force_charge_soc', 'battery_max_charge_soc'), 'options': ()},
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('battery_max_charge_soc',), 'options': ()},
+        'battery_target_soc': {'platform': 'number', 'keys': ('battery_force_charge_soc',), 'options': ()},
     },
     'solis_cloud_monitoring': {
         'battery_power': {'platform': 'sensor', 'keys': ('battery_power',), 'options': ()},
@@ -440,7 +443,8 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'vehicle_soc': {'platform': 'sensor', 'keys': ('ev_battery_level',), 'options': ()},
     },
     'sungrow': {
-        'battery_target_soc': {'platform': 'number', 'keys': ('forced_charging_target_soc_1', 'forced_charging_target_soc_2', 'soc_upper_limit'), 'options': ()},
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('soc_upper_limit',), 'options': ()},
+        'battery_target_soc': {'platform': 'number', 'keys': ('forced_charging_target_soc_1', 'forced_charging_target_soc_2'), 'options': ()},
     },
     'sunsynk': {
         'battery_target_soc': {'platform': 'number', 'keys': ('target_soc',), 'options': ()},

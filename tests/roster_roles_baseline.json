@@ -165,11 +165,11 @@
       ]
     },
     "goodwe": {
+      "battery_charge_end_soc": [
+        "soc_upper_limit"
+      ],
       "battery_strategy": [
         "operation_mode"
-      ],
-      "battery_target_soc": [
-        "soc_upper_limit"
       ]
     },
     "growatt_modbus": {
@@ -217,6 +217,9 @@
       "battery_capacity_spec": [
         "rated_ess_capacity",
         "storage_rated_capacity"
+      ],
+      "battery_charge_end_soc": [
+        "storage_charging_cutoff_capacity"
       ],
       "battery_charge_limit": [
         "storage_maximum_charging_power"
@@ -272,6 +275,9 @@
       ]
     },
     "marstek_venus_energy_manager": {
+      "battery_charge_end_soc": [
+        "charging_cutoff_capacity"
+      ],
       "battery_charge_limit": [
         "max_charge_power",
         "system_max_charge_power"
@@ -380,14 +386,14 @@
       ]
     },
     "sigen": {
+      "battery_charge_end_soc": [
+        "plant_charge_cut_off_soc"
+      ],
       "battery_charge_limit": [
         "dc_charger_max_charging_power_limit"
       ],
       "battery_discharge_limit": [
         "dc_charger_max_discharging_power_limit"
-      ],
-      "battery_target_soc": [
-        "plant_charge_cut_off_soc"
       ],
       "ev_current_control": [
         "ac_charger_output_current"
@@ -436,9 +442,11 @@
       ]
     },
     "solis_cloud_control": {
-      "battery_target_soc": [
-        "battery_force_charge_soc",
+      "battery_charge_end_soc": [
         "battery_max_charge_soc"
+      ],
+      "battery_target_soc": [
+        "battery_force_charge_soc"
       ]
     },
     "solis_cloud_monitoring": {
@@ -462,10 +470,12 @@
       ]
     },
     "sungrow": {
+      "battery_charge_end_soc": [
+        "soc_upper_limit"
+      ],
       "battery_target_soc": [
         "forced_charging_target_soc_1",
-        "forced_charging_target_soc_2",
-        "soc_upper_limit"
+        "forced_charging_target_soc_2"
       ]
     },
     "sunsynk": {
