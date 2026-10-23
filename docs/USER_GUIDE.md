@@ -25,6 +25,7 @@ Complete reference for Solar Energy Management (SEM).
 - [Tariff Integration](#tariff-integration)
 - [Solar Forecast](#solar-forecast)
 - [Simulation tab](#simulation-tab-1083)
+- [Why did SEM do that?](#why-did-sem-do-that)
 - [Observer Mode](#observer-mode)
 - [Sensors Reference](#sensors-reference)
 - [Daily Energy Reset](#daily-energy-reset)
@@ -1878,6 +1879,35 @@ against simulated; and notes. The EV tab's session download is an .xlsx
 file too.
 
 Limits: [Known Limitations → Simulation tab](KNOWN_LIMITATIONS.md#simulation-tab-estimates-from-hourly-averages-1083).
+
+---
+
+## Why did SEM do that?
+
+Open **Settings → Logbook**. SEM writes one line each time it changes what it
+tells a device to do: a charger, a battery or a load. The line shows the old
+command, the new one and the reason:
+
+    <device>: <old command> → <new command> — <reason>
+
+A command reads like `charge 8 A`, `off` or `limit_discharge 1500 W`.
+
+- A line appears only on a change: a start, a stop, a new mode, a charger
+  step of 1 A or more, a battery limit that moved by 250 W or more, a load
+  setpoint that moved by 500 W or more. The same command sent again writes
+  nothing.
+- With **Observer Mode** on, SEM sends nothing, and the line ends in
+  *(observer: not sent)*. It still shows what SEM would have done.
+- The diagnostics download (**Settings → Devices & Services → Solar Energy
+  Management → ⋮ → Download diagnostics**) keeps the last 200 lines under
+  `decision_log`.
+- The newest line per device is also an attribute:
+  `per_charger_last_decision` and `per_charger_strategy` on
+  `sensor.sem_charging_state`, `per_battery_last_decision` on
+  `sensor.sem_battery_status`, `per_device_last_decision` on
+  `sensor.sem_load_management_status`.
+
+The log starts empty after a restart. The reason text is in English.
 
 ---
 
