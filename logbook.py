@@ -14,7 +14,7 @@ from homeassistant.core import Event, HomeAssistant, callback
 
 from .consts.core import DOMAIN
 from .coordinator.decision_log import EVENT_DECISION
-from .plain_reasons import DATA_KEY, plain_sentence
+from .plain_reasons import DATA_KEY, kind_word, plain_sentence
 
 # The logbook's own keys. Spelled out rather than imported so this platform
 # does not pull the logbook integration in as a dependency.
@@ -27,6 +27,10 @@ def describe_decision(data: Dict[str, Any],
                       lang: str = "en") -> Dict[str, str]:
     """One decision record → the logbook's name + message."""
     name = str(data.get("name") or data.get("device_id") or "SEM")
+    if name == data.get("device_id"):
+        # (#1174) known only by its id (the grid export): the kind's word
+        name = kind_word(catalogue or {}, str(data.get("device_kind") or ""),
+                         lang) or name
     old = data.get("old") or "none"
     new = data.get("new") or "?"
     message = f"{old} → {new}"

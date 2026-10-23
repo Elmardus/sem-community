@@ -15,7 +15,7 @@ import os
 import re
 from typing import Any, Dict, Mapping, Optional
 
-from .coordinator.reason_codes import KEY_PREFIX
+from .coordinator.reason_codes import ALL_CODES, catalogue_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,6 +24,8 @@ DATA_KEY = "solar_energy_management_plain_reasons"
 _TRANSLATIONS = os.path.join(
     os.path.dirname(__file__), "dashboard", "translations.json")
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
+#: catalogue entries that are a device kind's word, not a reason
+KIND_PREFIX = "kind:"
 
 
 def load_plain_reasons(path: str = _TRANSLATIONS) -> Dict[str, Dict[str, str]]:
@@ -34,11 +36,17 @@ def load_plain_reasons(path: str = _TRANSLATIONS) -> Dict[str, Dict[str, str]]:
     except (OSError, ValueError) as err:
         _LOGGER.debug("plain reasons: catalogue not read: %s", err)
         return {}
-    return {
-        lang: {k[len(KEY_PREFIX):]: v for k, v in table.items()
-               if k.startswith(KEY_PREFIX) and isinstance(v, str)}
-        for lang, table in data.items() if isinstance(table, dict)
-    }
+    out: Dict[str, Dict[str, str]] = {}
+    for lang, table in data.items():
+        if not isinstance(table, dict):
+            continue
+        out[lang] = {code: table[catalogue_key(code)] for code in ALL_CODES
+                     if isinstance(table.get(catalogue_key(code)), str)}
+        # the kind words, for a device the log knows only by its id
+        out[lang].update({f"{KIND_PREFIX}{k[len('why_kind_'):]}": v
+                          for k, v in table.items()
+                          if k.startswith("why_kind_") and isinstance(v, str)})
+    return out
 
 
 async def async_load_plain_reasons(hass) -> None:
@@ -65,6 +73,12 @@ def fill(sentence: str, params: Optional[Mapping[str, Any]]) -> Optional[str]:
 
     out = _PLACEHOLDER.sub(_sub, sentence)
     return None if missing else out
+
+
+def kind_word(catalogue: Mapping[str, Mapping[str, str]], kind: str,
+              lang: str = "en") -> Optional[str]:
+    """The word for a device kind (``Grid export``) in ``lang``, or ``None``."""
+    return plain_sentence(catalogue, f"{KIND_PREFIX}{kind}", None, lang)
 
 
 def plain_sentence(catalogue: Mapping[str, Mapping[str, str]], code: str,
