@@ -70,6 +70,11 @@ SEM monitors your solar production, battery, grid, EV charger, and household dev
 - **PV health (2.2, #1022)** — one sensor, green to red, from a week of yield against forecast. With downtime minutes and a snow flag.
 - **Hints (2.2, #1019)** — one setting, off by default: a sentence when an input goes silent, a load runs all night, grid use rises, or power is cheap while the car waits. And a weekly note.
 - **Chargers found by what they offer (2.2, #1032)** — start/stop buttons, a charge-mode select, a car's own charging amps. SEM reads any integration's controls and offers the charger in setup.
+- **Simulation tab (2.2, #1083)** — replay your own recorded days with a different battery, solar size, peak limit or price, and see what they would have cost. Off until you switch it on; see [Simulation tab](docs/USER_GUIDE.md#simulation-tab-1083).
+- **Why did SEM do that? (2.2, #1084)** — each time SEM changes a device, the logbook and the *Why?* card on the Control tab say what changed and why.
+- **Taxes, markup and feed-in fee (2.2, #1077)** — SEM decides on what a kWh is worth to you, with a Netherlands 2027 preset. Nothing changes until you set a field.
+- **Stop exporting below a price (2.2, #1090)** — when a sold kWh is worth less than your limit, the battery and loads take the sun instead.
+- **A tariff per device (2.2, #812)** — a heat pump (or any load) on its own meter and price, with its own cost.
 
 ---
 

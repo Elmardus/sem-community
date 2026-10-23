@@ -1829,6 +1829,9 @@ that period would have cost. Every simulated number is an estimate.
 reload the page.
 The tab is off by default. Turning it on also tags each day and reads the
 last 90 days from Home Assistant's history once, in the background.
+Only a Home Assistant administrator can use the tab: other users see no
+days and no results.
+On a phone the days sit in one row: swipe it sideways.
 
 ### Pick a period
 
