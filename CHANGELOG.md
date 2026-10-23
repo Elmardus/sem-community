@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Force charge ends on a battery set to stop below 90 %** (#1166). Pick its end-of-charge level in Settings. SEM only reads it.
+
 # [2.2.0-beta.25] — 23.10.2026
 
 - 🐛 **Selling from the battery lifts the discharge limit set before** (#1175). A 0 W limit for the car or cheap hours no longer stops it.
