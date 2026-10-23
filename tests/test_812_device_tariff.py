@@ -765,3 +765,10 @@ class TestThePlanReadsTheOwnTariff:
         # … and that reader is the live gate's DeviceTariffs
         from custom_components.solar_energy_management.tests.ast_contracts import calls
         assert calls(plan_fns[0], "plan_tariff")
+
+
+def test_the_meter_baseline_really_survives_a_restart():
+    """(#812) The baseline was emitted by get_state() but not in the store's
+    key list, so it read back empty after every restart."""
+    from custom_components.solar_energy_management.coordinator import storage
+    assert "device_meter_last" in storage.CALCULATOR_STATE_KEYS
