@@ -176,3 +176,35 @@ They appear once a value field is set, daily and yearly:
 - **Export value** — exported kWh at the export price before the fee.
 - **Feed-in fees** — what the fee took. Export value − fees is your export
   revenue (fixed monthly fees aside).
+
+## A tariff per device (#812)
+
+Some houses buy a device's power on a second contract, for example a heat
+pump behind its own meter at a lower price. A device can have its own
+tariff. Nothing set = the house tariff, as before.
+
+| field | what it does |
+|---|---|
+| **Own rate** | a fixed price per kWh |
+| **Own price entity** | a sensor (or `input_number`) with the device's price, when it changes by the hour |
+| **Own meter (kWh)** | optional: the kWh counter of the device's own meter |
+
+Where: for a heat pump, in its settings (Configuration card → **Heat pump**,
+or the heat pump step of **Configure**; each extra heat pump has the same
+three fields). For any other load, in its goals on the Load Priority card,
+under **Own tariff**.
+
+What it changes:
+
+- **Cheap and expensive hours** for that device follow its own price. A
+  price entity is classed like the house price. A fixed rate is one price,
+  so it is never cheap and never expensive.
+- **The energy plan** places the device's hours by its own price.
+- **Cost**: a sensor *<device> tariff cost today* = the device's grid kWh ×
+  its own price. With an own meter, the grid kWh are what the meter counted.
+  Without one, SEM estimates them: the device's use × the share of the house
+  load that came from the grid.
+
+When the price entity cannot be read, SEM uses the own rate if one is set.
+With no own rate, the device falls back to the house tariff for its hours
+and its cost until the price reads again.

@@ -378,6 +378,22 @@ in the generic device list. Every climate device gets, independently:
 Heat-pump units and climate devices can coexist: any number of
 menu-configured units plus any number of climate-managed ones.
 
+### A heat pump on its own tariff (#812)
+
+A heat pump on its own meter and price can have its own tariff. In the heat
+pump settings, set **Own tariff: fixed rate** or **Own tariff: price
+entity**, and optionally **Own tariff: meter (kWh)**. Empty = the house
+tariff.
+
+- Its cheap and expensive hours, and its plan, follow its own price. A fixed
+  rate is never cheap or expensive.
+- A sensor *<heat pump> tariff cost today* shows what its grid power cost.
+- If the price entity cannot be read, SEM uses the fixed rate, or else the
+  house tariff, until it reads again.
+
+Other loads get the same fields in their goals on the Load Priority card.
+More in [Tariff models](TARIFF_MODELS.md#a-tariff-per-device-812).
+
 ### How much did SG-Ready actually shift? (#769)
 
 The SG-Ready unit has its own energy row, on the same footing as the EV:
