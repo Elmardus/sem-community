@@ -272,13 +272,15 @@ class DeviceTariffs:
     # ── grid kWh ──────────────────────────────────────────────────────
 
     def grid_kwh(self, device: Any, increment_kwh: float,
-                 share: float) -> Optional[float]:
+                 share: float, store: Optional[Dict[str, float]] = None
+                 ) -> Optional[float]:
         """This cycle's grid kWh on the device's tariff.
 
         Own meter named: its delta since the last read (the first read only
         sets the baseline; a fall or an implausible jump is a meter reset,
         not consumption). Else the device's kWh × the grid's share.
-        None = nothing to book this cycle.
+        None = nothing to book this cycle. ``store`` keeps the meter's last
+        reading (the energy calculator's persisted dict); default in memory.
         """
         tariff = tariff_of(device)
         if not tariff.configured:
@@ -288,8 +290,9 @@ class DeviceTariffs:
             now = self._entity_price(tariff.meter)   # a number, like a price
             if now is None:
                 return None
-            last = self._meter_last.get(did)
-            self._meter_last[did] = now
+            last_seen = self._meter_last if store is None else store
+            last = last_seen.get(did)
+            last_seen[did] = now
             if last is None:
                 return None
             step = now - last

@@ -3197,6 +3197,10 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 f"daily_tariff_grid_kwh_{did}")
             attrs["price_now"] = self.coordinator.data.get(f"tariff_price_{did}")
             attrs["price_level"] = self.coordinator.data.get(f"tariff_level_{did}")
+            # "house" while the own price cannot be read: the kWh are then
+            # priced at the house rate
+            attrs["price_source"] = self.coordinator.data.get(
+                f"tariff_price_source_{did}")
         elif self.entity_description.key == "yearly_feed_in_fees":
             # (#1077) Where a tiered fee stands: this year's export, the fee
             # on the next kWh, and where the next tier starts.

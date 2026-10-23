@@ -120,6 +120,16 @@ def _hass_with(states: dict):
     return hass
 
 
+def _imported(calc, kwh, rate):
+    """Today's house import, booked the way ``calculate_energy`` books it."""
+    calc._import_rate = rate
+    day = dt_util.now().date()
+    mk, yk = calc._month_key(day), str(day.year)
+    calc._accumulate("grid_import", day, mk, yk, kwh)
+    calc._accumulate_cost("cost_import", day, mk, yk, kwh * rate)
+    return calc, day
+
+
 async def _night_cycle(sc, price_level):
     await sc.update(0.0, price_level=price_level, reclaim_w=0.0,
                     battery_priority=100, battery_soc=80.0,
@@ -300,8 +310,8 @@ class TestTheBooks:
         )
         sc = SimpleNamespace(_devices={d.device_id: d for d in devices},
                              device_tariffs=DeviceTariffs(None))
-        fake = SimpleNamespace(_energy_calculator=EnergyCalculator({}, MagicMock()),
-                               _surplus_controller=sc)
+        calc, _ = _imported(EnergyCalculator({}, MagicMock()), 5.0, 0.30)
+        fake = SimpleNamespace(_energy_calculator=calc, _surplus_controller=sc)
         return lambda power, flows: SEMCoordinator._book_device_tariffs(
             fake, power, flows)
 
@@ -501,6 +511,7 @@ async def test_a_real_setup_gives_the_pump_its_tariff_and_sensor(
     # the books: the pump's kWh, the grid's share, the pump's rate
     hp._last_cycle_energy_kwh = 1.0
     hp2._last_cycle_energy_kwh = 1.0
+    _imported(coord._energy_calculator, 5.0, 0.30)
     out = coord._book_device_tariffs(
         SimpleNamespace(home_consumption_power=1000.0),
         SimpleNamespace(grid_to_home=500.0))
@@ -519,13 +530,7 @@ async def test_a_real_setup_gives_the_pump_its_tariff_and_sensor(
 class TestTheHouseCostIsOneTotal:
     @staticmethod
     def _calc_with_import(kwh, rate):
-        calc = EnergyCalculator({}, MagicMock())
-        calc._import_rate = rate
-        day = dt_util.now().date()
-        mk, yk = calc._month_key(day), str(day.year)
-        calc._accumulate("grid_import", day, mk, yk, kwh)
-        calc._accumulate_cost("cost_import", day, mk, yk, kwh * rate)
-        return calc, day
+        return _imported(EnergyCalculator({}, MagicMock()), kwh, rate)
 
     def test_no_tariff_is_todays_number(self):
         calc, day = self._calc_with_import(2.0, 0.30)
@@ -543,11 +548,64 @@ class TestTheHouseCostIsOneTotal:
         assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.50)
         assert out["daily_tariff_cost_heat_pump"] == pytest.approx(0.20)
 
-    def test_a_meter_running_ahead_cannot_go_below_zero(self):
+    def test_kwh_leave_at_the_rate_they_were_booked_at(self):
+        # The reviewer's case: 1 kWh imported at 0.10; later the house rate
+        # is 0.40 and the pump bills 1 kWh at 0.05. Moving at 0.40 would
+        # leave the house at 0.10 − 0.40 + 0.05 = −0.25.
+        calc, day = self._calc_with_import(1.0, 0.10)
+        calc._import_rate = 0.40
+        calc.accumulate_device_tariff("heat_pump", 1.0, 0.05, day)
+        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.05)
+        assert calc._get_daily_cost("cost_import", day) >= 0
+
+    def test_mixed_rates_move_at_their_average_and_never_below_zero(self):
+        calc, day = self._calc_with_import(1.0, 0.10)
+        mk, yk = calc._month_key(day), str(day.year)
+        calc._accumulate("grid_import", day, mk, yk, 1.0)
+        calc._accumulate_cost("cost_import", day, mk, yk, 0.50)   # 1 kWh at 0.50
+        for _ in range(4):                                         # 4 × 0.5 kWh
+            calc.accumulate_device_tariff("heat_pump", 0.5, 0.0, day)
+        # everything moved at a free rate: the house money is exactly gone
+        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.0, abs=1e-9)
+
+    def test_a_meter_running_ahead_books_the_same_capped_kwh_on_both_sides(self):
         calc, day = self._calc_with_import(0.5, 0.30)
-        calc.accumulate_device_tariff("heat_pump", 2.0, 0.40, day)
-        # only the 0.5 kWh the house imported move: 0.5 × 0.20
+        moved = calc.accumulate_device_tariff("heat_pump", 2.0, 0.20, day)
+        assert moved == pytest.approx(0.5)
+        # house: 0.5 × 0.20; the pump: the same 0.5 kWh, nothing more
         assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.10)
+        books = calc.get_device_tariff("heat_pump", day)
+        assert books["daily_grid_kwh"] == pytest.approx(0.5)
+        assert books["daily_cost"] == pytest.approx(0.10)
+
+    def test_an_unreadable_price_keeps_the_house_rate_and_says_so(self, caplog):
+        calc, day = self._calc_with_import(2.0, 0.30)
+        pump = _load("heat_pump", entity="sensor.hp_price")
+        pump.last_cycle_energy_kwh = 1.0
+        seam = SEMCoordinatorSeam(calc, [pump])
+        seam.tariffs = DeviceTariffs(_hass_with({
+            "sensor.hp_price": SimpleNamespace(state="unavailable", attributes={})}))
+        with caplog.at_level("INFO"):
+            out = seam.book(grid_to_home=2000.0, home=2000.0)
+        assert out["daily_tariff_grid_kwh_heat_pump"] == pytest.approx(1.0)
+        assert out["daily_tariff_cost_heat_pump"] == pytest.approx(0.30)
+        assert out["tariff_price_source_heat_pump"] == "house"
+        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.60)
+        assert "house rate" in caplog.text
+
+    def test_the_own_meter_survives_a_restart(self):
+        states = {"sensor.hp_meter": SimpleNamespace(state="100.0", attributes={})}
+        calc = EnergyCalculator({}, MagicMock())
+        d = _load("heat_pump", rate=0.20, meter="sensor.hp_meter")
+        DeviceTariffs(_hass_with(states)).grid_kwh(
+            d, 0, 0, store=calc.device_meter_last)
+        saved = calc.get_state()
+        fresh = EnergyCalculator({}, MagicMock())
+        fresh.restore_state(saved)
+        states["sensor.hp_meter"] = SimpleNamespace(state="100.7", attributes={})
+        step = DeviceTariffs(_hass_with(states)).grid_kwh(
+            d, 0, 0, store=fresh.device_meter_last)
+        assert step == pytest.approx(0.7)
 
 
 class SEMCoordinatorSeam:
@@ -555,13 +613,14 @@ class SEMCoordinatorSeam:
 
     def __init__(self, calc, devices):
         self.calc, self.devices = calc, devices
+        self.tariffs = DeviceTariffs(None)
 
     def book(self, *, grid_to_home, home):
         from custom_components.solar_energy_management.coordinator.coordinator import (
             SEMCoordinator,
         )
         sc = SimpleNamespace(_devices={d.device_id: d for d in self.devices},
-                             device_tariffs=DeviceTariffs(None))
+                             device_tariffs=self.tariffs)
         fake = SimpleNamespace(_energy_calculator=self.calc, _surplus_controller=sc)
         return SEMCoordinator._book_device_tariffs(
             fake, SimpleNamespace(home_consumption_power=home),

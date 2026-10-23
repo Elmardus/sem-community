@@ -334,6 +334,8 @@ DEVICE_TARIFF_KWH = "device_tariff_kwh:"
 DEVICE_TARIFF_COST = "device_tariff_cost:"
 #: (#812) Device kWh taken out of the house's import cost today (all devices).
 DEVICE_TARIFF_MOVED = "device_tariff_moved"
+#: (#812) Device money put back into ``cost_import`` today (all devices).
+DEVICE_TARIFF_OWN_MONEY = "device_tariff_own_money"
 CO2_KG_PER_TREE_PER_YEAR = 22  # EPA estimate
 
 
@@ -370,6 +372,9 @@ class EnergyCalculator:
 
         # Rate history for 7-day averaging (dynamic tariffs)
         self._rate_history: deque = deque(maxlen=30)
+        #: (#812) device id → the last reading of a device's own meter, kept
+        #: with the energy state so a restart books the first step after it.
+        self.device_meter_last: Dict[str, float] = {}
 
         # (#1077) The value layer's books. ``_export_rate`` above is the
         # export VALUE (net of the per-kWh feed-in fee); these keep the
@@ -3987,37 +3992,51 @@ class EnergyCalculator:
         }
 
     def accumulate_device_tariff(
-        self, device_id: str, grid_kwh: float, cost: float, day: date,
-    ) -> None:
-        """(#812) Book a device's grid kWh at its own tariff — and move them
-        out of the house's import cost.
+        self, device_id: str, grid_kwh: float, price: float, day: date,
+    ) -> float:
+        """(#812) Move a device's grid kWh out of the house's import cost and
+        book them at the device's own price. Returns the kWh moved.
 
         ``cost_import`` already booked every imported kWh at the house rate
-        (``calculate_energy``). The device's share is taken back out at that
-        rate and put back in at the device's price, so the house's daily cost
-        is ONE total: (house kWh − device kWh) × house rate + device kWh ×
-        device price. The kWh moved are capped at what the house imported
-        today: a device meter that runs ahead of the main meter can never
-        drive the house's own kWh below zero.
+        of ITS cycle (``calculate_energy``). The device's kWh leave it at the
+        rate they were booked at — the average over the house money not yet
+        moved today, never the rate now — and come back at the device price.
+        So the house's daily cost is ONE total, and its money can never go
+        below zero: what leaves is at most what was booked.
+
+        The kWh are capped at the house's import not yet moved today: a
+        device meter that runs ahead of the main meter has no house kWh to
+        move, and the overflow is booked nowhere (not on the device either,
+        so nothing is counted twice).
         """
-        if not device_id or not grid_kwh:
-            return
-        grid_kwh, cost = float(grid_kwh), float(cost)
+        if not device_id or not grid_kwh or grid_kwh <= 0:
+            return 0.0
+        price = float(price)
+        imported = self._daily_accumulators.get(f"grid_import_{day}", 0.0)
+        moved_kwh = self._daily_accumulators.get(f"{DEVICE_TARIFF_MOVED}_{day}", 0.0)
+        room_kwh = max(0.0, imported - moved_kwh)
+        moved = min(float(grid_kwh), room_kwh)
+        if moved <= 0:
+            return 0.0
+        # The house money still in ``cost_import`` for the unmoved kWh:
+        # today's import cost, less the device money put back, less the
+        # house money already taken out.
+        house_money = max(0.0, (
+            self._daily_cost_accumulators.get(f"cost_import_{day}", 0.0)
+            - self._daily_cost_accumulators.get(f"{DEVICE_TARIFF_OWN_MONEY}_{day}", 0.0)))
+        taken = house_money * moved / room_kwh
+        own = moved * price
         month_key, year_key = self._month_key(day), str(day.year)
         self._accumulate(f"{DEVICE_TARIFF_KWH}{device_id}", day,
-                         month_key, year_key, grid_kwh)
+                         month_key, year_key, moved)
         self._accumulate_cost(f"{DEVICE_TARIFF_COST}{device_id}", day,
-                              month_key, year_key, cost)
-        room = max(0.0, self._daily_accumulators.get(f"grid_import_{day}", 0.0)
-                   - self._daily_accumulators.get(f"{DEVICE_TARIFF_MOVED}_{day}", 0.0))
-        moved = min(grid_kwh, room)
-        if moved <= 0:
-            return
+                              month_key, year_key, own)
         self._accumulate(DEVICE_TARIFF_MOVED, day, month_key, year_key, moved)
-        own_price = cost / grid_kwh
-        house_rate = float(self._import_rate or 0.0)
+        self._accumulate_cost(DEVICE_TARIFF_OWN_MONEY, day, month_key,
+                              year_key, own)
         self._accumulate_cost("cost_import", day, month_key, year_key,
-                              moved * (own_price - house_rate))
+                              own - taken)
+        return moved
 
     def get_device_tariff(self, device_id: str, day: date) -> Dict[str, float]:
         """(#812) Today's grid kWh and cost of a device on its own tariff."""
@@ -4606,6 +4625,7 @@ class EnergyCalculator:
             ),
             "yearly_cost_seeded": self._yearly_cost_seeded,
             "rate_history": list(self._rate_history),
+            "device_meter_last": dict(self.device_meter_last),   # (#812)
             "accumulated_savings": self._accumulated_savings,
             "accumulated_battery_savings": self._accumulated_battery_savings,
             "accumulated_cost": self._accumulated_cost,
@@ -4746,6 +4766,12 @@ class EnergyCalculator:
             self._yearly_cost_seeded = state.get("yearly_cost_seeded", False)
             self._lifetime_seed_counters = _as_seed_counters(
                 state.get("lifetime_seed_counters"))
+            # (#812) a corrupt entry is dropped, never a reason to fail restore
+            _ml = state.get("device_meter_last")
+            self.device_meter_last = {
+                str(k): float(v) for k, v in (_ml.items() if isinstance(_ml, dict) else ())
+                if isinstance(v, (int, float)) and not isinstance(v, bool)
+                and math.isfinite(float(v))}
             rate_history = state.get("rate_history", [])
             self._rate_history = deque(
                 rate_history if isinstance(rate_history, list) else [], maxlen=30
