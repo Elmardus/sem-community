@@ -245,3 +245,30 @@ class TestNames:
         coord = SimpleNamespace(hass=MagicMock())
         assert SEMCoordinator._battery_display_names(
             coord, SimpleNamespace(batteries={})) == {}
+
+
+class TestEdges:
+    def test_a_long_name_is_cut_where_the_record_is_written(self):
+        log = DecisionLog(None)
+        rec = log.record(device_id="x", kind=KIND_LOAD, verb="on", name="n" * 500,
+                         now=T0, quiet_first_rest=False)
+        assert len(rec.name) == 60
+        log.set_names({"battery:b1": "b" * 500})
+        rec = log.record(device_id="b1", kind=KIND_BATTERY, verb="force_charge",
+                         value=2000, now=T0)
+        assert len(rec.name) == 60
+
+    def test_no_entry_id_takes_the_first_loaded_entry(self):
+        hass = MagicMock()
+        hass.data = {}
+        unloaded = MagicMock(spec=["entry_id"])   # no runtime_data yet
+        unloaded.entry_id = "e0"
+        half = MagicMock()
+        half.entry_id = "e1"
+        half.runtime_data = SimpleNamespace()       # loaded, no log
+        loaded = MagicMock()
+        loaded.entry_id = "e2"
+        loaded.runtime_data = SimpleNamespace(decision_log=_log())
+        hass.config_entries.async_entries.return_value = [unloaded, half, loaded]
+        _, payload = _call(hass).send_result.call_args.args
+        assert [r["device_id"] for r in payload["records"]] == ["box", "bat", "pool"]

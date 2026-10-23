@@ -26,6 +26,8 @@ import {
 } from '../util/why-rows.js';
 
 export const WS_DECISION_LOG = 'solar_energy_management/decision_log';
+/** After a failed read, wait this long before the next try. */
+export const WHY_RETRY_MS = 30000;
 
 class SEMWhyCard extends SEMLitBase {
     static get properties() {
@@ -47,7 +49,9 @@ class SEMWhyCard extends SEMLitBase {
         this._foldOpen = null;  // null = the view's default
         this._error = false;
         this._loading = false;
-        this._stamp = null;
+        this._stamp = null;        // the stamp the sensors show now
+        this._loadedStamp = undefined; // the stamp the last good read was for
+        this._failedAt = 0;
         this._boundViewMode = (e) => this._applyViewMode(
             e && e.detail && typeof e.detail.all === 'boolean' ? e.detail.all : getAllSettings());
     }
@@ -71,29 +75,45 @@ class SEMWhyCard extends SEMLitBase {
     set hass(hass) {
         super.hass = hass;
         // Read again only when the newest decision on the sensors moves.
-        const stamp = lastDecisionStamp(hass?.states, this._prefix || 'sensor.sem_');
-        if (stamp !== this._stamp) {
-            this._stamp = stamp;
-            this._load();
-        }
+        this._stamp = lastDecisionStamp(hass?.states, this._prefix || 'sensor.sem_');
+        this._maybeLoad();
     }
 
     get hass() { return this._hass; }
 
-    async _load() {
+    /**
+     * Load when the wanted stamp is not the one last read. One read at a
+     * time: a stamp that moves during a read is read right after it. A
+     * failed read waits WHY_RETRY_MS, then the next hass update tries again.
+     */
+    _maybeLoad(now = Date.now()) {
+        if (this._loading || !this._hass?.callWS) return;
+        if (this._stamp === this._loadedStamp) return;
+        if (this._failedAt && now - this._failedAt < WHY_RETRY_MS) return;
+        this._load(this._stamp);
+    }
+
+    async _load(forStamp = this._stamp) {
         if (this._loading || !this._hass?.callWS) return;
         this._loading = true;
+        let ok = false;
         try {
             const res = await this._hass.callWS({ type: WS_DECISION_LOG });
             this._records = Array.isArray(res?.records) ? res.records : [];
             this._error = false;
+            this._loadedStamp = forStamp;
+            this._failedAt = 0;
+            ok = true;
         } catch (_err) {
             if (this._records === null) this._records = [];
             this._error = true;
+            this._failedAt = Date.now();
         } finally {
             this._loading = false;
         }
         this.requestUpdate();
+        // the stamp moved while this read was out: read again now
+        if (ok && this._stamp !== this._loadedStamp) this._maybeLoad();
     }
 
     // ── The view: Everyday or All settings ──────────────────────────────

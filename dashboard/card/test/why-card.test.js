@@ -249,3 +249,53 @@ test('two chargers named only by id: the kind word plus the id', () => {
     const recs = [REC('c1', 'charger', { name: 'c1' }), REC('c2', 'charger', { name: 'c2' })];
     assert.deepEqual(rows.whyChips(recs, t).map((c) => c.name), ['Wallbox c1', 'Wallbox c2']);
 });
+
+// ── loading: one read at a time, none lost, a failure retried later ─────
+
+const stampStates = (time) => ({
+    'sensor.sem_charging_state': { state: 'x', attributes: { per_charger_last_decision: { c1: { time } } } },
+});
+const tick = () => new Promise((r) => setImmediate(r));
+
+test('a stamp that moves during a read is read right after it', async () => {
+    const c = card(null);
+    const pending = [];
+    const calls = [];
+    const base = { language: 'en', config: { time_zone: 'UTC' } };
+    const hassAt = (time) => ({ ...base, states: stampStates(time),
+        callWS: (msg) => { calls.push(msg); return new Promise((res) => pending.push(res)); } });
+    c.hass = hassAt('a');
+    assert.equal(calls.length, 1);
+    c.hass = hassAt('b');                    // moves while the first read is out
+    assert.equal(calls.length, 1);           // still one at a time
+    pending.shift()({ records: [] });
+    await tick();
+    assert.equal(calls.length, 2);           // the move was not lost
+    pending.shift()({ records: records() });
+    await tick();
+    assert.equal(c._records.length, 6);
+    c.hass = hassAt('b');                    // nothing new: no read
+    assert.equal(calls.length, 2);
+});
+
+test('a failed read is tried again on a later update, not before 30 s', async () => {
+    const c = card(null);
+    let calls = 0;
+    let fail = true;
+    const hass = { language: 'en', config: { time_zone: 'UTC' }, states: stampStates('a'),
+        callWS: async () => { calls += 1; if (fail) throw new Error('down'); return { records: records() }; } };
+    c.hass = hass;
+    await tick();
+    assert.equal(calls, 1);
+    assert.equal(c._error, true);
+    c.hass = { ...hass };                    // same stamp, right away: wait
+    await tick();
+    assert.equal(calls, 1);
+    c._failedAt -= 31000;                    // 30 s later
+    fail = false;
+    c.hass = { ...hass };
+    await tick();
+    assert.equal(calls, 2);
+    assert.equal(c._error, false);
+    assert.equal(c._records.length, 6);
+});

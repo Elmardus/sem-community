@@ -56,6 +56,7 @@ RESTING_VERBS = frozenset({"idle", "off", "normal", "release", "disable",
                            "stop_force_charge", "stop_force_discharge"})
 
 _TEXT_MAX = 120
+_NAME_MAX = 60
 _INPUT_KEYS = ("import_price", "export_rate", "price_level", "soc",
                "solar_w", "surplus_w", "target_kwh", "target_soc")
 
@@ -203,7 +204,7 @@ class DecisionLog:
                 text=str(text or "")[:_TEXT_MAX],
                 inputs=merged,
                 observer=bool(observer),
-                name=str(name or self._names.get(key) or device_id),
+                name=str(name or self._names.get(key) or device_id)[:_NAME_MAX],
             )
             self._records.append(rec)
             self._last_record[key] = rec

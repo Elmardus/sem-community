@@ -21,10 +21,13 @@ def _log_for(hass: HomeAssistant, entry_id: Optional[str]) -> Optional[DecisionL
     entries = hass.config_entries.async_entries(DOMAIN)
     if entry_id:
         entries = [e for e in entries if e.entry_id == entry_id]
-    entry = entries[0] if entries else None
-    coordinator = getattr(entry, "runtime_data", None) if entry else None
-    log = getattr(coordinator, "decision_log", None)
-    return log if isinstance(log, DecisionLog) else None
+    # the first entry that is loaded and has a log, not merely the first one
+    for entry in entries:
+        coordinator = getattr(entry, "runtime_data", None)
+        log = getattr(coordinator, "decision_log", None)
+        if isinstance(log, DecisionLog):
+            return log
+    return None
 
 
 @websocket_api.websocket_command({
