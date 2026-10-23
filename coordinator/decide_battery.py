@@ -232,8 +232,24 @@ def reserve_stops_peak_cover(view: "BatteryView"):
 #: (#1131) What a manual force charge charges to — and where it is done.
 MANUAL_CHARGE_TARGET_SOC = 100.0
 
+#: (#1164) Some inverters end a charge below 100 %: Huawei's end-of-charge
+#: level is set between 90 and 100 %. At or above this level a pack that
+#: takes no more is full for its own inverter. Below it a pack that takes
+#: nothing refuses for another reason (cold, grid charging off on the
+#: inverter, a write it ignored), and the job is not done.
+MANUAL_CHARGE_STALL_SOC = 90.0
+#: (#1164) "Takes no more": at most this many watts in or out…
+MANUAL_CHARGE_STALL_W = 100.0
+#: (#1164) …while SEM asks it for at least one charge step, for this long,
+#: and its level does not rise.
+MANUAL_CHARGE_STALL_S = 15 * 60.0
+#: (#1164) Two checks further apart than this (three of the slowest 60 s
+#: cycles) start the window again: what happened between them is unseen.
+MANUAL_CHARGE_STALL_GAP_S = 180.0
 
-def manual_mode_done(mode, soc, *, soc_read: bool, reserve: float) -> bool:
+
+def manual_mode_done(mode, soc, *, soc_read: bool, reserve: float,
+                     charge_stalled: bool = False) -> bool:
     """(#1131) Has a manual charge or sale finished its job?
 
     Force charge and force discharge are one job each, not a place to stay.
@@ -243,16 +259,58 @@ def manual_mode_done(mode, soc, *, soc_read: bool, reserve: float) -> bool:
     charge, at or under the reserve for a sale — the exact opposite of the
     test ``decide_battery`` sells on.
 
+    (#1164) A charge is also done when the pack has stopped taking it at
+    its inverter's own end-of-charge level (``charge_stalled``, from
+    :func:`charge_stall_step`): a pack that stops at 95 % never reaches 100.
+
     A level SEM cannot read finishes nothing: a held or never-read SOC is
     not the battery's level (#932, #875)."""
     if not soc_read or soc is None:
         return False
     m = str(mode or "auto").lower()
     if m == "force_charge":
-        return float(soc) >= MANUAL_CHARGE_TARGET_SOC
+        return float(soc) >= MANUAL_CHARGE_TARGET_SOC or bool(charge_stalled)
     if m == "force_discharge":
         return float(soc) <= float(reserve)
     return False
+
+
+def charge_stall_read(soc, power_w, *, soc_read: bool, power_read: bool,
+                      asked_w, sem_charging) -> bool:
+    """(#1164) Does this cycle show a pack that takes no more charge?
+
+    All of: the level and the pack's own power are readings; SEM's forced
+    charge landed and is not stopped (``sem_charging``, from
+    :func:`forced_ops`); SEM asked for at least one charge step
+    (``asked_w`` — a charge the grid limit cut to nothing asks for none);
+    the level is at or above ``MANUAL_CHARGE_STALL_SOC``; and the pack moves
+    no more than ``MANUAL_CHARGE_STALL_W`` either way. A pack that sends
+    power out is not full, it is not following the charge."""
+    if not (soc_read and power_read) or soc is None or power_w is None:
+        return False
+    return (sem_charging is True
+            and float(asked_w or 0.0) >= FORCED_CHARGE_STEP_W
+            and float(soc) >= MANUAL_CHARGE_STALL_SOC
+            and abs(float(power_w)) <= MANUAL_CHARGE_STALL_W)
+
+
+def charge_stall_step(prev, now_s: float, soc, stall_read: bool):
+    """(#1164) Carry one battery's stall window one cycle.
+
+    ``prev`` is ``None`` or ``(since_s, soc_at_start, last_s)``. Returns the
+    new window and whether it has lasted ``MANUAL_CHARGE_STALL_S``. Any
+    cycle without a stall read ends the window; a level above the one it
+    started at starts it again — the pack still charges, slowly — and so
+    does a gap over ``MANUAL_CHARGE_STALL_GAP_S`` since the last check."""
+    if not stall_read:
+        return None, False
+    now_s = float(now_s)
+    if (prev is None or float(soc) > float(prev[1])
+            or now_s - float(prev[2]) > MANUAL_CHARGE_STALL_GAP_S):
+        return (now_s, float(soc), now_s), False
+    since_s, start_soc = float(prev[0]), float(prev[1])
+    return ((since_s, start_soc, now_s),
+            now_s - since_s >= MANUAL_CHARGE_STALL_S)
 
 
 def peak_cover_floor_w(view: "BatteryView", limit_w: float, n: int) -> float:

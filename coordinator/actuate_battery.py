@@ -217,6 +217,11 @@ async def actuate_battery(
     # command at the point it really leaves (after the holds that send
     # nothing), with the watts it sends. Recording only.
     _log = log_of(controller)
+    # (#1164) What this battery was asked to charge at, as SENT: the FORCE_CHARGE
+    # branch below sets it once its command goes out. Every other path — a
+    # stop, a held stop after no room, observer, another intent — asks for
+    # none, so a pack SEM did not ask to charge is never read as full.
+    _set(adapter, "_sem_charge_asked_w", 0.0)
     if observer:
         _would_w = {
             BatteryIntent.FORCE_CHARGE: decision.charge_power_w,
@@ -325,6 +330,12 @@ async def actuate_battery(
         )
         _note_forced_op(adapter, "_sem_forced_charge", ret,
                         BatteryIntent.FORCE_CHARGE, True)
+        # (#1164 review) Asked only if it went out: a withheld setpoint
+        # (#978) or a failed start leaves ``last_error`` set.
+        if (getattr(adapter, "last_error", None) is None
+                and getattr(adapter, "last_intent", None)
+                is BatteryIntent.FORCE_CHARGE):
+            _set(adapter, "_sem_charge_asked_w", float(decision.charge_power_w))
         _LOGGER.debug(
             "actuate_battery(%s): FORCE_CHARGE target_soc=%.0f%% "
             "power=%.0f W duration=%dm — %s",

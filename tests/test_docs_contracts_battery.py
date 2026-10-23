@@ -162,6 +162,31 @@ class TestBatteryModeTable:
         assert not manual_mode_done("force_charge", 99.0, soc_read=True, reserve=20)
         assert manual_mode_done("force_charge", 100.0, soc_read=True, reserve=20)
 
+    def test_force_charge_goes_back_to_auto_when_the_pack_takes_no_more(self):
+        """USER_GUIDE.md, "Per-Battery Modes": "Force Charge | … Some inverters
+        stop the charge below 100 %: at 90 % or more, a battery that takes no
+        more charge for 15 minutes also goes back to Auto." (#1164)
+
+        The window and the write are pinned in
+        ``test_1164_force_charge_stall.py``."""
+        from custom_components.solar_energy_management.coordinator.decide_battery import (
+            MANUAL_CHARGE_STALL_S, MANUAL_CHARGE_STALL_SOC, charge_stall_read,
+            charge_stall_step,
+        )
+        assert MANUAL_CHARGE_STALL_SOC == 90.0
+        assert MANUAL_CHARGE_STALL_S == 15 * 60
+        read = dict(soc_read=True, power_read=True, asked_w=5000.0,
+                    sem_charging=True)
+        assert charge_stall_read(90.0, 0.0, **read)
+        assert not charge_stall_read(89.0, 0.0, **read)
+        window, stalled = None, False
+        for t in range(0, 15 * 60 + 1, 30):      # one check every 30 s
+            assert not stalled
+            window, stalled = charge_stall_step(window, float(t), 95.0, True)
+        assert stalled
+        assert manual_mode_done("force_charge", 95.0, soc_read=True, reserve=20,
+                                charge_stalled=stalled)
+
     def test_force_charge_buys_at_any_price(self):
         """USER_GUIDE.md, "Per-Battery Modes": "Force Charge | … **at any
         price**" and "It does not wait for a cheap hour: at night in an
