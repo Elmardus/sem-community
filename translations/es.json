@@ -266,7 +266,8 @@
           "import_vat_percent": "IVA",
           "feed_in_fee_model": "Cargo por vertido",
           "feed_in_fee": "Importe del cargo por vertido",
-          "feed_in_fee_tiers": "Tramos del cargo por vertido"
+          "feed_in_fee_tiers": "Tramos del cargo por vertido",
+          "export_value_threshold": "Detener exportación por debajo de"
         },
         "data_description": {
           "electricity_import_rate": "Tarifa de importación diurna/plana (moneda/kWh, IVA incluido). Se utiliza como alternativa cuando el precio dinámico no está disponible.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "IVA sobre el kWh comprado, en porcentaje.",
           "feed_in_fee_model": "Lo que cobra su proveedor por la energía que vierte a la red: por kWh, por tramos según los kWh del año, o un importe fijo al mes.",
           "feed_in_fee": "Por kWh: el cargo por kWh. Fijo al mes: el importe mensual.",
-          "feed_in_fee_tiers": "Solo para tramos. kWh vertidos este año : cargo por kWh, por ejemplo 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Solo para tramos. kWh vertidos este año : cargo por kWh, por ejemplo 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Si un kWh vendido vale menos, SEM detiene la exportación: la batería y las cargas toman el sol primero. 0 = solo por debajo de cero. Requiere el interruptor Guardia de exportación."
         }
       },
       "load_management": {
@@ -532,7 +534,10 @@
           "heat_pump_relay1_on_value": "Contacto 1 SG-Ready — valor ON",
           "heat_pump_relay1_off_value": "Contacto 1 SG-Ready — valor OFF",
           "heat_pump_relay2_on_value": "Contacto 2 SG-Ready — valor ON",
-          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF"
+          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF",
+          "heat_pump_tariff_rate": "Tarifa propia: precio fijo",
+          "heat_pump_tariff_entity": "Tarifa propia: entidad de precio",
+          "heat_pump_tariff_meter": "Tarifa propia: contador (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Entidad switch del relé 1 SG-Ready (señal de funcionamiento normal). Configúrela junto con el relé 2 para el protocolo SG-Ready.",
@@ -546,7 +551,10 @@
           "heat_pump_relay1_on_value": "Solo para un contacto text/number/select: el valor que SEM escribe para cerrar el contacto 1. Déjelo vacío para un switch.",
           "heat_pump_relay1_off_value": "Solo para un contacto text/number/select: el valor que SEM escribe para abrir el contacto 1. Déjelo vacío para un switch.",
           "heat_pump_relay2_on_value": "Solo para un contacto text/number/select: el valor que SEM escribe para cerrar el contacto 2. Déjelo vacío para un switch.",
-          "heat_pump_relay2_off_value": "Solo para un contacto text/number/select: el valor que SEM escribe para abrir el contacto 2. Déjelo vacío para un switch."
+          "heat_pump_relay2_off_value": "Solo para un contacto text/number/select: el valor que SEM escribe para abrir el contacto 2. Déjelo vacío para un switch.",
+          "heat_pump_tariff_rate": "Precio fijo del contador propio de la bomba de calor, p. ej. una tarifa para bomba de calor. 0 = tarifa de la casa.",
+          "heat_pump_tariff_entity": "Un sensor con el precio de la bomba de calor, si cambia. Las horas baratas siguen entonces este precio.",
+          "heat_pump_tariff_meter": "Opcional. El contador de kWh propio de la bomba de calor. Vacío = SEM estima su parte de red."
         }
       },
       "ev_charger_menu": {
@@ -706,7 +714,10 @@
           "heat_pump_relay1_on_value": "Contacto 1 SG-Ready — valor ON",
           "heat_pump_relay1_off_value": "Contacto 1 SG-Ready — valor OFF",
           "heat_pump_relay2_on_value": "Contacto 2 SG-Ready — valor ON",
-          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF"
+          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF",
+          "heat_pump_tariff_rate": "Tarifa propia: precio fijo",
+          "heat_pump_tariff_entity": "Tarifa propia: entidad de precio",
+          "heat_pump_tariff_meter": "Tarifa propia: contador (kWh)"
         }
       }
     },
@@ -1484,6 +1495,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Cargos por vertido este año"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} coste de tarifa hoy"
       }
     },
     "binary_sensor": {

@@ -26,6 +26,7 @@ from ..devices.base import ControllableDevice, DeviceState, DeviceControlMode
 from .plan_verdict import NO_OPINION, PlanVerdict
 
 from ..utils.log_gate import log_on_change
+from .device_tariff import device_price_level  # (#812)
 from .price_signal import is_cheap_name, is_expensive_name
 
 _LOGGER = logging.getLogger(__name__)
@@ -1275,6 +1276,10 @@ class SurplusController:
         # already hold this controller. Recording only; never restored.
         from .decision_log import DecisionLog
         self.decision_log = DecisionLog(hass)
+        # (#812) Each device's own tariff, when it has one. Stamped once per
+        # cycle in ``update``; a device without one reads the house level.
+        from .device_tariff import DeviceTariffs
+        self.device_tariffs = DeviceTariffs(hass)
         self.max_export_w: float = 0  # 0 = no limit. E.g., 10000 for 10kW export limit
         self._devices: Dict[str, ControllableDevice] = {}
         self._allocation_data = SurplusAllocationData()
@@ -1537,7 +1542,6 @@ class SurplusController:
         actuation (``reconcile_load`` applies them); the shared cycle context
         (``self._batt_*`` / ``self._tier1_budget_left``) is already stamped by
         ``update()``. This is what REPLACES the 7 imperative passes."""
-        price_is_cheap = is_cheap_name(price_level)
         soc_above = (self._batt_soc is not None
                      and self._batt_soc > self._batt_reserve_soc)
 
@@ -1566,7 +1570,10 @@ class SurplusController:
             tier1 = self._tier1_headroom_w(device)
             intent = compute_load_intent(
                 device, remaining_surplus_w=remaining, tier1_headroom_w=tier1,
-                price_is_cheap=price_is_cheap, peak_freeze=peak_freeze,
+                # (#812) the device's own tariff when it has one
+                price_is_cheap=is_cheap_name(
+                    device_price_level(device, price_level)),
+                peak_freeze=peak_freeze,
                 is_night=getattr(self, "_is_night_cycle", True),
                 # (#953) same cycle context as is_night — stamped by update()
                 daylight_remaining_s=getattr(
@@ -1709,6 +1716,9 @@ class SurplusController:
             d for d in self._devices.values()
             if getattr(d, "device_type", None) in (DeviceType.SWITCH, DeviceType.CLIMATE)
         ])
+        # (#812) A device with its own tariff gates on its own price level
+        # this cycle (``device_price_level``); the rest read ``price_level``.
+        self.device_tariffs.stamp(self._devices.values())
 
         # #508 W2 — peak posture. WARNING freezes new activation (don't add
         # load while the peak is climbing); SHEDDING/EMERGENCY additionally
@@ -1913,21 +1923,23 @@ class SurplusController:
                     # only blocks re-activation (class 17).
                     reason = ("cheap-hours top-up ended — today's daylight "
                               "can still finish the target")
-                elif not is_cheap_name(price_level):
+                elif not is_cheap_name(
+                        _lvl := device_price_level(device, price_level)):
                     # (#992/#994) Say which of three things happened. "tariff
                     # now flat" claims a transition that a flat tariff cannot
                     # make — it was flat when this top-up started — and
                     # "tariff now no_prices" blames the tariff for SEM losing
                     # the price feed. Class 99: a verdict naming a cause its
-                    # own scope refutes.
-                    if price_level == "flat":
+                    # own scope refutes. (#812) ``_lvl`` is the device's own
+                    # tariff when it has one.
+                    if _lvl == "flat":
                         reason = ("cheap-hours top-up ended — this tariff has "
                                   "no cheaper hours to wait for")
-                    elif price_level in ("no_prices", "", "unknown", None):
+                    elif _lvl in ("no_prices", "", "unknown", None):
                         reason = ("cheap-hours top-up ended — no prices left "
                                   "to compare")
                     else:
-                        reason = f"tariff now {price_level}"
+                        reason = f"tariff now {_lvl}"
             # (#620) Tier-2 overnight battery force expiry — its OWN terms: the
             # user turned the "Use battery overnight" toggle OFF, the Reserve
             # floor was crossed (battery must be protected), or the day rolled
@@ -2404,8 +2416,12 @@ class SurplusController:
                         device.name, consumed,
                     )
 
-        if is_cheap_name(price_level) and not peak_freeze:
+        if not peak_freeze:
             for device in devices:
+                # (#812) the device's own tariff when it has one; else the
+                # house level, exactly the old ``is_cheap_name(price_level)``
+                if not is_cheap_name(device_price_level(device, price_level)):
+                    continue
                 if device.control_mode != DeviceControlMode.SURPLUS:
                     continue
                 # (#559) solar_only devices NEVER grid-force — they accept

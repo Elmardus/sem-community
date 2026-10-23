@@ -266,7 +266,8 @@
           "import_vat_percent": "IVA",
           "feed_in_fee_model": "Costo di immissione",
           "feed_in_fee": "Importo costo di immissione",
-          "feed_in_fee_tiers": "Scaglioni costo di immissione"
+          "feed_in_fee_tiers": "Scaglioni costo di immissione",
+          "export_value_threshold": "Ferma l'esportazione sotto"
         },
         "data_description": {
           "electricity_import_rate": "Tariffa di importazione diurna/fissa (valuta/kWh, IVA inclusa). Usata come ripiego quando il prezzo dinamico non è disponibile.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "IVA sul kWh acquistato, in percentuale.",
           "feed_in_fee_model": "Quanto chiede il fornitore per l'energia immessa in rete: per kWh, a scaglioni secondo i kWh dell'anno, o un importo fisso al mese.",
           "feed_in_fee": "Per kWh: il costo per kWh. Fisso al mese: l'importo mensile.",
-          "feed_in_fee_tiers": "Solo per scaglioni. kWh immessi quest'anno : costo per kWh, ad esempio 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Solo per scaglioni. kWh immessi quest'anno : costo per kWh, ad esempio 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Se un kWh venduto vale meno, SEM ferma l'esportazione: batteria e carichi prendono prima il sole. 0 = solo sotto zero. Richiede l'interruttore Guardia dell'esportazione."
         }
       },
       "load_management": {
@@ -532,7 +534,10 @@
           "heat_pump_relay1_on_value": "Contatto 1 SG-Ready — valore ON",
           "heat_pump_relay1_off_value": "Contatto 1 SG-Ready — valore OFF",
           "heat_pump_relay2_on_value": "Contatto 2 SG-Ready — valore ON",
-          "heat_pump_relay2_off_value": "Contatto 2 SG-Ready — valore OFF"
+          "heat_pump_relay2_off_value": "Contatto 2 SG-Ready — valore OFF",
+          "heat_pump_tariff_rate": "Tariffa propria: prezzo fisso",
+          "heat_pump_tariff_entity": "Tariffa propria: entità prezzo",
+          "heat_pump_tariff_meter": "Tariffa propria: contatore (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Entità switch del relè 1 SG-Ready (segnale di funzionamento normale). Impostala insieme al relè 2 per il protocollo SG-Ready.",
@@ -546,7 +551,10 @@
           "heat_pump_relay1_on_value": "Solo per un contatto testo/numero/selettore: il valore che SEM scrive per chiudere il contatto 1. Lascia vuoto per un interruttore.",
           "heat_pump_relay1_off_value": "Solo per un contatto testo/numero/selettore: il valore che SEM scrive per aprire il contatto 1. Lascia vuoto per un interruttore.",
           "heat_pump_relay2_on_value": "Solo per un contatto testo/numero/selettore: il valore che SEM scrive per chiudere il contatto 2. Lascia vuoto per un interruttore.",
-          "heat_pump_relay2_off_value": "Solo per un contatto testo/numero/selettore: il valore che SEM scrive per aprire il contatto 2. Lascia vuoto per un interruttore."
+          "heat_pump_relay2_off_value": "Solo per un contatto testo/numero/selettore: il valore che SEM scrive per aprire il contatto 2. Lascia vuoto per un interruttore.",
+          "heat_pump_tariff_rate": "Prezzo fisso del contatore proprio della pompa di calore, es. una tariffa pompa di calore. 0 = tariffa della casa.",
+          "heat_pump_tariff_entity": "Un sensore con il prezzo della pompa di calore, se cambia. Le ore economiche seguono allora questo prezzo.",
+          "heat_pump_tariff_meter": "Facoltativo. Il contatore kWh proprio della pompa di calore. Vuoto = SEM stima la sua quota di rete."
         }
       },
       "ev_charger_menu": {
@@ -706,7 +714,10 @@
           "heat_pump_relay1_on_value": "Contatto 1 SG-Ready — valore ON",
           "heat_pump_relay1_off_value": "Contatto 1 SG-Ready — valore OFF",
           "heat_pump_relay2_on_value": "Contatto 2 SG-Ready — valore ON",
-          "heat_pump_relay2_off_value": "Contatto 2 SG-Ready — valore OFF"
+          "heat_pump_relay2_off_value": "Contatto 2 SG-Ready — valore OFF",
+          "heat_pump_tariff_rate": "Tariffa propria: prezzo fisso",
+          "heat_pump_tariff_entity": "Tariffa propria: entità prezzo",
+          "heat_pump_tariff_meter": "Tariffa propria: contatore (kWh)"
         }
       }
     },
@@ -1484,6 +1495,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Costi di immissione quest'anno"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} costo tariffa oggi"
       }
     },
     "binary_sensor": {

@@ -266,7 +266,8 @@
           "import_vat_percent": "IVA",
           "feed_in_fee_model": "Taxa de injeção",
           "feed_in_fee": "Valor da taxa de injeção",
-          "feed_in_fee_tiers": "Escalões da taxa de injeção"
+          "feed_in_fee_tiers": "Escalões da taxa de injeção",
+          "export_value_threshold": "Parar exportação abaixo de"
         },
         "data_description": {
           "electricity_import_rate": "Taxa de importação diurna/simples (moeda/kWh, com IVA). Usada como recurso quando o preço dinâmico não está disponível.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "IVA sobre o kWh comprado, em percentagem.",
           "feed_in_fee_model": "O que o fornecedor cobra pela energia injetada na rede: por kWh, por escalões segundo os kWh do ano, ou um valor fixo por mês.",
           "feed_in_fee": "Por kWh: a taxa por kWh. Fixo por mês: o valor mensal.",
-          "feed_in_fee_tiers": "Só para escalões. kWh injetados este ano : taxa por kWh, por exemplo 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Só para escalões. kWh injetados este ano : taxa por kWh, por exemplo 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Se um kWh vendido vale menos, o SEM para a exportação: a bateria e as cargas ficam primeiro com o sol. 0 = só abaixo de zero. Requer o interruptor Guarda de exportação."
         }
       },
       "load_management": {
@@ -532,7 +534,10 @@
           "heat_pump_relay1_on_value": "Contacto 1 SG-Ready — valor ON",
           "heat_pump_relay1_off_value": "Contacto 1 SG-Ready — valor OFF",
           "heat_pump_relay2_on_value": "Contacto 2 SG-Ready — valor ON",
-          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF"
+          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF",
+          "heat_pump_tariff_rate": "Tarifa própria: preço fixo",
+          "heat_pump_tariff_entity": "Tarifa própria: entidade de preço",
+          "heat_pump_tariff_meter": "Tarifa própria: contador (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Entidade switch do relé 1 SG-Ready (sinal de funcionamento normal). Defina em conjunto com o relé 2 para o protocolo SG-Ready.",
@@ -546,7 +551,10 @@
           "heat_pump_relay1_on_value": "Só para um contacto text/number/select: o valor que o SEM escreve para fechar o contacto 1. Deixe vazio para um switch.",
           "heat_pump_relay1_off_value": "Só para um contacto text/number/select: o valor que o SEM escreve para abrir o contacto 1. Deixe vazio para um switch.",
           "heat_pump_relay2_on_value": "Só para um contacto text/number/select: o valor que o SEM escreve para fechar o contacto 2. Deixe vazio para um switch.",
-          "heat_pump_relay2_off_value": "Só para um contacto text/number/select: o valor que o SEM escreve para abrir o contacto 2. Deixe vazio para um switch."
+          "heat_pump_relay2_off_value": "Só para um contacto text/number/select: o valor que o SEM escreve para abrir o contacto 2. Deixe vazio para um switch.",
+          "heat_pump_tariff_rate": "Preço fixo do contador próprio da bomba de calor, p. ex. uma tarifa de bomba de calor. 0 = tarifa da casa.",
+          "heat_pump_tariff_entity": "Um sensor com o preço da bomba de calor, se mudar. As horas baratas seguem então este preço.",
+          "heat_pump_tariff_meter": "Opcional. O contador de kWh próprio da bomba de calor. Vazio = o SEM estima a sua parte da rede."
         }
       },
       "ev_charger_menu": {
@@ -706,7 +714,10 @@
           "heat_pump_relay1_on_value": "Contacto 1 SG-Ready — valor ON",
           "heat_pump_relay1_off_value": "Contacto 1 SG-Ready — valor OFF",
           "heat_pump_relay2_on_value": "Contacto 2 SG-Ready — valor ON",
-          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF"
+          "heat_pump_relay2_off_value": "Contacto 2 SG-Ready — valor OFF",
+          "heat_pump_tariff_rate": "Tarifa própria: preço fixo",
+          "heat_pump_tariff_entity": "Tarifa própria: entidade de preço",
+          "heat_pump_tariff_meter": "Tarifa própria: contador (kWh)"
         }
       }
     },
@@ -1484,6 +1495,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Taxas de injeção este ano"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} custo da tarifa hoje"
       }
     },
     "binary_sensor": {

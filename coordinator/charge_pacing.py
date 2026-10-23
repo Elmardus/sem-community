@@ -73,7 +73,8 @@ class PacingDecision:
     """ISO time the paced fill is predicted to reach target (diagnostic)."""
     code: str = "idle"
     """Stable token for the card (buffer/trust/weak_day/paced/clip/none/
-    target/soc_unknown). Cards render the token; the prose is a tooltip."""
+    target/soc_unknown/closed_meter). Cards render the token; the prose is
+    a tooltip. ``closed_meter`` (#1090): the grid is closed, no cap."""
     need_kwh: Optional[float] = None
     """(#820 diag) kWh the pack still needs to reach the target."""
     fill_kwh: Optional[float] = None

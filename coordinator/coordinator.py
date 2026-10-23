@@ -652,6 +652,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             calc = getattr(self, "_energy_calculator", None)
             inputs["import_price"] = getattr(calc, "_import_rate", None)
             inputs["export_rate"] = getattr(calc, "_export_rate", None)
+            # (#812) the house rate is the noise floor a device's own price
+            # curve is classified against (``DeviceTariffs.provider_for``)
+            _dt = getattr(self._surplus_controller, "device_tariffs", None)
+            if _dt is not None:
+                _dt.house_rate = inputs["import_price"]
             provider = getattr(self, "_tariff_provider", None)
             if provider is not None and getattr(provider, "available", True):
                 from .price_signal import comparative_level
@@ -3934,6 +3939,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # ``calculate_energy`` now uses ``power_flows.solar_to_home
             # + solar_to_ev`` directly instead of the legacy
             # subtraction heuristic. See the note inside the function.
+            # (#812) devices on their own tariff take their share of this
+            # cycle's import in the same booking
+            try:
+                self._stage_device_tariffs()
+            except Exception:  # noqa: BLE001 — the books never cost a cycle
+                _LOGGER.debug("device tariff staging skipped", exc_info=True)
             energy = self._energy_calculator.calculate_energy(power, power_flows)
 
             # Step 2c: Time-integrate the per-cycle flows into daily
@@ -5395,6 +5406,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # home-hold state lives, so a known-incoherent cycle ships the
             # last coherent set instead of a fresh/substituted chimera.
             result["power_snapshot"] = self._build_power_snapshot(power)
+            # (#812) devices on their own tariff: book this cycle's grid
+            # kWh at that tariff and publish today's cost per device.
+            try:
+                result.update(self._device_tariff_books())
+            except Exception:  # noqa: BLE001 — the books never cost a cycle
+                _LOGGER.debug("device tariff books skipped", exc_info=True)
             # 3a — core snapshot complete (power/flows/energy/battery/EV/
             # charging). Everything below is enrichment; a throw past this
             # point degrades to core data (see the except handler), it does
@@ -8377,6 +8394,21 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         fallback = self._configured_export_rate()
         return lambda ts: tariff_export_rate_at(prov, ts, fallback)
 
+    def _export_value_threshold(self) -> float:
+        """(#1090) Below this export value a kWh is not worth sending out.
+        Read from the config every cycle, so a change applies live."""
+        from ..tariff.value_layer import export_value_threshold
+        return export_value_threshold(self.config)
+
+    def _active_export_threshold(self) -> "Optional[float]":
+        """(#1090) The export threshold while the value rules are in force,
+        else None — the consumer then keeps its pre-#1090 behaviour."""
+        from ..tariff.value_layer import value_rules_active
+        threshold = self._export_value_threshold()
+        _vs = getattr(getattr(self, "_tariff_provider", None),
+                      "value_settings", None)
+        return threshold if value_rules_active(_vs, threshold) else None
+
     def _daylight_remaining_s_now(self) -> "Optional[float]":
         """(#953) Seconds of daylight left today, or None if we cannot tell.
 
@@ -8943,6 +8975,20 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             self._pacing_full_latched = decision.cap_w is not None and (
                 decision.cap_w >= float(self.config.get(
                     "battery_max_charge_power_w", 5000.0) or 5000.0) - 0.5)
+            # (#1090) While the meter is closed, a kWh the pack is paced away
+            # from is a kWh the export guard clips. The pack takes the sun
+            # first: no cap for as long as the verdict stands. The latches
+            # above are left alone, so the pace resumes where it was.
+            # Only while the value rules are in force (``value_rules_active``):
+            # the old negative-PRICE close keeps the pace it always had.
+            _gv = (getattr(self, "_sink_verdicts", None) or {}).get("grid_export")
+            if (getattr(_gv, "state", "open") == "closed"
+                    and self._active_export_threshold() is not None):
+                from .charge_pacing import PacingDecision
+                decision = PacingDecision(
+                    None, "export closed — the pack takes the sun first",
+                    code="closed_meter", need_kwh=decision.need_kwh,
+                    fill_kwh=decision.fill_kwh)
         cap = decision.cap_w if (decision and enabled) else None
         code = (decision.code if decision else
                 ("night" if not ledger else
@@ -9208,6 +9254,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     # battery is in allow_arbitrage mode (#523); decide_battery
                     # gates per battery which units actually sell.
                     enabled_override=_any_allow_arb,
+                    # (#1090) None while the value rules are off: the
+                    # arbitrage floor alone decides, as before
+                    export_threshold=self._active_export_threshold(),
                 )
                 if _arb.state.value == "discharging_arbitrage":
                     scheduler_decision = _arb
@@ -9297,6 +9346,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     reserve_pct=float(self.config.get(
                         "battery_reserve_soc", 20.0) or 20.0),
                     export_rate=_xr, export_rate_known=_xr_known,
+                    # (#1090) None while the value rules are off
+                    export_threshold=self._active_export_threshold(),
                 )
                 if _fs.state.value == "discharging_arbitrage":
                     scheduler_decision = _fs
@@ -11457,6 +11508,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 ))
             # Load min-runtime deficits eligible for a night source.
             controller = getattr(self, "_surplus_controller", None)
+            # (#812) a device on its own tariff is planned on it (one reader:
+            # the same ``DeviceTariffs`` the live gate stamps from)
+            _dtariffs = getattr(controller, "device_tariffs", None)
+            _plan_tariff = ((lambda d: _dtariffs.plan_tariff(d)) if _dtariffs is not None
+                            else (lambda d: None))
             loads_seen = 0
             loads_eligible = 0
             from ..devices.base import DeviceControlMode as _DCM
@@ -11554,6 +11610,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                         # (#688) the plan quantizes to the anti-cycle window.
                         min_run_s=int(getattr(dev, "min_on_seconds", 0) or 0),
                         min_gap_s=int(getattr(dev, "min_off_seconds", 0) or 0),
+                        # (#812) its own tariff, when it has one — the
+                        # reader the live gate uses
+                        tariff=_plan_tariff(dev),
                     ))
                 except Exception:  # noqa: BLE001 — one bad device won't kill the plan
                     continue
@@ -11589,6 +11648,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                         needs_cheap_level=True,
                         min_run_s=int(getattr(dev, "min_on_seconds", 0) or 0),
                         min_gap_s=int(getattr(dev, "min_off_seconds", 0) or 0),
+                        tariff=_plan_tariff(dev),     # (#812)
                     ))
                 except Exception:  # noqa: BLE001 — one bad band won't kill the plan
                     continue
@@ -13470,10 +13530,19 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     if _prov is not None else None)
         except Exception:  # noqa: BLE001
             _ups = None
+        # (#1090) the threshold, and the value per slot once there is a value
+        # to read; with neither, the closed window follows the level as before
+        # — one gate for every export-value behaviour (``value_rules_active``)
+        from ..tariff.value_layer import DEFAULT_EXPORT_VALUE_THRESHOLD
+        _x_active = self._active_export_threshold()
+        _x_thr = (DEFAULT_EXPORT_VALUE_THRESHOLD if _x_active is None
+                  else _x_active)
+        _x_at = None if _x_active is None else self._export_rate_at()
         try:
             _verdicts = sink_verdicts(
                 now=dt_util.now(), tariff_level=tariff_level, upcoming=_ups,
                 export_rate=_xr, export_rate_known=_xr_known,
+                export_threshold=_x_thr, export_at=_x_at,
                 export_guard_enabled=bool(self.config.get("export_guard_enabled", False)),
                 house_sink_enabled=bool(self.config.get("battery_house_sink_enabled", False)),
                 morning_window_enabled=bool(self.config.get("ev_morning_window_enabled", False)),
@@ -15948,6 +16017,55 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 estimated=not getattr(
                     device, "daily_energy_is_measured", False),
             )
+
+    def _stage_device_tariffs(self) -> None:
+        """(#812) Hand the calculator this cycle's own-tariff devices — their
+        draw, their accepted meter step and their price — before it books
+        the cycle's import. A device whose own price cannot be read (and has
+        no fixed rate) is priced at the house rate, and that is said once."""
+        calc = getattr(self, "_energy_calculator", None)
+        tariffs = getattr(self._surplus_controller, "device_tariffs", None)
+        if calc is None or tariffs is None:
+            return
+        devices = list(self._surplus_controller._devices.values())
+        entries = tariffs.cycle(devices, calc.device_meter_last, dt_util.now())
+        names = {d.device_id: getattr(d, "name", d.device_id) for d in devices}
+        for e in entries:
+            log_on_change(
+                _LOGGER, f"device_tariff_fallback:{e.device_id}",
+                logging.INFO if e.price is None else logging.DEBUG,
+                "%s: own price %s (#812)", names.get(e.device_id),
+                "unreadable — its grid kWh are priced at the house rate"
+                if e.price is None else "readable")
+        calc.set_device_tariff_cycle(entries)
+
+    def _device_tariff_books(self) -> Dict[str, Any]:
+        """(#812) Today's grid kWh and cost per own-tariff device, for its
+        cost sensor; nothing for a device without its own tariff."""
+        from .device_tariff import tariff_of
+        calc = getattr(self, "_energy_calculator", None)
+        tariffs = getattr(self._surplus_controller, "device_tariffs", None)
+        if calc is None or tariffs is None:
+            return {}
+        # the day the calculator booked this cycle under — not a clock here
+        day = getattr(calc, "booking_day", None)
+        if day is None:
+            return {}
+        out: Dict[str, Any] = {}
+        for device in list(self._surplus_controller._devices.values()):
+            if not tariff_of(device).configured:
+                continue
+            did = device.device_id
+            price = tariffs.price_now(device)
+            books = calc.get_device_tariff(did, day)
+            out[f"daily_tariff_cost_{did}"] = books["daily_cost"]
+            out[f"daily_tariff_grid_kwh_{did}"] = books["daily_grid_kwh"]
+            out[f"tariff_price_{did}"] = (
+                price if price is not None
+                else float(getattr(calc, "_import_rate", 0.0) or 0.0))
+            out[f"tariff_price_source_{did}"] = "own" if price is not None else "house"
+            out[f"tariff_level_{did}"] = getattr(device, "_tariff_level", None)
+        return out
 
     def _comfort_split_for(self, device, now):
         """(#772) The comfort bucket for this cycle's kWh, or None.

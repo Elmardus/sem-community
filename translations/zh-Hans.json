@@ -266,7 +266,8 @@
           "import_vat_percent": "增值税",
           "feed_in_fee_model": "上网费用",
           "feed_in_fee": "上网费用金额",
-          "feed_in_fee_tiers": "上网费用阶梯"
+          "feed_in_fee_tiers": "上网费用阶梯",
+          "export_value_threshold": "低于此值停止出口"
         },
         "data_description": {
           "tariff_mode": "选择“静态”代表固定费率，“动态”代表实时计价，或选择“日历”代表分时电价计划。",
@@ -293,7 +294,8 @@
           "import_vat_percent": "购电的增值税，百分比。",
           "feed_in_fee_model": "供应商对送入电网的电收取的费用：按度、按今年送出度数分阶梯，或每月固定金额。",
           "feed_in_fee": "按度：每度费用。每月固定：每月金额。",
-          "feed_in_fee_tiers": "仅用于阶梯。今年送出度数 : 每度费用，例如 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "仅用于阶梯。今年送出度数 : 每度费用，例如 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "售出每 kWh 的价值低于此值时，SEM 停止出口：电池和负载优先使用太阳能。0 = 仅低于零时。需要开启“出口守护”开关。"
         }
       },
       "load_management": {
@@ -532,7 +534,10 @@
           "heat_pump_relay1_on_value": "SG-Ready 触点 1 — 开启值",
           "heat_pump_relay1_off_value": "SG-Ready 触点 1 — 关闭值",
           "heat_pump_relay2_on_value": "SG-Ready 触点 2 — 开启值",
-          "heat_pump_relay2_off_value": "SG-Ready 触点 2 — 关闭值"
+          "heat_pump_relay2_off_value": "SG-Ready 触点 2 — 关闭值",
+          "heat_pump_tariff_rate": "独立电价：固定单价",
+          "heat_pump_tariff_entity": "独立电价：电价实体",
+          "heat_pump_tariff_meter": "独立电价：电表 (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "SG-Ready 继电器 1（正常运行信号）的 switch 实体。需与继电器 2 一同设置才能使用 SG-Ready 协议。",
@@ -546,7 +551,10 @@
           "heat_pump_relay1_on_value": "仅适用于文本/数字/选择器触点：SEM 用于闭合触点 1 所写入的值。若为开关实体，请留空。",
           "heat_pump_relay1_off_value": "仅适用于文本/数字/选择器触点：SEM 用于断开触点 1 所写入的值。若为开关实体，请留空。",
           "heat_pump_relay2_on_value": "仅适用于文本/数字/选择器触点：SEM 用于闭合触点 2 所写入的值。若为开关实体，请留空。",
-          "heat_pump_relay2_off_value": "仅适用于文本/数字/选择器触点：SEM 用于断开触点 2 所写入的值。若为开关实体，请留空。"
+          "heat_pump_relay2_off_value": "仅适用于文本/数字/选择器触点：SEM 用于断开触点 2 所写入的值。若为开关实体，请留空。",
+          "heat_pump_tariff_rate": "热泵独立电表的固定电价，例如热泵专用电价。0 = 家庭电价。",
+          "heat_pump_tariff_entity": "包含热泵电价的传感器（电价变化时使用）。低价时段将按此电价判断。",
+          "heat_pump_tariff_meter": "可选。热泵独立电表的 kWh 计数器。留空 = SEM 估算其电网用电份额。"
         }
       },
       "ev_charger_menu": {
@@ -706,7 +714,10 @@
           "heat_pump_relay1_on_value": "SG-Ready 触点 1 — 开启值",
           "heat_pump_relay1_off_value": "SG-Ready 触点 1 — 关闭值",
           "heat_pump_relay2_on_value": "SG-Ready 触点 2 — 开启值",
-          "heat_pump_relay2_off_value": "SG-Ready 触点 2 — 关闭值"
+          "heat_pump_relay2_off_value": "SG-Ready 触点 2 — 关闭值",
+          "heat_pump_tariff_rate": "独立电价：固定单价",
+          "heat_pump_tariff_entity": "独立电价：电价实体",
+          "heat_pump_tariff_meter": "独立电价：电表 (kWh)"
         }
       }
     },
@@ -1484,6 +1495,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "今年上网费用"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} 今日电价费用"
       }
     },
     "binary_sensor": {

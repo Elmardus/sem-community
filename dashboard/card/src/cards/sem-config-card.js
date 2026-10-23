@@ -315,6 +315,9 @@ const STRUCTURAL_KEYS = new Set([
     'heat_pump_relay2_on_value', 'heat_pump_relay2_off_value',
     'heat_pump_climate_entity', 'heat_pump_power_sensor',
     'heat_pump_temperature_sensor', 'heat_pump_invert_sg_ready',
+    // (#812) the own tariff of the heat pump: read at controller
+    // construction, and it decides whether its cost sensor exists.
+    'heat_pump_tariff_rate', 'heat_pump_tariff_entity', 'heat_pump_tariff_meter',
     'hot_water_entity', 'hot_water_power_sensor', 'hot_water_temperature_sensor',
     'battery_force_discharge_control_entity', 'battery_strategy_control_entity',
     'battery_discharge_control_entity',  // #528 — discharge-limit (protection) entity
@@ -1540,6 +1543,8 @@ class SEMConfigCard extends SEMLitBase {
         const model = this._stagedVal('opt:feed_in_fee_model',
             opts.feed_in_fee_model ?? 'none');
         const feeUnit = model === 'fixed_monthly' ? `${currency}/Mt` : `${currency}/kWh`;
+        // (#1090) the export threshold: below this value SEM stops exporting
+        const feeUnitKwh = `${currency}/kWh`;
         // (#1077) An all-in price already holds markup, tax and VAT: those
         // rows are greyed out with a one-line hint, and set_option refuses
         // a positive amount beside an all-in basis.
@@ -1569,6 +1574,8 @@ class SEMConfigCard extends SEMLitBase {
                 ? this._renderOptionTextInput('feed_in_fee_tiers', 'config_feed_in_fee_tiers',
                     opts, 'config_help_feed_in_fee_tiers', '0:0, 1000:0.02, 3000:0.05')
                 : nothing}
+            ${this._renderOptionNumberInput('export_value_threshold', 'config_export_value_threshold',
+                { min: -10000, max: 10000, step: 0.0001, unit: feeUnitKwh, default: 0 }, opts, 'config_help_export_value_threshold')}
         `;
     }
 
@@ -1724,6 +1731,8 @@ class SEMConfigCard extends SEMLitBase {
     _renderHeatPump(T) {
         const registered = this._bin('heat_pump_registered');
         const opts = this._options || {};
+        // (#812) the unit of the pump's own rate
+        const rateUnit = (this._hass?.config?.currency || 'EUR') + '/kWh';
         // Live-status block — only when SEM has the heat pump registered
         const statusBlock = registered ? html`
             <div class="hp-status">
@@ -1797,6 +1806,15 @@ class SEMConfigCard extends SEMLitBase {
                         { min: 0, max: 10, step: 0.5, unit: '°C', default: 2.0 }, opts, 'config_help_hp_boost_offset')}
                 ${this._renderOptionSlider('heat_pump_max_setpoint', 'config_hp_max_setpoint',
                     { min: 30, max: 80, step: 1, unit: '°C', default: 55 }, opts, 'config_help_hp_max_setpoint')}
+                ${/* (#812) The pump's own tariff: a fixed rate or a price
+                      entity, and its own meter. Empty = the house tariff. */ ''}
+                ${this._renderOptionNumberInput('heat_pump_tariff_rate', 'device_tariff_rate',
+                    { min: 0, max: 10000, step: 0.001, unit: rateUnit, default: 0 },
+                    opts, 'config_help_hp_tariff_rate')}
+                ${this._renderPicker('heat_pump_tariff_entity', 'device_tariff_entity',
+                    ['sensor', 'input_number'], null, opts, 'config_help_hp_tariff_entity')}
+                ${this._renderPicker('heat_pump_tariff_meter', 'device_tariff_meter', 'sensor',
+                    'energy', opts, 'config_help_hp_tariff_meter')}
                 ${/* #602/#576 — heat_pump_priority slider retired: the heat pump
                       is a draggable row in the device-priority list now, so its
                       position IS its priority (single axis, no parallel knob). */ ''}

@@ -55,6 +55,8 @@ def _double(spend_on: bool):
         _compute_arbitrage_signals=lambda *a, **kw: None,
         _maybe_run_scheduler_evaluation=_no_sched,
         _per_battery_config=lambda *a, **kw: {},
+        # (#1090) the one export-value gate the pipeline now reads; off
+        _active_export_threshold=lambda: None,
     )
     return fake
 

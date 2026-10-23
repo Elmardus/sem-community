@@ -115,11 +115,16 @@ def _runtime_translation_keys():
     # resolves locally and ModuleNotFoundErrors in CI (the #671 lesson).
     from .test_677_per_charger_names import per_charger_translation_keys
 
-    return {
+    keys = {
         (domain, key)
         for domain, names in per_charger_translation_keys().items()
         for key in names
     }
+    # (#812) the per-device tariff cost sensor: its key carries the device
+    # id, its translation key is set beside it — read off the source.
+    keys |= {("sensor", k) for k in re.findall(
+        r'translation_key="(per_device_[a-z_0-9]+)"', open(_path("sensor.py")).read())}
+    return keys
 
 
 def test_no_orphaned_translations():

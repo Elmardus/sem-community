@@ -212,6 +212,16 @@ class ControllableDevice(ABC):
     to each device that meets its minimum threshold.
     """
 
+    # (#812) The device's own tariff — none set = the house tariff. Set by
+    # ``coordinator.device_tariff.apply_tariff`` (heat pump config row, or a
+    # device goal); ``_tariff_level`` / ``tariff_inputs`` are stamped each
+    # cycle by ``DeviceTariffs.stamp``.
+    tariff_rate: float = 0.0
+    tariff_entity: str = ""
+    tariff_meter: str = ""
+    _tariff_level: Optional[str] = None
+    tariff_inputs: Optional[Dict[str, Any]] = None
+
     @property
     def control_mode(self) -> DeviceControlMode:
         """What SEM may do with this device NOW (#49): the scheduled mode

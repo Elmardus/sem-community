@@ -266,7 +266,8 @@
           "import_vat_percent": "VAT",
           "feed_in_fee_model": "Opłata za oddawanie energii",
           "feed_in_fee": "Wysokość opłaty",
-          "feed_in_fee_tiers": "Progi opłaty"
+          "feed_in_fee_tiers": "Progi opłaty",
+          "export_value_threshold": "Zatrzymaj eksport poniżej"
         },
         "data_description": {
           "electricity_import_rate": "Dzienna/jednostrefowa stawka importu (waluta/kWh z VAT). Używana zapasowo, gdy ceny dynamiczne są niedostępne.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "VAT od kupionej kWh, w procentach.",
           "feed_in_fee_model": "Ile sprzedawca pobiera za energię oddaną do sieci: za kWh, progowo według kWh w tym roku, lub stała kwota miesięcznie.",
           "feed_in_fee": "Za kWh: opłata za kWh. Stała miesięcznie: kwota na miesiąc.",
-          "feed_in_fee_tiers": "Tylko dla progów. kWh oddane w tym roku : opłata za kWh, na przykład 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Tylko dla progów. kWh oddane w tym roku : opłata za kWh, na przykład 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Gdy sprzedana kWh jest warta mniej, SEM zatrzymuje eksport: bateria i odbiorniki biorą słońce najpierw. 0 = tylko poniżej zera. Wymaga przełącznika Strażnik eksportu."
         }
       },
       "load_management": {
@@ -532,7 +534,10 @@
           "heat_pump_relay1_on_value": "Styk 1 SG-Ready — wartość ZAŁ",
           "heat_pump_relay1_off_value": "Styk 1 SG-Ready — wartość WYŁ",
           "heat_pump_relay2_on_value": "Styk 2 SG-Ready — wartość ZAŁ",
-          "heat_pump_relay2_off_value": "Styk 2 SG-Ready — wartość WYŁ"
+          "heat_pump_relay2_off_value": "Styk 2 SG-Ready — wartość WYŁ",
+          "heat_pump_tariff_rate": "Własna taryfa: stała cena",
+          "heat_pump_tariff_entity": "Własna taryfa: encja ceny",
+          "heat_pump_tariff_meter": "Własna taryfa: licznik (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Encja switch przekaźnika SG-Ready 1 (sygnał normalnej pracy). Ustaw razem z przekaźnikiem 2, aby używać protokołu SG-Ready.",
@@ -546,7 +551,10 @@
           "heat_pump_relay1_on_value": "Tylko dla styku typu text/number/select: wartość, którą SEM zapisuje, aby zamknąć styk 1. Zostaw puste dla switcha.",
           "heat_pump_relay1_off_value": "Tylko dla styku typu text/number/select: wartość, którą SEM zapisuje, aby otworzyć styk 1. Zostaw puste dla switcha.",
           "heat_pump_relay2_on_value": "Tylko dla styku typu text/number/select: wartość, którą SEM zapisuje, aby zamknąć styk 2. Zostaw puste dla switcha.",
-          "heat_pump_relay2_off_value": "Tylko dla styku typu text/number/select: wartość, którą SEM zapisuje, aby otworzyć styk 2. Zostaw puste dla switcha."
+          "heat_pump_relay2_off_value": "Tylko dla styku typu text/number/select: wartość, którą SEM zapisuje, aby otworzyć styk 2. Zostaw puste dla switcha.",
+          "heat_pump_tariff_rate": "Stała cena dla własnego licznika pompy ciepła, np. taryfa dla pompy ciepła. 0 = taryfa domu.",
+          "heat_pump_tariff_entity": "Czujnik z ceną pompy ciepła, jeśli się zmienia. Tanie godziny podążają wtedy za tą ceną.",
+          "heat_pump_tariff_meter": "Opcjonalnie. Licznik kWh własnego licznika pompy ciepła. Puste = SEM szacuje jej udział z sieci."
         }
       },
       "ev_charger_menu": {
@@ -706,7 +714,10 @@
           "heat_pump_relay1_on_value": "Styk 1 SG-Ready — wartość ZAŁ",
           "heat_pump_relay1_off_value": "Styk 1 SG-Ready — wartość WYŁ",
           "heat_pump_relay2_on_value": "Styk 2 SG-Ready — wartość ZAŁ",
-          "heat_pump_relay2_off_value": "Styk 2 SG-Ready — wartość WYŁ"
+          "heat_pump_relay2_off_value": "Styk 2 SG-Ready — wartość WYŁ",
+          "heat_pump_tariff_rate": "Własna taryfa: stała cena",
+          "heat_pump_tariff_entity": "Własna taryfa: encja ceny",
+          "heat_pump_tariff_meter": "Własna taryfa: licznik (kWh)"
         }
       }
     },
@@ -1484,6 +1495,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Opłaty za oddawanie w tym roku"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} koszt taryfy dziś"
       }
     },
     "binary_sensor": {

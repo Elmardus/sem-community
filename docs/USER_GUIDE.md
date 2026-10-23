@@ -379,6 +379,22 @@ in the generic device list. Every climate device gets, independently:
 Heat-pump units and climate devices can coexist: any number of
 menu-configured units plus any number of climate-managed ones.
 
+### A heat pump on its own tariff (#812)
+
+A heat pump on its own meter and price can have its own tariff. In the heat
+pump settings, set **Own tariff: fixed rate** or **Own tariff: price
+entity**, and optionally **Own tariff: meter (kWh)**. Empty = the house
+tariff.
+
+- Its cheap and expensive hours, and its plan, follow its own price. A fixed
+  rate is never cheap or expensive.
+- A sensor *<heat pump> tariff cost today* shows what its grid power cost.
+- If the price entity cannot be read, SEM uses the fixed rate, or else the
+  house tariff, until it reads again.
+
+Other loads get the same fields in their goals on the Load Priority card.
+More in [Tariff models](TARIFF_MODELS.md#a-tariff-per-device-812).
+
 ### How much did SG-Ready actually shift? (#769)
 
 The SG-Ready unit has its own energy row, on the same footing as the EV:
@@ -1619,6 +1635,14 @@ Everything below is **off by default** and lives on the Config tab under
   (**Battery charge pacing**), off by default.
 
 SEM never curtails what the battery, the car and the loads could still take.
+
+**Stop exporting below a price.** Set **Stop exporting below** in the
+Configuration card under **Tariff & pricing**, or in **Configure → Tariff &
+Advanced**. When a sold kWh is worth less than this
+(export price minus feed-in fee), SEM stops exporting: the battery and the
+loads take the sun first. SEM never buys from the grid for it. It needs the
+**Export guard** switch on. Default 0: only a negative price stops export.
+More in [Tariff models](TARIFF_MODELS.md#stop-exporting-below-1090).
 
 Proven end to end on real hardware on 17.09.2026: with the price held negative
 and 2 kW of export on the meter, SEM's guard engaged after its delay, wrote the

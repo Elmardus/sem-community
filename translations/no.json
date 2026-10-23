@@ -266,7 +266,8 @@
           "import_vat_percent": "Mva",
           "feed_in_fee_model": "Gebyr for innmating",
           "feed_in_fee": "Gebyrets størrelse",
-          "feed_in_fee_tiers": "Trinn for gebyret"
+          "feed_in_fee_tiers": "Trinn for gebyret",
+          "export_value_threshold": "Stopp eksport under"
         },
         "data_description": {
           "electricity_import_rate": "Dag-/fastpris for import (valuta/kWh inkl. mva.). Brukes som reserve når dynamisk prising ikke er tilgjengelig.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "Mva på kjøpt kWh, i prosent.",
           "feed_in_fee_model": "Hva leverandøren tar for strøm du sender ut på nettet: per kWh, i trinn etter kWh i år, eller et fast beløp per måned.",
           "feed_in_fee": "Per kWh: gebyret per kWh. Fast per måned: beløpet per måned.",
-          "feed_in_fee_tiers": "Bare for trinn. kWh sendt ut i år : gebyr per kWh, for eksempel 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Bare for trinn. kWh sendt ut i år : gebyr per kWh, for eksempel 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Er en solgt kWh mindre verdt, stopper SEM eksporten: batteri og forbrukere tar solen først. 0 = bare under null. Krever bryteren Eksportvakt."
         }
       },
       "load_management": {
@@ -532,7 +534,10 @@
           "heat_pump_relay1_on_value": "SG-Ready-relé 1 — ON-verdi",
           "heat_pump_relay1_off_value": "SG-Ready-relé 1 — OFF-verdi",
           "heat_pump_relay2_on_value": "SG-Ready-relé 2 — ON-verdi",
-          "heat_pump_relay2_off_value": "SG-Ready-relé 2 — OFF-verdi"
+          "heat_pump_relay2_off_value": "SG-Ready-relé 2 — OFF-verdi",
+          "heat_pump_tariff_rate": "Egen tariff: fast pris",
+          "heat_pump_tariff_entity": "Egen tariff: prisentitet",
+          "heat_pump_tariff_meter": "Egen tariff: måler (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Switch-entitet for SG-Ready-relé 1 (signal for normal drift). Angis sammen med relé 2 for SG-Ready-protokollen.",
@@ -546,7 +551,10 @@
           "heat_pump_relay1_on_value": "Bare for et text-/number-/select-relé: verdien SEM skriver for å lukke relé 1. La stå tom for en bryter.",
           "heat_pump_relay1_off_value": "Bare for et text-/number-/select-relé: verdien SEM skriver for å åpne relé 1. La stå tom for en bryter.",
           "heat_pump_relay2_on_value": "Bare for et text-/number-/select-relé: verdien SEM skriver for å lukke relé 2. La stå tom for en bryter.",
-          "heat_pump_relay2_off_value": "Bare for et text-/number-/select-relé: verdien SEM skriver for å åpne relé 2. La stå tom for en bryter."
+          "heat_pump_relay2_off_value": "Bare for et text-/number-/select-relé: verdien SEM skriver for å åpne relé 2. La stå tom for en bryter.",
+          "heat_pump_tariff_rate": "Fast pris for varmepumpens egen måler, f.eks. en varmepumpetariff. 0 = husets tariff.",
+          "heat_pump_tariff_entity": "En sensor med varmepumpens pris, hvis den endres. Billige timer følger da denne prisen.",
+          "heat_pump_tariff_meter": "Valgfri. kWh-telleren på varmepumpens egen måler. Tom = SEM anslår andelen fra nettet."
         }
       },
       "ev_charger_menu": {
@@ -706,7 +714,10 @@
           "heat_pump_relay1_on_value": "SG-Ready-relé 1 — ON-verdi",
           "heat_pump_relay1_off_value": "SG-Ready-relé 1 — OFF-verdi",
           "heat_pump_relay2_on_value": "SG-Ready-relé 2 — ON-verdi",
-          "heat_pump_relay2_off_value": "SG-Ready-relé 2 — OFF-verdi"
+          "heat_pump_relay2_off_value": "SG-Ready-relé 2 — OFF-verdi",
+          "heat_pump_tariff_rate": "Egen tariff: fast pris",
+          "heat_pump_tariff_entity": "Egen tariff: prisentitet",
+          "heat_pump_tariff_meter": "Egen tariff: måler (kWh)"
         }
       }
     },
@@ -1484,6 +1495,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Innmatingsgebyrer i år"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} tariffkostnad i dag"
       }
     },
     "binary_sensor": {

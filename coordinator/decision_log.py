@@ -295,6 +295,12 @@ def record_shed(log: Optional[DecisionLog], device_id: str, *, name: str = "",
         quiet_first_rest=False)
 
 
+def _own_inputs(device) -> Optional[Mapping[str, Any]]:
+    """(#812) The inputs a device's own tariff stamped, if any."""
+    own = getattr(device, "tariff_inputs", None)
+    return own if isinstance(own, dict) else None
+
+
 def record_load(log: Optional[DecisionLog], device, *, on: bool,
                 watts: Optional[float] = None, reason_code: str = "",
                 text: str = "", observer: bool = False
@@ -316,5 +322,8 @@ def record_load(log: Optional[DecisionLog], device, *, on: bool,
         value=value, reason_code=reason_code or ("start" if on else "stop"),
         text=text, observer=observer,
         name=str(getattr(device, "name", "") or did),
+        # (#812) a device on its own tariff: its price and level, not the
+        # house's (stamped each cycle by ``DeviceTariffs.stamp``)
+        inputs=_own_inputs(device),
         # a load stop only leaves for a running load: always a change
         quiet_first_rest=False)

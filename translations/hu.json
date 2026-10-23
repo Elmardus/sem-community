@@ -266,7 +266,8 @@
           "import_vat_percent": "ÁFA",
           "feed_in_fee_model": "Betáplálási díj",
           "feed_in_fee": "A díj összege",
-          "feed_in_fee_tiers": "A díj sávjai"
+          "feed_in_fee_tiers": "A díj sávjai",
+          "export_value_threshold": "Export leállítása ez alatt"
         },
         "data_description": {
           "electricity_import_rate": "Nappali/egységes vételezési ár (pénznem/kWh, áfával). Tartalékként használatos, ha a dinamikus árazás nem érhető el.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "ÁFA a vett kWh-ra, százalékban.",
           "feed_in_fee_model": "Mit kér a szolgáltató a hálózatba küldött energiáért: kWh-nként, sávosan az idei kWh szerint, vagy fix havi összeget.",
           "feed_in_fee": "kWh-nként: a díj kWh-nként. Fix havi: a havi összeg.",
-          "feed_in_fee_tiers": "Csak sávokhoz. Idén betáplált kWh : díj kWh-nként, például 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Csak sávokhoz. Idén betáplált kWh : díj kWh-nként, például 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Ha egy eladott kWh ennél kevesebbet ér, a SEM leállítja az exportot: az akkumulátor és a fogyasztók kapják először a napot. 0 = csak nulla alatt. Az Export-őr kapcsoló kell hozzá."
         }
       },
       "load_management": {
@@ -532,7 +534,10 @@
           "heat_pump_relay1_on_value": "SG-Ready 1. érintkező — BE érték",
           "heat_pump_relay1_off_value": "SG-Ready 1. érintkező — KI érték",
           "heat_pump_relay2_on_value": "SG-Ready 2. érintkező — BE érték",
-          "heat_pump_relay2_off_value": "SG-Ready 2. érintkező — KI érték"
+          "heat_pump_relay2_off_value": "SG-Ready 2. érintkező — KI érték",
+          "heat_pump_tariff_rate": "Saját tarifa: fix ár",
+          "heat_pump_tariff_entity": "Saját tarifa: ár entitás",
+          "heat_pump_tariff_meter": "Saját tarifa: mérő (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Switch entitás az SG-Ready 1-es reléhez (normál üzem jelzése). Az SG-Ready protokollhoz a 2-es relével együtt állítsa be.",
@@ -546,7 +551,10 @@
           "heat_pump_relay1_on_value": "Csak text/number/select érintkezőhöz: az az érték, amelyet a SEM ír az 1. érintkező zárásához. Switch esetén hagyja üresen.",
           "heat_pump_relay1_off_value": "Csak text/number/select érintkezőhöz: az az érték, amelyet a SEM ír az 1. érintkező nyitásához. Switch esetén hagyja üresen.",
           "heat_pump_relay2_on_value": "Csak text/number/select érintkezőhöz: az az érték, amelyet a SEM ír a 2. érintkező zárásához. Switch esetén hagyja üresen.",
-          "heat_pump_relay2_off_value": "Csak text/number/select érintkezőhöz: az az érték, amelyet a SEM ír a 2. érintkező nyitásához. Switch esetén hagyja üresen."
+          "heat_pump_relay2_off_value": "Csak text/number/select érintkezőhöz: az az érték, amelyet a SEM ír a 2. érintkező nyitásához. Switch esetén hagyja üresen.",
+          "heat_pump_tariff_rate": "Fix ár a hőszivattyú saját mérőjéhez, pl. hőszivattyús tarifa. 0 = a ház tarifája.",
+          "heat_pump_tariff_entity": "Érzékelő a hőszivattyú árával, ha változik. Az olcsó órák ekkor ezt az árat követik.",
+          "heat_pump_tariff_meter": "Opcionális. A hőszivattyú saját mérőjének kWh-számlálója. Üres = a SEM becsüli a hálózati részét."
         }
       },
       "ev_charger_menu": {
@@ -706,7 +714,10 @@
           "heat_pump_relay1_on_value": "SG-Ready 1. érintkező — BE érték",
           "heat_pump_relay1_off_value": "SG-Ready 1. érintkező — KI érték",
           "heat_pump_relay2_on_value": "SG-Ready 2. érintkező — BE érték",
-          "heat_pump_relay2_off_value": "SG-Ready 2. érintkező — KI érték"
+          "heat_pump_relay2_off_value": "SG-Ready 2. érintkező — KI érték",
+          "heat_pump_tariff_rate": "Saját tarifa: fix ár",
+          "heat_pump_tariff_entity": "Saját tarifa: ár entitás",
+          "heat_pump_tariff_meter": "Saját tarifa: mérő (kWh)"
         }
       }
     },
@@ -1484,6 +1495,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Betáplálási díjak idén"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} tarifaköltség ma"
       }
     },
     "binary_sensor": {

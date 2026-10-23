@@ -266,7 +266,8 @@
           "import_vat_percent": "MwSt.",
           "feed_in_fee": "Höhe der Einspeisegebühr",
           "feed_in_fee_model": "Einspeisegebühr",
-          "feed_in_fee_tiers": "Stufen der Einspeisegebühr"
+          "feed_in_fee_tiers": "Stufen der Einspeisegebühr",
+          "export_value_threshold": "Einspeisung stoppen unter"
         },
         "data_description": {
           "electricity_import_rate": "Tag-/Einheitstarif für den Import (Währung/kWh inkl. MwSt.). Wird als Rückfallwert verwendet, wenn keine dynamische Preisgestaltung verfügbar ist.",
@@ -293,7 +294,8 @@
           "import_vat_percent": "MwSt. auf die bezogene kWh, in Prozent.",
           "feed_in_fee_model": "Was Ihr Lieferant für eingespeisten Strom verlangt: pro kWh, in Stufen nach kWh dieses Jahr oder ein fester Betrag pro Monat.",
           "feed_in_fee": "Pro kWh: die Gebühr pro kWh. Fest pro Monat: der Betrag pro Monat.",
-          "feed_in_fee_tiers": "Nur für Stufen. kWh eingespeist dieses Jahr : Gebühr pro kWh, zum Beispiel 0:0, 1000:0.02, 3000:0.05"
+          "feed_in_fee_tiers": "Nur für Stufen. kWh eingespeist dieses Jahr : Gebühr pro kWh, zum Beispiel 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Ist eine verkaufte kWh weniger wert, stoppt SEM die Einspeisung: Batterie und Verbraucher nehmen zuerst die Sonne. 0 = nur unter null. Braucht den Schalter Einspeise-Wächter."
         }
       },
       "load_management": {
@@ -532,7 +534,10 @@
           "heat_pump_relay1_on_value": "SG-Ready-Kontakt 1 — EIN-Wert",
           "heat_pump_relay1_off_value": "SG-Ready-Kontakt 1 — AUS-Wert",
           "heat_pump_relay2_on_value": "SG-Ready-Kontakt 2 — EIN-Wert",
-          "heat_pump_relay2_off_value": "SG-Ready-Kontakt 2 — AUS-Wert"
+          "heat_pump_relay2_off_value": "SG-Ready-Kontakt 2 — AUS-Wert",
+          "heat_pump_tariff_rate": "Eigener Tarif: fester Preis",
+          "heat_pump_tariff_entity": "Eigener Tarif: Preis-Entität",
+          "heat_pump_tariff_meter": "Eigener Tarif: Zähler (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Switch-Entität für SG-Ready-Relais 1 (Signal für Normalbetrieb). Zusammen mit Relais 2 setzen, um das SG-Ready-Protokoll zu nutzen.",
@@ -546,7 +551,10 @@
           "heat_pump_relay1_on_value": "Nur für einen Text-/Zahlen-/Auswahl-Kontakt: der Wert, den SEM schreibt, um Kontakt 1 zu schließen. Bei einem Schalter leer lassen.",
           "heat_pump_relay1_off_value": "Nur für einen Text-/Zahlen-/Auswahl-Kontakt: der Wert, den SEM schreibt, um Kontakt 1 zu öffnen. Bei einem Schalter leer lassen.",
           "heat_pump_relay2_on_value": "Nur für einen Text-/Zahlen-/Auswahl-Kontakt: der Wert, den SEM schreibt, um Kontakt 2 zu schließen. Bei einem Schalter leer lassen.",
-          "heat_pump_relay2_off_value": "Nur für einen Text-/Zahlen-/Auswahl-Kontakt: der Wert, den SEM schreibt, um Kontakt 2 zu öffnen. Bei einem Schalter leer lassen."
+          "heat_pump_relay2_off_value": "Nur für einen Text-/Zahlen-/Auswahl-Kontakt: der Wert, den SEM schreibt, um Kontakt 2 zu öffnen. Bei einem Schalter leer lassen.",
+          "heat_pump_tariff_rate": "Fester Preis für den eigenen Zähler der Wärmepumpe, z. B. ein Wärmepumpentarif. 0 = Haustarif.",
+          "heat_pump_tariff_entity": "Ein Sensor mit dem Preis der Wärmepumpe, falls er sich ändert. Günstige Stunden folgen dann diesem Preis.",
+          "heat_pump_tariff_meter": "Optional. Der kWh-Zähler des eigenen Zählers der Wärmepumpe. Leer = SEM schätzt den Netzanteil."
         }
       },
       "ev_charger_menu": {
@@ -706,7 +714,10 @@
           "heat_pump_relay1_on_value": "SG-Ready-Kontakt 1 — EIN-Wert",
           "heat_pump_relay1_off_value": "SG-Ready-Kontakt 1 — AUS-Wert",
           "heat_pump_relay2_on_value": "SG-Ready-Kontakt 2 — EIN-Wert",
-          "heat_pump_relay2_off_value": "SG-Ready-Kontakt 2 — AUS-Wert"
+          "heat_pump_relay2_off_value": "SG-Ready-Kontakt 2 — AUS-Wert",
+          "heat_pump_tariff_rate": "Eigener Tarif: fester Preis",
+          "heat_pump_tariff_entity": "Eigener Tarif: Preis-Entität",
+          "heat_pump_tariff_meter": "Eigener Tarif: Zähler (kWh)"
         }
       }
     },
@@ -1484,6 +1495,9 @@
       },
       "yearly_feed_in_fees": {
         "name": "Einspeisegebühren dieses Jahr"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} Tarifkosten heute"
       }
     },
     "binary_sensor": {

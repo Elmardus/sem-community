@@ -77,6 +77,9 @@ CALCULATOR_STATE_KEYS: tuple[str, ...] = (
     "solar_counter_baselines",
     # (#658) EV wallbox-counter baselines
     "ev_counter_baselines",
+    # (#812) a device's own meter baseline: without it the first step after
+    # every restart is re-baselined and its kWh are never priced
+    "device_meter_last",
     # (#1049) each charger's own counter baselines, and what each box drew
     # since its counter last moved
     "charger_counter_baselines",

@@ -297,6 +297,10 @@ _SET_OPTION_STRUCTURAL_KEYS: frozenset[str] = frozenset({
     # #523: read at HeatPumpController construction, so a change must reload
     # to rebuild the controller with the new relay polarity.
     "heat_pump_invert_sg_ready",
+    # (#812) the pump's own tariff and meter — read at controller
+    # construction, and they decide whether its cost sensor exists.
+    "heat_pump_tariff_rate", "heat_pump_tariff_entity",
+    "heat_pump_tariff_meter",
     "hot_water_entity", "hot_water_power_sensor",
     "hot_water_temperature_sensor",
     "ev_chargers",
@@ -1860,6 +1864,9 @@ def _heat_pump_rows(full_config: dict) -> list[dict]:
             "heat_pump_sg_ready_state_entity",
             "heat_pump_relay1_on_value", "heat_pump_relay1_off_value",
             "heat_pump_relay2_on_value", "heat_pump_relay2_off_value",
+            # (#812) the pump's own tariff and meter
+            "heat_pump_tariff_rate", "heat_pump_tariff_entity",
+            "heat_pump_tariff_meter",
         ) if full_config.get(k) not in (None, "")},
     }]
     # (#990) Two rows may carry the SAME id — a config written by a build
@@ -3225,6 +3232,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             # returns the pump to NORMAL. A relay still loading is decided on
             # the first readable cycle (the per-cycle belief sync retries it).
             hp_extra.adopt_if_running()
+            # (#812) the pump's own tariff, when its row names one
+            from .coordinator.device_tariff import apply_tariff, heat_pump_tariff
+            apply_tariff(hp_extra, heat_pump_tariff(_row))
             coordinator._surplus_controller.register_device(hp_extra)
             hp_registered += 1
             _LOGGER.info(
@@ -5231,6 +5241,8 @@ async def _async_register_services(
             "phase",
             # (#1021) behind the grid operator's relay
             "behind_operator_relay",
+            # (#812) the load's own tariff and meter
+            "tariff_rate", "tariff_entity", "tariff_meter",
         ):
             # (#559/#620) goal engine — persisted + applied live
             registry = getattr(coordinator, "_device_registry", None)
@@ -5316,7 +5328,43 @@ async def _async_register_services(
                         translation_key="invalid_device_property",
                         translation_placeholders={"property": f"{prop}={value}"},
                     ) from err
+            # (#812) a rate is a non-negative number (0 = none); a price
+            # entity or a meter is a sensor / input_number, or empty.
+            if prop == "tariff_rate":
+                try:
+                    _rv = float(value) if str(value).strip() else 0.0
+                    if not math.isfinite(_rv) or _rv < 0:
+                        raise ValueError
+                except (TypeError, ValueError) as err:
+                    raise ServiceValidationError(
+                        translation_domain=DOMAIN,
+                        translation_key="invalid_device_property",
+                        translation_placeholders={"property": f"{prop}={value}"},
+                    ) from err
+                value = str(_rv)
+            if prop in ("tariff_entity", "tariff_meter") and str(value) and not (
+                str(value).startswith(("sensor.", "input_number."))
+            ):
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="invalid_device_property",
+                    translation_placeholders={"property": f"{prop}={value}"},
+                )
+            _tariff_before = None
+            if prop in ("tariff_rate", "tariff_entity"):
+                from .coordinator.device_tariff import tariff_of
+                _live = coordinator._surplus_controller.get_device(device_id)
+                _tariff_before = tariff_of(_live).configured if _live else None
             await registry.async_update_device_goal(device_id, prop, value)
+            # (#812) The device's cost sensor exists only while it has its
+            # own tariff: setting the first field or clearing the last one
+            # reloads, so the sensor appears or goes.
+            if _tariff_before is not None:
+                _live = coordinator._surplus_controller.get_device(device_id)
+                _entry = getattr(coordinator, "config_entry", None)
+                if (_live is not None and _entry is not None
+                        and tariff_of(_live).configured != _tariff_before):
+                    hass.config_entries.async_schedule_reload(_entry.entry_id)
         else:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -6222,6 +6270,8 @@ async def _async_register_phase_services(
             "status_retention_days",
             # (#1088) read fresh every cycle by _grid_co2_reading
             "grid_co2_entity", "co2_live_intensity",
+            # (#1090) read every cycle by _export_value_threshold
+            "export_value_threshold",
         }
         # (#637) Some options are backed by number entities under a DIFFERENT
         # name (number.py CONFIG_KEY_MAP, #542) — the naive number.sem_<key>
@@ -6792,6 +6842,7 @@ async def _async_register_phase_services(
         "tariff_value_preset", "import_price_basis", "import_markup",
         "import_energy_tax", "import_vat_percent", "feed_in_fee_model",
         "feed_in_fee", "feed_in_fee_tiers",
+        "export_value_threshold",   # (#1090)
     }
     _DIAGNOSE_TARIFF_STATE = {
         "tariff_provider", "tariff_is_dynamic", "tariff_currency",

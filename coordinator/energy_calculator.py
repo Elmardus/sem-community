@@ -327,6 +327,11 @@ CO2_CORRECTION_CATEGORY = "co2_live_correction"
 VALUE_SELF_CONSUMPTION = "value_self_consumption"
 VALUE_EXPORT = "value_export"
 VALUE_FEED_IN_FEE = "value_feed_in_fee"
+#: (#812) A device on its own tariff: its grid kWh and what they cost at
+#: that tariff, per device id. Keyed on the calendar day like the house's
+#: own import cost, so the two daily figures roll together.
+DEVICE_TARIFF_KWH = "device_tariff_kwh:"
+DEVICE_TARIFF_COST = "device_tariff_cost:"
 CO2_KG_PER_TREE_PER_YEAR = 22  # EPA estimate
 
 
@@ -363,6 +368,15 @@ class EnergyCalculator:
 
         # Rate history for 7-day averaging (dynamic tariffs)
         self._rate_history: deque = deque(maxlen=30)
+        #: (#812) device id → the stamped baseline of a device's own meter
+        #: (entity, date, value, time), kept with the energy state so a
+        #: restart books the first step after it.
+        self.device_meter_last: Dict[str, Dict[str, Any]] = {}
+        #: (#812) this cycle's own-tariff devices, staged by the coordinator
+        self._device_tariff_cycle: list = []
+        #: (#812) the calendar day the last cycle booked under — the day the
+        #: per-device cost sensors read, so they need no clock of their own
+        self.booking_day: Optional[date] = None
 
         # (#1077) The value layer's books. ``_export_rate`` above is the
         # export VALUE (net of the per-kWh feed-in fee); these keep the
@@ -730,6 +744,7 @@ class EnergyCalculator:
 
         # Check for day/month/year rollover and reset accumulators
         self._check_rollover(today, month_key, year_key)
+        self.booking_day = today   # (#812)
 
         # (#628) This cycle's counter-backing starts empty — each reconciler
         # below records its own category only when it actually read a COMPLETE
@@ -816,7 +831,19 @@ class EnergyCalculator:
         if power.grid_import_power >= MIN_POWER_THRESHOLD:
             import_increment = (power.grid_import_power * interval_hours) / 1000
             self._accumulate("grid_import", today, month_key, year_key, import_increment)
-            self._accumulate_cost("cost_import", today, month_key, year_key, import_increment * self._import_rate)
+            # (#812) split here, in the one booking, when a device is on its
+            # own tariff; with none, exactly ``import_increment × rate``
+            self._accumulate_cost("cost_import", today, month_key, year_key,
+                                  self._import_cost(import_increment, interval_hours,
+                                                    power, power_flows, today,
+                                                    month_key, year_key)
+                                  if self._device_tariff_cycle else
+                                  import_increment * self._import_rate)
+        if self._device_tariff_cycle:
+            # (#812) no import this cycle: nothing to split, but the meter
+            # baselines advance (their steps came from the sun)
+            self._import_cost(0.0, interval_hours, power, power_flows, today,
+                              month_key, year_key)
         # (#628) utility-meter reconciliation — bidirectional, so it must run
         # before the reads below exactly like its solar and EV siblings.
         self._reconcile_metered_energy(
@@ -3979,6 +4006,66 @@ class EnergyCalculator:
             "lifetime_kwh": self._get_lifetime(category),
         }
 
+    def set_device_tariff_cycle(self, entries) -> None:
+        """(#812) The own-tariff devices of THIS cycle (``DeviceCycle``),
+        staged by the coordinator before ``calculate_energy`` books it."""
+        self._device_tariff_cycle = list(entries or ())
+
+    def _import_cost(self, import_kwh: float, interval_hours: float,
+                     power, power_flows, today: date,
+                     month_key: str, year_key: str) -> float:
+        """(#812) The money of THIS cycle's import, split where it is booked.
+
+        Each own-tariff device's use this cycle — its own meter's step, else
+        its draw × the cycle time — times the grid's share of the house this
+        cycle is its grid kWh: the rest of what it used came from the sun or
+        the pack. When the devices' grid kWh add up to more than this
+        cycle's import, they share the import in proportion (order does not
+        matter). The rest of the import is the house's, at the house rate.
+
+        One booking, one total: nothing is moved later, nothing waits for a
+        later cycle, a device kWh is never counted twice. A meter baseline is
+        written back HERE, where its step is booked: a cycle that returns
+        early leaves the step for the next one.
+        """
+        from .device_tariff import grid_share
+        house_rate = float(self._import_rate or 0.0)
+        entries, self._device_tariff_cycle = self._device_tariff_cycle, []
+        left = max(0.0, float(import_kwh or 0.0))
+        share = grid_share(getattr(power_flows, "grid_to_home", 0.0),
+                           getattr(power, "home_consumption_power", 0.0))
+        wants = []
+        for e in entries:
+            if e.meter and e.baseline is not None:
+                self.device_meter_last[e.device_id] = dict(e.baseline)
+            used = (max(0.0, e.meter_kwh) if e.meter
+                    else max(0.0, e.power_w) * interval_hours / 1000.0)
+            wants.append(used * share)
+        total = sum(wants)
+        scale = min(1.0, left / total) if total > 0 else 0.0
+        cost = 0.0
+        for e, want in zip(entries, wants, strict=True):
+            kwh = want * scale
+            if kwh <= 0:
+                continue
+            price = house_rate if e.price is None else float(e.price)
+            self._accumulate(f"{DEVICE_TARIFF_KWH}{e.device_id}", today,
+                             month_key, year_key, kwh)
+            self._accumulate_cost(f"{DEVICE_TARIFF_COST}{e.device_id}", today,
+                                  month_key, year_key, kwh * price)
+            cost += kwh * price
+            left -= kwh
+        return cost + max(0.0, left) * house_rate
+
+    def get_device_tariff(self, device_id: str, day: date) -> Dict[str, float]:
+        """(#812) Today's grid kWh and cost of a device on its own tariff."""
+        return {
+            "daily_grid_kwh": self._get_daily(
+                f"{DEVICE_TARIFF_KWH}{device_id}", day),
+            "daily_cost": self._get_daily_cost(
+                f"{DEVICE_TARIFF_COST}{device_id}", day),
+        }
+
     def get_device_splits(self, device_id: str, meter_day: date) -> Dict[str, float]:
         """Today's kWh per attribution bucket, e.g. ``{"sg2": .., "sg3": ..}``.
 
@@ -4557,6 +4644,7 @@ class EnergyCalculator:
             ),
             "yearly_cost_seeded": self._yearly_cost_seeded,
             "rate_history": list(self._rate_history),
+            "device_meter_last": dict(self.device_meter_last),   # (#812)
             "accumulated_savings": self._accumulated_savings,
             "accumulated_battery_savings": self._accumulated_battery_savings,
             "accumulated_cost": self._accumulated_cost,
@@ -4697,6 +4785,15 @@ class EnergyCalculator:
             self._yearly_cost_seeded = state.get("yearly_cost_seeded", False)
             self._lifetime_seed_counters = _as_seed_counters(
                 state.get("lifetime_seed_counters"))
+            # (#812) a corrupt entry is dropped, never a reason to fail restore
+            _ml = state.get("device_meter_last")
+            self.device_meter_last = {
+                str(k): dict(v) for k, v in (_ml.items() if isinstance(_ml, dict) else ())
+                if isinstance(v, dict) and isinstance(v.get("value"), (int, float))
+                and not isinstance(v.get("value"), bool)
+                and math.isfinite(float(v["value"]))
+                and isinstance(v.get("entity"), str) and isinstance(v.get("date"), str)
+                and isinstance(v.get("at"), str)}
             rate_history = state.get("rate_history", [])
             self._rate_history = deque(
                 rate_history if isinstance(rate_history, list) else [], maxlen=30

@@ -166,9 +166,11 @@ test('All settings still shows every row', () => {
     // (#1077) +6 for the value fields (preset, price basis, fee model, and
     // markup, tax and VAT, greyed out on an all-in price); the fee amount
     // and tiers show only for their model.
+    // (#1090) +1 for the export threshold.
+    // (#812) +3 for the heat pump's own tariff (rate, price entity, meter).
     const everyday = renderTab(card()).total;
     const { per, total } = renderTab(card({ advanced: true }));
-    assert.equal(total, 103, `All settings drew ${total} rows`);
+    assert.equal(total, 107, `All settings drew ${total} rows`);
     assert.ok(per.battery_zones >= 9, 'battery knobs and pickers');
     assert.ok(per.ev_chargers >= 15, 'every per-charger row');
     assert.ok(total > everyday * 5);
