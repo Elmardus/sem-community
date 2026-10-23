@@ -359,7 +359,10 @@ class TestTheSelectProvesItself:
             assert rep.count("raise", SEL) == 1
             hass.deaf.discard(SEL)                      # the user fixes it
             t[0] += 60.0
-            await ad.command_limit_discharge(1200.0)    # a limit write goes out
+            # a limit write goes out: NORMAL's max (5000 → 1700). (#1175) A
+            # lower limit would be put back to the max by the sale below,
+            # and that new write would be checked one cycle later.
+            await ad.command_normal()
             c._verify_battery_writes({})
             t[0] += 10.0
             await ad.command_force_discharge(1700, 20.0)    # the select lands…
