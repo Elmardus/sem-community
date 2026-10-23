@@ -138,3 +138,110 @@ class TestSolarInput:
         rec = log.record(device_id="box", kind=KIND_CHARGER, verb="charge",
                          value=6, now=T0)
         assert rec.inputs == {"solar_w": 2345.7}
+
+
+# ─────────────── each device's own name rides the record ───────────────
+
+from types import SimpleNamespace  # noqa: E402
+from unittest.mock import AsyncMock  # noqa: E402
+
+from custom_components.solar_energy_management.coordinator.actuate import actuate  # noqa: E402
+from custom_components.solar_energy_management.coordinator.charger_reconciler import (  # noqa: E402
+    ChargerReconciler,
+)
+from custom_components.solar_energy_management.coordinator.charger_types import (  # noqa: E402
+    ChargerDecision, ChargerIntent, ChargerPower,
+)
+from custom_components.solar_energy_management.coordinator.coordinator import (  # noqa: E402
+    SEMCoordinator,
+)
+from custom_components.solar_energy_management.coordinator.surplus_controller import (  # noqa: E402
+    SurplusController,
+)
+
+
+def _charger(name):
+    dev = MagicMock()
+    dev.name = name
+    dev._current_setpoint = 0
+    dev.observer_mode = False
+    dev.contactor_surface = False
+    dev.can_stop_charging = MagicMock(return_value=True)
+    a = MagicMock()
+    a._device = dev
+    a.phases, a.voltage, a.max_current_a = 3, 230.0, 32
+    a.actual_charging = MagicMock(return_value=True)
+    a.is_self_charging = MagicMock(return_value=False)
+    a.enable_state = MagicMock(return_value=(None, True))
+
+    async def _write(amps):
+        dev._current_setpoint = amps
+    a.command_current = AsyncMock(side_effect=_write)
+    for m in ("command_disable", "command_park_off", "arm_failsafe",
+              "ensure_enabled"):
+        setattr(a, m, AsyncMock())
+    return a
+
+
+async def _charge(sc, cid, adapter, amps=10):
+    rec = ChargerReconciler(charger_id=cid, heartbeat_s=3600.0)
+    dec = ChargerDecision(charger_id=cid, mode="solar_only",
+                          intent=ChargerIntent.CHARGE_AT_AMPS,
+                          commanded_amps=amps, reason="sun to spare")
+    power = ChargerPower(charger_id=cid, power_w=6900.0, connected=True,
+                         charging=True)
+    await actuate(dec, adapter, power, rec, controller=sc)
+
+
+class TestNames:
+    async def test_two_chargers_carry_their_own_names(self):
+        sc = SurplusController(MagicMock())
+        sc.hass.bus.async_fire = MagicMock()
+        await _charge(sc, "c1", _charger("Garage"))
+        await _charge(sc, "c2", _charger("Carport"), amps=8)
+        rows = sc.decision_log.records()
+        assert {r["device_id"]: r["name"] for r in rows} == {
+            "c1": "Garage", "c2": "Carport"}
+
+    async def test_a_charger_without_a_name_keeps_its_id(self):
+        sc = SurplusController(MagicMock())
+        sc.hass.bus.async_fire = MagicMock()
+        ad = _charger(None)
+        await _charge(sc, "c1", ad)
+        assert sc.decision_log.records()[0]["name"] == "c1"
+
+    def test_stamped_names_fill_a_seam_that_knows_only_an_id(self):
+        log = DecisionLog(None)
+        log.set_names({"battery:b1": "Garage battery", "battery:b2": ""})
+        r1 = log.record(device_id="b1", kind=KIND_BATTERY, verb="force_charge",
+                        value=2000, now=T0)
+        r2 = log.record(device_id="b2", kind=KIND_BATTERY, verb="force_charge",
+                        value=2000, now=T0)
+        r3 = log.record(device_id="b1", kind=KIND_LOAD, verb="on", now=T0,
+                        name="Pool pump", quiet_first_rest=False)
+        assert (r1.name, r2.name, r3.name) == ("Garage battery", "b2", "Pool pump")
+
+    def test_battery_names_come_from_their_devices(self, monkeypatch):
+        from homeassistant.helpers import device_registry as dr
+        from homeassistant.helpers import entity_registry as er
+        ents = {"sensor.p1": SimpleNamespace(device_id="d1"),
+                "sensor.p2": SimpleNamespace(device_id="d2"),
+                "sensor.p3": SimpleNamespace(device_id="d2"),
+                "sensor.p4": None}
+        devs = {"d1": SimpleNamespace(name="Pack A", name_by_user="Cellar"),
+                "d2": SimpleNamespace(name="Inverter", name_by_user=None)}
+        monkeypatch.setattr(er, "async_get", lambda hass: SimpleNamespace(
+            async_get=lambda eid: ents.get(eid)))
+        monkeypatch.setattr(dr, "async_get", lambda hass: SimpleNamespace(
+            async_get=lambda did: devs.get(did)))
+        coord = SimpleNamespace(hass=MagicMock())
+        power = SimpleNamespace(batteries={
+            f"b{i}": SimpleNamespace(name=f"sensor.p{i}") for i in range(1, 5)})
+        names = SEMCoordinator._battery_display_names(coord, power)
+        assert names == {"battery:b1": "Cellar", "battery:b2": "Inverter b2",
+                         "battery:b3": "Inverter b3"}
+
+    def test_no_breakdown_no_names(self):
+        coord = SimpleNamespace(hass=MagicMock())
+        assert SEMCoordinator._battery_display_names(
+            coord, SimpleNamespace(batteries={})) == {}

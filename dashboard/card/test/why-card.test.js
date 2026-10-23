@@ -228,3 +228,24 @@ test('an empty log says so; it reads the records over the websocket', async () =
     assert.deepEqual(calls, [{ type: 'solar_energy_management/decision_log' }]);
     assert.equal(c._records.length, 6);
 });
+
+test('two named chargers: each row and chip shows its own name, prices in CHF', () => {
+    const recs = [
+        REC('c1', 'charger', { name: 'Garage', time: at(19), old: 'charge 8 A', new: 'stop',
+            inputs: { import_price: 0.31, export_rate: 0.06 } }),
+        REC('c2', 'charger', { name: 'Carport', time: at(18), new: 'charge 6 A' }),
+    ];
+    assert.deepEqual(rows.whyChips(recs, t).map((c) => c.name), ['Garage', 'Carport']);
+    const out = text(card(recs).render());
+    assert.match(out, /class="name">Garage</);
+    assert.match(out, /class="name">Carport</);
+    assert.doesNotMatch(out, /Wallbox/);
+    assert.match(out, /Import 0\.31 CHF\/kWh/);
+    assert.match(out, /Export 0\.06 CHF\/kWh/);
+    assert.doesNotMatch(out, /€/);
+});
+
+test('two chargers named only by id: the kind word plus the id', () => {
+    const recs = [REC('c1', 'charger', { name: 'c1' }), REC('c2', 'charger', { name: 'c2' })];
+    assert.deepEqual(rows.whyChips(recs, t).map((c) => c.name), ['Wallbox c1', 'Wallbox c2']);
+});

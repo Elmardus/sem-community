@@ -1262,10 +1262,13 @@ class ChargerReconciler:
             else:
                 return
             from .decision_log import record_charger
-            observer = getattr(getattr(adapter, "_device", None),
-                               "observer_mode", False) is True
+            dev = getattr(adapter, "_device", None)
+            observer = getattr(dev, "observer_mode", False) is True
+            # the charger's own name, so two chargers' rows tell apart
+            name = getattr(dev, "name", None)
             record_charger(log, decision, verb=verb, value=value,
-                           observer=observer)
+                           observer=observer,
+                           name=name if isinstance(name, str) else "")
         except Exception as e:  # noqa: BLE001 — recording only, never the send
             _LOGGER.debug("decision log: charger row not written: %s", e)
 

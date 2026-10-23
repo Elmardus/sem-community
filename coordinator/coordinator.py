@@ -673,6 +673,37 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         except Exception:  # noqa: BLE001 — the log never costs a cycle
             _LOGGER.debug("decision inputs incomplete", exc_info=True)
         log.set_inputs(inputs)
+        # the batteries' seam knows only b1/b2: name them by their device
+        log.set_names(self._battery_display_names(power))
+
+    def _battery_display_names(self, power) -> Dict[str, str]:
+        """(#1084) ``{"battery:<id>": name}`` from the HA device behind each
+        battery's power sensor (a user's own name first). Empty when there is
+        no per-battery breakdown or no device; never raises."""
+        names: Dict[str, str] = {}
+        try:
+            batteries = getattr(power, "batteries", None) or {}
+            if not batteries:
+                return names
+            from homeassistant.helpers import device_registry as dr
+            from homeassistant.helpers import entity_registry as er
+            ent_reg = er.async_get(self.hass)
+            dev_reg = dr.async_get(self.hass)
+            for bid, bp in batteries.items():
+                ent = ent_reg.async_get(str(getattr(bp, "name", "") or ""))
+                dev = dev_reg.async_get(ent.device_id) if ent and ent.device_id else None
+                name = (dev.name_by_user or dev.name) if dev else None
+                if name:
+                    names[f"battery:{bid}"] = str(name)
+            # two units on one device: the id tells them apart
+            seen: Dict[str, int] = {}
+            for v in names.values():
+                seen[v] = seen.get(v, 0) + 1
+            names = {k: (f"{v} {k.split(':', 1)[1]}" if seen[v] > 1 else v)
+                     for k, v in names.items()}
+        except Exception:  # noqa: BLE001 — a name is never worth a cycle
+            _LOGGER.debug("battery names unread", exc_info=True)
+        return names
 
     @property
     def decision_log(self):
