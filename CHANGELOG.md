@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **The battery discharge limit no longer moves with every short burst of home load** (#1173). It goes up only when the load stays higher.
 - 🐛 **Force charge ends on a battery set to stop below 90 %** (#1166). Pick its end-of-charge level in Settings. SEM only reads it.
 
 # [2.2.0-beta.25] — 23.10.2026
