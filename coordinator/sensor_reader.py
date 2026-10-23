@@ -4544,12 +4544,6 @@ class SensorReader:
                     self._sensor_repair_raised.add(entity_id)
             return None if allow_none else 0.0
 
-        if name in _DEGRADABLE_POWER_INPUTS:
-            # (#818) The denominator for ``_all_dark``: this read reached a
-            # live state. Counted here, after the unavailable branch has
-            # returned, so the two tallies can never double-count.
-            self._input_reads[name] = self._input_reads.get(name, 0) + 1
-
         try:
             # #641 — one shared rule (this copy was ``.lower() == "kw"``, no
             # strip; four other spellings lived elsewhere). The bare ``float()``
@@ -4561,6 +4555,13 @@ class SensorReader:
             # the bare ``float()`` has succeeded on the same string).
             value = float(state.state)
             value = power_state_to_watts(state, default=value)
+            if name in _DEGRADABLE_POWER_INPUTS:
+                # (#818) The denominator for ``_all_dark``: this read reached
+                # a live state. Counted here, after the unavailable branch has
+                # returned, so the two tallies can never double-count — and
+                # (#1164 review) after the parse, so a state that is no
+                # number ("none") is no reading.
+                self._input_reads[name] = self._input_reads.get(name, 0) + 1
 
             # Detect transition from unavailable → available. Demoted
             # to DEBUG so a flapping upstream sensor (e.g. Huawei

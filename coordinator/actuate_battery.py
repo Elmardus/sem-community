@@ -323,7 +323,6 @@ async def actuate_battery(
             )
             return
         record_battery(_log, decision, value_w=decision.charge_power_w)
-        _set(adapter, "_sem_charge_asked_w", float(decision.charge_power_w))
         ret = await adapter.command_force_charge(
             decision.target_soc,
             decision.charge_power_w,
@@ -331,6 +330,12 @@ async def actuate_battery(
         )
         _note_forced_op(adapter, "_sem_forced_charge", ret,
                         BatteryIntent.FORCE_CHARGE, True)
+        # (#1164 review) Asked only if it went out: a withheld setpoint
+        # (#978) or a failed start leaves ``last_error`` set.
+        if (getattr(adapter, "last_error", None) is None
+                and getattr(adapter, "last_intent", None)
+                is BatteryIntent.FORCE_CHARGE):
+            _set(adapter, "_sem_charge_asked_w", float(decision.charge_power_w))
         _LOGGER.debug(
             "actuate_battery(%s): FORCE_CHARGE target_soc=%.0f%% "
             "power=%.0f W duration=%dm — %s",

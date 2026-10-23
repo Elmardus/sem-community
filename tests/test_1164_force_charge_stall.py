@@ -412,19 +412,26 @@ class TestAPackThatStopsAt95:
 # ── 3. What was sent, what was read, and the pipeline ──────────────────────
 
 class _Adapter:
-    """A battery adapter that takes every command."""
+    """A battery adapter that takes every command (``refuse``: the start
+    fails, as an adapter reports it — ``last_error`` set, intent kept)."""
     supports_forced_charge = True
     supports_forced_discharge = True
     last_intent = None
+    last_error = None
     last_discharge_limit_w = -1.0
 
     def __init__(self):
         self.sent: list = []
+        self.refuse = False
 
     async def command_force_charge(self, target_soc, power_w, duration_min):
+        if self.refuse:
+            self.last_error = "start_forced_charge failed"
+            return None
         self.sent.append(("charge", power_w))
+        self.last_error = None
         self.last_intent = BatteryIntent.FORCE_CHARGE
-        return True
+        return None
 
     async def command_stop_force_charge(self):
         self.sent.append(("stop",))
@@ -496,6 +503,17 @@ class TestTheActuatorRecordsWhatItSent:
         assert a.sent == [("stop",)], "the stop is held, nothing sent"
         assert asked == 0.0
 
+    async def test_a_start_that_failed_asks_for_nothing(self):
+        # (review) A withheld setpoint (#978) or a failed start sends
+        # nothing; the intent from the last cycle still reads FORCE_CHARGE.
+        a = _Adapter()
+        await self._send(a, _decision(BatteryIntent.FORCE_CHARGE))
+        a.refuse = True
+        assert await self._send(a, _decision(BatteryIntent.FORCE_CHARGE)) == 0.0
+        assert a.last_intent is BatteryIntent.FORCE_CHARGE
+        a.refuse = False
+        assert await self._send(a, _decision(BatteryIntent.FORCE_CHARGE)) == 4200.0
+
     async def test_an_adapter_that_cannot_charge_is_asked_nothing(self):
         a = _Adapter()
         a.supports_forced_charge = False
@@ -551,6 +569,31 @@ class TestTheReaderSaysWhetherPowerWasRead:
                      "battery_power_sensor": "sensor.bp"}).read_power()
         assert p.battery_power_read is False
 
+    def test_a_state_that_is_no_number_is_no_reading(self):
+        # (review) "none" passes the unavailable check and fails the parse.
+        p = _reader({"sensor.soc": _state(95, "%"), "sensor.bp": _state("none", "W")},
+                    {"battery_soc_sensor": "sensor.soc",
+                     "battery_power_sensor": "sensor.bp"}).read_power()
+        assert p.battery_power == 0.0
+        assert p.battery_power_read is False
+
+    @pytest.mark.parametrize("b2,read", [("300", True), ("unavailable", False)])
+    def test_the_energy_dashboard_path_reads_every_unit(self, b2, read):
+        from custom_components.solar_energy_management.ha_energy_reader import (
+            EnergyDashboardConfig,
+        )
+        r = _reader({"sensor.b1_power": _state(0, "W"),
+                     "sensor.b2_power": _state(b2, "W")}, {})
+        r.hass.states.async_all = MagicMock(return_value=[])
+        r._sign_vote_warmup = 0
+        r.set_energy_dashboard_config(EnergyDashboardConfig(
+            battery_power="sensor.b1_power",
+            battery_power_list=["sensor.b1_power", "sensor.b2_power"],
+            has_battery=True, has_solar=False, has_grid=False))
+        p = r.read_power()
+        assert set(p.batteries) == {"b1", "b2"}
+        assert p.battery_power_read is read
+
     def test_the_default_is_no_reading(self):
         from custom_components.solar_energy_management.coordinator.types import (
             PowerReadings,
@@ -604,8 +647,7 @@ class TestThePipeline:
         assert seen == {"power_read": True, "power": [("primary", 12.0)]}
 
     @pytest.mark.parametrize("change", [
-        {"battery_power_unavailable": True}, {"battery_power_read": False},
-        {"battery_power_read": False, "battery_power_unavailable": False}])
+        {"battery_power_unavailable": True}, {"battery_power_read": False}])
     async def test_a_dark_or_missing_power_is_not(self, monkeypatch, change):
         seen = await _pipeline(monkeypatch, _single(**change))
         assert seen["power_read"] is False
