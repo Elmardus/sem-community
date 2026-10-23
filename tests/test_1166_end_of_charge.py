@@ -329,10 +329,11 @@ class TestTheRoster:
 
 _ALLOWED = {
     # the coordinator reads it; the stall rule, the flow, the reload list,
-    # diagnostics and the lexicon only NAME it
+    # diagnostics, the lexicon and the install modules' evidence only NAME it
     "coordinator/coordinator.py", "coordinator/decide_battery.py",
     "config_flow.py", "__init__.py",
     "diagnostics.py", "consts/role_lexicon.py",
+    "coordinator/install_modules.py",
 }
 
 
