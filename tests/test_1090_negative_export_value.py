@@ -214,21 +214,51 @@ class TestADutchDayThroughTheCycle:
 
 
 class TestTheDefaultIsDevelop:
-    def test_no_value_reader_at_the_default(self):
-        """No value field, threshold 0: the closed window stays on the level."""
+    @staticmethod
+    def _active(config, settings):
         from custom_components.solar_energy_management.coordinator import SEMCoordinator
-        coord = SimpleNamespace(config={})
-        prov = SimpleNamespace(value_settings=vl.NO_VALUE)
-        assert SEMCoordinator._export_value_at_for_verdicts(coord, prov, 0.0) is None
+        coord = SimpleNamespace(config=config, _tariff_provider=SimpleNamespace(
+            value_settings=settings))
+        coord._export_value_threshold = (
+            lambda: SEMCoordinator._export_value_threshold(coord))
+        return SEMCoordinator._active_export_threshold(coord)
 
-    def test_a_value_field_or_a_threshold_turns_it_on(self):
-        from custom_components.solar_energy_management.coordinator import SEMCoordinator
-        coord = SimpleNamespace(config={}, _export_rate_at=lambda: "reader")
-        fee = SimpleNamespace(value_settings=vl.settings_from_config(
-            {"feed_in_fee_model": vl.FEE_PER_KWH, "feed_in_fee": 0.07}))
-        none = SimpleNamespace(value_settings=vl.NO_VALUE)
-        assert SEMCoordinator._export_value_at_for_verdicts(coord, fee, 0.0) == "reader"
-        assert SEMCoordinator._export_value_at_for_verdicts(coord, none, 0.05) == "reader"
+    def test_off_at_the_default(self):
+        assert self._active({}, vl.NO_VALUE) is None
+
+    def test_a_per_kwh_fee_or_a_threshold_turns_it_on(self):
+        fee = vl.settings_from_config(
+            {"feed_in_fee_model": vl.FEE_PER_KWH, "feed_in_fee": 0.07})
+        assert self._active({}, fee) == 0.0
+        assert self._active({KEY: 0.05}, vl.NO_VALUE) == pytest.approx(0.05)
+
+    def test_a_fixed_monthly_fee_or_an_import_markup_alone_is_develop(self):
+        """Neither changes what an exported kWh earns."""
+        monthly = vl.settings_from_config(
+            {"feed_in_fee_model": "fixed_monthly", "feed_in_fee": 5.0})
+        markup = vl.settings_from_config(
+            {"import_price_basis": "spot", "import_markup": 0.02})
+        assert monthly.configured and markup.configured
+        assert self._active({}, monthly) is None
+        assert self._active({}, markup) is None
+
+    @pytest.mark.asyncio
+    async def test_fixed_monthly_only_cycle_is_develop(self):
+        """A negative feed-in with only a monthly fee: the meter closes the
+        old way and pacing keeps its pace."""
+        cfg = {**WIRED, **SPOT, "feed_in_fee_model": "fixed_monthly",
+               "feed_in_fee": 5.0}
+        out = await _two_cycles(cfg, _states(feedin=-0.02))
+        assert out["sink_verdicts"]["grid_export"]["state"] == "closed"
+        assert "export price negative" in out["sink_verdicts"]["grid_export"]["reason"]
+        assert out["charge_pacing"]["reason_code"] != "closed_meter"
+
+    def test_forecast_sell_skips_the_value_check_while_off(self):
+        d = evaluate_forecast_sell(
+            NOW, enabled=True, in_block=True, block_w=3000.0, spendable_kwh=5.0,
+            max_discharge_w=5000.0, dynamic_floor_pct=None, reserve_pct=20.0,
+            export_rate=0.03, export_rate_known=True, export_threshold=None)
+        assert d.state is SchedulerState.DISCHARGING_ARBITRAGE
 
 
 class TestTheSetting:
@@ -264,7 +294,7 @@ class TestValueRulesActiveIsOneTest:
         assert vl.value_rules_active(None, vl.DEFAULT_EXPORT_VALUE_THRESHOLD) is False
 
     def test_on_with_a_field_or_a_threshold(self):
-        assert vl.value_rules_active(SimpleNamespace(configured=True), 0.0)
+        assert vl.value_rules_active(SimpleNamespace(changes_export=True), 0.0)
         assert vl.value_rules_active(None, 0.05)
         assert vl.value_rules_active(None, -0.02)
 

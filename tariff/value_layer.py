@@ -187,6 +187,13 @@ class ValueSettings:
         return bool(self.markup or self.energy_tax or self.vat_percent
                     or self.fee_model != FEE_NONE)
 
+    @property
+    def changes_export(self) -> bool:
+        """(#1090) Can the export VALUE differ from the spot export? Only a
+        per-kWh or tiered feed-in fee does; a fixed monthly fee and every
+        import field leave each exported kWh worth what the meter pays."""
+        return self.fee_model in (FEE_PER_KWH, FEE_TIERED)
+
     def import_value(self, spot: float, surcharge: float = 0.0) -> float:
         """What a bought kWh costs, from the price the sensor reports."""
         if not self.adds_to_import:
@@ -330,11 +337,14 @@ DEFAULT_EXPORT_VALUE_THRESHOLD = 0.0
 
 
 def value_rules_active(value_settings: Any, threshold: float) -> bool:
-    """(#1090) Are the value rules in force? A value field is set, or the
-    export threshold is not the default. THE one test: with neither, every
-    consumer keeps the behaviour SEM had before the value layer (a negative
-    PRICE closes the meter; pacing, arbitrage and the plan are untouched)."""
-    if getattr(value_settings, "configured", False) is True:
+    """(#1090) Are the export-value rules in force? The export value can
+    differ from the spot export (a per-kWh or tiered feed-in fee), or the
+    export threshold is not the default. THE one test: otherwise every
+    consumer keeps the behaviour SEM had before (a negative PRICE closes the
+    meter; pacing, arbitrage and the sale are untouched). A fixed monthly
+    fee or an import markup alone never changes what an exported kWh earns,
+    so they do not switch anything on."""
+    if getattr(value_settings, "changes_export", False) is True:
         return True
     try:
         return float(threshold) != DEFAULT_EXPORT_VALUE_THRESHOLD

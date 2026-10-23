@@ -103,7 +103,7 @@ def evaluate_forecast_sell(
     reserve_pct: float,
     export_rate: Optional[float] = None,
     export_rate_known: bool = True,
-    export_threshold: float = 0.0,
+    export_threshold: Optional[float] = None,
 ) -> SchedulerDecision:
     """The live WHETHER, in ``evaluate_arbitrage``'s verdict shape.
 
@@ -134,7 +134,9 @@ def evaluate_forecast_sell(
                          "— selling would pay to give energy away")
     # (#1090) A positive value below the threshold is not worth sending
     # either. Zero stays refused above: a sale at nothing earns nothing.
-    if export_not_worth(export_rate, export_threshold):
+    # None = the value rules are off (``value_rules_active``).
+    if (export_threshold is not None
+            and export_not_worth(export_rate, export_threshold)):
         # CAUSE: export_rate < export_threshold, tested on the line above
         return _v(state=SchedulerState.IDLE,
                   reason=f"export value {float(export_rate):.3f} below "
