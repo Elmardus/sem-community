@@ -346,7 +346,26 @@ class TestTheLogbook:
 #: The fields that change what a device does. A decision rewritten in one
 #: of these after it was made must say why it was rewritten.
 _DOES = {"intent", "commanded_amps", "mode", "charge_power_w",
-         "discharge_limit_w", "discharge_power_w", "target_soc", "floor_soc"}
+         "discharge_limit_w", "discharge_power_w", "target_soc", "floor_soc",
+         "safety_stop", "capped_by_limit", "budget_w", "bridgeable",
+         "peak_paused", "room_capped"}
+
+
+def _is_dataclass_replace(node) -> bool:
+    fn = node.func
+    if isinstance(fn, ast.Name):
+        return fn.id in ("replace", "_dc_replace")
+    return (isinstance(fn, ast.Attribute) and fn.attr == "replace"
+            and isinstance(fn.value, ast.Name) and fn.value.id == "dataclasses")
+
+
+def _rewrite_body_lines():
+    """The one ``replace`` allowed to forward ``**changes``: rewrite's own."""
+    src = (_PKG / "coordinator" / "charger_types.py").read_text(encoding="utf-8")
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.FunctionDef) and node.name == "rewrite":
+            return set(range(node.lineno, node.end_lineno + 1))
+    raise AssertionError("charger_types.rewrite not found")
 
 
 def _source_files():
@@ -364,16 +383,19 @@ class TestARewriteNamesItsWhy:
 
     def test_no_bare_replace_changes_what_a_device_does(self):
         bad = []
+        allowed = _rewrite_body_lines()
         for path in _source_files():
             rel = path.relative_to(_PKG).as_posix()
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-                if not isinstance(node, ast.Call):
-                    continue
-                name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
-                if name not in ("replace", "_dc_replace"):
+                if not isinstance(node, ast.Call) or not _is_dataclass_replace(node):
                     continue
                 kws = {k.arg for k in node.keywords}
-                if kws & _DOES and "reason_code" not in kws:
+                if rel == "coordinator/charger_types.py" and node.lineno in allowed:
+                    continue
+                # **kwargs or a second positional hides what changes
+                if None in kws or len(node.args) > 1:
+                    bad.append(f"{rel}:{node.lineno} hidden fields")
+                elif kws & _DOES and "reason_code" not in kws:
                     bad.append(f"{rel}:{node.lineno} {sorted(kws & _DOES)}")
         assert not bad, ("use charger_types.rewrite(..., reason_code=…): "
                          + ", ".join(bad))
@@ -400,7 +422,7 @@ class TestARewriteNamesItsWhy:
         r = rewrite(d, intent=ChargerIntent.IDLE, commanded_amps=0,
                     reason_code=RC.CHARGER_DIP_STOP)
         assert (r.intent, r.reason_code, r.reason_params) == (
-            ChargerIntent.IDLE, RC.CHARGER_DIP_STOP, {})
+            ChargerIntent.IDLE, RC.CHARGER_DIP_STOP, {"x": 1})
 
     def test_the_stability_ramp_says_ramp_not_sun(self):
         from custom_components.solar_energy_management.coordinator.charge_stability import (
@@ -422,3 +444,38 @@ class TestBatteryNormalSaysWhatItDoes:
     def test_the_fall_through_is_no_limit(self, catalogue):
         """NORMAL writes the pack's own maximum discharge: SEM sets no limit."""
         assert "no limit" in catalogue["en"][RC.catalogue_key(RC.BATTERY_NORMAL)]
+
+
+class TestALimitKeepsItsOwnCode:
+
+    def test_every_capped_by_limit_names_the_limit(self):
+        """The stability clamp keeps the code of the site that set
+        ``capped_by_limit``; so each such site must name its limit."""
+        peak = {"CHARGER_PEAK_PAUSE", "CHARGER_PEAK_SLOW", "CHARGER_PEAK_STOP",
+                "CHARGER_PHASE_SLOW", "CHARGER_PHASE_STOP"}
+        sites = 0
+        for path in _source_files():
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if not isinstance(node, ast.Call):
+                    continue
+                kw = {k.arg: k.value for k in node.keywords if k.arg}
+                cap = kw.get("capped_by_limit")
+                if not (isinstance(cap, ast.Constant) and cap.value is True):
+                    continue
+                sites += 1
+                code = kw.get("reason_code")
+                assert isinstance(code, ast.Attribute) and code.attr in peak, (
+                    path.name, node.lineno)
+        assert sites >= 3
+
+    def test_rewrite_keeps_the_numbers_unless_given(self):
+        from custom_components.solar_energy_management.coordinator.charger_types import (
+            rewrite,
+        )
+        d = ChargerDecision(charger_id="c", mode="m", intent=ChargerIntent.IDLE,
+                            reason_code=RC.CHARGER_PLAN_WAIT_UNTIL,
+                            reason_params={"time": "02:00"})
+        assert rewrite(d, bridgeable=False, reason_code=d.reason_code
+                       ).reason_params == {"time": "02:00"}
+        assert rewrite(d, bridgeable=False, reason_code=RC.CHARGER_STOP_NOW,
+                       reason_params={}).reason_params == {}

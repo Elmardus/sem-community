@@ -1284,8 +1284,11 @@ def rewrite(decision, *, reason_code: str,
     """(#1174) The one way to change what a decision does — its intent, its
     current or power, its mode — after it was made. The caller names WHY in
     the same breath (``reason_code``), so a rewritten decision never keeps
-    a code that describes the decision it replaced.
+    a code that describes the decision it replaced. ``reason_params=None``
+    keeps the decision's own numbers; pass a mapping to replace them.
     ``tests/test_1174_plain_reasons.py`` fails on a bare ``replace`` that
     changes one of those fields."""
+    params = (getattr(decision, "reason_params", None) if reason_params is None
+              else reason_params)
     return replace(decision, reason_code=reason_code,
-                   reason_params=dict(reason_params or {}), **changes)
+                   reason_params=dict(params or {}), **changes)

@@ -430,7 +430,6 @@ def _relabel(decision: ChargerDecision, mode: str, prefix: str) -> ChargerDecisi
     return rewrite(
         decision, mode=mode, reason=f"{prefix} — {decision.reason}",
         reason_code=decision.reason_code,
-        reason_params=decision.reason_params,
     )
 
 
@@ -1467,11 +1466,14 @@ def decide(view: ChargerView) -> ChargerDecision:
     if result.intent is ChargerIntent.IDLE and not view.fleet.is_night:
         bridgeable, why = _idle_bridgeable(view)
         if bridgeable:
-            result = replace(result, bridgeable=True)
+            result = rewrite(result, bridgeable=True,
+                             reason_code=result.reason_code)
         else:
-            result = replace(
+            # (#1174) a label on the idle, not a new why
+            result = rewrite(
                 result, bridgeable=False,
                 reason=f"{result.reason} [structural: {why}]",
+                reason_code=result.reason_code,
             )
 
     # (#864) The PREVENTIVE peak bound — the slot budget, applied to the

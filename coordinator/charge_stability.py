@@ -1159,7 +1159,9 @@ class ChargeStability:
                 decision, intent=ChargerIntent.CHARGE_AT_AMPS,
                 commanded_amps=target,
                 reason=f"stability: smoothed → {target}A — {decision.reason}",
-                reason_code=RC.CHARGER_RAMP,
+                # (#1174) nothing ramps here: the target is adopted as is,
+                # so the decision's own why stands
+                reason_code=decision.reason_code,
             )
 
         # (#905) A LIMIT lowering the current lands NOW. The ramp and the
@@ -1180,8 +1182,9 @@ class ChargeStability:
                 decision, intent=ChargerIntent.CHARGE_AT_AMPS,
                 commanded_amps=target,
                 reason=f"stability: limit clamp → {target}A — {decision.reason}",
-                # only the peak guard and the peak shed set capped_by_limit
-                reason_code=RC.CHARGER_PEAK_SLOW,
+                # (#1174) the limit's own code, set where capped_by_limit
+                # was set (decide.py: the peak slot guard or the peak shed)
+                reason_code=decision.reason_code,
             )
         ramp = max(1, int(ramp_amps))
         ramped = max(last - ramp, min(last + ramp, target))
