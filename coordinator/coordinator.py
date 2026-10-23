@@ -7827,6 +7827,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 ("battery_force_discharge_entities", "battery_force_discharge_control_entity"),
                 ("battery_discharge_control_entities", "battery_discharge_control_entity"),
                 ("battery_strategy_entities", "battery_strategy_control_entity"),
+                # (#1166) each pack's own end-of-charge level (read only)
+                ("battery_charge_end_soc_entities", "battery_charge_end_soc_entity"),
             ):
                 lst = cfg.get(list_key)
                 if isinstance(lst, list) and idx < len(lst) and lst[idx]:
@@ -7850,6 +7852,24 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # With the one global control an unset scalar stays unset: its
         # readers resolve it (``reserve_soc_of``, mode → ``auto``).
         return {**cfg, **overrides} if overrides else cfg
+
+    def _charge_end_soc(self, cfg: dict) -> "float | None":
+        """(#1166) The pack's own end-of-charge level, or ``None``.
+
+        Read from ``battery_charge_end_soc_entity`` — this battery's, via
+        ``_per_battery_config``. SEM only reads it, never writes it: it is
+        the user's setting on the inverter. Unset, missing, unavailable or
+        not a number → ``None``, and the stall check keeps its 90 % rule.
+        """
+        eid = cfg.get("battery_charge_end_soc_entity")
+        hass = getattr(self, "hass", None)
+        if not eid or not isinstance(eid, str) or hass is None:
+            return None
+        try:
+            st = hass.states.get(eid)
+            return float(st.state) if st is not None else None
+        except (TypeError, ValueError, AttributeError):
+            return None
 
     def _finish_manual_battery_modes(
         self, battery_items, soc_read: dict, count: int,
@@ -7886,9 +7906,14 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         a gap of more than ``MANUAL_CHARGE_STALL_GAP_S`` between two checks.
         (#1167) It is a map and nothing else: one fleet flag let a dark
         sensor on one pack stop the check of every pack.
+
+        (#1166) A pack whose inverter stops it below 90 % stalls from its
+        own end level (``battery_charge_end_soc_entity``, per battery) less
+        a small margin; with no level read, 90 % as before.
         """
         from .decide_battery import (
-            charge_stall_read, charge_stall_step, forced_ops, manual_mode_done,
+            charge_stall_read, charge_stall_soc, charge_stall_step, forced_ops,
+            manual_mode_done,
         )
         from ..consts.core import BATTERY_SOC_STEP_CONFIRM_READS
         if self.config_entry is None or not battery_items:
@@ -7937,7 +7962,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                         power_read=power_read.get(battery_id) is True,
                         asked_w=asked_w,
                         sem_charging=(forced_ops(adapter)[0]
-                                      if commands else None)))
+                                      if commands else None),
+                        stall_soc=charge_stall_soc(
+                            self._charge_end_soc(cfg))))
                 if window is not None:
                     new_stalls[battery_id] = window
                 if stalled:
