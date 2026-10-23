@@ -25,6 +25,7 @@ from datetime import date as _date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ..analytics.day_tags import CAR_MIN_KWH, clear_sky_envelope, tag_day
+from ..analytics.simulation.hourly_day import CAR_DOUBT
 from ..consts.core import CONF_DAY_TAGS, CONF_SIMULATION_TAB, DEFAULT_DAY_TAGS
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,9 +74,10 @@ _COULD_NOT_ASK = object()
 _CAR_DAILY_UID = re.compile(r"^sem_charger_(.+)_daily_energy$")
 
 
-def car_daily_entity_ids(hass) -> List[str]:
-    """(#1176) Every charger's daily-energy sensor, a removed charger's too
-    while the entity registry still remembers it.
+def car_daily_entities(hass) -> Dict[str, bool]:
+    """(#1176) Every charger's daily-energy sensor → is it live. A removed
+    charger's sensor is listed (False) while the entity registry still
+    remembers it.
 
     The car's hours are read from these, not from ``daily_ev_energy``. They
     are TOTAL_INCREASING, so the recorder takes a fall as a new cycle and
@@ -87,18 +89,24 @@ def car_daily_entity_ids(hass) -> List[str]:
         from homeassistant.helpers import entity_registry as er
         from ..const import DOMAIN
         reg = er.async_get(hass)
-        entries = list(reg.entities.values()) + list(
-            getattr(reg, "deleted_entities", {}).values())
+        entries = ([(e, True) for e in reg.entities.values()]
+                   + [(e, False) for e in getattr(
+                       reg, "deleted_entities", {}).values()])
     except Exception:  # noqa: BLE001 — no registry, no charger rows
-        return []
-    found = set()
-    for entry in entries:
+        return {}
+    found: Dict[str, bool] = {}
+    for entry, live in entries:
         eid = str(getattr(entry, "entity_id", "") or "")
         if (getattr(entry, "platform", None) == DOMAIN
                 and eid.startswith("sensor.")
                 and _CAR_DAILY_UID.match(str(getattr(entry, "unique_id", "")))):
-            found.add(eid)
-    return sorted(found)
+            found[eid] = found.get(eid, False) or live
+    return dict(sorted(found.items()))
+
+
+def car_daily_entity_ids(hass) -> List[str]:
+    """(#1176) The ids of ``car_daily_entities``, live and removed."""
+    return list(car_daily_entities(hass))
 
 
 def car_rows(stats: Dict[str, Any], car_ids: Sequence[str],
@@ -110,6 +118,90 @@ def car_rows(stats: Dict[str, Any], car_ids: Sequence[str],
     if rows:
         return rows
     return list(stats.get(fallback_id) or []) if fallback_id else []
+
+
+def car_spans(stats: Dict[str, Any], car_ids: Sequence[str]
+              ) -> Dict[str, Tuple[datetime, datetime]]:
+    """(#1176) Each charger's first and last hour with a row in ``stats``."""
+    out: Dict[str, Tuple[datetime, datetime]] = {}
+    for eid in car_ids:
+        times = [t for t in (_row_time(r) for r in stats.get(eid) or [])
+                 if t is not None]
+        if times:
+            out[eid] = (min(times), max(times))
+    return out
+
+
+def car_day_notes(stats: Dict[str, Any], live: Dict[str, bool],
+                  day_start: datetime, day_end: datetime,
+                  spans: Optional[Dict[str, Tuple[datetime, datetime]]] = None,
+                  ) -> List[str]:
+    """(#1176) What makes a day's car sum from its chargers doubtful.
+
+    - A charger with rows in the period (``spans``; without them, on this
+      day) but none for some hour of this day inside its span: the sum is
+      short.
+    - A removed charger's rows on the same hours as a live one's: a renamed
+      charger counts twice, a removed one does not — no way to tell.
+
+    Each note starts with ``CAR_DOUBT``; such a day is not exact. Nothing
+    when no charger has a row on the day (the fleet row is read instead)."""
+    start, end = _utc(day_start), _utc(day_end)
+    hours: Dict[str, set] = {}
+    for eid in live:
+        hours[eid] = {t for t in (_row_time(r) for r in stats.get(eid) or [])
+                      if t is not None and start <= t < end}
+    if not any(hours.values()):
+        return []
+    notes: List[str] = []
+    for eid in live:
+        got = hours[eid]
+        span = (spans or {}).get(eid)
+        if span is None:
+            if not got:
+                continue
+            span = (min(got), max(got))
+        lo = max(start, span[0])
+        hi = min(end - timedelta(hours=1), span[1])
+        want = set()
+        t = lo
+        while t <= hi:
+            want.add(t)
+            t += timedelta(hours=1)
+        short = len(want - got)
+        if short:
+            notes.append(f"{CAR_DOUBT}: a charger's car energy is missing for "
+                         f"{short} hours of this day ({eid})")
+    live_hours = set().union(*(hours[e] for e, on in live.items() if on))
+    for eid, on in live.items():
+        both = len(hours[eid] & live_hours) if not on else 0
+        if both:
+            notes.append(f"{CAR_DOUBT}: a removed charger's car energy "
+                         f"overlaps a live one for {both} hours — it may "
+                         f"count twice ({eid})")
+    return notes
+
+
+def _utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _row_time(row) -> Optional[datetime]:
+    """A statistics row's start in UTC (a UNIX timestamp on current Home
+    Assistant, a datetime or ISO text on older ones)."""
+    start = (row or {}).get("start")
+    if isinstance(start, (int, float)):
+        return datetime.fromtimestamp(float(start), tz=timezone.utc)
+    if isinstance(start, str):
+        try:
+            start = datetime.fromisoformat(start)
+        except ValueError:
+            return None
+    if not isinstance(start, datetime):
+        return None
+    return _utc(start)
 
 
 def simulation_tab_on(owner) -> bool:

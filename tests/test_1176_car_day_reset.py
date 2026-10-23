@@ -33,9 +33,15 @@ from custom_components.solar_energy_management.coordinator import (
     day_tag_store,
     simulation_job,
 )
+from custom_components.solar_energy_management.analytics.simulation.hourly_day import (
+    CAR_DOUBT,
+)
 from custom_components.solar_energy_management.coordinator.day_tag_store import (
+    car_daily_entities,
     car_daily_entity_ids,
+    car_day_notes,
     car_rows,
+    car_spans,
 )
 from custom_components.solar_energy_management.coordinator.energy_calculator import (
     EnergyCalculator,
@@ -342,12 +348,13 @@ async def test_the_simulation_reads_the_car_from_the_chargers(monkeypatch):
                                             "sensor.e", "sensor.h")}
         return {**core, BOX_A: a, FLEET: fleet}
 
-    monkeypatch.setattr(simulation_job, "car_daily_entity_ids",
-                        lambda _hass: [BOX_A])
+    monkeypatch.setattr(simulation_job, "car_daily_entities",
+                        lambda _hass: {BOX_A: True})
     seen = {}
 
-    def capture(rows, **_kw):
+    def capture(rows, **kw):
         seen.update(rows)
+        seen["_notes"] = list(kw.get("notes") or [])
         raise RuntimeError("stop here")
 
     monkeypatch.setattr(simulation_job.HourlyDay, "from_statistics", capture)
@@ -359,6 +366,7 @@ async def test_the_simulation_reads_the_car_from_the_chargers(monkeypatch):
         await job._one_day({}, DAY, [], None, {}, ids, TZ)
     assert BOX_A in asked[0]
     assert seen["ev"] == a
+    assert seen["_notes"] == []
 
 
 @pytest.mark.asyncio
@@ -384,3 +392,121 @@ async def test_the_day_tags_read_the_car_from_the_chargers(monkeypatch):
     store._read_stats = read
     got = await store._read_day_stats(day, {"solar": "sensor.s", "ev": FLEET})
     assert got["ev"] == {7: 5.0}
+
+
+# ── a doubtful sum is never silent ──────────────────────────────────
+
+D0 = datetime.fromisoformat(DAY).replace(tzinfo=TZ)
+D1 = D0 + timedelta(days=1)
+
+
+def _hours(first, count, change=0.1):
+    return [{"start": (first + timedelta(hours=h)).timestamp(),
+             "change": change} for h in range(count)]
+
+
+def _period(**rows):
+    """Rows over 22.–24.10 per charger; the spans come from them."""
+    return dict(rows)
+
+
+def _doubt(stats, live, spans_from=None):
+    spans = car_spans(spans_from or stats, list(live))
+    return car_day_notes(stats, live, D0, D1, spans)
+
+
+def test_a_charger_missing_hours_marks_the_day():
+    period = _period(**{BOX_A: _hours(D0 - timedelta(days=1), 72),
+                        BOX_B: _hours(D0 - timedelta(days=1), 72)})
+    day = {BOX_A: _hours(D0, 24), BOX_B: _hours(D0, 12)}
+    notes = _doubt(day, {BOX_A: True, BOX_B: True}, period)
+    assert notes == [f"{CAR_DOUBT}: a charger's car energy is missing for "
+                     f"12 hours of this day ({BOX_B})"]
+    hd = HourlyDay.from_statistics(
+        {"solar": _flat(0.0), "grid_import": _flat(0.5),
+         "grid_export": _flat(0.0), "home": _flat(0.5)},
+        date=DAY, tz=TZ, notes=notes)
+    assert hd.counter_jumped
+
+
+def test_a_charger_missing_the_whole_day_marks_it():
+    period = _period(**{BOX_A: _hours(D0 - timedelta(days=1), 72),
+                        BOX_B: _hours(D0 - timedelta(days=1), 24)
+                        + _hours(D1, 24)})
+    day = {BOX_A: _hours(D0, 24), BOX_B: []}
+    notes = _doubt(day, {BOX_A: True, BOX_B: True}, period)
+    assert len(notes) == 1 and "missing for 24 hours" in notes[0]
+
+
+def test_a_charger_added_later_is_not_missing():
+    period = _period(**{BOX_A: _hours(D0 - timedelta(days=1), 72),
+                        BOX_B: _hours(D1, 24)})
+    day = {BOX_A: _hours(D0, 24), BOX_B: []}
+    assert _doubt(day, {BOX_A: True, BOX_B: True}, period) == []
+
+
+def test_a_removed_charger_overlapping_a_live_one_marks_the_day():
+    day = {BOX_A: _hours(D0, 24), BOX_B: _hours(D0, 24)}
+    notes = _doubt(day, {BOX_A: True, BOX_B: False})
+    assert notes == [f"{CAR_DOUBT}: a removed charger's car energy overlaps "
+                     f"a live one for 24 hours — it may count twice ({BOX_B})"]
+
+
+def test_a_replaced_charger_does_not_overlap():
+    # the old sensor until 10:00, the new one from 10:00
+    day = {BOX_B: _hours(D0, 10), BOX_A: _hours(D0 + timedelta(hours=10), 14)}
+    spans = {BOX_B: (D0 - timedelta(days=5), D0 + timedelta(hours=9)),
+             BOX_A: (D0 + timedelta(hours=10), D1 + timedelta(days=5))}
+    assert car_day_notes(day, {BOX_A: True, BOX_B: False}, D0, D1,
+                         spans) == []
+
+
+def test_no_charger_rows_no_doubt():
+    assert _doubt({BOX_A: []}, {BOX_A: True}) == []
+
+
+@pytest.mark.asyncio
+async def test_the_simulation_passes_the_doubt_on(monkeypatch):
+    async def read(_hass, start, end, entity_ids, _types):
+        core = {eid: _flat(0.5) for eid in ("sensor.s", "sensor.i",
+                                            "sensor.e", "sensor.h")}
+        if end - start > timedelta(days=1, hours=1):        # the span read
+            return {BOX_A: _hours(D0 - timedelta(days=1), 72),
+                    BOX_B: _hours(D0 - timedelta(days=1), 72)}
+        return {**core, BOX_A: _hours(D0, 24), BOX_B: _hours(D0, 20)}
+
+    monkeypatch.setattr(simulation_job, "car_daily_entities",
+                        lambda _hass: {BOX_A: True, BOX_B: True})
+    seen = {}
+
+    def capture(rows, **kw):
+        seen["notes"] = list(kw.get("notes") or [])
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(simulation_job.HourlyDay, "from_statistics", capture)
+    from homeassistant.util import dt as dt_util
+    monkeypatch.setattr(dt_util, "start_of_local_day",
+                        lambda d: datetime(d.year, d.month, d.day, tzinfo=TZ))
+    job = simulation_job.SimulationJob(
+        Mock(), SimpleNamespace(config={}), read_stats=read)
+    ids = {"solar": "sensor.s", "grid_import": "sensor.i",
+           "grid_export": "sensor.e", "home": "sensor.h"}
+    run = {"period": {"from": "2026-10-22", "to": "2026-10-24"}}
+    with pytest.raises(RuntimeError, match="stop here"):
+        await job._one_day(run, DAY, [], None, {}, ids, TZ)
+    assert seen["notes"] == [f"{CAR_DOUBT}: a charger's car energy is "
+                             f"missing for 4 hours of this day ({BOX_B})"]
+
+
+def test_live_and_removed_are_told_apart(monkeypatch):
+    from homeassistant.helpers import entity_registry as er
+
+    def entry(eid, uid):
+        return SimpleNamespace(entity_id=eid, unique_id=uid,
+                               platform="solar_energy_management")
+
+    reg = SimpleNamespace(
+        entities={1: entry(BOX_A, "sem_charger_a_daily_energy")},
+        deleted_entities={2: entry(BOX_B, "sem_charger_b_daily_energy")})
+    monkeypatch.setattr(er, "async_get", lambda _hass: reg)
+    assert car_daily_entities(object()) == {BOX_A: True, BOX_B: False}
