@@ -86,6 +86,20 @@ DISCHARGE_LIMIT_LEAK_W: float = 50.0
 # really fell is followed within a minute.
 DISCHARGE_LIMIT_LOWER_DWELL_CYCLES: int = 6
 
+# (#1173) …but "raise fast" made every burst two writes: up at once, down a
+# minute later. PROD, 15.–23.10: 48–143 writes a night, from a kettle or a
+# hob for 10–60 s, a house hovering 700–800 W across the 750 W step, and
+# the house figure's own jump right after SEM moved the pack. A limit that
+# follows the house (``BatteryDecision.follows_load``) now RISES only to a
+# level the house has held: for the last ~1 min when that is two steps or
+# more above the limit, for the last ~5 min when it is one step. While it
+# waits the grid covers the rest of the house, so the pack still never
+# feeds the car. Lowering is the side that keeps the pack out of the car,
+# so it keeps the rule above. A target (a peak cover, the hold, the blind
+# release, the cars' share) still rises at once.
+DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES: int = 6
+DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES: int = 30
+
 #: (#1069 review) A forced charge capped by the room under the grid limit
 #: is RAISED only after the bigger room held this many cycles (~1 min).
 #: Lowering never waits: the limit must never be exceeded. Without it a
@@ -112,6 +126,39 @@ def quantise_discharge_limit_w(raw_w: float, last_w: float) -> float:
     if last_w - raw >= DISCHARGE_LIMIT_STEP_W + DISCHARGE_LIMIT_LEAK_W:
         return candidate                      # the load really fell
     return float(last_w)                      # noise — hold
+
+
+def _settled_rise_w(raw_w: float, last_w: float, adapter) -> float:
+    """(#1173) The limit for a ``follows_load`` decision whose house is above
+    the limit in force (``last_w``).
+
+    Keeps the houses of this rise on the adapter: the cycles in a row above
+    ``last_w``, at most ``DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES`` of them.
+    After a rise only the cycles still above the new limit stay in it, and
+    a write that failed leaves it whole, so the next cycle tries again at
+    once. The limit rises to the level the house held over the last short
+    wait if that is two steps or more, else to the level it held over the
+    long wait; until then it stays ``last_w``.
+    """
+    import math
+    raw = max(0.0, float(raw_w or 0.0))
+    kept = getattr(adapter, "_limit_rise", None)
+    houses: list = []
+    for h in reversed(kept if isinstance(kept, tuple) else ()):
+        if not h > last_w:
+            break
+        houses.insert(0, h)
+    houses = (houses + [raw])[-DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES:]
+    _set(adapter, "_limit_rise", tuple(houses))
+    step = DISCHARGE_LIMIT_STEP_W
+    if len(houses) >= DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES:
+        held = math.ceil(
+            min(houses[-DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES:]) / step) * step
+        if held - last_w >= 2 * step:
+            return float(held)
+    if len(houses) >= DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES:
+        return float(math.ceil(min(houses) / step) * step)
+    return last_w
 
 
 def _note_forced_op(adapter, attr: str, ret, landed_intent, value: bool) -> None:
@@ -226,6 +273,7 @@ async def actuate_battery(
     # none, so a pack SEM did not ask to charge is never read as full.
     _set(adapter, "_sem_charge_asked_w", 0.0)
     if observer:
+        _set(adapter, "_limit_rise", None)   # (#1173) a wait is for real cycles
         _would_w = {
             BatteryIntent.FORCE_CHARGE: decision.charge_power_w,
             BatteryIntent.FORCE_DISCHARGE: decision.discharge_power_w,
@@ -285,7 +333,10 @@ async def actuate_battery(
     if decision.intent is BatteryIntent.LIMIT_DISCHARGE:
         # (#900) quantised against what the adapter last commanded, so the
         # register follows the load's trend and not the fridge.
-        last_w = float(getattr(adapter, "last_discharge_limit_w", -1.0) or -1.0)
+        # (#1173) A 0 W limit is a limit: ``or -1.0`` read it as none, so
+        # the next one went out at once whatever it was (class 105).
+        _last = getattr(adapter, "last_discharge_limit_w", None)
+        last_w = -1.0 if _last is None else float(_last)
         limit_w = quantise_discharge_limit_w(decision.discharge_limit_w, last_w)
         # Lowering waits for the drop to persist; raising never waits.
         # (#1066) …and the wait is for a limit already in force. Coming from
@@ -293,11 +344,21 @@ async def actuate_battery(
         # "lowering" and the pack fed a newly plugged-in car for six cycles.
         streak = int(getattr(adapter, "_limit_lower_streak", 0) or 0)
         _in_force = getattr(adapter, "last_intent", None) is BatteryIntent.LIMIT_DISCHARGE
-        if last_w >= 0 and limit_w < last_w and _in_force:
+        # (#1173) …except a limit that follows the house: it rises only to
+        # a level the house has held — when the limit in force is one too.
+        # Out of a target (the 0 W hold, a cover) the clamp lands at once.
+        _following = getattr(adapter, "_limit_follows", None) is True
+        if (decision.follows_load is True and _following and _in_force
+                and last_w >= 0 and limit_w > last_w):
+            limit_w = _settled_rise_w(decision.discharge_limit_w, last_w, adapter)
+            streak = 0
+        elif last_w >= 0 and limit_w < last_w and _in_force:
+            _set(adapter, "_limit_rise", None)
             streak += 1
             if streak < DISCHARGE_LIMIT_LOWER_DWELL_CYCLES:
                 limit_w = last_w
         else:
+            _set(adapter, "_limit_rise", None)
             streak = 0
         try:
             adapter._limit_lower_streak = streak
@@ -305,6 +366,10 @@ async def actuate_battery(
             pass
         record_battery(_log, decision, value_w=limit_w)
         await adapter.command_limit_discharge(limit_w)
+        # (#1173) what the limit in force is; a write that did not land
+        # leaves the old one, which this cannot vouch for
+        _set(adapter, "_limit_follows", decision.follows_load is True and getattr(
+            adapter, "last_discharge_limit_w", None) == limit_w)
         _note_protection_cycle(adapter)
         log_on_change(   # (#762) the watts wobble; the gate strips digits
             _LOGGER, f"actuate:{decision.battery_id}", logging.DEBUG,

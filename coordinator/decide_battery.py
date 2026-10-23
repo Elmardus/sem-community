@@ -129,6 +129,7 @@ def _stop_what_sem_started(view, decision: BatteryDecision) -> BatteryDecision:
                     f"{m} cycles — it is retried every other cycle)"),
             reason_code=decision.reason_code,
             reason_params=decision.reason_params,
+            follows_load=decision.follows_load,
         )
     if charge and discharge:
         charge = (m // 2) % 2 == 1
@@ -210,6 +211,30 @@ def house_load_is_measured(fleet) -> bool:
     """
     return (not bool(getattr(fleet, "inputs_degraded", False))
             and float(getattr(fleet, "home_residual_clamped_w", 0.0) or 0.0) <= 0.0)
+
+
+def meter_wants_the_rise_now(view: "BatteryView") -> bool:
+    """(#1173) Must a house clamp's rise land at once, for the meter?
+
+    A clamp that follows the house waits before it rises (``follows_load``).
+    That wait is only for a meter with room: while a peak allowance is set
+    and the house's own import plus what the chargers were offered this
+    cycle (``peak_committed_w``) is over it, the rise goes out at once, as
+    before. So it does when the house figure is not a measurement, since
+    nothing then shows the meter is under. Asked of the meter itself, not of
+    :func:`peak_cover_floor_w`, which also says no at the reserve or an
+    unread SOC: the clamp still rises with the house there (review).
+    """
+    f = view.fleet
+    allowed_w = getattr(f, "peak_slot_allowed_w", None)
+    if allowed_w is None:
+        return False
+    if not house_load_is_measured(f):
+        return True
+    house_w = max(0.0, float(view.home_consumption_w or 0.0))
+    solar_w = max(0.0, float(getattr(f, "solar_w", 0.0) or 0.0))
+    cars_w = max(0.0, float(getattr(f, "peak_committed_w", 0.0) or 0.0))
+    return max(0.0, house_w - solar_w) + cars_w > float(allowed_w)
 
 
 def reserve_stops_peak_cover(view: "BatteryView"):
@@ -996,6 +1021,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
             # figure, so this never feeds the car.
             _floored_w = peak_cover_floor_w(view, home_w, n)
             _peak_raised = _floored_w > home_w
+            _meter_tight = meter_wants_the_rise_now(view)   # (#1173)
             home_w = _floored_w
             _cars_w = (_cars_total_w / n
                        if (_cars_total_w > 0 and not below_buffer and _assist_ok)
@@ -1050,6 +1076,9 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                 reason_code=code,
                 reason_params=({"floor": round(floor_soc)}
                                if code == RC.BATTERY_CAR_BELOW_FLOOR else {}),
+                # (#1173) the house's own figure, so a rise waits out a short
+                # burst; a meter at its limit and the cars' share do not wait
+                follows_load=not (_peak_raised or _meter_tight or _cars_w > 0),
             )
 
     if _blind_release is not None:
@@ -1074,6 +1103,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
             # loads to save cents, and the peak limit outranks that.
             _floored_w = peak_cover_floor_w(view, home_w, n)
             _peak_raised = _floored_w > home_w
+            _meter_tight = meter_wants_the_rise_now(view)   # (#1173)
             home_w = _floored_w
             return BatteryDecision(
                 battery_id=rt.battery_id,
@@ -1089,6 +1119,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                        f"(home/{n} across fleet) so the grid feeds them")
                 ),
                 reason_code=RC.BATTERY_GRID_LOADS,
+                follows_load=not (_peak_raised or _meter_tight),   # (#1173)
             )
 
     # ─── NORMAL ───
