@@ -332,10 +332,6 @@ VALUE_FEED_IN_FEE = "value_feed_in_fee"
 #: own import cost, so the two daily figures roll together.
 DEVICE_TARIFF_KWH = "device_tariff_kwh:"
 DEVICE_TARIFF_COST = "device_tariff_cost:"
-#: (#812) Device kWh taken out of the house's import cost today (all devices).
-DEVICE_TARIFF_MOVED = "device_tariff_moved"
-#: (#812) Device money put back into ``cost_import`` today (all devices).
-DEVICE_TARIFF_OWN_MONEY = "device_tariff_own_money"
 CO2_KG_PER_TREE_PER_YEAR = 22  # EPA estimate
 
 
@@ -372,9 +368,14 @@ class EnergyCalculator:
 
         # Rate history for 7-day averaging (dynamic tariffs)
         self._rate_history: deque = deque(maxlen=30)
-        #: (#812) device id → the last reading of a device's own meter, kept
-        #: with the energy state so a restart books the first step after it.
-        self.device_meter_last: Dict[str, float] = {}
+        #: (#812) device id → the stamped baseline of a device's own meter
+        #: (entity, date, value, time), kept with the energy state so a
+        #: restart books the first step after it.
+        self.device_meter_last: Dict[str, Dict[str, Any]] = {}
+        #: (#812) this cycle's own-tariff devices, and meter kWh still
+        #: waiting for import to book against (device id → (day, kWh)).
+        self._device_tariff_cycle: list = []
+        self._device_meter_pending: Dict[str, tuple] = {}
 
         # (#1077) The value layer's books. ``_export_rate`` above is the
         # export VALUE (net of the per-kWh feed-in fee); these keep the
@@ -828,7 +829,19 @@ class EnergyCalculator:
         if power.grid_import_power >= MIN_POWER_THRESHOLD:
             import_increment = (power.grid_import_power * interval_hours) / 1000
             self._accumulate("grid_import", today, month_key, year_key, import_increment)
-            self._accumulate_cost("cost_import", today, month_key, year_key, import_increment * self._import_rate)
+            # (#812) split here, in the one booking, when a device is on its
+            # own tariff; with none, exactly ``import_increment × rate``
+            self._accumulate_cost("cost_import", today, month_key, year_key,
+                                  self._import_cost(import_increment, interval_hours,
+                                                    power, power_flows, today,
+                                                    month_key, year_key)
+                                  if self._device_tariff_cycle else
+                                  import_increment * self._import_rate)
+        if self._device_tariff_cycle:
+            # (#812) no import this cycle: a meter step still waits for the
+            # next import, nothing is booked
+            self._import_cost(0.0, interval_hours, power, power_flows, today,
+                              month_key, year_key)
         # (#628) utility-meter reconciliation — bidirectional, so it must run
         # before the reads below exactly like its solar and EV siblings.
         self._reconcile_metered_energy(
@@ -3991,52 +4004,54 @@ class EnergyCalculator:
             "lifetime_kwh": self._get_lifetime(category),
         }
 
-    def accumulate_device_tariff(
-        self, device_id: str, grid_kwh: float, price: float, day: date,
-    ) -> float:
-        """(#812) Move a device's grid kWh out of the house's import cost and
-        book them at the device's own price. Returns the kWh moved.
+    def set_device_tariff_cycle(self, entries) -> None:
+        """(#812) The own-tariff devices of THIS cycle (``DeviceCycle``),
+        staged by the coordinator before ``calculate_energy`` books it."""
+        self._device_tariff_cycle = list(entries or ())
 
-        ``cost_import`` already booked every imported kWh at the house rate
-        of ITS cycle (``calculate_energy``). The device's kWh leave it at the
-        rate they were booked at — the average over the house money not yet
-        moved today, never the rate now — and come back at the device price.
-        So the house's daily cost is ONE total, and its money can never go
-        below zero: what leaves is at most what was booked.
+    def _import_cost(self, import_kwh: float, interval_hours: float,
+                     power, power_flows, today: date,
+                     month_key: str, year_key: str) -> float:
+        """(#812) The money of THIS cycle's import, split where it is booked.
 
-        The kWh are capped at the house's import not yet moved today: a
-        device meter that runs ahead of the main meter has no house kWh to
-        move, and the overflow is booked nowhere (not on the device either,
-        so nothing is counted twice).
+        Each own-tariff device takes its grid kWh of this cycle — its own
+        meter's step, else its draw × the cycle time × the grid's share of
+        the house — capped at the import still unassigned this cycle, at its
+        own price. The rest is the house's, at the house rate. One booking,
+        one total: nothing is moved later, the house's money is never below
+        what its own kWh cost, and a device kWh is never counted twice.
+
+        A meter step larger than this cycle's import waits (same day only)
+        for the next cycles' import — a meter ticks in 0.01–0.1 kWh steps,
+        a cycle imports a few Wh.
         """
-        if not device_id or not grid_kwh or grid_kwh <= 0:
-            return 0.0
-        price = float(price)
-        imported = self._daily_accumulators.get(f"grid_import_{day}", 0.0)
-        moved_kwh = self._daily_accumulators.get(f"{DEVICE_TARIFF_MOVED}_{day}", 0.0)
-        room_kwh = max(0.0, imported - moved_kwh)
-        moved = min(float(grid_kwh), room_kwh)
-        if moved <= 0:
-            return 0.0
-        # The house money still in ``cost_import`` for the unmoved kWh:
-        # today's import cost, less the device money put back, less the
-        # house money already taken out.
-        house_money = max(0.0, (
-            self._daily_cost_accumulators.get(f"cost_import_{day}", 0.0)
-            - self._daily_cost_accumulators.get(f"{DEVICE_TARIFF_OWN_MONEY}_{day}", 0.0)))
-        taken = house_money * moved / room_kwh
-        own = moved * price
-        month_key, year_key = self._month_key(day), str(day.year)
-        self._accumulate(f"{DEVICE_TARIFF_KWH}{device_id}", day,
-                         month_key, year_key, moved)
-        self._accumulate_cost(f"{DEVICE_TARIFF_COST}{device_id}", day,
-                              month_key, year_key, own)
-        self._accumulate(DEVICE_TARIFF_MOVED, day, month_key, year_key, moved)
-        self._accumulate_cost(DEVICE_TARIFF_OWN_MONEY, day, month_key,
-                              year_key, own)
-        self._accumulate_cost("cost_import", day, month_key, year_key,
-                              own - taken)
-        return moved
+        from .device_tariff import grid_share
+        house_rate = float(self._import_rate or 0.0)
+        entries, self._device_tariff_cycle = self._device_tariff_cycle, []
+        left = max(0.0, float(import_kwh or 0.0))
+        share = grid_share(getattr(power_flows, "grid_to_home", 0.0),
+                           getattr(power, "home_consumption_power", 0.0))
+        cost = 0.0
+        for e in entries:
+            if e.meter:
+                day, pending = self._device_meter_pending.get(
+                    e.device_id, (today, 0.0))
+                pending = (pending if day == today else 0.0) + max(0.0, e.meter_kwh)
+                kwh = min(pending, left)
+                self._device_meter_pending[e.device_id] = (today, pending - kwh)
+            else:
+                kwh = min(max(0.0, e.power_w) * interval_hours / 1000.0 * share,
+                          left)
+            if kwh <= 0:
+                continue
+            price = house_rate if e.price is None else float(e.price)
+            self._accumulate(f"{DEVICE_TARIFF_KWH}{e.device_id}", today,
+                             month_key, year_key, kwh)
+            self._accumulate_cost(f"{DEVICE_TARIFF_COST}{e.device_id}", today,
+                                  month_key, year_key, kwh * price)
+            cost += kwh * price
+            left -= kwh
+        return cost + left * house_rate
 
     def get_device_tariff(self, device_id: str, day: date) -> Dict[str, float]:
         """(#812) Today's grid kWh and cost of a device on its own tariff."""
@@ -4769,9 +4784,12 @@ class EnergyCalculator:
             # (#812) a corrupt entry is dropped, never a reason to fail restore
             _ml = state.get("device_meter_last")
             self.device_meter_last = {
-                str(k): float(v) for k, v in (_ml.items() if isinstance(_ml, dict) else ())
-                if isinstance(v, (int, float)) and not isinstance(v, bool)
-                and math.isfinite(float(v))}
+                str(k): dict(v) for k, v in (_ml.items() if isinstance(_ml, dict) else ())
+                if isinstance(v, dict) and isinstance(v.get("value"), (int, float))
+                and not isinstance(v.get("value"), bool)
+                and math.isfinite(float(v["value"]))
+                and isinstance(v.get("entity"), str) and isinstance(v.get("date"), str)
+                and isinstance(v.get("at"), str)}
             rate_history = state.get("rate_history", [])
             self._rate_history = deque(
                 rate_history if isinstance(rate_history, list) else [], maxlen=30

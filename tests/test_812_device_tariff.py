@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -27,7 +27,7 @@ import pytest
 from homeassistant.util import dt as dt_util
 
 from custom_components.solar_energy_management.coordinator.device_tariff import (
-    LEVEL_FIXED, DeviceTariffs, apply_tariff, device_price_level, grid_share,
+    LEVEL_FIXED, DeviceCycle, DeviceTariffs, apply_tariff, device_price_level, grid_share,
     heat_pump_tariff, tariff_of,
 )
 from custom_components.solar_energy_management.coordinator.decision_log import (
@@ -120,16 +120,6 @@ def _hass_with(states: dict):
     return hass
 
 
-def _imported(calc, kwh, rate):
-    """Today's house import, booked the way ``calculate_energy`` books it."""
-    calc._import_rate = rate
-    day = dt_util.now().date()
-    mk, yk = calc._month_key(day), str(day.year)
-    calc._accumulate("grid_import", day, mk, yk, kwh)
-    calc._accumulate_cost("cost_import", day, mk, yk, kwh * rate)
-    return calc, day
-
-
 async def _night_cycle(sc, price_level):
     await sc.update(0.0, price_level=price_level, reclaim_w=0.0,
                     battery_priority=100, battery_soc=80.0,
@@ -166,7 +156,7 @@ class TestNoTariffIsTheHouseTariff:
     def test_nothing_is_booked_and_no_inputs_change(self):
         tariffs = DeviceTariffs(None)
         d = _load()
-        assert tariffs.grid_kwh(d, 1.0, 1.0) is None
+        assert tariffs.cycle([d], {}, dt_util.now()) == []
         assert tariffs.price_now(d) is None
         log = DecisionLog(None)
         log.set_inputs({"import_price": 0.30, "price_level": "cheap"})
@@ -213,12 +203,10 @@ class TestAFixedRate:
         await _night_cycle(sc, "cheap")
         assert pump.deactivate.called
 
-    def test_its_grid_kwh_are_priced_at_the_rate(self):
+    def test_its_price_is_the_rate(self):
         d = _load(rate=0.20)
-        tariffs = DeviceTariffs(None)
-        assert tariffs.price_now(d) == pytest.approx(0.20)
-        # 0.5 kWh this cycle, the grid carried 40 % of the house
-        assert tariffs.grid_kwh(d, 0.5, grid_share(800.0, 2000.0)) == pytest.approx(0.2)
+        assert DeviceTariffs(None).price_now(d) == pytest.approx(0.20)
+        assert grid_share(800.0, 2000.0) == pytest.approx(0.4)
 
     def test_the_log_shows_the_device_price(self):
         d = _load(rate=0.20)
@@ -275,71 +263,179 @@ class TestAPriceEntity:
         assert tariffs.price_now(d) == pytest.approx(0.05)
 
 
-# ── 4. the own meter ─────────────────────────────────────────────────────
+# ── 4. the own meter: a stamped, plausible step ──────────────────────────
+
+T_NOON = datetime(2026, 10, 3, 12, 0, 0)
+
+
+def _meter(value):
+    return {"sensor.hp_meter": SimpleNamespace(state=str(value), attributes={})}
 
 
 @pytest.mark.unit
 class TestTheOwnMeter:
-    def test_its_steps_are_the_grid_kwh(self):
-        states = {"sensor.hp_meter": SimpleNamespace(state="100.0", attributes={})}
-        tariffs = DeviceTariffs(_hass_with(states))
-        d = _load(rate=0.20, meter="sensor.hp_meter")
-        assert tariffs.grid_kwh(d, 9.9, 1.0) is None          # baseline
-        states["sensor.hp_meter"] = SimpleNamespace(state="100.4", attributes={})
-        assert tariffs.grid_kwh(d, 9.9, 1.0) == pytest.approx(0.4)
+    def _pump(self):
+        d = _load("heat_pump", rate=0.20, meter="sensor.hp_meter")
+        d.rated_power = 3000.0
+        return d
 
-    def test_a_reset_or_a_jump_is_not_consumption(self):
-        states = {"sensor.hp_meter": SimpleNamespace(state="100.0", attributes={})}
-        tariffs = DeviceTariffs(_hass_with(states))
-        d = _load(rate=0.20, meter="sensor.hp_meter")
-        tariffs.grid_kwh(d, 0, 0)
-        states["sensor.hp_meter"] = SimpleNamespace(state="0.2", attributes={})
-        assert tariffs.grid_kwh(d, 0, 0) is None
-        states["sensor.hp_meter"] = SimpleNamespace(state="900.0", attributes={})
-        assert tariffs.grid_kwh(d, 0, 0) is None
+    def test_a_plausible_step_is_the_grid_kwh(self):
+        store, d = {}, self._pump()
+        assert DeviceTariffs(_hass_with(_meter(100.0))).meter_step(d, store, T_NOON) is None
+        # 0.04 kWh in 1 min: under 3 kW × 1 min = 0.05
+        step = DeviceTariffs(_hass_with(_meter(100.04))).meter_step(
+            d, store, T_NOON + timedelta(minutes=1))
+        assert step == pytest.approx(0.04)
+
+    def test_an_implausible_step_rebaselines_and_says_so(self, caplog):
+        store, d = {}, self._pump()
+        DeviceTariffs(_hass_with(_meter(100.0))).meter_step(d, store, T_NOON)
+        with caplog.at_level("INFO"):
+            step = DeviceTariffs(_hass_with(_meter(103.0))).meter_step(
+                d, store, T_NOON + timedelta(minutes=1))
+        assert step is None and "re-baselined" in caplog.text
+        assert store["heat_pump"]["value"] == pytest.approx(103.0)
+
+    def test_a_restart_after_days_off_books_nothing(self):
+        store, d = {}, self._pump()
+        DeviceTariffs(_hass_with(_meter(100.0))).meter_step(d, store, T_NOON)
+        calc = EnergyCalculator({}, MagicMock())
+        calc.device_meter_last = store
+        fresh = EnergyCalculator({}, MagicMock())
+        fresh.restore_state(calc.get_state())
+        assert fresh.device_meter_last["heat_pump"]["entity"] == "sensor.hp_meter"
+        step = DeviceTariffs(_hass_with(_meter(130.0))).meter_step(
+            d, fresh.device_meter_last, T_NOON + timedelta(days=3))
+        assert step is None
+
+    def test_a_short_restart_keeps_the_step(self):
+        store, d = {}, self._pump()
+        DeviceTariffs(_hass_with(_meter(100.0))).meter_step(d, store, T_NOON)
+        calc = EnergyCalculator({}, MagicMock())
+        calc.device_meter_last = store
+        fresh = EnergyCalculator({}, MagicMock())
+        fresh.restore_state(calc.get_state())
+        step = DeviceTariffs(_hass_with(_meter(100.5))).meter_step(
+            d, fresh.device_meter_last, T_NOON + timedelta(minutes=30))
+        assert step == pytest.approx(0.5)
+
+    def test_a_swapped_meter_entity_rebaselines(self):
+        store, d = {}, self._pump()
+        DeviceTariffs(_hass_with(_meter(100.0))).meter_step(d, store, T_NOON)
+        d.tariff_meter = "sensor.hp_meter_new"
+        states = {"sensor.hp_meter_new": SimpleNamespace(state="100.02", attributes={})}
+        assert DeviceTariffs(_hass_with(states)).meter_step(
+            d, store, T_NOON + timedelta(minutes=1)) is None
+        assert store["heat_pump"]["entity"] == "sensor.hp_meter_new"
 
 
-# ── 5. the books, through the coordinator seam ───────────────────────────
+# ── 5. the books: split in the one import booking ────────────────────────
+
+_CALC_DT = "custom_components.solar_energy_management.coordinator.energy_calculator.dt_util"
+
+
+def _cycle(calc, now, *, import_w, home_w=None, grid_to_home=None, entries=()):
+    """One real ``calculate_energy`` cycle at ``now``."""
+    from unittest.mock import patch
+
+    from custom_components.solar_energy_management.coordinator.types import (
+        PowerReadings,
+    )
+    p = PowerReadings(solar_power=0.0, grid_power=-float(import_w))
+    p.calculate_derived()
+    home = float(import_w if home_w is None else home_w)
+    p.home_consumption_power = home
+    flows = SimpleNamespace(grid_to_home=float(import_w if grid_to_home is None
+                                               else grid_to_home),
+                            solar_to_home=0.0, solar_to_ev=0.0, grid_to_ev=0.0,
+                            grid_to_battery=0.0, battery_to_home=0.0,
+                            battery_to_ev=0.0, solar_to_battery=0.0,
+                            solar_to_grid=0.0, battery_to_grid=0.0)
+    calc.set_device_tariff_cycle(list(entries))
+    with patch(_CALC_DT) as dt:
+        dt.now.return_value = now
+        calc.calculate_energy(p, flows)
+
+
+def _calc(rate):
+    calc = EnergyCalculator({"update_interval": 3600}, MagicMock())
+    calc._import_rate = rate
+    return calc
 
 
 @pytest.mark.unit
 class TestTheBooks:
-    def _seam(self, devices):
-        from custom_components.solar_energy_management.coordinator.coordinator import (
-            SEMCoordinator,
-        )
-        sc = SimpleNamespace(_devices={d.device_id: d for d in devices},
-                             device_tariffs=DeviceTariffs(None))
-        calc, _ = _imported(EnergyCalculator({}, MagicMock()), 5.0, 0.30)
-        fake = SimpleNamespace(_energy_calculator=calc, _surplus_controller=sc)
-        return lambda power, flows: SEMCoordinator._book_device_tariffs(
-            fake, power, flows)
+    def test_no_device_is_todays_number(self):
+        calc = _calc(0.30)
+        _cycle(calc, T_NOON, import_w=2000.0)        # 1 h at 2 kW
+        assert calc._get_daily_cost("cost_import", T_NOON.date()) == pytest.approx(0.60)
 
-    def test_a_device_on_its_own_rate_is_costed(self):
-        pump = _load("heat_pump", rate=0.20)
-        pump.last_cycle_energy_kwh = 0.5
-        book = self._seam([pump])
-        power = SimpleNamespace(home_consumption_power=2000.0)
-        flows = SimpleNamespace(grid_to_home=1000.0)
-        book(power, flows)
-        out = book(power, flows)
-        assert out["daily_tariff_grid_kwh_heat_pump"] == pytest.approx(0.5)
-        assert out["daily_tariff_cost_heat_pump"] == pytest.approx(0.1)
-        assert out["tariff_price_heat_pump"] == pytest.approx(0.20)
+    def test_the_cycle_is_split_where_it_is_booked(self):
+        calc = _calc(0.30)
+        pump = DeviceCycle("heat_pump", power_w=1000.0, price=0.20)
+        # 2 kW import, all of the house from the grid: the pump's 1 kWh at 0.20
+        _cycle(calc, T_NOON, import_w=2000.0, entries=[pump])
+        day = T_NOON.date()
+        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.50)
+        assert calc.get_device_tariff("heat_pump", day) == {
+            "daily_grid_kwh": pytest.approx(1.0), "daily_cost": pytest.approx(0.20)}
 
-    def test_a_device_without_one_adds_nothing(self):
-        pump = _load("heat_pump")
-        pump.last_cycle_energy_kwh = 0.5
-        out = self._seam([pump])(SimpleNamespace(home_consumption_power=2000.0),
-                                 SimpleNamespace(grid_to_home=2000.0))
-        assert out == {}
+    def test_only_the_grids_share_is_the_devices(self):
+        calc = _calc(0.30)
+        pump = DeviceCycle("heat_pump", power_w=1000.0, price=0.20)
+        _cycle(calc, T_NOON, import_w=1000.0, home_w=2000.0, grid_to_home=1000.0,
+               entries=[pump])
+        assert calc.get_device_tariff("heat_pump", T_NOON.date())["daily_grid_kwh"] == \
+            pytest.approx(0.5)
 
-    def test_sun_only_costs_nothing(self):
-        pump = _load("heat_pump", rate=0.20)
-        pump.last_cycle_energy_kwh = 0.5
-        out = self._seam([pump])(SimpleNamespace(home_consumption_power=2000.0),
-                                 SimpleNamespace(grid_to_home=0.0))
-        assert out["daily_tariff_cost_heat_pump"] == 0.0
+    def test_a_negative_price_day_counts_each_kwh_once(self):
+        calc = _calc(-0.10)
+        pump = DeviceCycle("heat_pump", power_w=1000.0, price=0.20)
+        _cycle(calc, T_NOON, import_w=2000.0, entries=[pump])
+        # 1 kWh house at −0.10 + 1 kWh pump at 0.20
+        assert calc._get_daily_cost("cost_import", T_NOON.date()) == pytest.approx(0.10)
+
+    def test_the_house_never_pays_less_than_its_own_kwh(self):
+        # the reviewer's case: imported at 0.10, the rate later 0.40, the pump
+        # bills at 0.05 — every kWh is priced in its own cycle, nothing moves
+        calc = _calc(0.10)
+        _cycle(calc, T_NOON, import_w=1000.0)
+        calc._import_rate = 0.40
+        # the next cycle, 2 min later: 30 kW for 2 min = 1 kWh, all the pump's
+        pump = DeviceCycle("heat_pump", power_w=30000.0, price=0.05)
+        _cycle(calc, T_NOON + timedelta(minutes=2), import_w=30000.0, entries=[pump])
+        assert calc._get_daily_cost("cost_import", T_NOON.date()) == pytest.approx(0.15)
+
+    def test_a_meter_step_waits_for_import_and_is_never_counted_twice(self):
+        calc = _calc(0.30)
+        _cycle(calc, T_NOON, import_w=0.0,
+               entries=[DeviceCycle("heat_pump", meter=True, meter_kwh=1.5, price=0.20)])
+        _cycle(calc, T_NOON + timedelta(minutes=2), import_w=30000.0,
+               entries=[DeviceCycle("heat_pump", meter=True, meter_kwh=0.0, price=0.20)])
+        day = T_NOON.date()
+        # 1 kWh imported (2 min at 30 kW): the pump takes 1 of its 1.5
+        assert calc.get_device_tariff("heat_pump", day)["daily_grid_kwh"] == pytest.approx(1.0)
+        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.20)
+
+    def test_the_first_cycles_after_midnight_start_clean(self):
+        calc = _calc(0.30)
+        late = datetime(2026, 10, 3, 23, 59, 0)
+        _cycle(calc, late, import_w=0.0,
+               entries=[DeviceCycle("heat_pump", meter=True, meter_kwh=0.8, price=0.20)])
+        after = datetime(2026, 10, 4, 0, 0, 30)
+        _cycle(calc, after, import_w=1000.0,
+               entries=[DeviceCycle("heat_pump", meter=True, meter_kwh=0.0, price=0.20)])
+        # yesterday's waiting kWh do not land on today's import
+        assert calc.get_device_tariff("heat_pump", after.date())["daily_grid_kwh"] == 0.0
+        assert calc._get_daily_cost("cost_import", after.date()) > 0
+
+    def test_an_unreadable_price_is_the_house_rate(self):
+        calc = _calc(0.30)
+        _cycle(calc, T_NOON, import_w=2000.0,
+               entries=[DeviceCycle("heat_pump", power_w=1000.0, price=None)])
+        day = T_NOON.date()
+        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.60)
+        assert calc.get_device_tariff("heat_pump", day)["daily_cost"] == pytest.approx(0.30)
 
 
 # ── 6. heat pump config → device, and a goal on any load ─────────────────
@@ -508,14 +604,12 @@ async def test_a_real_setup_gives_the_pump_its_tariff_and_sensor(
     assert device_price_level(hp, "cheap") == "normal"
     assert device_price_level(hp2, "cheap") == "cheap"
 
-    # the books: the pump's kWh, the grid's share, the pump's rate
-    hp._last_cycle_energy_kwh = 1.0
-    hp2._last_cycle_energy_kwh = 1.0
-    _imported(coord._energy_calculator, 5.0, 0.30)
-    out = coord._book_device_tariffs(
-        SimpleNamespace(home_consumption_power=1000.0),
-        SimpleNamespace(grid_to_home=500.0))
-    assert out["daily_tariff_cost_heat_pump"] == pytest.approx(0.105, abs=0.01)
+    # the books: staged for the pump only, at its rate
+    coord._stage_device_tariffs()
+    staged = coord._energy_calculator._device_tariff_cycle
+    assert [(e.device_id, e.price) for e in staged] == [("heat_pump", pytest.approx(0.21))]
+    out = coord._device_tariff_books()
+    assert "daily_tariff_cost_heat_pump" in out
     assert not any(k.endswith("heat_pump_2") for k in out)
 
     # the sensor: there for the pump on its own rate, absent for the other
@@ -523,108 +617,28 @@ async def test_a_real_setup_gives_the_pump_its_tariff_and_sensor(
     assert sem_real_hass.states.get("sensor.sem_daily_tariff_cost_heat_pump_2") is None
 
 
-# ── 10. the house cost: one total, no double count ───────────────────────
+# ── 10. an unreadable own price: gate, plan and cost read the house ──────
 
 
 @pytest.mark.unit
-class TestTheHouseCostIsOneTotal:
-    @staticmethod
-    def _calc_with_import(kwh, rate):
-        return _imported(EnergyCalculator({}, MagicMock()), kwh, rate)
-
-    def test_no_tariff_is_todays_number(self):
-        calc, day = self._calc_with_import(2.0, 0.30)
-        pump = _load("heat_pump")
-        pump.last_cycle_energy_kwh = 1.0
-        SEMCoordinatorSeam(calc, [pump]).book(grid_to_home=2000.0, home=2000.0)
-        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.60)
-
-    def test_the_device_kwh_move_to_its_own_rate(self):
-        # 2 kWh imported at 0.30; the pump took 1 kWh of it on its 0.20 rate
-        calc, day = self._calc_with_import(2.0, 0.30)
-        pump = _load("heat_pump", rate=0.20)
-        pump.last_cycle_energy_kwh = 1.0
-        out = SEMCoordinatorSeam(calc, [pump]).book(grid_to_home=2000.0, home=2000.0)
-        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.50)
-        assert out["daily_tariff_cost_heat_pump"] == pytest.approx(0.20)
-
-    def test_kwh_leave_at_the_rate_they_were_booked_at(self):
-        # The reviewer's case: 1 kWh imported at 0.10; later the house rate
-        # is 0.40 and the pump bills 1 kWh at 0.05. Moving at 0.40 would
-        # leave the house at 0.10 − 0.40 + 0.05 = −0.25.
-        calc, day = self._calc_with_import(1.0, 0.10)
-        calc._import_rate = 0.40
-        calc.accumulate_device_tariff("heat_pump", 1.0, 0.05, day)
-        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.05)
-        assert calc._get_daily_cost("cost_import", day) >= 0
-
-    def test_mixed_rates_move_at_their_average_and_never_below_zero(self):
-        calc, day = self._calc_with_import(1.0, 0.10)
-        mk, yk = calc._month_key(day), str(day.year)
-        calc._accumulate("grid_import", day, mk, yk, 1.0)
-        calc._accumulate_cost("cost_import", day, mk, yk, 0.50)   # 1 kWh at 0.50
-        for _ in range(4):                                         # 4 × 0.5 kWh
-            calc.accumulate_device_tariff("heat_pump", 0.5, 0.0, day)
-        # everything moved at a free rate: the house money is exactly gone
-        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.0, abs=1e-9)
-
-    def test_a_meter_running_ahead_books_the_same_capped_kwh_on_both_sides(self):
-        calc, day = self._calc_with_import(0.5, 0.30)
-        moved = calc.accumulate_device_tariff("heat_pump", 2.0, 0.20, day)
-        assert moved == pytest.approx(0.5)
-        # house: 0.5 × 0.20; the pump: the same 0.5 kWh, nothing more
-        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.10)
-        books = calc.get_device_tariff("heat_pump", day)
-        assert books["daily_grid_kwh"] == pytest.approx(0.5)
-        assert books["daily_cost"] == pytest.approx(0.10)
-
-    def test_an_unreadable_price_keeps_the_house_rate_and_says_so(self, caplog):
-        calc, day = self._calc_with_import(2.0, 0.30)
-        pump = _load("heat_pump", entity="sensor.hp_price")
-        pump.last_cycle_energy_kwh = 1.0
-        seam = SEMCoordinatorSeam(calc, [pump])
-        seam.tariffs = DeviceTariffs(_hass_with({
+class TestAnUnreadablePriceIsTheHouses:
+    def test_gate_and_plan_read_the_house(self):
+        d = _load("heat_pump", entity="sensor.hp_price")
+        tariffs = DeviceTariffs(_hass_with({
             "sensor.hp_price": SimpleNamespace(state="unavailable", attributes={})}))
-        with caplog.at_level("INFO"):
-            out = seam.book(grid_to_home=2000.0, home=2000.0)
-        assert out["daily_tariff_grid_kwh_heat_pump"] == pytest.approx(1.0)
-        assert out["daily_tariff_cost_heat_pump"] == pytest.approx(0.30)
-        assert out["tariff_price_source_heat_pump"] == "house"
-        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.60)
-        assert "house rate" in caplog.text
+        tariffs.stamp([d])
+        assert device_price_level(d, "cheap") == "cheap"
+        assert d.tariff_inputs is None
+        assert tariffs.plan_tariff(d) is None
+        assert tariffs.price_now(d) is None        # → the house rate in the books
 
-    def test_the_own_meter_survives_a_restart(self):
-        states = {"sensor.hp_meter": SimpleNamespace(state="100.0", attributes={})}
-        calc = EnergyCalculator({}, MagicMock())
-        d = _load("heat_pump", rate=0.20, meter="sensor.hp_meter")
-        DeviceTariffs(_hass_with(states)).grid_kwh(
-            d, 0, 0, store=calc.device_meter_last)
-        saved = calc.get_state()
-        fresh = EnergyCalculator({}, MagicMock())
-        fresh.restore_state(saved)
-        states["sensor.hp_meter"] = SimpleNamespace(state="100.7", attributes={})
-        step = DeviceTariffs(_hass_with(states)).grid_kwh(
-            d, 0, 0, store=fresh.device_meter_last)
-        assert step == pytest.approx(0.7)
-
-
-class SEMCoordinatorSeam:
-    """The coordinator's books seam over a real calculator."""
-
-    def __init__(self, calc, devices):
-        self.calc, self.devices = calc, devices
-        self.tariffs = DeviceTariffs(None)
-
-    def book(self, *, grid_to_home, home):
-        from custom_components.solar_energy_management.coordinator.coordinator import (
-            SEMCoordinator,
-        )
-        sc = SimpleNamespace(_devices={d.device_id: d for d in self.devices},
-                             device_tariffs=self.tariffs)
-        fake = SimpleNamespace(_energy_calculator=self.calc, _surplus_controller=sc)
-        return SEMCoordinator._book_device_tariffs(
-            fake, SimpleNamespace(home_consumption_power=home),
-            SimpleNamespace(grid_to_home=grid_to_home))
+    def test_a_fixed_rate_behind_it_still_holds(self):
+        d = _load("heat_pump", rate=0.19, entity="sensor.hp_price")
+        tariffs = DeviceTariffs(_hass_with({
+            "sensor.hp_price": SimpleNamespace(state="unavailable", attributes={})}))
+        tariffs.stamp([d])
+        assert device_price_level(d, "cheap") != "cheap"
+        assert tariffs.plan_tariff(d) is not None
 
 
 # ── 11. the plan reads the device's own tariff ───────────────────────────

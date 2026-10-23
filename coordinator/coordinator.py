@@ -3933,6 +3933,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # ``calculate_energy`` now uses ``power_flows.solar_to_home
             # + solar_to_ev`` directly instead of the legacy
             # subtraction heuristic. See the note inside the function.
+            # (#812) devices on their own tariff take their share of this
+            # cycle's import in the same booking
+            try:
+                self._stage_device_tariffs()
+            except Exception:  # noqa: BLE001 — the books never cost a cycle
+                _LOGGER.debug("device tariff staging skipped", exc_info=True)
             energy = self._energy_calculator.calculate_energy(power, power_flows)
 
             # Step 2c: Time-integrate the per-cycle flows into daily
@@ -5397,7 +5403,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # (#812) devices on their own tariff: book this cycle's grid
             # kWh at that tariff and publish today's cost per device.
             try:
-                result.update(self._book_device_tariffs(power, power_flows))
+                result.update(self._device_tariff_books())
             except Exception:  # noqa: BLE001 — the books never cost a cycle
                 _LOGGER.debug("device tariff books skipped", exc_info=True)
             # 3a — core snapshot complete (power/flows/energy/battery/EV/
@@ -8337,21 +8343,6 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         from ..tariff.value_layer import export_value_threshold
         return export_value_threshold(self.config)
 
-    def _export_value_at_for_verdicts(self, prov, threshold: float):
-        """(#1090) The export value per slot for the closed window, or None.
-
-        None keeps the window on the NEGATIVE level, as before: with no value
-        field set and the default threshold, nothing about the meter moves.
-        A fee or a threshold makes the value the rule, because a Dutch import
-        curve with energy tax never reads negative while the export value
-        does.
-        """
-        from ..tariff.value_layer import value_rules_active
-        _vs = getattr(prov, "value_settings", None) if prov is not None else None
-        if not value_rules_active(_vs, threshold):
-            return None
-        return self._export_rate_at()
-
     def _active_export_threshold(self) -> "Optional[float]":
         """(#1090) The export threshold while the value rules are in force,
         else None — the consumer then keeps its pre-#1090 behaviour."""
@@ -9298,7 +9289,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     reserve_pct=float(self.config.get(
                         "battery_reserve_soc", 20.0) or 20.0),
                     export_rate=_xr, export_rate_known=_xr_known,
-                    export_threshold=self._export_value_threshold(),  # (#1090)
+                    # (#1090) None while the value rules are off
+                    export_threshold=self._active_export_threshold(),
                 )
                 if _fs.state.value == "discharging_arbitrage":
                     scheduler_decision = _fs
@@ -13479,8 +13471,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             _ups = None
         # (#1090) the threshold, and the value per slot once there is a value
         # to read; with neither, the closed window follows the level as before
-        _x_thr = self._export_value_threshold()
-        _x_at = self._export_value_at_for_verdicts(_prov, _x_thr)
+        # — one gate for every export-value behaviour (``value_rules_active``)
+        from ..tariff.value_layer import DEFAULT_EXPORT_VALUE_THRESHOLD
+        _x_active = self._active_export_threshold()
+        _x_thr = (DEFAULT_EXPORT_VALUE_THRESHOLD if _x_active is None
+                  else _x_active)
+        _x_at = None if _x_active is None else self._export_rate_at()
         try:
             _verdicts = sink_verdicts(
                 now=dt_util.now(), tariff_level=tariff_level, upcoming=_ups,
@@ -15961,56 +15957,49 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     device, "daily_energy_is_measured", False),
             )
 
-    def _book_device_tariffs(self, power, power_flows) -> Dict[str, Any]:
-        """(#812) Price each own-tariff device's grid kWh at its tariff.
+    def _stage_device_tariffs(self) -> None:
+        """(#812) Hand the calculator this cycle's own-tariff devices — their
+        draw, their accepted meter step and their price — before it books
+        the cycle's import. A device whose own price cannot be read (and has
+        no fixed rate) is priced at the house rate, and that is said once."""
+        calc = getattr(self, "_energy_calculator", None)
+        tariffs = getattr(self._surplus_controller, "device_tariffs", None)
+        if calc is None or tariffs is None:
+            return
+        devices = list(self._surplus_controller._devices.values())
+        entries = tariffs.cycle(devices, calc.device_meter_last, dt_util.now())
+        names = {d.device_id: getattr(d, "name", d.device_id) for d in devices}
+        for e in entries:
+            log_on_change(
+                _LOGGER, f"device_tariff_fallback:{e.device_id}",
+                logging.INFO if e.price is None else logging.DEBUG,
+                "%s: own price %s (#812)", names.get(e.device_id),
+                "unreadable — its grid kWh are priced at the house rate"
+                if e.price is None else "readable")
+        calc.set_device_tariff_cycle(entries)
 
-        The kWh the device booked this cycle (#768), times the share of the
-        house load the grid supplied (SEM's own flow split) — or, when the
-        device names its own meter, that meter's step. Priced at the
-        device's price now. Returns the per-device keys the cost sensors
-        read; a device without its own tariff adds nothing.
-        """
-        from .device_tariff import grid_share, tariff_of
+    def _device_tariff_books(self) -> Dict[str, Any]:
+        """(#812) Today's grid kWh and cost per own-tariff device, for its
+        cost sensor; nothing for a device without its own tariff."""
+        from .device_tariff import tariff_of
         calc = getattr(self, "_energy_calculator", None)
         tariffs = getattr(self._surplus_controller, "device_tariffs", None)
         if calc is None or tariffs is None:
             return {}
         day = dt_util.now().date()
-        share = grid_share(getattr(power_flows, "grid_to_home", 0.0),
-                           getattr(power, "home_consumption_power", 0.0))
         out: Dict[str, Any] = {}
         for device in list(self._surplus_controller._devices.values()):
             if not tariff_of(device).configured:
                 continue
             did = device.device_id
-            kwh = tariffs.grid_kwh(
-                device, getattr(device, "last_cycle_energy_kwh", 0.0) or 0.0,
-                share,
-                # the own meter's last reading lives with the energy state,
-                # so a restart does not drop the first step
-                store=getattr(calc, "device_meter_last", None))
             price = tariffs.price_now(device)
-            source = "own"
-            if price is None:
-                # The device's price cannot be read and it has no fixed rate
-                # to fall back on: its kWh stay at the house rate — the
-                # honest answer — rather than going unbooked. Said once.
-                price, source = float(getattr(calc, "_import_rate", 0.0) or 0.0), "house"
-                log_on_change(
-                    _LOGGER, f"device_tariff_fallback:{did}", logging.INFO,
-                    "%s: own price unreadable — its grid kWh are priced at the "
-                    "house rate until it reads again (#812)", device.name)
-            else:
-                log_on_change(_LOGGER, f"device_tariff_fallback:{did}",
-                              logging.DEBUG, "%s: own price readable (#812)",
-                              device.name)
-            if kwh:
-                calc.accumulate_device_tariff(did, kwh, price, day)
             books = calc.get_device_tariff(did, day)
             out[f"daily_tariff_cost_{did}"] = books["daily_cost"]
             out[f"daily_tariff_grid_kwh_{did}"] = books["daily_grid_kwh"]
-            out[f"tariff_price_{did}"] = price
-            out[f"tariff_price_source_{did}"] = source
+            out[f"tariff_price_{did}"] = (
+                price if price is not None
+                else float(getattr(calc, "_import_rate", 0.0) or 0.0))
+            out[f"tariff_price_source_{did}"] = "own" if price is not None else "house"
             out[f"tariff_level_{did}"] = getattr(device, "_tariff_level", None)
         return out
 
