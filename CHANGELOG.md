@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Selling from the battery lifts the discharge limit set before** (#1175). A 0 W limit for the car or cheap hours no longer stops it.
 - 🐛 **Car energy across midnight or Charge-by is counted once** (#1161). The charger's counter sets the total over the days.
 - 🐛 **Daily car energy tells Home Assistant it resets at Charge-by, not midnight** (#1176). The Simulation tab reads each charger's daily energy.
 - 🐛 **Force charge goes back to Auto when the battery is full** (#1131). Force discharge does the same at the reserve.

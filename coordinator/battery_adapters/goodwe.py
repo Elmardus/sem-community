@@ -95,7 +95,8 @@ class GoodWeBatteryAdapter(BatteryControlAdapter):
         self._last_error = None
         self._last_intent = BatteryIntent.STOP_FORCE_CHARGE
 
-    async def _apply_discharge_limit(self, watts: float) -> None:
+    async def _apply_discharge_limit(self, watts: float, *,
+                                     force: bool = False) -> None:
         if not self._discharge_control_entity:
             self._last_discharge_limit_w = watts
             return
@@ -104,5 +105,6 @@ class GoodWeBatteryAdapter(BatteryControlAdapter):
             self._discharge_control_entity,
             watts,
             context="GoodWe battery discharge limit",
+            force=force,
         ):
             self._last_discharge_limit_w = watts

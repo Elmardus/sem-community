@@ -531,6 +531,8 @@ class GenericBatteryAdapter(BatteryControlAdapter):
             return
         await self._zero_setpoint()  # (#1005)
         await self._set_strategy(self._strategy_off)
+        # (#1175) Hands off means no limit of SEM's left behind either.
+        await self._hand_back_own_limit()
         self._last_intent = BatteryIntent.OFF
 
     async def command_limit_discharge(self, watts: float) -> None:
@@ -610,7 +612,8 @@ class GenericBatteryAdapter(BatteryControlAdapter):
         self._last_error = None
         self._last_intent = BatteryIntent.STOP_FORCE_CHARGE
 
-    async def _apply_discharge_limit(self, watts: float) -> None:
+    async def _apply_discharge_limit(self, watts: float, *,
+                                     force: bool = False) -> None:
         if not self._discharge_control_entity:
             self._last_discharge_limit_w = watts
             return
@@ -619,6 +622,7 @@ class GenericBatteryAdapter(BatteryControlAdapter):
             self._discharge_control_entity,
             watts,
             context="Generic battery discharge limit",
+            force=force,
         )
         if ok:
             self._last_discharge_limit_w = watts
@@ -626,4 +630,3 @@ class GenericBatteryAdapter(BatteryControlAdapter):
                 # only a write that went OUT is judged; the same-value skip
                 # is not a write and must not re-arm the grace (06.09 audit)
                 self._note_pending_write(self._discharge_control_entity, watts)
-

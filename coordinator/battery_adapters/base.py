@@ -484,7 +484,53 @@ class BatteryControlAdapter(ABC):
 
         Sets ``_last_intent`` ONLY when the write succeeds — a failed
         write leaves ``_last_intent`` unchanged so the next cycle
-        re-issues the command rather than masquerading as successful."""
+        re-issues the command rather than masquerading as successful.
+
+        (#1175) A discharge limit SEM wrote before the sale is put back to
+        the max first (:meth:`_hand_back_own_limit`)."""
+        await self._hand_back_own_limit()
+        await self._send_sale(power_w)
+
+    def _own_limit_held(self) -> bool:
+        """(#1175) Is the last discharge limit SEM wrote below the pack's
+        max? −1 (SEM wrote none) is no. So is one entity for both the limit
+        and the sale power: that register is the sale's own."""
+        if getattr(self, "_discharge_control_entity", "") == self._force_discharge_entity:
+            return False
+        return 0.0 <= self.last_discharge_limit_w < float(self.max_discharge_power_w)
+
+    async def _hand_back_own_limit(self) -> None:
+        """(#1175) Before a sale: put back the pack's max discharge when the
+        last limit SEM wrote is below it.
+
+        A limit SEM wrote to keep the pack for the house (the 0 W cheap-hour
+        hold, the EV clamp) stays in the register until a command writes it
+        again, and only NORMAL did. On a brand where that limit also caps a
+        forced discharge, the sale then sends nothing. A limit SEM did not
+        write (``last_discharge_limit_w`` is −1) is left as it is (#936).
+
+        The write skips the same-value check: SEM knows it wrote a lower
+        limit, and the entity can still show the max from before that write
+        until the integration reads it again (review). A failed write leaves
+        the record low, so the next sale cycle asks again.
+        """
+        if not self._own_limit_held():
+            return
+        apply = getattr(self, "_apply_discharge_limit", None)
+        if apply is None:
+            return
+        await apply(float(self.max_discharge_power_w), force=True)
+        if (not self._own_limit_held()
+                and self._last_intent is BatteryIntent.LIMIT_DISCHARGE):
+            # The limit is gone. Left as the last command, LIMIT_DISCHARGE at
+            # the max reads as a limit in force, and a hold that comes back
+            # next cycle waits out the lowering dwell (review). A sale that
+            # goes out this cycle records its own intent after this.
+            self._last_intent = None
+
+    async def _send_sale(self, power_w: float) -> None:
+        """The sale's own write: the forcible-discharge power, clamped to
+        the brand's max. Records the intent only when the write landed."""
         watts = max(0.0, min(float(power_w), self.max_discharge_power_w))
         ok = await self._write_force_discharge(watts)
         if ok:

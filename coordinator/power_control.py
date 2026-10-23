@@ -269,6 +269,7 @@ async def async_write_power_setpoint_verbose(
     watts: float,
     *,
     context: str,
+    force: bool = False,
 ) -> tuple:
     """Validate, convert, and write a watt setpoint.
 
@@ -278,6 +279,10 @@ async def async_write_power_setpoint_verbose(
     #915 read-back needs: noting a "write" that never happened re-armed its
     grace timer every cycle and no verdict could ever be reached (06.09
     audit).
+
+    ``force`` skips the same-value check, for a caller that knows it wrote
+    another value last: the entity can still show the value from before
+    that write until the integration next reads it (#1175).
     """
     prepared = prepare_power_setpoint(hass, entity_id, watts)
     if prepared is None:
@@ -287,7 +292,8 @@ async def async_write_power_setpoint_verbose(
     # a Huawei install — wrote its max every cycle). Compare in native units
     # to the LIVE entity state, so an external change is still re-asserted;
     # one native unit is the resolution the entity can express.
-    if abs(prepared.current_value - prepared.value) < 1.0 / prepared.scale_to_watts:
+    if (not force and abs(prepared.current_value - prepared.value)
+            < 1.0 / prepared.scale_to_watts):
         log_on_change(
             _LOGGER, f"setpoint-skip:{entity_id}", logging.DEBUG,
             "%s: %s already at %.3f — no write", context, entity_id, prepared.value,
@@ -315,8 +321,9 @@ async def async_write_power_setpoint(
     watts: float,
     *,
     context: str,
+    force: bool = False,
 ) -> bool:
     """Validate, convert, and write a watt setpoint. Return success."""
     ok, _wrote = await async_write_power_setpoint_verbose(
-        hass, entity_id, watts, context=context)
+        hass, entity_id, watts, context=context, force=force)
     return ok
