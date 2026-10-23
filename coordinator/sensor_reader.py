@@ -935,6 +935,11 @@ class SensorReader:
         # (#758) An unreadable battery power sensor reads as 0.0 W, which is
         # also what an idle battery reads. Say which one this is, once, here.
         readings.battery_power_unavailable = self._battery_power_missing
+        # (#1164) …and whether there was a reading at all: no sensor (SOC
+        # only) reads 0.0 with nothing dark.
+        readings.battery_power_read = (
+            self._input_reads.get("battery", 0) > 0
+            and not self._battery_power_missing)
         # (#818) Two questions, two answers. ``inputs_degraded`` gates
         # WRITING (any dark read means this cycle cannot be steered on);
         # the per-input flags gate PUBLISHING (only a total with nothing

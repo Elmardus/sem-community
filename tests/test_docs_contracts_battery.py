@@ -179,8 +179,11 @@ class TestBatteryModeTable:
                     sem_charging=True)
         assert charge_stall_read(90.0, 0.0, **read)
         assert not charge_stall_read(89.0, 0.0, **read)
-        window, _ = charge_stall_step(None, 0.0, 95.0, True)
-        _, stalled = charge_stall_step(window, 15 * 60.0, 95.0, True)
+        window, stalled = None, False
+        for t in range(0, 15 * 60 + 1, 30):      # one check every 30 s
+            assert not stalled
+            window, stalled = charge_stall_step(window, float(t), 95.0, True)
+        assert stalled
         assert manual_mode_done("force_charge", 95.0, soc_read=True, reserve=20,
                                 charge_stalled=stalled)
 

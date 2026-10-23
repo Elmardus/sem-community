@@ -7828,10 +7828,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         its Force charge never ended. A charge is also done once the pack
         has taken no more for ``MANUAL_CHARGE_STALL_S`` at a high level,
         while SEM's charge was on (``charge_stall_read``). The window runs
-        on this cycle's readings against what SEM asked last cycle: the
-        decision before this one is what the pack was answering.
-        ``power_read`` is False when a battery power read is dark; the
-        window then ends, as it does on any cycle not checked here.
+        on this cycle's readings against what the actuator last sent: the
+        command before this cycle is what the pack was answering.
+        ``power_read`` is False unless a battery power sensor was read; the
+        window then ends. So does a gap of more than
+        ``MANUAL_CHARGE_STALL_GAP_S`` between two checks.
         """
         from .decide_battery import (
             charge_stall_read, charge_stall_step, forced_ops, manual_mode_done,
@@ -7855,8 +7856,6 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         stalls = stalls if isinstance(stalls, dict) else {}
         adapters = getattr(self, "_battery_adapters", None)
         adapters = adapters if isinstance(adapters, dict) else {}
-        asked = getattr(self, "_forced_charge_asked_w", None)
-        asked = asked if isinstance(asked, dict) else {}
         # Observer sends nothing, so nothing was asked of the pack.
         commands = not bool(getattr(self, "_observer_mode", False))
         now_s = _manual_stall_clock()
@@ -7870,12 +7869,19 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             is_read = bool(soc_read.get(battery_id, False))
             stalled = False
             if mode == "force_charge":
+                adapter = adapters.get(battery_id)
+                # What actuate_battery last SENT this battery (0 when it sent
+                # a stop, held one, or sent anything else).
+                asked_w = getattr(adapter, "_sem_charge_asked_w", 0.0)
+                if isinstance(asked_w, bool) or not isinstance(
+                        asked_w, (int, float)):
+                    asked_w = 0.0
                 window, stalled = charge_stall_step(
                     stalls.get(battery_id), now_s, soc, charge_stall_read(
                         soc, getattr(runtime, "last_known_w", None),
                         soc_read=is_read, power_read=bool(power_read),
-                        asked_w=asked.get(battery_id, 0.0),
-                        sem_charging=(forced_ops(adapters.get(battery_id))[0]
+                        asked_w=asked_w,
+                        sem_charging=(forced_ops(adapter)[0]
                                       if commands else None)))
                 if window is not None:
                     new_stalls[battery_id] = window
@@ -9463,9 +9469,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 {bid: bool(rt.available and soc_seen.get(bid, False))
                  for bid, rt in battery_items},
                 _bat_count,
-                # (#1164) a dark or impossible battery power is no reading
-                power_read=not bool(
-                    getattr(power, "battery_power_unavailable", False)))
+                # (#1164) a dark or impossible battery power is no reading,
+                # and neither is the 0.0 of a battery with no power sensor
+                power_read=bool(getattr(power, "battery_power_read", False))
+                and not bool(getattr(power, "battery_power_unavailable", False)))
         except Exception:  # noqa: BLE001 — a mode write must not end a cycle
             _LOGGER.warning("ending a finished manual battery mode failed "
                             "(#1131)", exc_info=True)
@@ -9640,14 +9647,6 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             }
             if decision.intent is BatteryIntent.FORCE_DISCHARGE:
                 self._battery_arbitrage_active = True
-            # (#1164) What this battery is asked to charge at — the next
-            # cycle's Force charge check compares the pack's answer with it.
-            if not isinstance(getattr(self, "_forced_charge_asked_w", None),
-                              dict):
-                self._forced_charge_asked_w = {}
-            self._forced_charge_asked_w[battery_id] = (
-                float(decision.charge_power_w or 0.0)
-                if decision.intent is BatteryIntent.FORCE_CHARGE else 0.0)
 
             # 4. Actuate (#764: observer cuts here, inside the actuator)
             await actuate_battery(

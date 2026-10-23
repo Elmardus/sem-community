@@ -243,6 +243,9 @@ MANUAL_CHARGE_STALL_W = 100.0
 #: (#1164) …while SEM asks it for at least one charge step, for this long,
 #: and its level does not rise.
 MANUAL_CHARGE_STALL_S = 15 * 60.0
+#: (#1164) Two checks further apart than this (three of the slowest 60 s
+#: cycles) start the window again: what happened between them is unseen.
+MANUAL_CHARGE_STALL_GAP_S = 180.0
 
 
 def manual_mode_done(mode, soc, *, soc_read: bool, reserve: float,
@@ -294,15 +297,20 @@ def charge_stall_read(soc, power_w, *, soc_read: bool, power_read: bool,
 def charge_stall_step(prev, now_s: float, soc, stall_read: bool):
     """(#1164) Carry one battery's stall window one cycle.
 
-    ``prev`` is ``None`` or ``(since_s, soc_at_start)``. Returns the new
-    window and whether it has lasted ``MANUAL_CHARGE_STALL_S``. Any cycle
-    without a stall read ends the window; a level above the one it started
-    at starts it again — the pack still charges, slowly."""
+    ``prev`` is ``None`` or ``(since_s, soc_at_start, last_s)``. Returns the
+    new window and whether it has lasted ``MANUAL_CHARGE_STALL_S``. Any
+    cycle without a stall read ends the window; a level above the one it
+    started at starts it again — the pack still charges, slowly — and so
+    does a gap over ``MANUAL_CHARGE_STALL_GAP_S`` since the last check."""
     if not stall_read:
         return None, False
-    if prev is None or float(soc) > float(prev[1]):
-        return (float(now_s), float(soc)), False
-    return prev, float(now_s) - float(prev[0]) >= MANUAL_CHARGE_STALL_S
+    now_s = float(now_s)
+    if (prev is None or float(soc) > float(prev[1])
+            or now_s - float(prev[2]) > MANUAL_CHARGE_STALL_GAP_S):
+        return (now_s, float(soc), now_s), False
+    since_s, start_soc = float(prev[0]), float(prev[1])
+    return ((since_s, start_soc, now_s),
+            now_s - since_s >= MANUAL_CHARGE_STALL_S)
 
 
 def peak_cover_floor_w(view: "BatteryView", limit_w: float, n: int) -> float:
