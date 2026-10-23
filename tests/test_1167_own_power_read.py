@@ -231,36 +231,75 @@ class TestThePipeline:
 def _fleet_reads(nodes, names):
     return [ast.unparse(n) for node in nodes for n in ast.walk(node)
             if (isinstance(n, ast.Attribute) and n.attr in names)
-            or (isinstance(n, ast.Constant) and n.value in names)]
+            or (isinstance(n, ast.Constant) and n.value in names)
+            or (isinstance(n, ast.Name) and n.id in names)]
 
 
 _PIPELINE = ast.parse(textwrap.dedent(
     inspect.getsource(SEMCoordinator._run_battery_pipeline)))
 _FLEET_POWER = {"battery_power_read", "battery_power_unavailable",
                 "battery_power_all_unavailable"}
+#: …and what stands for the fleet's level: its SOC flags, and the runtime's
+#: ``available``, which carries the fleet SOC flag on every unit (#932).
+_FLEET = _FLEET_POWER | {"battery_soc_unavailable", "battery_soc_known",
+                         "available"}
+
+
+def _tainted():
+    """Local names assigned anywhere in the pipeline from a fleet flag, so a
+    copy into a variable first is still a fleet read."""
+    names: set = set()
+    for _ in range(3):                  # a copy of a copy
+        for n in ast.walk(_PIPELINE):
+            if (isinstance(n, ast.Assign)
+                    and _fleet_reads([n.value], _FLEET | names)):
+                names |= {t.id for t in n.targets if isinstance(t, ast.Name)}
+    return names
+
+
+def _many_battery_branch():
+    branches = [n for n in ast.walk(_PIPELINE) if isinstance(n, ast.If)
+                and ast.unparse(n.test) == "power.batteries"]
+    assert len(branches) == 1, "the per-battery branch moved: update this guard"
+    return branches[0]
 
 
 def test_the_many_battery_branch_reads_no_fleet_power_flag():
     """Guard: inside ``if power.batteries:`` of the pipeline, each battery
     answers for itself. A fleet battery power flag read there is the #1167
     shape again."""
-    branches = [n for n in ast.walk(_PIPELINE) if isinstance(n, ast.If)
-                and ast.unparse(n.test) == "power.batteries"]
-    assert len(branches) == 1, "the per-battery branch moved: update this guard"
-    assert _fleet_reads(branches[0].body, _FLEET_POWER) == []
+    assert _fleet_reads(_many_battery_branch().body,
+                        _FLEET_POWER | _tainted()) == []
 
 
-def test_the_check_is_handed_no_fleet_flag():
-    """Guard: the arguments of the end check name no fleet flag. #1167 was
-    ``power_read=power.battery_power_read`` here, and the level was
-    ``rt.available`` — the fleet's SOC flag on every unit."""
+def test_each_unit_flag_is_its_own():
+    """Guard: in the per-battery branch, what goes into the flags the check
+    gets names no fleet flag, directly or through a copy."""
+    flags = {"soc_seen", "power_seen"}
+    stores = [n for stmt in _many_battery_branch().body for n in ast.walk(stmt)
+              if isinstance(n, (ast.Assign, ast.AugAssign, ast.AnnAssign))
+              and any(isinstance(t, ast.Subscript)
+                      and ast.unparse(t.value) in flags
+                      for t in (n.targets if isinstance(n, ast.Assign)
+                                else [n.target]))]
+    assert len(stores) == 2, "one store per flag: update this guard"
+    assert _fleet_reads([n.value for n in stores], _FLEET | _tainted()) == []
+
+
+def test_the_check_is_handed_the_unit_flags():
+    """Guard: the end check gets those two maps by name and no fleet flag.
+    #1167 was ``power_read=power.battery_power_read`` here, and the level
+    was ``rt.available`` — the fleet's SOC flag on every unit."""
     calls = [n for n in ast.walk(_PIPELINE) if isinstance(n, ast.Call)
              and isinstance(n.func, ast.Attribute)
              and n.func.attr == "_finish_manual_battery_modes"]
     assert len(calls) == 1, "the end check moved: update this guard"
-    args = list(calls[0].args) + [k.value for k in calls[0].keywords]
-    assert _fleet_reads(args, _FLEET_POWER | {
-        "available", "battery_soc_unavailable", "battery_soc_known"}) == []
+    call = calls[0]
+    assert ast.unparse(call.args[1]) == "soc_seen"
+    assert [ast.unparse(k.value) for k in call.keywords
+            if k.arg == "power_read"] == ["power_seen"]
+    args = list(call.args) + [k.value for k in call.keywords]
+    assert _fleet_reads(args, _FLEET | _tainted()) == []
 
 
 # ── 3. The check ends battery 1's charge while battery 2 is dark ───────────
