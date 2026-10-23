@@ -23,6 +23,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from ..devices.base import ControllableDevice, DeviceState, DeviceControlMode
+from . import reason_codes as RC  # (#1174)
 from .plan_verdict import NO_OPINION, PlanVerdict
 
 from ..utils.log_gate import log_on_change
@@ -653,6 +654,9 @@ class LoadIntent:
     power_w: float
     source: Optional[str]   # 'solar'|'tier1_battery'|'tier2_battery'|'cheap_grid'|None
     reason: str
+    #: (#1174) the reason as a stable code (``reason_codes``); empty = the
+    #: source names it. Recorded only, left out of equality.
+    code: str = field(default="", compare=False)
 
 
 def compute_load_intent(
@@ -705,7 +709,8 @@ def compute_load_intent(
         # (not _sem_owned) is left exactly as-is.
         if active and getattr(device, "_sem_commanded", False):
             # SEM issued the ON - opt-out undoes SEM's own action.
-            return LoadIntent(False, 0.0, None, "mode off — ending SEM-started run")
+            return LoadIntent(False, 0.0, None, "mode off — ending SEM-started run",
+                              RC.LOAD_MODE_OFF)
         if getattr(device, "_sem_owned", False):
             # (#847) ADOPTED only (user/externally started, claimed
             # under Surplus so goal gates could stop it). Opt-out
@@ -729,7 +734,7 @@ def compute_load_intent(
     # --- SURPLUS mode below ---
     # 2. Peak shed wins over any run reason.
     if is_shed_target:
-        return LoadIntent(False, 0.0, None, "peak shed")
+        return LoadIntent(False, 0.0, None, "peak shed", RC.LOAD_PEAK_SHED)
 
     # 2b. (#638 Stage 3) The plan may STOP a paid run whose window closed —
     #     the hold is only ever raised while the remaining blocks can still
@@ -741,7 +746,8 @@ def compute_load_intent(
             and (getattr(device, "_batt_overnight_forced", False)
                  or getattr(device, "_offpeak_forced", False))):
         return LoadIntent(False, 0.0, None,
-                          plan.reason or "joint energy plan: window closed")
+                          plan.reason or "joint energy plan: window closed",
+                          RC.LOAD_PLAN_CLOSED)
 
     # 3. Done for the day — the hard stops (cap overrides the deficit).
     #    (#688) The daily MINIMUM is deliberately NOT one of them. It is a
@@ -750,9 +756,11 @@ def compute_load_intent(
     #    the EV floor/ceiling contract (#245) that this slider was built to
     #    mirror — treating Min as a stop made Max unreachable whenever Min > 0.
     if getattr(device, "daily_max_runtime_reached", False):
-        return LoadIntent(False, 0.0, None, "daily max cap reached")
+        return LoadIntent(False, 0.0, None, "daily max cap reached",
+                          RC.LOAD_DAILY_MAX)
     if getattr(device, "stop_condition_met", False):
-        return LoadIntent(False, 0.0, None, "stop condition met")
+        return LoadIntent(False, 0.0, None, "stop condition met",
+                          RC.LOAD_STOP_CONDITION)
     # 3a. (#1121) The device's own run (Legionella) needs no sun: kept as
     #     it is, never re-tuned. Only a shed (clause 2) or its own end stops it.
     if active and getattr(device, "runs_without_surplus", False) is True:
@@ -763,7 +771,7 @@ def compute_load_intent(
     #     which was deliberately not peak-gated). ruflo B1.
     if getattr(device, "is_deadline_approaching", False) and not active:
         return LoadIntent(True, float(getattr(device, "rated_power", 0.0) or 0.0),
-                          "solar", "deadline force")
+                          "solar", "deadline force", RC.LOAD_DEADLINE)
 
     # 4. A source can power it. peak_freeze blocks *new* starts but keeps a
     #    running load on (only an explicit shed removes it, clause 2).
@@ -830,8 +838,9 @@ def compute_load_intent(
     if plan_hold and deficit:
         detail = f" (until {plan.until:%H:%M})" if plan.until else ""
         return LoadIntent(False, 0.0, None,
-                          (plan.reason or "joint energy plan: waiting for the planned window") + detail)
-    return LoadIntent(False, 0.0, None, "no source available")
+                          (plan.reason or "joint energy plan: waiting for the planned window") + detail,
+                          RC.LOAD_PLAN_WAIT)
+    return LoadIntent(False, 0.0, None, "no source available", RC.LOAD_NO_SOURCE)
 
 
 def _load_meter_day(device: "ControllableDevice"):
@@ -903,11 +912,12 @@ def _reconcile_load_observe(device: "ControllableDevice", intent: LoadIntent,
     if intent.on and (not active or intent.source is not None):
         from .decision_log import record_load
         record_load(_log, device, on=True, watts=intent.power_w,
-                    reason_code=intent.source or "start", text=intent.reason,
-                    observer=True)
+                    reason_code=intent.code or intent.source or RC.LOAD_START,
+                    text=intent.reason, observer=True)
     elif not intent.on and active:
         from .decision_log import record_load
-        record_load(_log, device, on=False, reason_code="stop",
+        record_load(_log, device, on=False,
+                    reason_code=intent.code or RC.LOAD_STOP,
                     text=intent.reason, observer=True)
     observed = device.get_current_consumption() if active else 0.0
     name = getattr(device, "name", None) or getattr(device, "device_id", "?")
@@ -965,7 +975,7 @@ async def _activate_owned(device: "ControllableDevice", watts: float,
         device.record_activated()
         # (#1084) logged once it took: a refused start sent nothing new
         _note_load(device, on=True, watts=watts,
-                   reason_code=reason_code or "start", text=text)
+                   reason_code=reason_code or RC.LOAD_START, text=text)
     return consumed
 
 
@@ -975,7 +985,7 @@ async def _adjust_owned(device: "ControllableDevice", watts: float,
     so the decision log sees a setpoint change of a meaningful size."""
     consumed = await device.adjust_power(watts)
     _note_load(device, on=True, watts=watts,
-               reason_code=reason_code or "adjust", text=text)
+               reason_code=reason_code or RC.LOAD_ADJUST, text=text)
     return consumed
 
 
@@ -990,7 +1000,8 @@ async def _deactivate_owned(device: "ControllableDevice",
     if device.is_active:
         return False
     device.record_deactivated()
-    _note_load(device, on=False, reason_code=reason_code or "stop", text=text)
+    _note_load(device, on=False, reason_code=reason_code or RC.LOAD_STOP,
+               text=text)
     return True
 
 
@@ -1017,7 +1028,8 @@ async def reconcile_load(device: "ControllableDevice", intent: LoadIntent,
         if not device.can_activate():
             return 0.0
         consumed = await _activate_owned(
-            device, intent.power_w, reason_code=intent.source or "start",
+            device, intent.power_w,
+            reason_code=intent.code or intent.source or RC.LOAD_START,
             text=intent.reason)
         if consumed > 0:
             device.reset_surplus_timer()
@@ -1027,7 +1039,8 @@ async def reconcile_load(device: "ControllableDevice", intent: LoadIntent,
     if not intent.on and active:
         if not device.can_deactivate():
             return device.get_current_consumption()   # anti-flicker holds it on
-        if await _deactivate_owned(device, reason_code="stop",
+        if await _deactivate_owned(device,
+                                   reason_code=intent.code or RC.LOAD_STOP,
                                    text=intent.reason):
             _clear_source_markers(device)
             return 0.0
@@ -1039,7 +1052,8 @@ async def reconcile_load(device: "ControllableDevice", intent: LoadIntent,
         if intent.source is None:
             return device.get_current_consumption()
         consumed = await _adjust_owned(
-            device, intent.power_w, reason_code=intent.source or "adjust",
+            device, intent.power_w,
+            reason_code=intent.code or intent.source or RC.LOAD_ADJUST,
             text=intent.reason)
         _apply_source_markers(device, intent)
         return consumed
@@ -1141,7 +1155,7 @@ async def deactivate_devices(devices, reason: str = "teardown") -> int:
         if not getattr(device, "_sem_commanded", False):
             continue
         try:
-            await _deactivate_owned(device, reason_code="teardown", text=reason)
+            await _deactivate_owned(device, reason_code=RC.LOAD_TEARDOWN, text=reason)
             stopped += 1
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning(
@@ -1968,7 +1982,7 @@ class SurplusController:
                 # pass — this one trusted the device to hold it itself, and a
                 # heat pump's SG-Ready stand-down does not.
                 if device.can_deactivate() and await _deactivate_owned(
-                        device, reason_code="overnight_end", text=reason):
+                        device, reason_code=RC.LOAD_OVERNIGHT_END, text=reason):
                     device._offpeak_forced = False
                     device._offpeak_forced_date = None
                     device._batt_overnight_forced = False
@@ -2056,7 +2070,7 @@ class SurplusController:
                 if done_reason:
                     if device.is_active and device.can_deactivate():
                         if await _deactivate_owned(
-                                device, reason_code="target_met", text=done_reason):
+                                device, reason_code=RC.LOAD_TARGET_MET, text=done_reason):
                             device._offpeak_forced = False
                             device._offpeak_forced_date = None
                             # (#620) done-for-the-day also ends any Tier-2
@@ -2113,7 +2127,7 @@ class SurplusController:
                     continue  # #508 W2: don't add load while peak is at risk
                 if device.can_activate():
                     consumed = await _activate_owned(
-                        device, remaining_surplus, reason_code="surplus",
+                        device, remaining_surplus, reason_code=RC.LOAD_SURPLUS,
                         text="enough sun to start")
                     assist = 0.0
                     if consumed > 0:
@@ -2158,7 +2172,7 @@ class SurplusController:
                     consumed = await _adjust_owned(
                         device,
                         remaining_surplus + self._tier1_headroom_w(device),
-                        reason_code="surplus", text="follows the sun")
+                        reason_code=RC.LOAD_SURPLUS, text="follows the sun")
                 else:
                     # (#1102) peak_only is the user's: SEM only sheds it
                     # (the desired-state twin leaves it alone too). A paid
@@ -2253,7 +2267,7 @@ class SurplusController:
                     if charged <= 0.0:
                         continue
                     if await _deactivate_owned(
-                            device, reason_code="surplus_short",
+                            device, reason_code=RC.LOAD_SURPLUS_SHORT,
                             text="not enough sun"):
                         remaining_surplus += charged
                         active_count -= 1
@@ -2266,7 +2280,7 @@ class SurplusController:
                             if dep.is_active and dep.can_deactivate():
                                 dep_consumption = dep.get_current_consumption()
                                 if await _deactivate_owned(
-                                    dep, reason_code="dependency",
+                                    dep, reason_code=RC.LOAD_DEPENDENCY,
                                     text=f"{device.name} stopped"):
                                     remaining_surplus += _walk_spend.get(
                                         dep.device_id,
@@ -2299,7 +2313,7 @@ class SurplusController:
                 continue
             consumption = device.get_current_consumption()
             if await _deactivate_owned(
-                    device, reason_code="phase_guard",
+                    device, reason_code=RC.LOAD_PHASE_GUARD,
                     text="phase over its limit"):
                 active_count = max(0, active_count - 1)
                 remaining_surplus += consumption
@@ -2332,7 +2346,7 @@ class SurplusController:
                     continue
                 consumption = device.get_current_consumption()
                 if await _deactivate_owned(
-                        device, reason_code="peak_shed",
+                        device, reason_code=RC.LOAD_PEAK_SHED,
                         text="grid peak limit"):
                     device._batt_overnight_forced = False
                     device._batt_overnight_forced_date = None
@@ -2366,7 +2380,7 @@ class SurplusController:
                     # (#1048) a deadline outranks the peak, not a fuse
                     and not _phase_held(device)):
                 consumed = await _activate_owned(
-                    device, device.rated_power, reason_code="deadline",
+                    device, device.rated_power, reason_code=RC.LOAD_DEADLINE,
                     text="deadline is near")
                 if consumed > 0:
                     active_count += 1
@@ -2405,7 +2419,7 @@ class SurplusController:
                     continue
                 consumed = await _activate_owned(
                     device, device.min_power_threshold,
-                    reason_code="plan_window", text="planned block")
+                    reason_code=RC.LOAD_PLAN_WINDOW, text="planned block")
                 if consumed > 0:
                     device._offpeak_forced = True
                     device._offpeak_forced_date = _load_meter_day(device)
@@ -2488,7 +2502,7 @@ class SurplusController:
                         continue
                     consumed = await _activate_owned(
                         device, device.min_power_threshold,
-                        reason_code="cheap_grid", text="cheap hours")
+                        reason_code=RC.LOAD_CHEAP_GRID, text="cheap hours")
                     if consumed > 0:
                         device._offpeak_forced = True
                         device._offpeak_forced_date = _load_meter_day(device)
@@ -2546,7 +2560,7 @@ class SurplusController:
                     continue
                 consumed = await _activate_owned(
                     device, device.min_power_threshold,
-                    reason_code="tier2_battery", text="overnight from the battery")
+                    reason_code=RC.LOAD_TIER2_BATTERY, text="overnight from the battery")
                 if consumed > 0:
                     device._batt_overnight_forced = True  # (#620) own marker
                     device._batt_overnight_forced_date = _load_meter_day(device)

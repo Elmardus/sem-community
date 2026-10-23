@@ -31,10 +31,10 @@ Decision tree (precedence top-down):
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from .charger_types import BatteryDecision, BatteryIntent
+from . import reason_codes as RC
+from .charger_types import BatteryDecision, BatteryIntent, rewrite
 from .peak_guard import cover_for_peak_w
 from ..consts.battery_modes import arbitrage_allowed_for_mode, reserve_soc_of
 from ..consts.battery_permissions import effective_permissions, may_assist_ev
@@ -127,6 +127,8 @@ def _stop_what_sem_started(view, decision: BatteryDecision) -> BatteryDecision:
             # keeps of stops whose landing it did not see (`_note_forced_op`).
             reason=(f"{decision.reason} (a stop SEM sent has not landed in "
                     f"{m} cycles — it is retried every other cycle)"),
+            reason_code=decision.reason_code,
+            reason_params=decision.reason_params,
         )
     if charge and discharge:
         charge = (m // 2) % 2 == 1
@@ -138,6 +140,7 @@ def _stop_what_sem_started(view, decision: BatteryDecision) -> BatteryDecision:
             # charge landed and no charge stop has landed since.
             reason=("a forced charge SEM started has not been seen to stop "
                     f"— stopping it before {decision.intent.value}"),
+            reason_code=RC.BATTERY_END_CHARGE,
         )
     return BatteryDecision(
         battery_id=decision.battery_id,
@@ -146,6 +149,7 @@ def _stop_what_sem_started(view, decision: BatteryDecision) -> BatteryDecision:
         # landed and no discharge stop has landed since.
         reason=("a forced discharge SEM started has not been seen to stop "
                 f"— stopping it before {decision.intent.value}"),
+        reason_code=RC.BATTERY_END_SELL,
     )
 
 
@@ -406,13 +410,15 @@ def _cap_forced_charge(view, decision: BatteryDecision) -> BatteryDecision:
             reason=(f"{decision.reason} — no room under the grid limit "
                     f"({allowed_w:.0f} W allowed, {room_w:.0f} W left after "
                     "the house and the car)"),
+            reason_code=RC.BATTERY_CHARGE_NO_ROOM,
         )
-    return replace(
+    return rewrite(
         decision, charge_power_w=stepped_w, room_capped=True,
         # CAUSE: `stepped_w` is `room_w` from forced_charge_room_w, floored to
         # a step, and the branch runs only when the decision asked for more.
         reason=(f"{decision.reason} — {stepped_w:.0f} W, the room left under "
                 f"the grid limit ({allowed_w:.0f} W allowed)"),
+        reason_code=RC.BATTERY_CHARGE_SLOWED,
     )
 
 
@@ -447,6 +453,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
             battery_id=rt.battery_id,
             intent=BatteryIntent.OFF,
             reason="mode=off (SEM hands-off — inverter self-manages)",
+            reason_code=RC.BATTERY_OFF,
         )
 
     if mode == "force_discharge":
@@ -473,6 +480,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                 discharge_power_w=float(cfg.get("battery_max_discharge_power", 5000.0) or 0.0),
                 floor_soc=reserve,
                 reason="mode=force_discharge (manual sell to grid)",
+                reason_code=RC.BATTERY_MANUAL_SELL,
             )
         # (#992, class 99) The guard above is a three-way OR, and only ONE
         # of its arms is a comparison. Printing "≤ reserve" for the other
@@ -506,6 +514,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
             battery_id=rt.battery_id,
             intent=BatteryIntent.NORMAL,
             reason=f"mode=force_discharge but {_why} — hold",
+            reason_code=RC.BATTERY_MANUAL_SELL_HOLD,
         )
     if mode == "force_charge":
         return BatteryDecision(
@@ -524,6 +533,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
             ),
             duration_min=240,
             reason="mode=force_charge (manual charge to full)",
+            reason_code=RC.BATTERY_MANUAL_CHARGE,
         )
 
     # ─── FORCE_CHARGE / STOP_FORCE_CHARGE branch ───
@@ -557,6 +567,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                     charge_power_w=sched_power,
                     duration_min=getattr(sched, "duration_min", 60),
                     reason="negative price — charging regardless of plan",
+                    reason_code=RC.BATTERY_NEGATIVE_PRICE,
                 )
             gate = view.plan_gate
             if gate is not None and getattr(gate, "covered", False):
@@ -573,6 +584,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                         duration_min=getattr(sched, "duration_min", 60),
                         reason="scheduler SCHEDULED → plan block open — "
                                "force charge",
+                        reason_code=RC.BATTERY_PLAN_CHARGE,
                     )
                 nxt = getattr(gate, "next_block_start", None)
                 when = f" (opens {nxt:%H:%M})" if nxt else ""
@@ -582,6 +594,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                         intent=BatteryIntent.STOP_FORCE_CHARGE,
                         reason="scheduler SCHEDULED — outside the planned "
                                f"block{when}",
+                        reason_code=RC.BATTERY_PLAN_WAIT,
                     )
             else:
                 why = (getattr(gate, "reason", "") if gate is not None
@@ -593,6 +606,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                         reason=f"scheduled but the plan does not cover the "
                                f"battery ({why or 'uncovered'}) — pre-charge "
                                "is optimization, not guarantee",
+                        reason_code=RC.BATTERY_PLAN_NONE,
                     )
 
         # Export arbitrage — the scheduler decided to SELL to the grid
@@ -682,6 +696,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                                 intent=BatteryIntent.NORMAL,
                                 reason=("export held — tonight's forecast budget "
                                         "has nothing spendable"),
+                                reason_code=RC.BATTERY_SELL_HOLD,
                             )
                     return BatteryDecision(
                         battery_id=rt.battery_id,
@@ -690,6 +705,8 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                         floor_soc=floor,
                         reason=getattr(sched, "reason", "export arbitrage")
                                + " — plan sell block open",
+                        reason_code=(RC.BATTERY_SELL_FORECAST if _spend
+                                     else RC.BATTERY_SELL),
                     )
             # Not allowed for this battery (self_consumption / auto-with-
             # global-off) or already at/under its reserve → fall through to
@@ -714,12 +731,14 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                         battery_id=rt.battery_id,
                         intent=BatteryIntent.STOP_FORCE_DISCHARGE,
                         reason=f"arbitrage {state_value} → stop selling to grid",
+                        reason_code=RC.BATTERY_SELL_STOP,
                     )
             elif _charge_open:
                 return BatteryDecision(
                     battery_id=rt.battery_id,
                     intent=BatteryIntent.STOP_FORCE_CHARGE,
                     reason=f"scheduler {state_value} → ensure not force-charging",
+                    reason_code=RC.BATTERY_CHARGE_STOP,
                 )
 
     # ─── arc #921: the sink verdicts (absent = every sink OPEN) ───
@@ -758,6 +777,8 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                 battery_id=rt.battery_id, intent=BatteryIntent.NORMAL,
                 reason=(f"{_why} — the pack feeds the car down to "
                         f"{_floor:.0f}% (SOC {_soc:.0f}%)"),
+                reason_code=RC.BATTERY_FEEDS_CAR,
+                reason_params={"floor": round(_floor)},
             )
 
     # (#879) The house as a sink: HELD in a cheap/negative hour means "let the
@@ -806,10 +827,12 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                 # tested one line up. Never a guess about which.
                 reason=(f"house sink not held — {_why}: the house load is not "
                         "measured, so nothing shows the meter is under its limit"),
+                reason_code=RC.BATTERY_HOUSE_BLIND,
             )
         else:
             _cover_w = peak_cover_floor_w(view, 0.0, _n)
             _why = f"house sink held — {getattr(_house_v, 'reason', '')}"
+            _code = RC.BATTERY_HOUSE_HELD
             _stop = reserve_stops_peak_cover(view)
             if _stop is not None and cover_for_peak_w(
                     _allowed, max(0.0, float(view.home_consumption_w or 0.0)),
@@ -824,10 +847,12 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                     f"rest of this quarter hour, so the pack covers "
                     f"{_cover_w:.0f} W"
                 )
+                _code = RC.BATTERY_HOUSE_HELD_PEAK
             return BatteryDecision(
                 battery_id=rt.battery_id, intent=BatteryIntent.LIMIT_DISCHARGE,
                 discharge_limit_w=_cover_w,
                 reason=_why,
+                reason_code=_code,
             )
 
     # ─── LIMIT_DISCHARGE branch (unified solar gate) ───
@@ -948,6 +973,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                 # (#1066) The permission alone decides here — name it, not
                 # a surplus or SOC comparison that did not choose (#983).
                 why = "ev plugged in + this battery may not feed the car (may_assist_ev off)"
+                code = RC.BATTERY_CAR_NOT_ALLOWED
             elif not getattr(f, "battery_soc_known", True):
                 # (#983) ``below_buffer`` is a disjunction, and the unread
                 # arm has no comparison in it: printing "SoC unknown < buffer
@@ -956,6 +982,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                 # clamp is the #875 protective default, not a measurement.
                 why = ("ev plugged in + battery SoC never read — holding the "
                        "protective floor (#875)")
+                code = RC.BATTERY_CAR_LEVEL_UNKNOWN
             elif below_buffer:
                 why = (
                     f"ev plugged in + battery SoC {f.soc_label} < "
@@ -963,15 +990,19 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                        if floor_soc > buffer_soc else
                        f"buffer {buffer_soc:.0f}% (self-consumption floor)")
                 )
+                code = (RC.BATTERY_CAR_BELOW_FLOOR if floor_soc > buffer_soc
+                        else RC.BATTERY_CAR_BELOW_RESERVE)
             else:
                 why = (
                     f"ev plugged in + solar surplus {surplus_w:.0f}W < gate "
                     f"{gate_w:.0f}W"
                 )
+                code = RC.BATTERY_CAR_LOW_SUN
             if _held_for_cars and not below_buffer and _assist_ok:
                 why = ("a plugged-in car may not use the battery — it covers "
                        f"the house + {_cars_w:.0f} W offered to the cars "
                        "that may")
+                code = RC.BATTERY_CAR_SHARED
             if gf_w > 0:
                 why += f" (excl. {gf_w:.0f}W grid-funded load)"
             return BatteryDecision(
@@ -985,6 +1016,9 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                        f"rest of this quarter hour"
                        if _peak_raised else f"(home/{n} across fleet)")
                 ),
+                reason_code=code,
+                reason_params=({"floor": round(floor_soc)}
+                               if code == RC.BATTERY_CAR_BELOW_FLOOR else {}),
             )
 
     if _blind_release is not None:
@@ -1023,6 +1057,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                        if _peak_raised else
                        f"(home/{n} across fleet) so the grid feeds them")
                 ),
+                reason_code=RC.BATTERY_GRID_LOADS,
             )
 
     # ─── NORMAL ───
@@ -1030,6 +1065,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
         battery_id=rt.battery_id,
         intent=BatteryIntent.NORMAL,
         reason="no protection / no force-charge — default discharge",
+        reason_code=RC.BATTERY_NORMAL,
     )
 
 

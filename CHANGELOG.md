@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Daily car energy tells Home Assistant it resets at Charge-by, not midnight** (#1176). The Simulation tab reads each charger's daily energy.
 - 🐛 **Force charge goes back to Auto when the battery is full** (#1131). Force discharge does the same at the reserve.
 - 🐛 **Force charge also ends on a battery that stops below 100 %** (#1164). At 90 % or more, 15 minutes without taking charge means full.
 - 🐛 **Force charge ends on each battery by itself** (#1167). An unavailable power sensor on one battery no longer keeps the other charging from the grid.
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ **SEM stops exporting when a sold kWh is worth too little** (#1090). The battery and loads take the sun; nothing is bought.
 - ✨ **The logbook says why SEM changed a device** (#1084). Each start, stop or step names its reason; diagnostics keeps the last 200.
 - ✨ **A Why? card on the Control tab lists each change SEM made** (#1084). Reason, the numbers behind it, a filter per device.
+- ✨ **The Why? card and the logbook give each reason as a short sentence** (#1174). It is in your language. The numbers stay below it.
 - ✨ **A heat pump or load can have its own tariff and meter** (#812). Its cheap hours follow that price; a sensor shows its cost.
 
 # [2.2.0-beta.24] — 21.10.2026

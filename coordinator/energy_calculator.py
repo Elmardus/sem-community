@@ -538,6 +538,12 @@ class EnergyCalculator:
         # see ``_ev_reset_day``.
         self._ev_day_offset: Optional[str] = None
         self._ev_day_key: Optional[date] = None
+        # (#1176) The car day ``daily_ev`` last read from, and the moment it
+        # last rolled to a new one — that sensor's ``last_reset``. Both
+        # persist; no moment yet (a fresh install, the upgrade's own car
+        # day) leaves the sensor on midnight, as it said before.
+        self._ev_seen_day: Optional[date] = None
+        self._ev_rolled_at: Optional[datetime] = None
         # (#1046) the day key daily_ev was last read from (not persisted:
         # the next cycle sets it before anyone reads it)
         self._daily_ev_day: Optional[date] = None
@@ -824,6 +830,7 @@ class EnergyCalculator:
 
         energy.daily_ev = self._get_daily(EV_CATEGORY, ev_day)
         self._daily_ev_day = ev_day  # (#1046) the key ev_day_flows reads
+        self._note_ev_rollover(ev_day)
         energy.monthly_ev = self._get_monthly(EV_CATEGORY, month_key)
         energy.yearly_ev = self._get_yearly(EV_CATEGORY, year_key)
 
@@ -1089,6 +1096,7 @@ class EnergyCalculator:
         energy.daily_total_consumption = self.daily_total_consumption(today)
         energy.daily_ev = self._get_daily(EV_CATEGORY, ev_day)
         self._daily_ev_day = ev_day  # (#1046) the key ev_day_flows reads
+        self._note_ev_rollover(ev_day)
         energy.monthly_ev = self._get_monthly(EV_CATEGORY, month_key)
         energy.yearly_ev = self._get_yearly(EV_CATEGORY, year_key)
         energy.daily_grid_import = self._get_daily("grid_import", today)
@@ -3854,6 +3862,22 @@ class EnergyCalculator:
             for _, category in EV_DAY_FLOW_CATEGORIES
         )
 
+    def _note_ev_rollover(self, ev_day: date) -> None:
+        """(#1176) Record the moment ``daily_ev`` moves to a new car day —
+        whatever rolled it: the Charge-by time, sunrise, a changed setting,
+        a restart across the boundary. It falls to 0 right then."""
+        seen = getattr(self, "_ev_seen_day", None)
+        if seen is not None and ev_day != seen:
+            self._ev_rolled_at = dt_util.now()
+        self._ev_seen_day = ev_day
+
+    def ev_last_reset(self) -> Optional[datetime]:
+        """(#1176) When ``daily_ev`` last fell to 0: the car-day sensor's
+        ``last_reset``. None until the first rollover this code saw — the
+        sensor then keeps midnight, as before. Moving it mid-day on the
+        upgrade would make the recorder count the day's kWh again."""
+        return getattr(self, "_ev_rolled_at", None)
+
     def _get_daily(self, category: str, today: date) -> float:
         """Get daily accumulated energy."""
         key = f"{category}_{today}"
@@ -4702,6 +4726,14 @@ class EnergyCalculator:
             # pair a restart re-derives the day from whatever the deadline is
             # NOW, which is exactly the retroactive re-bucket ``_ev_reset_day``
             # defends against — the bug would simply return on the next reboot.
+            "ev_seen_day": (
+                self._ev_seen_day.isoformat()
+                if getattr(self, "_ev_seen_day", None) else None
+            ),
+            "ev_rolled_at": (
+                self._ev_rolled_at.isoformat()
+                if getattr(self, "_ev_rolled_at", None) else None
+            ),
             "ev_day_offset": self._ev_day_offset,
             "ev_day_key": (
                 self._ev_day_key.isoformat() if self._ev_day_key else None
@@ -4879,6 +4911,17 @@ class EnergyCalculator:
                         "Discarding unparseable midnight_ev_since %r — the home "
                         "balance re-arms for one day", since,
                     )
+            # (#1176) a store without them is the upgrade: midnight until
+            # the first rollover this code sees.
+            try:
+                seen = state.get("ev_seen_day")
+                self._ev_seen_day = date.fromisoformat(str(seen)) if seen else None
+                rolled = state.get("ev_rolled_at")
+                self._ev_rolled_at = (
+                    datetime.fromisoformat(str(rolled)) if rolled else None)
+            except ValueError:
+                self._ev_seen_day = None
+                self._ev_rolled_at = None
             ev_day_offset = state.get("ev_day_offset")
             ev_day_key = state.get("ev_day_key")
             if _valid_hhmm(ev_day_offset) and ev_day_key:

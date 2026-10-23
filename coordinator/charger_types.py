@@ -35,7 +35,7 @@ and the legacy types simultaneously.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Dict
 
@@ -380,6 +380,9 @@ class ExportDecision:
     intent: ExportIntent = ExportIntent.NONE
     watts: float = 0.0
     reason: str = ""
+    #: (#1174) why, as a stable code and its numbers — recorded only
+    reason_code: str = field(default="", compare=False)
+    reason_params: Mapping[str, Any] = field(default_factory=dict, compare=False)
 
 
 @dataclass(frozen=True)
@@ -406,6 +409,11 @@ class BatteryDecision:
     """(#1069) FORCE_CHARGE / STOP_FORCE_CHARGE shaped by the room under the
     grid limit: actuation lowers it at once, raises it only after the room
     held, and restarts after a no-room stop only with clear room."""
+    # (#1174) The reason as a stable code and its sentence's numbers —
+    # recorded only, left out of equality (see ChargerDecision).
+    reason_code: str = field(default="", compare=False)
+    reason_params: Mapping[str, Any] = field(
+        default_factory=dict, compare=False)
 
 
 @dataclass(frozen=True)
@@ -657,6 +665,13 @@ class ChargerDecision:
     Deliberately NOT derived from ``bridgeable``: that field answers "is
     this dip transient", which a max-SOC stop also answers False, and a
     full car is not an emergency. One flag, one meaning."""
+
+    # (#1174) The reason as a stable code (``reason_codes``) and the few
+    # numbers its plain sentence names. Recorded only — never read by a
+    # decider, and left out of equality so no comparison moves.
+    reason_code: str = field(default="", compare=False)
+    reason_params: Mapping[str, Any] = field(
+        default_factory=dict, compare=False)
 
 
 def solar_commitment_w(
@@ -1265,3 +1280,18 @@ class FleetView:
             count=len(power),
             per_charger=dict(power),
         )
+
+
+def rewrite(decision, *, reason_code: str,
+            reason_params: Optional[Mapping[str, Any]] = None, **changes):
+    """(#1174) The one way to change what a decision does — its intent, its
+    current or power, its mode — after it was made. The caller names WHY in
+    the same breath (``reason_code``), so a rewritten decision never keeps
+    a code that describes the decision it replaced. ``reason_params=None``
+    keeps the decision's own numbers; pass a mapping to replace them.
+    ``tests/test_1174_plain_reasons.py`` fails on a bare ``replace`` that
+    changes one of those fields."""
+    params = (getattr(decision, "reason_params", None) if reason_params is None
+              else reason_params)
+    return replace(decision, reason_code=reason_code,
+                   reason_params=dict(params or {}), **changes)

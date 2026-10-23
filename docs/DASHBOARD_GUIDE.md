@@ -709,8 +709,10 @@ charging on one strip. The day-shaped companion to
 **SEM Why?** · *Control tab*
 
 Why did SEM act? One row per command SEM changed on a device: the time, the
-device, its old and new command, the reason in plain words, and the numbers
-SEM decided on (sun, battery level, prices, surplus). Rows SEM did not send
+device, its old and new command, the reason as a short sentence in your
+language, and the numbers SEM decided on (sun, battery level, prices,
+surplus). Hold the pointer on the sentence to see SEM's own reason text.
+Rows SEM did not send
 because observer mode is on say *test mode: not sent*. Tap a device chip to
 see only its rows. *Everyday* shows the newest four; the rest open from the
 *Earlier* fold. SEM keeps the last 200 changes until a restart; the same rows

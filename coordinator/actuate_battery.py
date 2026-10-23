@@ -14,7 +14,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from .charger_types import BatteryIntent
+from . import reason_codes as RC
+from .charger_types import BatteryIntent, rewrite
 from .decision_log import log_of, record_battery
 from .power_control import prepare_power_setpoint
 from ..utils.log_gate import log_on_change
@@ -165,7 +166,6 @@ def _calm_capped_charge(decision, adapter):
     ``FORCED_CHARGE_RAISE_DWELL_CYCLES``; after a no-room stop, restart only
     with ``FORCED_CHARGE_RESTART_STEPS`` steps of room. ``None`` = hold the
     stop, write nothing. A charge not shaped by the room passes unchanged."""
-    from dataclasses import replace
     from .decide_battery import FORCED_CHARGE_STEP_W
     if not decision.room_capped:
         _set(adapter, "_capped_charge_w", None)
@@ -190,7 +190,10 @@ def _calm_capped_charge(decision, adapter):
     _set(adapter, "_capped_raise_streak", streak)
     _set(adapter, "_capped_charge_w", want_w)
     if want_w != float(decision.charge_power_w):
-        decision = replace(decision, charge_power_w=want_w)
+        # (#1174) the raise waits for the room to hold: the battery charges
+        # more slowly than asked, and the row says so
+        decision = rewrite(decision, charge_power_w=want_w,
+                           reason_code=RC.BATTERY_CHARGE_SLOWED)
     return decision
 
 

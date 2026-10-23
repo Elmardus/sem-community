@@ -63,6 +63,9 @@ COUNTERS_DISAGREE_KWH = 3.0
 #: what the note of such a day starts with — the harness and the job
 #: look for it
 COUNTERS_DISAGREE = "the counters disagree"
+#: (#1176) what the note of a day whose car sum from its chargers is in
+#: doubt starts with (a charger missing hours, a removed one overlapping)
+CAR_DOUBT = "car energy in doubt"
 #: the meters close each hour (``close_hours``); a day whose house and
 #: solar counters had to move more than this (kWh) in total says so
 CLOSE_NOTE_KWH = 5.0
@@ -126,7 +129,8 @@ class HourlyDay:
     def counter_jumped(self) -> bool:
         """A counter jumped or stepped back: the day's money is not exact."""
         return self.counters_disagree or any(
-            "counter stepped back" in n for n in self.notes)
+            "counter stepped back" in n or n.startswith(CAR_DOUBT)
+            for n in self.notes)
 
     def close_hours(self) -> float:
         """Make every hour close on the meters; returns the kWh moved.
@@ -189,6 +193,7 @@ class HourlyDay:
         date: Any,
         tags: Iterable[str] = (),
         tz: Optional[tzinfo] = None,
+        notes: Iterable[str] = (),
     ) -> "HourlyDay":
         """Build a day from a recorder hourly-statistics read.
 
@@ -199,13 +204,15 @@ class HourlyDay:
         seconds need ``tz`` (ValueError without it — never read as UTC). A row of
         another day is ignored. Two rows on one hour (the autumn clock
         change) add up for a flow; the later mean wins for a measurement.
+        ``notes``: what the caller already knows is wrong with the rows
+        (#1176: the car's sum from its chargers).
         """
         day = _as_date(date)
         out: Dict[str, Any] = {role: _zeros() for role in FLOW_ROLES}
         means: Dict[str, List[Optional[float]]] = {
             role: _nones() for role in MEAN_ROLES}
         missing = set()
-        notes: List[str] = []
+        notes = list(notes)
         for role in FLOW_ROLES:
             rows = list(rows_by_role.get(role) or [])
             if not rows:
