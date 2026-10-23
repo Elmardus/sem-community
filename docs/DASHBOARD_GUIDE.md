@@ -186,6 +186,7 @@ EV section moved to per-charger cards on the EV tab in v1.6.3.
 | **Heat Pump** | Active mode and SG-Ready state (auto-hidden when no heat pump is configured) |
 | **Tariff & Pricing** | Provider, price level, current import rate |
 | **Peak & Load Management** | Live % of peak limit, peak margin, sheddable devices |
+| **Why?** | Each command SEM changed on a device, the reason, and the numbers it decided on ([details](#sem-why-card)) |
 | **Load Priority** | Drag-and-drop device ordering with real-time power, controllable/critical toggles, per-device control mode (Off / Peak Only / Surplus), and a per-device **Configure** button (see below). EV chargers have no mode dropdown here — their charge target is set in the **Charge Target** block on the EV card |
 
 A red observer-mode banner appears at the top whenever Observer Mode
@@ -350,7 +351,7 @@ went to zero. Installs that already have those cards are unaffected.
 
 ## Bundled SEM Cards
 
-All 32 cards ship inside the integration — no HACS installation needed. Each
+All 33 cards ship inside the integration — no HACS installation needed. Each
 one registers itself with Home Assistant's card picker carrying a name, a
 description, and a **help link that lands on its section below**. If you are
 looking at a card in the dashboard editor and want to know what it does, the
@@ -702,6 +703,18 @@ used to break long views into labelled sections in the user's own language.
 The forward-looking view of the rest of today: tariff, expected solar, and EV
 charging on one strip. The day-shaped companion to
 [`sem-energy-plan-card`](#sem-energy-plan-card).
+
+#### sem-why-card
+
+**SEM Why?** · *Control tab*
+
+Why did SEM act? One row per command SEM changed on a device: the time, the
+device, its old and new command, the reason in plain words, and the numbers
+SEM decided on (sun, battery level, prices, surplus). Rows SEM did not send
+because observer mode is on say *test mode: not sent*. Tap a device chip to
+see only its rows. *Everyday* shows the newest four; the rest open from the
+*Earlier* fold. SEM keeps the last 200 changes until a restart; the same rows
+are in Home Assistant's logbook.
 
 #### sem-weather-card
 

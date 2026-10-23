@@ -56,8 +56,9 @@ RESTING_VERBS = frozenset({"idle", "off", "normal", "release", "disable",
                            "stop_force_charge", "stop_force_discharge"})
 
 _TEXT_MAX = 120
+_NAME_MAX = 60
 _INPUT_KEYS = ("import_price", "export_rate", "price_level", "soc",
-               "surplus_w", "target_kwh", "target_soc")
+               "solar_w", "surplus_w", "target_kwh", "target_soc")
 
 
 def _clean_inputs(inputs: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
@@ -127,12 +128,20 @@ class DecisionLog:
         self._last: Dict[str, Tuple[str, Optional[float], bool, str]] = {}
         self._last_record: Dict[str, DecisionRecord] = {}
         self._inputs: Dict[str, Any] = {}
+        # "<kind>:<device_id>" → display name, for seams that know only an id
+        self._names: Dict[str, str] = {}
 
     # ── per-cycle context ────────────────────────────────────────────
     def set_inputs(self, inputs: Optional[Mapping[str, Any]]) -> None:
         """What the cycle knew — stamped once by the coordinator, copied
         into every record this cycle writes."""
         self._inputs = _clean_inputs(inputs)
+
+    def set_names(self, names: Optional[Mapping[str, str]]) -> None:
+        """Display names by ``"<kind>:<device_id>"`` — stamped by the
+        coordinator for devices whose seam knows only an id (batteries).
+        A name the seam passes itself wins."""
+        self._names = {str(k): str(v) for k, v in (names or {}).items() if v}
 
     # ── writing ──────────────────────────────────────────────────────
     def _is_change(self, key: str, kind: str, verb: str,
@@ -195,7 +204,7 @@ class DecisionLog:
                 text=str(text or "")[:_TEXT_MAX],
                 inputs=merged,
                 observer=bool(observer),
-                name=str(name or device_id),
+                name=str(name or self._names.get(key) or device_id)[:_NAME_MAX],
             )
             self._records.append(rec)
             self._last_record[key] = rec
@@ -244,7 +253,7 @@ def log_of(controller) -> Optional[DecisionLog]:
 
 def record_charger(log: Optional[DecisionLog], decision, *, verb: str,
                    value: Optional[float] = None,
-                   observer: bool = False) -> Optional[DecisionRecord]:
+                   observer: bool = False, name: str = "") -> Optional[DecisionRecord]:
     """A charger write at the reconciler's apply loop. ``verb`` / ``value``
     are what was SENT (or withheld under observer); the reason comes from
     the :class:`ChargerDecision` that asked for it."""
@@ -260,7 +269,8 @@ def record_charger(log: Optional[DecisionLog], decision, *, verb: str,
     return log.record(
         device_id=str(getattr(decision, "charger_id", "")), kind=KIND_CHARGER,
         verb=verb, value=value, reason_code=code,
-        text=str(getattr(decision, "reason", "") or ""), observer=observer)
+        text=str(getattr(decision, "reason", "") or ""), observer=observer,
+        name=name)
 
 
 def record_battery(log: Optional[DecisionLog], decision, *,

@@ -3380,6 +3380,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
         # (#1083) the Simulation tab's commands; its job stops on unload
         from .simulation_ws import async_register_websocket as _sim_ws
         _sim_ws(hass)
+        # (#1084) the Why? card reads the decision log over this command
+        from .decision_ws import async_register_websocket as _why_ws
+        _why_ws(hass)
         sim_job = getattr(coordinator, "_simulation_job", None)
         if sim_job is not None:
             entry.async_on_unload(lambda: sim_job.cancel(persist=False))
