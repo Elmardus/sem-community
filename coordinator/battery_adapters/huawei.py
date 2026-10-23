@@ -510,9 +510,17 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
         self._startup_orphan_checked = True
         self._fd_floor_soc = floor_soc
         watts = max(0.0, min(float(power_w), self._max_discharge_w))
+        # (#1175) SEM's own discharge limit (a 0 W hold) would cap the sale.
+        # It goes back to the max first, as this cycle's only command (one
+        # write per cycle, see __init__); the sale goes out on the next.
+        if await self._hand_back_own_limit():
+            if self._forcible_discharging:
+                self._last_error = None
+                self._last_intent = BatteryIntent.FORCE_DISCHARGE
+            return
         if not self._inverter_device_id:
             # No service → number-entity fallback (a user who wired one).
-            await super().command_force_discharge(power_w, floor_soc)
+            await self._send_sale(power_w)
             self._forcible_discharging = bool(self._force_discharge_entity)
             return
         if self._forcible_discharging and abs(watts - self._last_force_discharge_w) < 100.0:
@@ -836,7 +844,8 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
 
     # ─── Helpers ───────────────────────────────────────────────
 
-    async def _apply_discharge_limit(self, watts: float) -> None:
+    async def _apply_discharge_limit(self, watts: float) -> bool:
+        """True when a write went out (not the same-value skip, #538)."""
         if not self._discharge_control_entity:
             log_on_change(   # (#762) a standing config gap is one line, not 806/day
                 _LOGGER, "no_discharge_entity", logging.DEBUG,
@@ -844,7 +853,7 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
                 "configured — skipping limit %.0f W", watts,
             )
             self._last_discharge_limit_w = watts
-            return
+            return False
         # Idempotency (#538): skip the Modbus write when the control entity
         # is already at this value. ``command_normal`` re-issues max every
         # cycle, and a redundant write on the single serial Modbus
@@ -875,6 +884,7 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
                 "Huawei battery: discharge limit %.0f W → %s",
                 watts, self._discharge_control_entity,
             )
+        return bool(ok and wrote)
 
     def _autodetect_battery_device(self) -> str | None:
         """Find the huawei_solar BATTERY device id that the

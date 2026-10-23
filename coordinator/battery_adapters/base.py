@@ -484,7 +484,35 @@ class BatteryControlAdapter(ABC):
 
         Sets ``_last_intent`` ONLY when the write succeeds — a failed
         write leaves ``_last_intent`` unchanged so the next cycle
-        re-issues the command rather than masquerading as successful."""
+        re-issues the command rather than masquerading as successful.
+
+        (#1175) A discharge limit SEM wrote before the sale is put back to
+        the max first (:meth:`_hand_back_own_limit`)."""
+        await self._hand_back_own_limit()
+        await self._send_sale(power_w)
+
+    async def _hand_back_own_limit(self) -> bool:
+        """(#1175) Before a sale: put back the pack's max discharge when the
+        last limit SEM wrote is below it. True when a write went out.
+
+        A limit SEM wrote to keep the pack for the house (the 0 W cheap-hour
+        hold, the EV clamp) stays in the register until a command writes it
+        again, and only NORMAL did. On a brand where that limit also caps a
+        forced discharge, the sale then sends nothing. A limit SEM did not
+        write (``last_discharge_limit_w`` is −1) is left as it is (#936).
+        """
+        last = self.last_discharge_limit_w
+        top = float(self.max_discharge_power_w)
+        if last < 0 or last >= top:
+            return False
+        apply = getattr(self, "_apply_discharge_limit", None)
+        if apply is None:
+            return False
+        return bool(await apply(top))
+
+    async def _send_sale(self, power_w: float) -> None:
+        """The sale's own write: the forcible-discharge power, clamped to
+        the brand's max. Records the intent only when the write landed."""
         watts = max(0.0, min(float(power_w), self.max_discharge_power_w))
         ok = await self._write_force_discharge(watts)
         if ok:
