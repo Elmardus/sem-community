@@ -25,6 +25,7 @@ Complete reference for Solar Energy Management (SEM).
 - [Tariff Integration](#tariff-integration)
 - [Solar Forecast](#solar-forecast)
 - [Simulation tab](#simulation-tab-1083)
+- [Why did SEM do that?](#why-did-sem-do-that)
 - [Observer Mode](#observer-mode)
 - [Sensors Reference](#sensors-reference)
 - [Daily Energy Reset](#daily-energy-reset)
@@ -1684,6 +1685,32 @@ Any HA integration that exposes a price sensor works with SEM. If the sensor has
 
 Set tariff mode to "Calendar" for a fixed time-of-use tariff, then pick a HA Schedule helper in **Peak-time schedule** (Settings → Configure → Tariff). The helper's time blocks are the peak (HT) hours at the import rate; all other hours use the night rate. For "HT weekdays 07:00–20:00, NT otherwise", add a 07:00–20:00 block on Monday to Friday. Edit the helper to change the times. A holiday follows the schedule like any other day.
 
+### Taxes, markup and feed-in fee
+
+SEM can add tax and a supplier markup to the price you buy at, and
+take a feed-in fee off the price you sell at. Nothing changes until you set
+one of these fields.
+
+Where: the Configuration card, section **Tariff & pricing**, under **All
+settings**. Or **Configure → Tariff & Advanced**.
+
+| Field | What to enter |
+|---|---|
+| Taxes and fees preset | *None* adds nothing. *Netherlands from 2027* fills energy tax and 21 % VAT, and sets the price to spot. |
+| What your import price includes | *All-in*: your price already has tax and VAT (Tibber, a rate from your bill). SEM adds nothing. *Spot price incl. VAT*: a market price with VAT on it. *Spot price*: a bare market price (Nord Pool, ENTSO-e). |
+| Supplier markup | per bought kWh, without VAT |
+| Energy tax | per bought kWh, without VAT |
+| VAT | in percent |
+| Feed-in fee | *Per kWh*, *Tiers by kWh per year* or *Fixed per month* |
+| Feed-in fee amount / tiers | the fee; tiers as `0:0, 1000:0.02, 3000:0.05` (kWh exported this year : fee per kWh) |
+
+Markup, tax and VAT only work with a spot price. Beside *All-in* they are
+greyed out, and the options flow refuses them.
+
+Once a field is set, six sensors appear: **Self-consumption value**, **Export
+value** and **Feed-in fees**, each for today and this year.
+[Tariff models](TARIFF_MODELS.md#what-a-kwh-is-worth-1077) has the formulas.
+
 ---
 
 ## Solar Forecast
@@ -1878,6 +1905,35 @@ against simulated; and notes. The EV tab's session download is an .xlsx
 file too.
 
 Limits: [Known Limitations → Simulation tab](KNOWN_LIMITATIONS.md#simulation-tab-estimates-from-hourly-averages-1083).
+
+---
+
+## Why did SEM do that?
+
+Open **Settings → Logbook**. SEM writes one line each time it changes what it
+tells a device to do: a charger, a battery or a load. The line shows the old
+command, the new one and the reason:
+
+    <device>: <old command> → <new command> — <reason>
+
+A command reads like `charge 8 A`, `off` or `limit_discharge 1500 W`.
+
+- A line appears only on a change: a start, a stop, a new mode, a charger
+  step of 1 A or more, a battery limit that moved by 250 W or more, a load
+  setpoint that moved by 500 W or more. The same command sent again writes
+  nothing.
+- With **Observer Mode** on, SEM sends nothing, and the line ends in
+  *(observer: not sent)*. It still shows what SEM would have done.
+- The diagnostics download (**Settings → Devices & Services → Solar Energy
+  Management → ⋮ → Download diagnostics**) keeps the last 200 lines under
+  `decision_log`.
+- The newest line per device is also an attribute:
+  `per_charger_last_decision` and `per_charger_strategy` on
+  `sensor.sem_charging_state`, `per_battery_last_decision` on
+  `sensor.sem_battery_status`, `per_device_last_decision` on
+  `sensor.sem_load_management_status`.
+
+The log starts empty after a restart. The reason text is in English.
 
 ---
 
