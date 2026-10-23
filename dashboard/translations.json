@@ -1969,7 +1969,13 @@
     "why_reason_no_source": "Není přebytek ze slunce ani levná energie, takže se vypíná.",
     "why_reason_charger_stop_now": "Výkon se brzy nevrátí, takže se auto zastaví hned.",
     "why_reason_charger_ramp": "SEM mění proud na novou hodnotu po malých krocích.",
-    "why_reason_charger_hold_steady": "SEM drží proud stabilní, aby se vyhnul mnoha malým změnám."
+    "why_reason_charger_hold_steady": "SEM drží proud stabilní, aby se vyhnul mnoha malým změnám.",
+    "why_reason_export_negative_price": "Dodávka do sítě teď stojí peníze, takže SEM přestává posílat energii do sítě.",
+    "why_reason_export_not_worth": "Dodávka do sítě vynáší {value} za kWh, méně než váš limit {threshold}, takže ji SEM zastavuje.",
+    "why_reason_export_released": "Dodávka do sítě se zase vyplatí, takže SEM ruší limit dodávky.",
+    "why_kind_export": "Dodávka do sítě",
+    "why_verb_limit_export": "limit dodávky",
+    "why_verb_release_export": "dodávka volná"
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3941,7 +3947,13 @@
     "why_reason_no_source": "Der er hverken soloverskud eller billig strøm, så den slukker.",
     "why_reason_charger_stop_now": "Effekten kommer ikke snart tilbage, så bilen stopper nu.",
     "why_reason_charger_ramp": "SEM ændrer strømmen til den nye værdi i små trin.",
-    "why_reason_charger_hold_steady": "SEM holder strømmen stabil for at undgå mange små ændringer."
+    "why_reason_charger_hold_steady": "SEM holder strømmen stabil for at undgå mange små ændringer.",
+    "why_reason_export_negative_price": "Det koster penge at sende strøm ud nu, så SEM stopper med at sende strøm til nettet.",
+    "why_reason_export_not_worth": "Eksport giver {value} pr. kWh, under din grænse på {threshold}, så SEM stopper eksporten.",
+    "why_reason_export_released": "Eksport betaler sig igen, så SEM fjerner eksportgrænsen.",
+    "why_kind_export": "Eksport til nettet",
+    "why_verb_limit_export": "eksportgrænse",
+    "why_verb_release_export": "eksport fri"
   },
   "de": {
     "% of limit": "% des Limits",
@@ -5913,7 +5925,13 @@
     "why_reason_no_source": "Es gibt keinen Sonnenüberschuss und keinen günstigen Strom, darum schaltet es aus.",
     "why_reason_charger_stop_now": "Die Leistung kommt so bald nicht zurück, darum stoppt das Auto jetzt.",
     "why_reason_charger_ramp": "SEM bringt den Strom in kleinen Schritten auf den neuen Wert.",
-    "why_reason_charger_hold_steady": "SEM hält den Strom ruhig, um viele kleine Änderungen zu vermeiden."
+    "why_reason_charger_hold_steady": "SEM hält den Strom ruhig, um viele kleine Änderungen zu vermeiden.",
+    "why_reason_export_negative_price": "Einspeisen kostet gerade Geld, darum stoppt SEM die Einspeisung ins Netz.",
+    "why_reason_export_not_worth": "Einspeisen bringt {value} pro kWh, weniger als dein Limit von {threshold}, darum stoppt SEM die Einspeisung.",
+    "why_reason_export_released": "Einspeisen lohnt sich wieder, darum hebt SEM das Einspeiselimit auf.",
+    "why_kind_export": "Netzeinspeisung",
+    "why_verb_limit_export": "Einspeiselimit",
+    "why_verb_release_export": "Einspeisung frei"
   },
   "en": {
     "% of limit": "% of limit",
@@ -7885,7 +7903,13 @@
     "why_reason_no_source": "There is no spare sun or cheap power, so it turns off.",
     "why_reason_charger_stop_now": "The power will not come back soon, so the car stops now.",
     "why_reason_charger_ramp": "SEM moves the current to its new value in small steps.",
-    "why_reason_charger_hold_steady": "SEM keeps the current steady to avoid many small changes."
+    "why_reason_charger_hold_steady": "SEM keeps the current steady to avoid many small changes.",
+    "why_reason_export_negative_price": "Exporting costs money now, so SEM stops sending power to the grid.",
+    "why_reason_export_not_worth": "Exporting earns {value} per kWh, below your limit of {threshold}, so SEM stops exporting.",
+    "why_reason_export_released": "Exporting is worth it again, so SEM lifts the export limit.",
+    "why_kind_export": "Grid export",
+    "why_verb_limit_export": "export limit",
+    "why_verb_release_export": "export free"
   },
   "es": {
     "% of limit": "% del límite",
@@ -9857,7 +9881,13 @@
     "why_reason_no_source": "No hay excedente solar ni energía barata, así que se apaga.",
     "why_reason_charger_stop_now": "La potencia no volverá pronto, así que el coche se detiene ahora.",
     "why_reason_charger_ramp": "SEM lleva la corriente a su nuevo valor en pasos pequeños.",
-    "why_reason_charger_hold_steady": "SEM mantiene la corriente estable para evitar muchos cambios pequeños."
+    "why_reason_charger_hold_steady": "SEM mantiene la corriente estable para evitar muchos cambios pequeños.",
+    "why_reason_export_negative_price": "Exportar cuesta dinero ahora, así que SEM deja de enviar energía a la red.",
+    "why_reason_export_not_worth": "Exportar da {value} por kWh, menos que tu límite de {threshold}, así que SEM deja de exportar.",
+    "why_reason_export_released": "Exportar vuelve a compensar, así que SEM quita el límite de exportación.",
+    "why_kind_export": "Exportación a red",
+    "why_verb_limit_export": "límite de exportación",
+    "why_verb_release_export": "exportación libre"
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -11829,7 +11859,13 @@
     "why_reason_no_source": "Aurinkoylijäämää tai halpaa sähköä ei ole, joten se sammuu.",
     "why_reason_charger_stop_now": "Teho ei palaa pian, joten auto pysähtyy nyt.",
     "why_reason_charger_ramp": "SEM muuttaa virran uuteen arvoon pienin askelin.",
-    "why_reason_charger_hold_steady": "SEM pitää virran tasaisena välttääkseen monta pientä muutosta."
+    "why_reason_charger_hold_steady": "SEM pitää virran tasaisena välttääkseen monta pientä muutosta.",
+    "why_reason_export_negative_price": "Verkkoon syöttö maksaa nyt rahaa, joten SEM lopettaa sähkön syötön verkkoon.",
+    "why_reason_export_not_worth": "Verkkoon syöttö tuottaa {value} / kWh, alle rajasi {threshold}, joten SEM lopettaa syötön.",
+    "why_reason_export_released": "Verkkoon syöttö kannattaa taas, joten SEM poistaa syöttörajan.",
+    "why_kind_export": "Verkkoon syöttö",
+    "why_verb_limit_export": "syöttöraja",
+    "why_verb_release_export": "syöttö vapaa"
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -13801,7 +13837,13 @@
     "why_reason_no_source": "Il n'y a ni surplus solaire ni courant bon marché, il s'éteint.",
     "why_reason_charger_stop_now": "La puissance ne reviendra pas de sitôt, la voiture s'arrête donc maintenant.",
     "why_reason_charger_ramp": "SEM amène le courant à sa nouvelle valeur par petites étapes.",
-    "why_reason_charger_hold_steady": "SEM garde le courant stable pour éviter de nombreux petits changements."
+    "why_reason_charger_hold_steady": "SEM garde le courant stable pour éviter de nombreux petits changements.",
+    "why_reason_export_negative_price": "Injecter coûte de l'argent maintenant, SEM arrête donc d'envoyer du courant au réseau.",
+    "why_reason_export_not_worth": "Injecter rapporte {value} par kWh, moins que votre limite de {threshold}, SEM arrête donc l'injection.",
+    "why_reason_export_released": "Injecter vaut de nouveau la peine, SEM lève donc la limite d'injection.",
+    "why_kind_export": "Injection réseau",
+    "why_verb_limit_export": "limite d'injection",
+    "why_verb_release_export": "injection libre"
   },
   "hu": {
     "% of limit": "% a határból",
@@ -15773,7 +15815,13 @@
     "why_reason_no_source": "Nincs napenergia-többlet és olcsó áram sem, ezért kikapcsol.",
     "why_reason_charger_stop_now": "A teljesítmény nem tér vissza hamar, ezért az autó most leáll.",
     "why_reason_charger_ramp": "A SEM kis lépésekben viszi az áramot az új értékre.",
-    "why_reason_charger_hold_steady": "A SEM egyenletesen tartja az áramot, hogy elkerülje a sok apró változást."
+    "why_reason_charger_hold_steady": "A SEM egyenletesen tartja az áramot, hogy elkerülje a sok apró változást.",
+    "why_reason_export_negative_price": "A betáplálás most pénzbe kerül, ezért a SEM leállítja a hálózatba táplálást.",
+    "why_reason_export_not_worth": "A betáplálás {value}-t hoz kWh-nként, kevesebbet, mint a {threshold} határod, ezért a SEM leállítja.",
+    "why_reason_export_released": "A betáplálás újra megéri, ezért a SEM feloldja a betáplálási korlátot.",
+    "why_kind_export": "Hálózati betáplálás",
+    "why_verb_limit_export": "betáplálási korlát",
+    "why_verb_release_export": "betáplálás szabad"
   },
   "it": {
     "% of limit": "% del limite",
@@ -17745,7 +17793,13 @@
     "why_reason_no_source": "Non c'è surplus solare né energia a basso costo, quindi si spegne.",
     "why_reason_charger_stop_now": "La potenza non tornerà presto, quindi l'auto si ferma ora.",
     "why_reason_charger_ramp": "SEM porta la corrente al nuovo valore a piccoli passi.",
-    "why_reason_charger_hold_steady": "SEM mantiene la corrente stabile per evitare tanti piccoli cambi."
+    "why_reason_charger_hold_steady": "SEM mantiene la corrente stabile per evitare tanti piccoli cambi.",
+    "why_reason_export_negative_price": "Immettere in rete ora costa, quindi SEM smette di mandare energia alla rete.",
+    "why_reason_export_not_worth": "Immettere rende {value} per kWh, meno del tuo limite di {threshold}, quindi SEM smette di immettere.",
+    "why_reason_export_released": "Immettere conviene di nuovo, quindi SEM toglie il limite di immissione.",
+    "why_kind_export": "Immissione in rete",
+    "why_verb_limit_export": "limite di immissione",
+    "why_verb_release_export": "immissione libera"
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -19717,7 +19771,13 @@
     "why_reason_no_source": "Er is geen zonne-overschot of goedkope stroom, dus het gaat uit.",
     "why_reason_charger_stop_now": "Het vermogen komt niet snel terug, dus de auto stopt nu.",
     "why_reason_charger_ramp": "SEM brengt de stroom in kleine stappen naar de nieuwe waarde.",
-    "why_reason_charger_hold_steady": "SEM houdt de stroom gelijk om veel kleine wijzigingen te vermijden."
+    "why_reason_charger_hold_steady": "SEM houdt de stroom gelijk om veel kleine wijzigingen te vermijden.",
+    "why_reason_export_negative_price": "Terugleveren kost nu geld, dus SEM stopt met stroom naar het net sturen.",
+    "why_reason_export_not_worth": "Terugleveren levert {value} per kWh op, minder dan je grens van {threshold}, dus SEM stopt met terugleveren.",
+    "why_reason_export_released": "Terugleveren loont weer, dus SEM heft de teruglevergrens op.",
+    "why_kind_export": "Teruglevering",
+    "why_verb_limit_export": "teruglevergrens",
+    "why_verb_release_export": "teruglevering vrij"
   },
   "no": {
     "% of limit": "% av grense",
@@ -21689,7 +21749,13 @@
     "why_reason_no_source": "Det er verken soloverskudd eller billig strøm, så den slås av.",
     "why_reason_charger_stop_now": "Effekten kommer ikke tilbake snart, så bilen stopper nå.",
     "why_reason_charger_ramp": "SEM endrer strømmen til den nye verdien i små steg.",
-    "why_reason_charger_hold_steady": "SEM holder strømmen jevn for å unngå mange små endringer."
+    "why_reason_charger_hold_steady": "SEM holder strømmen jevn for å unngå mange små endringer.",
+    "why_reason_export_negative_price": "Det koster penger å sende strøm ut nå, så SEM slutter å sende strøm til nettet.",
+    "why_reason_export_not_worth": "Eksport gir {value} per kWh, under grensen din på {threshold}, så SEM stopper eksporten.",
+    "why_reason_export_released": "Eksport lønner seg igjen, så SEM fjerner eksportgrensen.",
+    "why_kind_export": "Eksport til nettet",
+    "why_verb_limit_export": "eksportgrense",
+    "why_verb_release_export": "eksport fri"
   },
   "pl": {
     "% of limit": "% limitu",
@@ -23661,7 +23727,13 @@
     "why_reason_no_source": "Nie ma nadwyżki ze słońca ani taniego prądu, więc się wyłącza.",
     "why_reason_charger_stop_now": "Moc szybko nie wróci, więc samochód zatrzymuje się teraz.",
     "why_reason_charger_ramp": "SEM zmienia prąd do nowej wartości małymi krokami.",
-    "why_reason_charger_hold_steady": "SEM utrzymuje stały prąd, by uniknąć wielu drobnych zmian."
+    "why_reason_charger_hold_steady": "SEM utrzymuje stały prąd, by uniknąć wielu drobnych zmian.",
+    "why_reason_export_negative_price": "Oddawanie do sieci kosztuje teraz pieniądze, więc SEM przestaje wysyłać energię do sieci.",
+    "why_reason_export_not_worth": "Oddawanie do sieci daje {value} za kWh, mniej niż twój limit {threshold}, więc SEM je zatrzymuje.",
+    "why_reason_export_released": "Oddawanie do sieci znów się opłaca, więc SEM znosi limit oddawania.",
+    "why_kind_export": "Oddawanie do sieci",
+    "why_verb_limit_export": "limit oddawania",
+    "why_verb_release_export": "oddawanie wolne"
   },
   "pt": {
     "% of limit": "% do limite",
@@ -25633,7 +25705,13 @@
     "why_reason_no_source": "Não há excedente solar nem energia barata, por isso desliga-se.",
     "why_reason_charger_stop_now": "A potência não vai voltar tão cedo, por isso o carro para agora.",
     "why_reason_charger_ramp": "O SEM leva a corrente ao novo valor em pequenos passos.",
-    "why_reason_charger_hold_steady": "O SEM mantém a corrente estável para evitar muitas pequenas mudanças."
+    "why_reason_charger_hold_steady": "O SEM mantém a corrente estável para evitar muitas pequenas mudanças.",
+    "why_reason_export_negative_price": "Exportar custa dinheiro agora, por isso o SEM deixa de enviar energia para a rede.",
+    "why_reason_export_not_worth": "Exportar rende {value} por kWh, abaixo do limite de {threshold}, por isso o SEM deixa de exportar.",
+    "why_reason_export_released": "Exportar volta a compensar, por isso o SEM retira o limite de exportação.",
+    "why_kind_export": "Exportação para a rede",
+    "why_verb_limit_export": "limite de exportação",
+    "why_verb_release_export": "exportação livre"
   },
   "ro": {
     "% of limit": "% din limită",
@@ -27605,7 +27683,13 @@
     "why_reason_no_source": "Nu este nici surplus solar, nici energie ieftină, deci se oprește.",
     "why_reason_charger_stop_now": "Puterea nu revine curând, deci mașina se oprește acum.",
     "why_reason_charger_ramp": "SEM duce curentul la noua valoare în pași mici.",
-    "why_reason_charger_hold_steady": "SEM ține curentul constant ca să evite multe schimbări mici."
+    "why_reason_charger_hold_steady": "SEM ține curentul constant ca să evite multe schimbări mici.",
+    "why_reason_export_negative_price": "Injectarea în rețea costă acum bani, deci SEM nu mai trimite energie în rețea.",
+    "why_reason_export_not_worth": "Injectarea aduce {value} pe kWh, sub limita ta de {threshold}, deci SEM oprește injectarea.",
+    "why_reason_export_released": "Injectarea merită din nou, deci SEM ridică limita de injectare.",
+    "why_kind_export": "Injectare în rețea",
+    "why_verb_limit_export": "limită de injectare",
+    "why_verb_release_export": "injectare liberă"
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -29577,7 +29661,13 @@
     "why_reason_no_source": "Det finns inget solöverskott eller billig el, så den stängs av.",
     "why_reason_charger_stop_now": "Effekten kommer inte tillbaka snart, så bilen stannar nu.",
     "why_reason_charger_ramp": "SEM ändrar strömmen till det nya värdet i små steg.",
-    "why_reason_charger_hold_steady": "SEM håller strömmen jämn för att undvika många små ändringar."
+    "why_reason_charger_hold_steady": "SEM håller strömmen jämn för att undvika många små ändringar.",
+    "why_reason_export_negative_price": "Att mata ut el kostar pengar nu, så SEM slutar skicka el till nätet.",
+    "why_reason_export_not_worth": "Att mata ut ger {value} per kWh, under din gräns på {threshold}, så SEM slutar mata ut.",
+    "why_reason_export_released": "Det lönar sig att mata ut igen, så SEM tar bort exportgränsen.",
+    "why_kind_export": "Export till nätet",
+    "why_verb_limit_export": "exportgräns",
+    "why_verb_release_export": "export fri"
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -31549,6 +31639,12 @@
     "why_reason_no_source": "既没有多余的太阳能，也没有便宜的电，所以它关闭。",
     "why_reason_charger_stop_now": "功率短时间内不会恢复，所以车辆现在停止充电。",
     "why_reason_charger_ramp": "SEM 分小步把电流调到新的数值。",
-    "why_reason_charger_hold_steady": "SEM 保持电流稳定，避免频繁的小调整。"
+    "why_reason_charger_hold_steady": "SEM 保持电流稳定，避免频繁的小调整。",
+    "why_reason_export_negative_price": "现在向电网送电要花钱，所以 SEM 停止向电网送电。",
+    "why_reason_export_not_worth": "每度电上网只能赚 {value}，低于你设的 {threshold}，所以 SEM 停止上网送电。",
+    "why_reason_export_released": "上网送电又划算了，所以 SEM 取消送电限制。",
+    "why_kind_export": "电网送电",
+    "why_verb_limit_export": "送电限制",
+    "why_verb_release_export": "送电不限"
   }
 }

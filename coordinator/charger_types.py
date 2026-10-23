@@ -380,6 +380,9 @@ class ExportDecision:
     intent: ExportIntent = ExportIntent.NONE
     watts: float = 0.0
     reason: str = ""
+    #: (#1174) why, as a stable code and its numbers — recorded only
+    reason_code: str = field(default="", compare=False)
+    reason_params: Mapping[str, Any] = field(default_factory=dict, compare=False)
 
 
 @dataclass(frozen=True)

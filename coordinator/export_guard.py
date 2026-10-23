@@ -25,8 +25,10 @@ Pure: the coordinator feeds a monotonic ``now`` and the measured export.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
+
+from . import reason_codes as RC
 
 ENGAGE_HOLD_S: float = 120.0
 RELEASE_HOLD_S: float = 300.0
@@ -42,6 +44,9 @@ class ExportCommand:
     intent: Optional[str]          # LIMIT_EXPORT | RELEASE_EXPORT | None
     watts: float                   # the cap: 0.0 for a zero-export window
     reason: str
+    #: (#1174) why, as a stable code and its numbers — recorded only
+    reason_code: str = field(default="", compare=False)
+    reason_params: Dict[str, Any] = field(default_factory=dict, compare=False)
 
 
 class ExportGuard:
@@ -74,7 +79,10 @@ class ExportGuard:
             self.repair_wanted = True
 
     def update(self, now: float, verdict_state: str,
-               export_w: Optional[float]) -> ExportCommand:
+               export_w: Optional[float], *, reason_code: str = "",
+               reason_params: Optional[Dict[str, Any]] = None) -> ExportCommand:
+        """``reason_code`` / ``reason_params``: (#1174) why the verdict closed
+        the meter, carried onto the cut so the decision log can say it."""
         closed = verdict_state == "closed"
         exp = float(export_w or 0.0)          # a BLIND meter is not export
         if closed:
@@ -103,7 +111,9 @@ class ExportGuard:
             self.state = "engaged"
             self._applied = True
             self.reason = f"export {exp:.0f} W into a closed meter — cutting to 0 W"
-            return ExportCommand(LIMIT_EXPORT, 0.0, self.reason)
+            return ExportCommand(LIMIT_EXPORT, 0.0, self.reason,
+                                 reason_code=reason_code or RC.EXPORT_NEGATIVE_PRICE,
+                                 reason_params=dict(reason_params or {}))
         # OPEN (HELD is not a grid state) — release with hysteresis
         self._closed_since = None
         if self.state == "idle":
@@ -135,4 +145,5 @@ class ExportGuard:
         self._open_since = None
         self._applied = False
         return ExportCommand(None if (was_refused or not applied) else RELEASE_EXPORT,
-                             0.0, "meter open — releasing the cut")
+                             0.0, "meter open — releasing the cut",
+                             reason_code=RC.EXPORT_RELEASED)

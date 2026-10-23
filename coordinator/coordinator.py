@@ -13227,7 +13227,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         export_w = (None if getattr(power, "grid_power_unavailable", False)
                     else float(getattr(power, "grid_export_power", 0.0) or 0.0))
         self._export_command = self._export_guard.update(
-            _time.monotonic() if now is None else now, state, export_w)
+            _time.monotonic() if now is None else now, state, export_w,
+            # (#1174) why the meter closed, carried onto the cut
+            reason_code=getattr(verdict, "reason_code", "") if enabled else "",
+            reason_params=getattr(verdict, "reason_params", None) if enabled else None)
 
     def _publish_export_guard_state(self) -> None:
         """(#955) What the card and ``sensor.sem_export_guard_state`` read.

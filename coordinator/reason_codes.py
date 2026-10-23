@@ -116,18 +116,25 @@ LOAD_STOP_CONDITION = "stop_condition"
 LOAD_PLAN_WAIT = "plan_wait"
 LOAD_NO_SOURCE = "no_source"
 
+# ── the grid export limit (#1090) ────────────────────────────────────
+EXPORT_NEGATIVE_PRICE = "export_negative_price"
+EXPORT_NOT_WORTH = "export_not_worth"
+EXPORT_RELEASED = "export_released"
+
 #: The placeholders a code's sentence fills, by name. A code not listed
 #: takes none.
 PARAMS: Dict[str, Tuple[str, ...]] = {
     CHARGER_PLAN_WAIT_UNTIL: ("time",),
     BATTERY_FEEDS_CAR: ("floor",),
     BATTERY_CAR_BELOW_FLOOR: ("floor",),
+    EXPORT_NOT_WORTH: ("value", "threshold"),
 }
 
 #: Every code the code base can set.
 ALL_CODES: FrozenSet[str] = frozenset(
     value for name, value in dict(globals()).items()
-    if name.isupper() and name.split("_", 1)[0] in ("CHARGER", "BATTERY", "LOAD")
+    if name.isupper()
+    and name.split("_", 1)[0] in ("CHARGER", "BATTERY", "LOAD", "EXPORT")
     and isinstance(value, str)
 )
 

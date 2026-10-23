@@ -78,7 +78,8 @@ class TestEveryCodeHasASentence:
 
     def test_the_code_list_is_not_empty_and_unique(self):
         names = [n for n in dir(RC)
-                 if n.isupper() and n.split("_", 1)[0] in ("CHARGER", "BATTERY", "LOAD")
+                 if n.isupper()
+                 and n.split("_", 1)[0] in ("CHARGER", "BATTERY", "LOAD", "EXPORT")
                  and isinstance(getattr(RC, n), str)]
         values = [getattr(RC, n) for n in names]
         assert len(values) == len(set(values)), "two names share one code"
@@ -176,8 +177,11 @@ class TestTheCodeIsSetWhereTheDecisionIsMade:
                     if kw.arg != "reason_code":
                         continue
                     # a string a code is chosen BY (mode == "off") is fine
+                    # …and so is an attribute name read with getattr()
                     compared = {id(c) for cmp in ast.walk(kw.value)
-                                if isinstance(cmp, ast.Compare)
+                                if isinstance(cmp, ast.Compare) or (
+                                    isinstance(cmp, ast.Call)
+                                    and getattr(cmp.func, "id", "") == "getattr")
                                 for c in ast.walk(cmp)}
                     for sub in ast.walk(kw.value):
                         if id(sub) in compared:
@@ -479,3 +483,129 @@ class TestALimitKeepsItsOwnCode:
                        ).reason_params == {"time": "02:00"}
         assert rewrite(d, bridgeable=False, reason_code=RC.CHARGER_STOP_NOW,
                        reason_params={}).reason_params == {}
+
+
+# ── the grid export limit (#1090) ────────────────────────────────────
+
+class _ExportAdapter:
+    def __init__(self):
+        self.cuts, self.releases = [], 0
+
+    async def command_limit_export(self, watts):
+        self.cuts.append(watts)
+
+    async def command_release_export(self):
+        self.releases += 1
+
+    def export_dry_run(self, intent, watts):
+        return {"service": "x.limit", "data": {"w": watts}, "why": None}
+
+
+def _dutch_day_cut(threshold=0.05, rate=0.012):
+    """A Dutch day: a sold kWh is worth 1.2 ct, the user's limit is 5 ct."""
+    from datetime import datetime, timezone
+    from custom_components.solar_energy_management.coordinator.decide_export import (
+        decide_export,
+    )
+    from custom_components.solar_energy_management.coordinator.export_guard import (
+        ExportGuard,
+    )
+    from custom_components.solar_energy_management.coordinator.sink_verdicts import (
+        sink_verdicts,
+    )
+    v = sink_verdicts(
+        now=datetime(2027, 6, 1, 13, tzinfo=timezone.utc), tariff_level="normal",
+        upcoming=[], export_rate=rate, export_rate_known=True,
+        export_guard_enabled=True, house_sink_enabled=False,
+        morning_window_enabled=False, departure=None, morning_hours=2.0,
+        forecast_refills_pack=False, pacing_horizon_end=None,
+        export_threshold=threshold)["grid_export"]
+    guard = ExportGuard(engage_hold_s=0.0, release_hold_s=0.0)
+
+    def tick(now, state, export_w):
+        cmd = guard.update(now, state, export_w, reason_code=v.reason_code,
+                           reason_params=v.reason_params)
+        fleet = type("F", (), {"export_guard_enabled": True, "export_command": cmd})()
+        return decide_export(fleet)
+    return v, tick
+
+
+class TestTheExportLimitIsLogged:
+
+    def _ctl(self):
+        return type("C", (), {"decision_log": DecisionLog(),
+                              "publish_observer_decision": lambda *a, **k: None})()
+
+    def test_a_dutch_day_stop_records_once_with_its_sentence(self):
+        import asyncio
+        from custom_components.solar_energy_management.coordinator.actuate_export import (
+            actuate_export,
+        )
+        v, tick = _dutch_day_cut()
+        assert v.state == "closed" and v.reason_code == RC.EXPORT_NOT_WORTH
+        ctl, adapter = self._ctl(), _ExportAdapter()
+        cut = tick(0.0, v.state, 2400.0)
+        asyncio.run(actuate_export(cut, adapter, controller=ctl))
+        for t in (10.0, 20.0):     # the meter stays closed: no new write, no row
+            asyncio.run(actuate_export(tick(t, v.state, 2400.0), adapter, controller=ctl))
+        asyncio.run(actuate_export(cut, adapter, controller=ctl))   # a re-sent cut
+        rows = ctl.decision_log.records()
+        assert adapter.cuts == [0.0, 0.0]
+        assert len(rows) == 1
+        row = rows[0]
+        assert (row["device_kind"], row["new"], row["reason_code"]) == (
+            "export", "limit_export 0 W", RC.EXPORT_NOT_WORTH)
+        assert row["params"] == {"value": "0.012", "threshold": "0.05"}
+        cat = load_plain_reasons(str(TRANSLATIONS))
+        assert plain_sentence(cat, row["reason_code"], row["params"], "en") == (
+            "Exporting earns 0.012 per kWh, below your limit of 0.05, "
+            "so SEM stops exporting.")
+        msg = describe_decision(row, cat, "nl")
+        assert msg["name"] == "Teruglevering"
+        assert "0.012" in msg["message"] and "0.05" in msg["message"]
+
+    def test_the_release_records_once(self):
+        import asyncio
+        from custom_components.solar_energy_management.coordinator.actuate_export import (
+            actuate_export,
+        )
+        v, tick = _dutch_day_cut()
+        ctl, adapter = self._ctl(), _ExportAdapter()
+        asyncio.run(actuate_export(tick(0.0, "closed", 2400.0), adapter, controller=ctl))
+        asyncio.run(actuate_export(tick(10.0, "open", 0.0), adapter, controller=ctl))
+        release = tick(20.0, "open", 0.0)
+        asyncio.run(actuate_export(release, adapter, controller=ctl))
+        for t in (30.0, 40.0):
+            asyncio.run(actuate_export(tick(t, "open", 0.0), adapter, controller=ctl))
+        rows = ctl.decision_log.records()
+        assert adapter.releases == 1
+        assert [r["reason_code"] for r in rows] == [RC.EXPORT_NOT_WORTH, RC.EXPORT_RELEASED]
+        assert rows[1]["new"] == "release_export"
+
+    def test_a_negative_price_names_itself(self):
+        v, tick = _dutch_day_cut(threshold=0.0, rate=-0.02)
+        assert (v.reason_code, v.reason_params) == (RC.EXPORT_NEGATIVE_PRICE, {})
+        assert tick(0.0, v.state, 900.0).reason_code == RC.EXPORT_NEGATIVE_PRICE
+
+    def test_observer_rows_are_flagged_and_nothing_is_written(self):
+        import asyncio
+        from custom_components.solar_energy_management.coordinator.actuate_export import (
+            actuate_export,
+        )
+        v, tick = _dutch_day_cut()
+        ctl, adapter = self._ctl(), _ExportAdapter()
+        asyncio.run(actuate_export(tick(0.0, v.state, 2400.0), adapter,
+                                   controller=ctl, observer=True))
+        rows = ctl.decision_log.records()
+        assert adapter.cuts == [] and len(rows) == 1 and rows[0]["observer"] is True
+
+    def test_a_refused_cut_records_nothing(self):
+        import asyncio
+        from custom_components.solar_energy_management.coordinator.actuate_export import (
+            actuate_export,
+        )
+        v, tick = _dutch_day_cut()
+        ctl = self._ctl()
+        refused = asyncio.run(actuate_export(tick(0.0, v.state, 2400.0), None,
+                                             controller=ctl))
+        assert refused and ctl.decision_log.records() == []

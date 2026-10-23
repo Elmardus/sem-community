@@ -19,11 +19,12 @@ around for no reason.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Optional, Tuple
 from .price_signal import CHEAP_LEVELS as _CHEAP_LEVELS, is_cheap_name
 from ..tariff.value_layer import DEFAULT_EXPORT_VALUE_THRESHOLD, export_not_worth
+from . import reason_codes as RC
 
 OPEN = "open"
 HELD = "held"
@@ -43,10 +44,19 @@ class SinkVerdict:
     state: str
     reason: str
     until: Optional[datetime] = None
+    #: (#1174) why, as a stable code and its numbers — recorded only, left
+    #: out of equality (``reason_codes``)
+    reason_code: str = field(default="", compare=False)
+    reason_params: Dict[str, Any] = field(default_factory=dict, compare=False)
 
     def to_dict(self) -> Dict[str, Any]:
         return {"sink": self.sink, "state": self.state, "reason": self.reason,
                 "until": self.until.isoformat() if self.until else None}
+
+
+def _money(v) -> str:
+    """(#1174) A per-kWh value as the sentence shows it: up to 3 decimals."""
+    return f"{round(float(v), 3):g}"
 
 
 class _Verdicts(dict):
@@ -146,7 +156,13 @@ def sink_verdicts(*, now: datetime, tariff_level: Optional[str], upcoming,
             ("export price negative — the meter is closed"
              if export_threshold == DEFAULT_EXPORT_VALUE_THRESHOLD else
              f"export value below {export_threshold:g} — the meter is closed"),
-            until=win[1] if win else None)
+            until=win[1] if win else None,
+            reason_code=(RC.EXPORT_NEGATIVE_PRICE
+                         if export_threshold == DEFAULT_EXPORT_VALUE_THRESHOLD
+                         else RC.EXPORT_NOT_WORTH),
+            reason_params=({} if export_threshold == DEFAULT_EXPORT_VALUE_THRESHOLD
+                           else {"value": _money(export_rate),
+                                 "threshold": _money(export_threshold)}))
     else:
         out["grid_export"] = SinkVerdict(
             "grid_export", OPEN, "export price not negative",

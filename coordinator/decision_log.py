@@ -36,6 +36,9 @@ DECISION_LOG_SIZE = 200
 KIND_CHARGER = "charger"
 KIND_BATTERY = "battery"
 KIND_LOAD = "load"
+#: (#1174) the house's grid export limit, written to the inverter (#1090)
+KIND_EXPORT = "export"
+EXPORT_DEVICE_ID = "grid_export"
 
 #: The smallest value change that counts as a new command, per kind. A
 #: charger steps in whole amps (decided: ≥ 1 A). A battery limit is
@@ -46,9 +49,10 @@ MIN_STEP: Dict[str, float] = {
     KIND_CHARGER: 1.0,
     KIND_BATTERY: 250.0,
     KIND_LOAD: 500.0,
+    KIND_EXPORT: 100.0,
 }
 
-_UNIT = {KIND_CHARGER: "A", KIND_BATTERY: "W", KIND_LOAD: "W"}
+_UNIT = {KIND_CHARGER: "A", KIND_BATTERY: "W", KIND_LOAD: "W", KIND_EXPORT: "W"}
 
 #: Commands that mean "SEM is not driving this device". A device whose
 #: FIRST command is one of these has not changed — it was never started —
@@ -334,6 +338,29 @@ def record_shed(log: Optional[DecisionLog], device_id: str, *, name: str = "",
         device_id=str(device_id), kind=KIND_LOAD,
         verb="off" if shed else "restore", reason_code=reason_code,
         text=text, observer=observer, name=str(name or device_id),
+        quiet_first_rest=False)
+
+
+def record_export(log: Optional[DecisionLog], decision, *,
+                  observer: bool = False) -> Optional[DecisionRecord]:
+    """(#1174) The export limit at the one point it leaves for the inverter
+    (``actuate_export``): a cut to ``watts`` or its release. A release only
+    ever follows a cut SEM made (the guard's rule), so the first one after a
+    restart is a real change, not boot noise."""
+    if not isinstance(log, DecisionLog):
+        return None
+    intent = str(getattr(getattr(decision, "intent", None), "value", "") or "")
+    if intent not in ("limit_export", "release_export"):
+        return None
+    return log.record(
+        device_id=EXPORT_DEVICE_ID, kind=KIND_EXPORT, verb=intent,
+        value=(float(getattr(decision, "watts", 0.0) or 0.0)
+               if intent == "limit_export" else None),
+        reason_code=str(getattr(decision, "reason_code", "") or intent),
+        text=str(getattr(decision, "reason", "") or ""), observer=observer,
+        # no name: the card and the logbook say the kind word in the
+        # user's language (``why_kind_export``)
+        params=_params_of(decision),
         quiet_first_rest=False)
 
 

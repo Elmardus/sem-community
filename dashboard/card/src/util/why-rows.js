@@ -10,11 +10,13 @@
 /** How many rows Everyday keeps open; the rest sit in the fold. */
 export const WHY_EVERYDAY_ROWS = 4;
 
-/** Device colours from the palette: wallbox green, battery teal, house load cyan. */
+/** Device colours from the palette: wallbox green, battery teal, house load cyan, grid export violet. */
 export const WHY_KINDS = {
     charger: { icon: 'mdi:ev-station', color: '#8DC892' },
     battery: { icon: 'mdi:home-battery', color: '#4db6ac' },
     load: { icon: 'mdi:power-plug', color: '#5BC8D8' },
+    // (#1174) the grid export limit, in the grid-export colour
+    export: { icon: 'mdi:transmission-tower-export', color: '#8353d1' },
 };
 
 /** The verbs the log writes; each has a `why_verb_<verb>` key. */
@@ -22,6 +24,7 @@ export const WHY_VERBS = [
     'charge', 'stop', 'disable', 'park_off', 'normal', 'limit_discharge',
     'force_charge', 'stop_force_charge', 'force_discharge',
     'stop_force_discharge', 'off', 'on', 'restore',
+    'limit_export', 'release_export',
 ];
 
 export const chipKey = (rec) => `${rec?.device_kind || ''}:${rec?.device_id || ''}`;

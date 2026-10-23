@@ -338,3 +338,21 @@ test('a code without a sentence falls back to the internal text', () => {
     const out = text(card([REC('box', 'charger', { reason_code: 'mode_idle', text: 'Internal words.' })]).render());
     assert.match(out, /Internal words\./);
 });
+
+test('the grid export limit: its own icon, colour, kind word and chip', () => {
+    const words = { ...PLAIN, why_kind_export: 'Grid export', why_verb_limit_export: 'export limit',
+        why_reason_export_not_worth: 'Exporting earns {value} per kWh, below your limit of {threshold}, so SEM stops exporting.' };
+    globalThis.semLocalize = (k) => words[k] || t(k);
+    const c = new Card();
+    c.setConfig({});
+    c._hass = { states: {}, language: 'en', config: { time_zone: 'UTC' } };
+    c._records = [REC('grid_export', 'export', { name: 'grid_export', old: null, new: 'limit_export 0 W',
+        reason_code: 'export_not_worth', params: { value: '0.012', threshold: '0.05' }, text: 'export 2400 W into a closed meter' })];
+    const out = text(c.render());
+    assert.match(out, /mdi:transmission-tower-export/);
+    assert.match(out, /#8353d1/);
+    assert.match(out, /Grid export/);
+    assert.match(out, /export limit 0 W/);
+    assert.match(out, /Exporting earns 0\.012 per kWh, below your limit of 0\.05/);
+    assert.equal(rows.whyChips(c._records, (k) => words[k] || t(k))[0].name, 'Grid export');
+});
