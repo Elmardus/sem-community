@@ -644,6 +644,11 @@ When you have multiple batteries (e.g. Huawei + Growatt, or split Huawei units),
 > **The reserve.** The reserve stops SEM's own sales (Force Discharge and the
 > planned sells). In Auto and Self-Consumption SEM does not stop the house
 > from using the battery below it; the inverter's own limit does that.
+>
+> **A sale lifts SEM's own limit.** SEM sometimes limits the battery to the
+> house, down to 0 W, while a car charges or in a cheap hour. When the battery
+> then sells (Force Discharge or a planned sale), SEM first puts that limit
+> back to full.
 
 Each mode promise is tested: `tests/test_docs_contracts_battery.py`.
 
