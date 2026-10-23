@@ -48,7 +48,13 @@ from ..analytics.simulation.battery_sim import (
 from ..consts.battery_permissions import may_assist_ev
 from ..analytics.simulation.hourly_day import CORE_ROLES, HourlyDay
 from ..analytics.simulation.summary import summarise
-from .day_tag_store import BACKFILL_DAYS, BACKFILL_ROLES, simulation_tab_on
+from .day_tag_store import (
+    BACKFILL_DAYS,
+    BACKFILL_ROLES,
+    car_daily_entity_ids,
+    car_rows,
+    simulation_tab_on,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -489,14 +495,15 @@ class SimulationJob:
         day = _date.fromisoformat(d)
         start = dt_util.start_of_local_day(day)
         end = dt_util.start_of_local_day(day + timedelta(days=1))
-        # (#1176) from the last hour of the day before, with the hour's end
-        # state: what the car's counter carried over midnight
-        stats = await self._read_stats(self.hass, start - timedelta(hours=1),
-                                       end, set(ids.values()),
-                                       {"change", "mean", "state"})
+        car_ids = car_daily_entity_ids(self.hass)
+        stats = await self._read_stats(self.hass, start, end,
+                                       set(ids.values()) | set(car_ids),
+                                       {"change", "mean"})
         if stats is None:
             return "the recorder could not answer"
         rows = {role: stats.get(eid) or [] for role, eid in ids.items()}
+        # (#1176) the car from its chargers' daily rows, which hold no reset
+        rows["ev"] = car_rows(stats, car_ids, ids.get("ev"))
         empty = [r for r in CORE_ROLES if not rows.get(r)]
         if empty:
             return "no hourly statistics for this day: " + ", ".join(empty)

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import date as _date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -68,6 +69,47 @@ BACKFILL_ROLES: Dict[str, Tuple[str, str]] = {
 #: session day (``day_tags.CAR_MIN_KWH``)
 BACKFILL_CAR_MIN_KWH = CAR_MIN_KWH
 _COULD_NOT_ASK = object()
+#: (#1176) unique id of a charger's daily-energy sensor
+_CAR_DAILY_UID = re.compile(r"^sem_charger_(.+)_daily_energy$")
+
+
+def car_daily_entity_ids(hass) -> List[str]:
+    """(#1176) Every charger's daily-energy sensor, a removed charger's too
+    while the entity registry still remembers it.
+
+    The car's hours are read from these, not from ``daily_ev_energy``. They
+    are TOTAL_INCREASING, so the recorder takes a fall as a new cycle and
+    their hourly ``change`` holds no reset. ``daily_ev_energy`` said it
+    reset at midnight while it fell at the car day's start, so its older
+    hours carry a phantom night and a fall that cannot be told apart from
+    a real one."""
+    try:
+        from homeassistant.helpers import entity_registry as er
+        from ..const import DOMAIN
+        reg = er.async_get(hass)
+        entries = list(reg.entities.values()) + list(
+            getattr(reg, "deleted_entities", {}).values())
+    except Exception:  # noqa: BLE001 — no registry, no charger rows
+        return []
+    found = set()
+    for entry in entries:
+        eid = str(getattr(entry, "entity_id", "") or "")
+        if (getattr(entry, "platform", None) == DOMAIN
+                and eid.startswith("sensor.")
+                and _CAR_DAILY_UID.match(str(getattr(entry, "unique_id", "")))):
+            found.add(eid)
+    return sorted(found)
+
+
+def car_rows(stats: Dict[str, Any], car_ids: Sequence[str],
+             fallback_id: Optional[str]) -> List[Any]:
+    """(#1176) The car's hourly rows: every charger's daily-energy rows
+    together, or — on a day none of them recorded — ``daily_ev_energy``'s,
+    read as before."""
+    rows = [row for eid in car_ids for row in (stats.get(eid) or [])]
+    if rows:
+        return rows
+    return list(stats.get(fallback_id) or []) if fallback_id else []
 
 
 def simulation_tab_on(owner) -> bool:
@@ -409,13 +451,17 @@ class DayTagger:
         the recorder could not answer."""
         from homeassistant.util import dt as dt_util
         day_start = dt_util.start_of_local_day(day)
+        car_ids = car_daily_entity_ids(self.hass)
         stats = await self._read_stats(
             self.hass, day_start, day_start + timedelta(days=1),
-            set(ids.values()), {"change", "mean"})
+            set(ids.values()) | set(car_ids), {"change", "mean"})
         if stats is None:
             return _COULD_NOT_ASK
         hourly = {role: _hourly(stats.get(eid), BACKFILL_ROLES[role][1], day_start)
                   for role, eid in ids.items()}
+        # (#1176) the car from its chargers' rows, summed per hour
+        hourly["ev"] = _hourly(car_rows(stats, car_ids, ids.get("ev")),
+                               "change", day_start, add=True)
         return hourly if hourly.get("solar") else {}
 
     def _hourly_record(self, day: _date, hourly: Dict[str, Dict[int, float]],
@@ -470,9 +516,11 @@ class DayTagger:
         return async_track_time_change(self.hass, _run, hour=0, minute=15, second=0)
 
 
-def _hourly(rows, stat: str, day_start: datetime) -> Dict[int, float]:
+def _hourly(rows, stat: str, day_start: datetime,
+            add: bool = False) -> Dict[int, float]:
     """``{hour of day: value}`` from statistics rows. A row's ``start`` is a
-    UNIX timestamp on current Home Assistant, a datetime on older ones."""
+    UNIX timestamp on current Home Assistant, a datetime on older ones.
+    ``add``: rows on one hour add up (#1176: several chargers)."""
     out: Dict[int, float] = {}
     for row in rows or []:
         start = (row or {}).get("start")
@@ -485,7 +533,7 @@ def _hourly(rows, stat: str, day_start: datetime) -> Dict[int, float]:
         h = int((start - day_start).total_seconds() // 3600)
         val = _float(row.get(stat))
         if 0 <= h < 24 and val is not None:
-            out[h] = val
+            out[h] = out.get(h, 0.0) + val if add else val
     return out
 
 

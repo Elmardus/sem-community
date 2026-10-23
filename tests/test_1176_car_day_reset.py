@@ -14,7 +14,6 @@ reset it is; a step back at any other hour is still noted.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -29,6 +28,14 @@ from homeassistant.util import dt as dt_util
 from custom_components.solar_energy_management.analytics.simulation.hourly_day import (
     FLOW_ROLES,
     HourlyDay,
+)
+from custom_components.solar_energy_management.coordinator import (
+    day_tag_store,
+    simulation_job,
+)
+from custom_components.solar_energy_management.coordinator.day_tag_store import (
+    car_daily_entity_ids,
+    car_rows,
 )
 from custom_components.solar_energy_management.coordinator.energy_calculator import (
     EnergyCalculator,
@@ -181,158 +188,199 @@ def test_a_sunrise_rollover_is_recorded_too():
     assert _sensor("daily_ev_energy", calc).last_reset == sunrise
 
 
-# ── days already recorded ───────────────────────────────────────────
+# ── days already recorded: the car from its chargers' rows ──────────
 
 TZ = timezone(timedelta(hours=2))
 DAY = "2026-10-23"
-CARRIED = 10.95          # what the car counter held at midnight
-NIGHT = [0.62] * 6       # 00:00–06:00: 10.95 → 14.67
+BOX_A = "sensor.sem_charger_a_daily_energy"
+BOX_B = "sensor.sem_charger_b_daily_energy"
+FLEET = "sensor.sem_daily_ev_energy"
 
 
-def _rows(date, values, key="change", states=None):
-    day = datetime.fromisoformat(date).replace(tzinfo=TZ)
-    rows = []
-    for h, v in enumerate(values):
-        row = {"start": (day + timedelta(hours=h)).isoformat(), key: v}
-        if states is not None:
-            row["state"] = states[h]
-        rows.append(row)
+def _total_increasing(samples):
+    """Hourly ``change`` rows as Home Assistant's recorder compiles a
+    TOTAL_INCREASING sensor: ``samples`` is ``{hour: [states...]}``; a
+    state below 90 % of the one before starts a new cycle
+    (``reset_detected``), anything else adds its difference."""
+    from homeassistant.components.sensor.recorder import reset_detected
+
+    hass = Mock()
+    hass.data = {}
+    day = datetime.fromisoformat(DAY).replace(tzinfo=TZ)
+    rows, prev = [], None
+    for hour in range(24):
+        change = 0.0
+        for value in samples.get(hour, []):
+            if prev is not None and reset_detected(
+                    hass, BOX_A, value, prev, Mock()):
+                change += value
+            elif prev is not None:
+                change += value - prev
+            prev = value
+        rows.append({"start": (day + timedelta(hours=hour)).isoformat(),
+                     "change": round(change, 4)})
     return rows
 
 
-def _flows(ev_rows, ev_true):
-    base = {role: _rows(DAY, [0.0] * 24) for role in FLOW_ROLES}
-    base["home"] = _rows(DAY, [0.5] * 24)
-    base["grid_import"] = _rows(DAY, [0.5 + e for e in ev_true])
-    base["ev"] = ev_rows
-    base["soc"] = _rows(DAY, [50.0] * 24, key="mean")
-    return base
+def _flat(value):
+    day = datetime.fromisoformat(DAY).replace(tzinfo=TZ)
+    return [{"start": (day + timedelta(hours=h)).isoformat(), "change": value}
+            for h in range(24)]
 
 
-def _prod_ev_rows(with_carried=True, after_reset=0.0):
-    """PROD 23.10: the recorder restarted the cycle at midnight, so hour 0
-    holds the carried 10.95 kWh plus the hour's 0.62; 14.67 at 06:00; 0 at
-    07:00 under an unchanged last_reset."""
-    states, value = [], CARRIED
-    for kwh in NIGHT:
-        value += kwh
-        states.append(round(value, 2))
-    states += [states[-1], after_reset] + [after_reset] * 16
-    changes = [states[0]] + [round(b - a, 2) for a, b in
-                             zip(states[:6], states[1:7], strict=True)]
-    changes += [round(after_reset - states[6], 2)] + [0.0] * 16
-    rows = _rows(DAY, changes, states=states)
-    if with_carried:
-        rows.insert(0, {"start": "2026-10-22T23:00:00+02:00",
-                        "change": 0.0, "state": CARRIED})
-    return rows
+def _day(ev_rows):
+    rows = {role: _flat(0.0) for role in FLOW_ROLES}
+    rows["home"] = _flat(0.5)
+    # the meters saw the car: import = house + the car's hour
+    car = [0.0] * 24
+    for row in ev_rows:
+        hour = datetime.fromisoformat(row["start"]).astimezone(TZ).hour
+        car[hour] += max(0.0, row["change"])
+    rows["grid_import"] = [dict(r, change=0.5 + car[h])
+                           for h, r in enumerate(_flat(0.5))]
+    rows["ev"] = ev_rows
+    return HourlyDay.from_statistics(rows, date=DAY, tz=TZ)
 
 
-def test_the_prod_rollover_drop_is_a_reset_not_a_step_back():
-    """No Charge-by is passed: the reset is read by its shape, so a day
-    recorded under 07:00 reads right after a move to 06:00 too."""
-    ev_true = NIGHT + [0.0] * 18
-    day = HourlyDay.from_statistics(_flows(_prod_ev_rows(), ev_true),
-                                    date=DAY, tz=TZ)
-    assert day.ev[:6] == pytest.approx(NIGHT)
-    assert day.ev[6] == day.ev[7] == 0.0
-    assert day.total("ev") == pytest.approx(3.72)
-    assert not any("stepped back" in n for n in day.notes)
+def test_case_a_a_reset_then_a_big_charge_is_counted():
+    """8 kWh at 06:50, 0 at 07:00, 5 kWh by 08:00: a fall followed by more
+    charge than the drop. The shape of one hour cannot tell it; the
+    TOTAL_INCREASING row can."""
+    samples = {0: [0.0], 6: [8.0], 7: [0.0, 2.0, 5.0]}
+    day = _day(_total_increasing(samples))
+    assert day.ev[7] == pytest.approx(5.0)
+    assert day.ev[6] == pytest.approx(8.0)
     assert not day.counter_jumped
 
 
-def test_the_rollover_hour_books_its_own_charge():
-    ev_true = NIGHT + [0.0, 1.2] + [0.0] * 16
-    day = HourlyDay.from_statistics(
-        _flows(_prod_ev_rows(after_reset=1.2), ev_true),
-        date=DAY, tz=TZ)
-    assert day.ev[7] == pytest.approx(1.2)
-    assert day.total("ev") == pytest.approx(3.72 + 1.2)
+def test_case_b_a_fall_to_a_third_is_a_new_cycle():
+    """10 → 3: the recorder starts a new cycle; the hour never goes
+    negative and nothing is netted against the night."""
+    samples = {0: [0.0], 3: [10.0], 9: [3.0]}
+    day = _day(_total_increasing(samples))
+    assert min(day.ev) >= 0.0
+    assert day.ev[3] == pytest.approx(10.0)
+    assert day.ev[9] == pytest.approx(3.0)
     assert not day.counter_jumped
 
 
-def test_without_the_carried_value_the_day_is_marked():
-    """The night cannot be told from the carried kWh: the day says so and
-    the self-check leaves it out."""
-    ev_true = [0.0] * 24
-    day = HourlyDay.from_statistics(
-        _flows(_prod_ev_rows(with_carried=False), ev_true),
-        date=DAY, tz=TZ)
-    assert day.ev[:8] == pytest.approx([0.0] * 8)
+def test_a_small_dip_stays_a_step_back():
+    """10 → 9.5 is within the recorder's 10 %: a negative hour, netted."""
+    samples = {0: [0.0], 3: [10.0], 9: [9.5]}
+    rows = _total_increasing(samples)
+    assert rows[9]["change"] == pytest.approx(-0.5)
+    assert _day(rows).total("ev") == pytest.approx(9.5)
+
+
+def test_two_chargers_add_up():
+    a = _total_increasing({0: [0.0], 2: [3.0], 7: [0.0, 1.0]})
+    b = _total_increasing({0: [0.0], 2: [4.0], 7: [4.0, 6.0]})
+    stats = {BOX_A: a, BOX_B: b, FLEET: _flat(0.0)}
+    day = _day(car_rows(stats, [BOX_A, BOX_B], FLEET))
+    assert day.ev[2] == pytest.approx(7.0)
+    assert day.ev[7] == pytest.approx(1.0 + 2.0)
+    assert day.total("ev") == pytest.approx(10.0)
+
+
+def test_without_charger_rows_the_fleet_row_is_read_as_before():
+    """The fallback keeps today's rule: a fall is a step back, noted."""
+    fleet = _flat(0.0)
+    fleet[0]["change"] = 11.57
+    for h in range(1, 6):
+        fleet[h]["change"] = 0.62
+    fleet[7]["change"] = -14.67
+    rows = car_rows({FLEET: fleet, BOX_A: []}, [BOX_A], FLEET)
+    assert rows == fleet
+    day = _day(rows)
     assert any("ev counter stepped back 14.67 kWh at 07:00" in n
                for n in day.notes)
     assert day.counter_jumped
 
 
-def test_a_real_step_back_at_another_hour_is_still_noted():
-    # 14.67 → 12.67 at 14:00: a fall that did not restart from 0
-    states = [CARRIED] * 12 + [14.67, 14.67, 12.67] + [12.67] * 9
-    changes = [0.0] * 12 + [3.72, 0.0, -2.0] + [0.0] * 9
-    rows = _rows(DAY, changes, states=states)
-    rows.insert(0, {"start": "2026-10-22T23:00:00+02:00",
-                    "change": 0.0, "state": CARRIED})
-    ev_true = [0.0] * 12 + [1.72] + [0.0] * 11
-    day = HourlyDay.from_statistics(_flows(rows, ev_true), date=DAY, tz=TZ)
-    assert any("ev counter stepped back 2.00 kWh at 14:00" in n
-               for n in day.notes)
-    assert day.counter_jumped
+def test_the_charger_sensors_are_found_removed_ones_too(monkeypatch):
+    from homeassistant.helpers import entity_registry as er
+
+    def entry(eid, uid, platform="solar_energy_management"):
+        return SimpleNamespace(entity_id=eid, unique_id=uid, platform=platform)
+
+    reg = SimpleNamespace(
+        entities={
+            1: entry(BOX_A, "sem_charger_a_daily_energy"),
+            2: entry("sensor.sem_pv_string_pv1_daily_energy",
+                     "sem_pv_string_pv1_daily_energy"),
+            3: entry(FLEET, "sem_daily_ev_energy"),
+            4: entry("sensor.other_charger_x_daily_energy",
+                     "sem_charger_x_daily_energy", platform="other"),
+        },
+        deleted_entities={
+            5: entry(BOX_B, "sem_charger_b_daily_energy"),
+        })
+    monkeypatch.setattr(er, "async_get", lambda _hass: reg)
+    assert car_daily_entity_ids(object()) == [BOX_A, BOX_B]
 
 
-def test_a_step_back_without_states_is_still_noted():
-    changes = [0.0] * 12 + [3.0, 0.0, -2.0] + [0.0] * 9
-    ev_true = [0.0] * 12 + [1.0] + [0.0] * 11
-    day = HourlyDay.from_statistics(_flows(_rows(DAY, changes), ev_true),
-                                    date=DAY, tz=TZ)
-    assert any("ev counter stepped back 2.00 kWh at 14:00" in n
-               for n in day.notes)
+def test_no_registry_no_charger_rows(monkeypatch):
+    from homeassistant.helpers import entity_registry as er
+
+    def boom(_hass):
+        raise RuntimeError("no registry")
+
+    monkeypatch.setattr(er, "async_get", boom)
+    assert car_daily_entity_ids(object()) == []
 
 
-def test_a_car_day_starting_at_half_past_midnight():
-    # the recorder restarted at 00:00 on 10.95; the counter fell to 0 at
-    # 00:30 and counted 0.4 kWh by 01:00
-    states = [0.4] + [0.4] * 23
-    changes = [0.4] + [0.0] * 23
-    rows = _rows(DAY, changes, states=states)
-    rows.insert(0, {"start": "2026-10-22T23:00:00+02:00",
-                    "change": 0.0, "state": CARRIED})
-    ev_true = [0.4] + [0.0] * 23
-    day = HourlyDay.from_statistics(_flows(rows, ev_true), date=DAY, tz=TZ)
-    assert day.ev[0] == pytest.approx(0.4)
-    assert day.total("ev") == pytest.approx(0.4)
-    assert not day.counter_jumped
+@pytest.mark.asyncio
+async def test_the_simulation_reads_the_car_from_the_chargers(monkeypatch):
+    a = _total_increasing({0: [0.0], 7: [0.0, 2.0]})
+    fleet = _flat(0.0)
+    fleet[7]["change"] = -9.0
+    asked = []
+
+    async def read(_hass, _start, _end, entity_ids, _types):
+        asked.append(set(entity_ids))
+        core = {eid: _flat(0.5) for eid in ("sensor.s", "sensor.i",
+                                            "sensor.e", "sensor.h")}
+        return {**core, BOX_A: a, FLEET: fleet}
+
+    monkeypatch.setattr(simulation_job, "car_daily_entity_ids",
+                        lambda _hass: [BOX_A])
+    seen = {}
+
+    def capture(rows, **_kw):
+        seen.update(rows)
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(simulation_job.HourlyDay, "from_statistics", capture)
+    job = simulation_job.SimulationJob(
+        Mock(), SimpleNamespace(config={}), read_stats=read)
+    ids = {"solar": "sensor.s", "grid_import": "sensor.i",
+           "grid_export": "sensor.e", "home": "sensor.h", "ev": FLEET}
+    with pytest.raises(RuntimeError, match="stop here"):
+        await job._one_day({}, DAY, [], None, {}, ids, TZ)
+    assert BOX_A in asked[0]
+    assert seen["ev"] == a
 
 
-def test_a_spring_forward_day():
-    """29.03.2026 has no 02:00: the row before 03:00 is 01:00."""
-    zone = ZoneInfo("Europe/Zurich")
-    first = datetime(2026, 3, 28, 22, 0, tzinfo=timezone.utc)  # 23:00 local
-    starts = [first + timedelta(hours=h) for h in range(24)]  # real hours
-    starts = [s.astimezone(zone) for s in starts]
-    value, carry = CARRIED, CARRIED
-    rows = [{"start": starts[0].isoformat(), "change": 0.0, "state": carry}]
-    for s in starts[1:]:
-        if s.hour < 7:
-            change = 0.62 if s.hour else value + 0.62
-            value += 0.62
-        elif s.hour == 7:
-            change, value = -value, 0.0
-        else:
-            change = 0.0
-        rows.append({"start": s.isoformat(), "change": round(change, 2),
-                     "state": round(value, 2)})
-    flows = {role: [] for role in FLOW_ROLES}
-    flows["ev"] = rows
-    day = HourlyDay.from_statistics(flows, date="2026-03-29", tz=zone)
-    night = [h for h in range(7) if h != 2]
-    assert [day.ev[h] for h in night] == pytest.approx([0.62] * 6)
-    assert day.ev[7] == 0.0
-    assert not any("stepped back" in n for n in day.notes)
+@pytest.mark.asyncio
+async def test_the_day_tags_read_the_car_from_the_chargers(monkeypatch):
+    from homeassistant.util import dt as dt_util
 
+    day = datetime(2026, 10, 23).date()
+    start = dt_util.start_of_local_day(day)
+    rows_a = [{"start": start + timedelta(hours=7), "change": 2.0}]
+    rows_b = [{"start": start + timedelta(hours=7), "change": 3.0}]
 
-def test_only_the_car_counter_is_read_this_way():
-    flows = _flows(_rows(DAY, [0.0] * 24), [0.0] * 24)
-    flows["solar"] = _rows(DAY, [0.0] * 7 + [-2.0] + [0.0] * 16)
-    flows["solar"][0]["change"] = 2.0
-    day = HourlyDay.from_statistics(flows, date=DAY, tz=TZ)
-    assert any("solar counter stepped back 2.00 kWh at 07:00" in n
-               for n in day.notes)
+    async def read(_hass, _start, _end, entity_ids, _types):
+        return {"sensor.s": [{"start": start + timedelta(hours=12),
+                              "change": 1.0}],
+                BOX_A: rows_a, BOX_B: rows_b,
+                FLEET: [{"start": start + timedelta(hours=7),
+                         "change": -9.0}]}
+
+    monkeypatch.setattr(day_tag_store, "car_daily_entity_ids",
+                        lambda _hass: [BOX_A, BOX_B])
+    store = day_tag_store.DayTagger.__new__(day_tag_store.DayTagger)
+    store.hass = Mock()
+    store._read_stats = read
+    got = await store._read_day_stats(day, {"solar": "sensor.s", "ev": FLEET})
+    assert got["ev"] == {7: 5.0}
