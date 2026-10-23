@@ -409,6 +409,11 @@ class BatteryDecision:
     """(#1069) FORCE_CHARGE / STOP_FORCE_CHARGE shaped by the room under the
     grid limit: actuation lowers it at once, raises it only after the room
     held, and restarts after a no-room stop only with clear room."""
+    follows_load: bool = False
+    """(#1173) LIMIT_DISCHARGE whose watts ARE the house load (the EV clamp,
+    the grid-funded clamp): actuation moves it, up or down, only once the
+    house has held the new level for a while. ``False`` — a target (the
+    hold, a peak cover, the blind release) — rises at once."""
     # (#1174) The reason as a stable code and its sentence's numbers —
     # recorded only, left out of equality (see ChargerDecision).
     reason_code: str = field(default="", compare=False)

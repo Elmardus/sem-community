@@ -129,6 +129,7 @@ def _stop_what_sem_started(view, decision: BatteryDecision) -> BatteryDecision:
                     f"{m} cycles — it is retried every other cycle)"),
             reason_code=decision.reason_code,
             reason_params=decision.reason_params,
+            follows_load=decision.follows_load,
         )
     if charge and discharge:
         charge = (m // 2) % 2 == 1
@@ -1019,6 +1020,9 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                 reason_code=code,
                 reason_params=({"floor": round(floor_soc)}
                                if code == RC.BATTERY_CAR_BELOW_FLOOR else {}),
+                # (#1173) the house's own figure, so it waits out a short
+                # burst; a peak cover must land at once
+                follows_load=not _peak_raised,
             )
 
     if _blind_release is not None:
@@ -1058,6 +1062,7 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
                        f"(home/{n} across fleet) so the grid feeds them")
                 ),
                 reason_code=RC.BATTERY_GRID_LOADS,
+                follows_load=not _peak_raised,   # (#1173) as the EV clamp
             )
 
     # ─── NORMAL ───

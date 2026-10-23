@@ -86,6 +86,18 @@ DISCHARGE_LIMIT_LEAK_W: float = 50.0
 # really fell is followed within a minute.
 DISCHARGE_LIMIT_LOWER_DWELL_CYCLES: int = 6
 
+# (#1173) …but "raise fast" made every burst two writes: up at once, down a
+# minute later. PROD, 15.–23.10: 48–143 writes a night, from a kettle or a
+# hob for 10–60 s, a house hovering 700–800 W across the 750 W step, and
+# the house figure's own jump right after SEM moved the pack. A limit that
+# follows the house (``BatteryDecision.follows_load``) now moves, up or
+# down, only once the house held the new level this many cycles in a row:
+# a move of two steps or more after ~1 min, a one-step move after ~5 min.
+# While it waits the grid covers the rest of the house (up) or the pack
+# may give a step more than the house (down) — never more than that.
+DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES: int = 6
+DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES: int = 30
+
 #: (#1069 review) A forced charge capped by the room under the grid limit
 #: is RAISED only after the bigger room held this many cycles (~1 min).
 #: Lowering never waits: the limit must never be exceeded. Without it a
@@ -112,6 +124,42 @@ def quantise_discharge_limit_w(raw_w: float, last_w: float) -> float:
     if last_w - raw >= DISCHARGE_LIMIT_STEP_W + DISCHARGE_LIMIT_LEAK_W:
         return candidate                      # the load really fell
     return float(last_w)                      # noise — hold
+
+
+def _settled_house_limit_w(raw_w: float, last_w: float, adapter) -> float:
+    """(#1173) The limit for a ``follows_load`` decision already in force.
+
+    Counts the cycles in a row the house sits above ``last_w`` (up) or a
+    step and the leak below it (down), and keeps the run's extreme: the
+    LOWEST house of an up-run, the HIGHEST of a down-run. That is the level
+    the house held the whole time, so a burst at the end of a run does not
+    set the limit. The limit moves to it once the run is long enough for
+    the size of the move; until then it stays ``last_w``.
+    """
+    import math
+    raw = max(0.0, float(raw_w or 0.0))
+    if raw > last_w:
+        way = "up"
+    elif last_w - raw >= DISCHARGE_LIMIT_STEP_W + DISCHARGE_LIMIT_LEAK_W:
+        way = "down"
+    else:
+        _set(adapter, "_limit_run", None)
+        return last_w
+    run = getattr(adapter, "_limit_run", None)
+    if isinstance(run, tuple) and len(run) == 3 and run[0] == way:
+        count = int(run[1]) + 1
+        edge = min(run[2], raw) if way == "up" else max(run[2], raw)
+    else:
+        count, edge = 1, raw
+    level = math.ceil(edge / DISCHARGE_LIMIT_STEP_W) * DISCHARGE_LIMIT_STEP_W
+    one_step = abs(level - last_w) < 2 * DISCHARGE_LIMIT_STEP_W
+    need = (DISCHARGE_LIMIT_ONE_STEP_DWELL_CYCLES if one_step
+            else DISCHARGE_LIMIT_FOLLOW_DWELL_CYCLES)
+    if count >= need and level != last_w:
+        _set(adapter, "_limit_run", None)
+        return float(level)
+    _set(adapter, "_limit_run", (way, count, edge))
+    return last_w
 
 
 def _note_forced_op(adapter, attr: str, ret, landed_intent, value: bool) -> None:
@@ -293,11 +341,18 @@ async def actuate_battery(
         # "lowering" and the pack fed a newly plugged-in car for six cycles.
         streak = int(getattr(adapter, "_limit_lower_streak", 0) or 0)
         _in_force = getattr(adapter, "last_intent", None) is BatteryIntent.LIMIT_DISCHARGE
-        if last_w >= 0 and limit_w < last_w and _in_force:
+        if decision.follows_load is True and _in_force and last_w >= 0:
+            # (#1173) A limit that follows the house waits both ways.
+            limit_w = _settled_house_limit_w(
+                decision.discharge_limit_w, last_w, adapter)
+            streak = 0
+        elif last_w >= 0 and limit_w < last_w and _in_force:
+            _set(adapter, "_limit_run", None)
             streak += 1
             if streak < DISCHARGE_LIMIT_LOWER_DWELL_CYCLES:
                 limit_w = last_w
         else:
+            _set(adapter, "_limit_run", None)
             streak = 0
         try:
             adapter._limit_lower_streak = streak
