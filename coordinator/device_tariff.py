@@ -157,14 +157,17 @@ class DeviceCycle:
     """One own-tariff device for ONE cycle's import booking.
 
     ``meter``: it has its own meter; ``meter_kwh`` is the accepted step this
-    cycle (0 when none). Else ``power_w`` × the cycle time × the grid's
-    share is its grid kWh. ``price`` None = the house rate.
+    cycle (0 when none), and ``baseline`` the reading the booking writes
+    back. Else ``power_w`` × the cycle time is its use. Either way × the
+    grid's share of the house is its grid kWh. ``price`` None = the house
+    rate.
     """
     device_id: str
     power_w: float = 0.0
     meter: bool = False
     meter_kwh: float = 0.0
     price: Optional[float] = None
+    baseline: Optional[Dict[str, Any]] = None
 
 
 def device_price_level(device: Any, house_level: Optional[str]) -> Optional[str]:
@@ -317,11 +320,12 @@ class DeviceTariffs:
             if not tariff.configured:
                 continue
             did = str(getattr(device, "device_id", "") or "")
-            step = self.meter_step(device, store, now) if tariff.meter else None
+            step, baseline = (self.meter_step(device, store, now)
+                              if tariff.meter else (None, None))
             out.append(DeviceCycle(
                 device_id=did, power_w=power_now_w(device),
                 meter=bool(tariff.meter), meter_kwh=step or 0.0,
-                price=self.price_now(device)))
+                price=self.price_now(device), baseline=baseline))
         return out
 
     def stamp(self, devices: Iterable[Any]) -> None:
@@ -348,20 +352,51 @@ class DeviceTariffs:
     # ── grid kWh ──────────────────────────────────────────────────────
 
     def meter_step(self, device: Any, store: Dict[str, Any], now: datetime
-                   ) -> Optional[float]:
-        """The own meter's kWh since its baseline, or None (nothing to book).
+                   ) -> "tuple[Optional[float], Optional[Dict[str, Any]]]":
+        """The own meter's kWh since its baseline, and the baseline to keep.
 
-        The baseline is stamped with the meter's entity id, the date and the
-        time it was read. A step is accepted only when it is plausible for
-        the time that passed: at most the device's top power × the elapsed
-        time. A different entity, another day, a fall, or an implausible
-        jump re-baselines and books nothing — said once, not every cycle.
+        Returns ``(step, baseline)``. Reads only: the caller writes the
+        baseline back in the path that BOOKS the step, so a cycle that books
+        nothing (an early return) leaves the step for the next one.
+
+        The baseline is stamped with the meter's entity id and the time it
+        was read. A step counts only when it is plausible for the time that
+        passed: at most the device's top power × the elapsed time (plus one
+        meter tick). A different entity, a fall or an implausible jump
+        re-baselines with no step — said once, not every cycle. Midnight is
+        no boundary: a step across it is booked in its own cycle.
         """
         tariff = tariff_of(device)
         did = str(getattr(device, "device_id", "") or "")
         value = self._entity_price(tariff.meter)   # a number, like a price
         if not tariff.meter or value is None:
-            return None
+            return None, None
+        last = store.get(did) if isinstance(store.get(did), dict) else None
+        baseline = {"entity": tariff.meter, "date": now.date().isoformat(),
+                    "value": value, "at": now.isoformat()}
+        why = None
+        if last is None:
+            why = "first reading"
+        elif last.get("entity") != tariff.meter:
+            why = "a different meter"
+        else:
+            try:
+                elapsed_h = max(0.0, (now - datetime.fromisoformat(
+                    str(last.get("at")))).total_seconds() / 3600.0)
+                step = value - float(last.get("value"))
+            except (TypeError, ValueError):
+                elapsed_h, step = 0.0, -1.0
+            limit = top_power_w(device) / 1000.0 * elapsed_h
+            if step < 0 or step > limit + METER_RESOLUTION_KWH:
+                why = (f"a step of {step:.3f} kWh in {elapsed_h * 60:.1f} min "
+                       "is not possible for this device")
+            else:
+                return step, baseline
+        log_on_change(_LOGGER, f"device_meter:{did}", logging.INFO,
+                      "%s: own meter %s re-baselined (%s) — nothing booked "
+                      "this cycle (#812)", getattr(device, "name", did),
+                      tariff.meter, why)
+        return None, baseline
         day = now.date().isoformat()
         last = store.get(did) if isinstance(store.get(did), dict) else None
         store[did] = {"entity": tariff.meter, "date": day, "value": value,

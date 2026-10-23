@@ -372,10 +372,8 @@ class EnergyCalculator:
         #: (entity, date, value, time), kept with the energy state so a
         #: restart books the first step after it.
         self.device_meter_last: Dict[str, Dict[str, Any]] = {}
-        #: (#812) this cycle's own-tariff devices, and meter kWh still
-        #: waiting for import to book against (device id → (day, kWh)).
+        #: (#812) this cycle's own-tariff devices, staged by the coordinator
         self._device_tariff_cycle: list = []
-        self._device_meter_pending: Dict[str, tuple] = {}
 
         # (#1077) The value layer's books. ``_export_rate`` above is the
         # export VALUE (net of the per-kWh feed-in fee); these keep the
@@ -838,8 +836,8 @@ class EnergyCalculator:
                                   if self._device_tariff_cycle else
                                   import_increment * self._import_rate)
         if self._device_tariff_cycle:
-            # (#812) no import this cycle: a meter step still waits for the
-            # next import, nothing is booked
+            # (#812) no import this cycle: nothing to split, but the meter
+            # baselines advance (their steps came from the sun)
             self._import_cost(0.0, interval_hours, power, power_flows, today,
                               month_key, year_key)
         # (#628) utility-meter reconciliation — bidirectional, so it must run
@@ -4014,16 +4012,17 @@ class EnergyCalculator:
                      month_key: str, year_key: str) -> float:
         """(#812) The money of THIS cycle's import, split where it is booked.
 
-        Each own-tariff device takes its grid kWh of this cycle — its own
-        meter's step, else its draw × the cycle time × the grid's share of
-        the house — capped at the import still unassigned this cycle, at its
-        own price. The rest is the house's, at the house rate. One booking,
-        one total: nothing is moved later, the house's money is never below
-        what its own kWh cost, and a device kWh is never counted twice.
+        Each own-tariff device's use this cycle — its own meter's step, else
+        its draw × the cycle time — times the grid's share of the house this
+        cycle is its grid kWh: the rest of what it used came from the sun or
+        the pack. When the devices' grid kWh add up to more than this
+        cycle's import, they share the import in proportion (order does not
+        matter). The rest of the import is the house's, at the house rate.
 
-        A meter step larger than this cycle's import waits (same day only)
-        for the next cycles' import — a meter ticks in 0.01–0.1 kWh steps,
-        a cycle imports a few Wh.
+        One booking, one total: nothing is moved later, nothing waits for a
+        later cycle, a device kWh is never counted twice. A meter baseline is
+        written back HERE, where its step is booked: a cycle that returns
+        early leaves the step for the next one.
         """
         from .device_tariff import grid_share
         house_rate = float(self._import_rate or 0.0)
@@ -4031,17 +4030,18 @@ class EnergyCalculator:
         left = max(0.0, float(import_kwh or 0.0))
         share = grid_share(getattr(power_flows, "grid_to_home", 0.0),
                            getattr(power, "home_consumption_power", 0.0))
-        cost = 0.0
+        wants = []
         for e in entries:
-            if e.meter:
-                day, pending = self._device_meter_pending.get(
-                    e.device_id, (today, 0.0))
-                pending = (pending if day == today else 0.0) + max(0.0, e.meter_kwh)
-                kwh = min(pending, left)
-                self._device_meter_pending[e.device_id] = (today, pending - kwh)
-            else:
-                kwh = min(max(0.0, e.power_w) * interval_hours / 1000.0 * share,
-                          left)
+            if e.meter and e.baseline is not None:
+                self.device_meter_last[e.device_id] = dict(e.baseline)
+            used = (max(0.0, e.meter_kwh) if e.meter
+                    else max(0.0, e.power_w) * interval_hours / 1000.0)
+            wants.append(used * share)
+        total = sum(wants)
+        scale = min(1.0, left / total) if total > 0 else 0.0
+        cost = 0.0
+        for e, want in zip(entries, wants, strict=True):
+            kwh = want * scale
             if kwh <= 0:
                 continue
             price = house_rate if e.price is None else float(e.price)
@@ -4051,7 +4051,7 @@ class EnergyCalculator:
                                   month_key, year_key, kwh * price)
             cost += kwh * price
             left -= kwh
-        return cost + left * house_rate
+        return cost + max(0.0, left) * house_rate
 
     def get_device_tariff(self, device_id: str, day: date) -> Dict[str, float]:
         """(#812) Today's grid kWh and cost of a device on its own tariff."""

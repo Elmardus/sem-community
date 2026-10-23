@@ -272,6 +272,16 @@ def _meter(value):
     return {"sensor.hp_meter": SimpleNamespace(state=str(value), attributes={})}
 
 
+def _read(d, store, value, at, *, entity="sensor.hp_meter"):
+    """Read the meter and, as the booking does, keep the baseline."""
+    step, baseline = DeviceTariffs(_hass_with({
+        entity: SimpleNamespace(state=str(value), attributes={})})).meter_step(
+            d, store, at)
+    if baseline is not None:
+        store[d.device_id] = baseline
+    return step
+
+
 @pytest.mark.unit
 class TestTheOwnMeter:
     def _pump(self):
@@ -279,53 +289,53 @@ class TestTheOwnMeter:
         d.rated_power = 3000.0
         return d
 
-    def test_a_plausible_step_is_the_grid_kwh(self):
+    def test_a_plausible_step_is_the_use(self):
         store, d = {}, self._pump()
-        assert DeviceTariffs(_hass_with(_meter(100.0))).meter_step(d, store, T_NOON) is None
+        assert _read(d, store, 100.0, T_NOON) is None
         # 0.04 kWh in 1 min: under 3 kW × 1 min = 0.05
-        step = DeviceTariffs(_hass_with(_meter(100.04))).meter_step(
+        assert _read(d, store, 100.04, T_NOON + timedelta(minutes=1)) == pytest.approx(0.04)
+
+    def test_reading_alone_does_not_move_the_baseline(self):
+        store, d = {}, self._pump()
+        _read(d, store, 100.0, T_NOON)
+        DeviceTariffs(_hass_with(_meter(100.04))).meter_step(
             d, store, T_NOON + timedelta(minutes=1))
-        assert step == pytest.approx(0.04)
+        assert store["heat_pump"]["value"] == pytest.approx(100.0)
 
     def test_an_implausible_step_rebaselines_and_says_so(self, caplog):
         store, d = {}, self._pump()
-        DeviceTariffs(_hass_with(_meter(100.0))).meter_step(d, store, T_NOON)
+        _read(d, store, 100.0, T_NOON)
         with caplog.at_level("INFO"):
-            step = DeviceTariffs(_hass_with(_meter(103.0))).meter_step(
-                d, store, T_NOON + timedelta(minutes=1))
+            step = _read(d, store, 103.0, T_NOON + timedelta(minutes=1))
         assert step is None and "re-baselined" in caplog.text
         assert store["heat_pump"]["value"] == pytest.approx(103.0)
 
-    def test_a_restart_after_days_off_books_nothing(self):
+    def test_midnight_is_no_boundary(self):
         store, d = {}, self._pump()
-        DeviceTariffs(_hass_with(_meter(100.0))).meter_step(d, store, T_NOON)
+        _read(d, store, 100.0, datetime(2026, 10, 3, 23, 59, 30))
+        assert _read(d, store, 100.02, datetime(2026, 10, 4, 0, 0, 0)) == \
+            pytest.approx(0.02)
+
+    def test_a_restart_loses_nothing(self):
+        store, d = {}, self._pump()
+        _read(d, store, 100.0, T_NOON)
         calc = EnergyCalculator({}, MagicMock())
         calc.device_meter_last = store
         fresh = EnergyCalculator({}, MagicMock())
         fresh.restore_state(calc.get_state())
         assert fresh.device_meter_last["heat_pump"]["entity"] == "sensor.hp_meter"
-        step = DeviceTariffs(_hass_with(_meter(130.0))).meter_step(
-            d, fresh.device_meter_last, T_NOON + timedelta(days=3))
-        assert step is None
-
-    def test_a_short_restart_keeps_the_step(self):
-        store, d = {}, self._pump()
-        DeviceTariffs(_hass_with(_meter(100.0))).meter_step(d, store, T_NOON)
-        calc = EnergyCalculator({}, MagicMock())
-        calc.device_meter_last = store
-        fresh = EnergyCalculator({}, MagicMock())
-        fresh.restore_state(calc.get_state())
-        step = DeviceTariffs(_hass_with(_meter(100.5))).meter_step(
-            d, fresh.device_meter_last, T_NOON + timedelta(minutes=30))
-        assert step == pytest.approx(0.5)
+        assert _read(d, fresh.device_meter_last, 100.5,
+                     T_NOON + timedelta(minutes=30)) == pytest.approx(0.5)
+        # after days off the step is still plausible for the time that passed
+        assert _read(d, fresh.device_meter_last, 130.0,
+                     T_NOON + timedelta(days=3)) == pytest.approx(29.5)
 
     def test_a_swapped_meter_entity_rebaselines(self):
         store, d = {}, self._pump()
-        DeviceTariffs(_hass_with(_meter(100.0))).meter_step(d, store, T_NOON)
+        _read(d, store, 100.0, T_NOON)
         d.tariff_meter = "sensor.hp_meter_new"
-        states = {"sensor.hp_meter_new": SimpleNamespace(state="100.02", attributes={})}
-        assert DeviceTariffs(_hass_with(states)).meter_step(
-            d, store, T_NOON + timedelta(minutes=1)) is None
+        assert _read(d, store, 100.02, T_NOON + timedelta(minutes=1),
+                     entity="sensor.hp_meter_new") is None
         assert store["heat_pump"]["entity"] == "sensor.hp_meter_new"
 
 
@@ -406,28 +416,69 @@ class TestTheBooks:
         _cycle(calc, T_NOON + timedelta(minutes=2), import_w=30000.0, entries=[pump])
         assert calc._get_daily_cost("cost_import", T_NOON.date()) == pytest.approx(0.15)
 
-    def test_a_meter_step_waits_for_import_and_is_never_counted_twice(self):
+    def test_a_solar_fed_step_books_only_its_grid_share(self):
         calc = _calc(0.30)
-        _cycle(calc, T_NOON, import_w=0.0,
-               entries=[DeviceCycle("heat_pump", meter=True, meter_kwh=1.5, price=0.20)])
-        _cycle(calc, T_NOON + timedelta(minutes=2), import_w=30000.0,
-               entries=[DeviceCycle("heat_pump", meter=True, meter_kwh=0.0, price=0.20)])
+        # 1.5 kWh on the meter; the grid carried a quarter of the house
+        _cycle(calc, T_NOON, import_w=500.0, home_w=2000.0, grid_to_home=500.0,
+               entries=[DeviceCycle("heat_pump", meter=True, meter_kwh=1.5,
+                                    price=0.20)])
         day = T_NOON.date()
-        # 1 kWh imported (2 min at 30 kW): the pump takes 1 of its 1.5
-        assert calc.get_device_tariff("heat_pump", day)["daily_grid_kwh"] == pytest.approx(1.0)
-        assert calc._get_daily_cost("cost_import", day) == pytest.approx(0.20)
+        assert calc.get_device_tariff("heat_pump", day)["daily_grid_kwh"] == \
+            pytest.approx(0.375, abs=0.006)
+        # the rest of the 0.5 kWh import is the house's
+        assert calc._get_daily_cost("cost_import", day) == pytest.approx(
+            0.375 * 0.20 + 0.125 * 0.30, abs=0.006)
 
-    def test_the_first_cycles_after_midnight_start_clean(self):
+    def test_a_step_is_booked_in_its_own_cycle(self):
         calc = _calc(0.30)
-        late = datetime(2026, 10, 3, 23, 59, 0)
-        _cycle(calc, late, import_w=0.0,
-               entries=[DeviceCycle("heat_pump", meter=True, meter_kwh=0.8, price=0.20)])
-        after = datetime(2026, 10, 4, 0, 0, 30)
-        _cycle(calc, after, import_w=1000.0,
-               entries=[DeviceCycle("heat_pump", meter=True, meter_kwh=0.0, price=0.20)])
-        # yesterday's waiting kWh do not land on today's import
-        assert calc.get_device_tariff("heat_pump", after.date())["daily_grid_kwh"] == 0.0
-        assert calc._get_daily_cost("cost_import", after.date()) > 0
+        _cycle(calc, datetime(2026, 10, 3, 23, 59, 0), import_w=0.0)
+        after = datetime(2026, 10, 4, 0, 0, 0)
+        # 1 min at 60 kW = 1 kWh imported, all of the house from the grid
+        _cycle(calc, after, import_w=60000.0,
+               entries=[DeviceCycle("heat_pump", meter=True, meter_kwh=0.4, price=0.20)])
+        assert calc.get_device_tariff("heat_pump", after.date())["daily_grid_kwh"] == \
+            pytest.approx(0.4)
+        assert calc._get_daily_cost("cost_import", after.date()) == pytest.approx(
+            0.4 * 0.20 + 0.6 * 0.30)
+
+    def test_two_devices_share_the_import_in_proportion(self):
+        def run(order):
+            calc = _calc(0.30)
+            # 1 kWh imported; the two want 1.5 and 0.5 kWh of grid → 3:1
+            _cycle(calc, T_NOON, import_w=1000.0, entries=order)
+            day = T_NOON.date()
+            return (calc.get_device_tariff("a", day)["daily_grid_kwh"],
+                    calc.get_device_tariff("b", day)["daily_grid_kwh"],
+                    calc._get_daily_cost("cost_import", day))
+        a = DeviceCycle("a", meter=True, meter_kwh=1.5, price=0.10)
+        b = DeviceCycle("b", meter=True, meter_kwh=0.5, price=0.20)
+        assert run([a, b]) == run([b, a])
+        ka, kb, cost = run([a, b])
+        assert (ka, kb) == (pytest.approx(0.75, abs=0.006),
+                            pytest.approx(0.25, abs=0.006))
+        assert cost == pytest.approx(0.75 * 0.10 + 0.25 * 0.20, abs=0.006)
+
+    def test_an_early_return_leaves_the_step_for_the_next_cycle(self):
+        from custom_components.solar_energy_management.coordinator.device_tariff import (
+            DeviceTariffs as DT,
+        )
+        calc = _calc(0.30)
+        d = _load("heat_pump", rate=0.20, meter="sensor.hp_meter")
+        d.rated_power = 3000.0
+        _read(d, calc.device_meter_last, 100.0, T_NOON)
+        _cycle(calc, T_NOON, import_w=0.0)
+        # a 5-min gap: calculate_energy skips the cycle; the step is not lost
+        t1 = T_NOON + timedelta(minutes=5)
+        staged = DT(_hass_with(_meter(100.2))).cycle([d], calc.device_meter_last, t1)
+        _cycle(calc, t1, import_w=60000.0, entries=staged)
+        assert calc.device_meter_last["heat_pump"]["value"] == pytest.approx(100.0)
+        # next cycle, 1 min on: the whole step since the baseline, booked
+        t2 = t1 + timedelta(minutes=1)
+        staged = DT(_hass_with(_meter(100.25))).cycle([d], calc.device_meter_last, t2)
+        _cycle(calc, t2, import_w=60000.0, entries=staged)
+        assert calc.get_device_tariff("heat_pump", t2.date())["daily_grid_kwh"] == \
+            pytest.approx(0.25)
+        assert calc.device_meter_last["heat_pump"]["value"] == pytest.approx(100.25)
 
     def test_an_unreadable_price_is_the_house_rate(self):
         calc = _calc(0.30)
