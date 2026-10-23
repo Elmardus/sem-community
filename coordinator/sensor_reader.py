@@ -2631,7 +2631,10 @@ class SensorReader:
             # name override the card uses.
             for idx, entity in enumerate(ed.battery_power_list):
                 bid = f"b{idx + 1}"
-                w = self._read_sensor(entity, "battery")
+                # (#1167) None is this unit's dark (or not-a-number) read:
+                # 0.0 for the sums, and no reading on its own flag.
+                raw_w = self._read_sensor(entity, "battery", allow_none=True)
+                w = float(raw_w) if raw_w is not None else 0.0
                 per_battery_total += w
                 # Per-battery SOC via the same auto-detect heuristic
                 # the fleet average uses. Stays ``None`` when no matching
@@ -2649,14 +2652,17 @@ class SensorReader:
                         soc_val = s
                 readings.batteries[bid] = BatteryPower(
                     battery_id=bid, power_w=w, soc_pct=soc_val, name=entity,
+                    power_read=raw_w is not None,
                 )
             # #553 — two-sensor pair units, bids continue after the combined
             # ones. net = charge(to) − discharge(from); the user-declared
             # pair IS the sign convention, so these are never sign-flipped.
             for k, (p_from, p_to) in enumerate(ed.battery_power_pairs):
                 bid = f"b{len(ed.battery_power_list) + k + 1}"
-                charge_w = self._read_sensor(p_to, "battery")
-                discharge_w = self._read_sensor(p_from, "battery")
+                raw_to = self._read_sensor(p_to, "battery", allow_none=True)
+                raw_from = self._read_sensor(p_from, "battery", allow_none=True)
+                charge_w = float(raw_to) if raw_to is not None else 0.0
+                discharge_w = float(raw_from) if raw_from is not None else 0.0
                 w = charge_w - discharge_w
                 # #661 — same shape as the split grid pair: netting is about to
                 # make "charging AND discharging" unrepresentable, so judge it
@@ -2676,6 +2682,8 @@ class SensorReader:
                         soc_val = s
                 readings.batteries[bid] = BatteryPower(
                     battery_id=bid, power_w=w, soc_pct=soc_val, name=p_to,
+                    # (#1167) one dark side is half a number
+                    power_read=raw_to is not None and raw_from is not None,
                 )
 
         # Fleet scalar precedence: a real ≥2 per-battery breakdown owns the fleet
@@ -2895,12 +2903,13 @@ class SensorReader:
         an unreadable sensor: 0.0 with the unavailable flags set, counted as
         dark for #818 (the cycle must not steer) and NOT as a read (so the
         entity says unavailable rather than 0 W). Per-unit entries are
-        zeroed the same way.
+        zeroed the same way, and (#1167) are no reading on their own flag.
         """
         bad = abs(float(readings.battery_power or 0.0)) > BATTERY_POWER_PLAUSIBLE_MAX_W
         for bid, bp in list(readings.batteries.items()):
             if abs(float(getattr(bp, "power_w", 0.0) or 0.0)) > BATTERY_POWER_PLAUSIBLE_MAX_W:
-                readings.batteries[bid] = replace(bp, power_w=0.0)
+                readings.batteries[bid] = replace(bp, power_w=0.0,
+                                                  power_read=False)
                 bad = True
         if not bad:
             if self._battery_power_implausible:
