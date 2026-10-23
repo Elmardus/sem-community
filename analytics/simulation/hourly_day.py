@@ -242,6 +242,14 @@ class HourlyDay:
             if (role == EV and ev_day_start_hour is not None
                     and 0 < ev_day_start_hour < HOURS
                     and raw[ev_day_start_hour] < 0):
+                if carried is None:
+                    # (#1176) what the counter carried over midnight is
+                    # unknown, so the night cannot be told from it
+                    notes.append(
+                        f"ev counter stepped back "
+                        f"{-raw[ev_day_start_hour]:.2f} kWh at "
+                        f"{ev_day_start_hour:02d}:00 — the car day's reset; "
+                        f"the night before it could not be read")
                 raw = _car_day_reset(raw, ev_day_start_hour,
                                      states[ev_day_start_hour], carried)
             out[role] = _net_step_backs(raw)
@@ -289,8 +297,8 @@ def _car_day_reset(raw: List[float], hour: int, end_state: Optional[float],
     reset adds up to the value that fell to 0. The reset hour is booked
     from its end ``state`` (or its change plus that value); the carried
     kWh are taken out of the first hours. Without ``carried`` the night
-    cannot be told from it, and the hours before the reset are dropped,
-    as the netting did before.
+    cannot be told from it: the hours before the reset are dropped, as
+    the netting did before, and the caller marks the day.
     """
     fixed = list(raw)
     before = sum(raw[:hour])

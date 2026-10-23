@@ -3858,7 +3858,7 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         # car day's start.
         if sensor_key in CAR_DAY_SENSOR_KEYS:
             calc = getattr(self.coordinator, "_energy_calculator", None)
-            start = calc.ev_day_start() if calc is not None else None
+            start = calc.ev_last_reset() if calc is not None else None
             if start is not None:
                 return start
 

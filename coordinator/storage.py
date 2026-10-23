@@ -97,6 +97,8 @@ CALCULATOR_STATE_KEYS: tuple[str, ...] = (
     # is the very thing ``_ev_reset_day`` defers.
     "ev_day_offset",
     "ev_day_key",
+    # (#1176) the car day the car-day ``last_reset`` began on
+    "ev_reset_since",
     # (#668) lifetime running totals, summed at each day rollover. Dropped
     # since they were introduced, so ``lifetime_total_savings`` fell back to a
     # 7-day-average-rate ESTIMATE of the entire history after every restart

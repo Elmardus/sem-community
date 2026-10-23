@@ -538,6 +538,9 @@ class EnergyCalculator:
         # see ``_ev_reset_day``.
         self._ev_day_offset: Optional[str] = None
         self._ev_day_key: Optional[date] = None
+        # (#1176) The car day this code first ran on. ``ev_last_reset``
+        # keeps saying midnight until a later car day opens. Persisted.
+        self._ev_reset_since: Optional[date] = None
         # (#1046) the day key daily_ev was last read from (not persisted:
         # the next cycle sets it before anyone reads it)
         self._daily_ev_day: Optional[date] = None
@@ -3874,6 +3877,24 @@ class EnergyCalculator:
         return datetime(key.year, key.month, key.day, hour, minute,
                         tzinfo=dt_util.get_default_time_zone())
 
+    def ev_last_reset(self) -> Optional[datetime]:
+        """(#1176) The car-day sensor's ``last_reset``: ``ev_day_start``,
+        or None (midnight) on the car day this code first ran on.
+
+        Before, the sensor said midnight. Moving that to the car day's start
+        in the middle of a day would make the recorder count the day's kWh
+        again. So the switch waits for the next car day, when the value is
+        0 anyway.
+        """
+        start = self.ev_day_start()
+        key = self._ev_day_key
+        if start is None or key is None:
+            return None
+        since = getattr(self, "_ev_reset_since", None)
+        if since is None:
+            self._ev_reset_since = since = key
+        return start if key > since else None
+
     def _get_daily(self, category: str, today: date) -> float:
         """Get daily accumulated energy."""
         key = f"{category}_{today}"
@@ -4722,6 +4743,10 @@ class EnergyCalculator:
             # pair a restart re-derives the day from whatever the deadline is
             # NOW, which is exactly the retroactive re-bucket ``_ev_reset_day``
             # defends against — the bug would simply return on the next reboot.
+            "ev_reset_since": (
+                self._ev_reset_since.isoformat()
+                if getattr(self, "_ev_reset_since", None) else None
+            ),
             "ev_day_offset": self._ev_day_offset,
             "ev_day_key": (
                 self._ev_day_key.isoformat() if self._ev_day_key else None
@@ -4899,6 +4924,14 @@ class EnergyCalculator:
                         "Discarding unparseable midnight_ev_since %r — the home "
                         "balance re-arms for one day", since,
                     )
+            # (#1176) a store without it is the upgrade: the first call of
+            # ``ev_last_reset`` sets it to the running car day.
+            reset_since = state.get("ev_reset_since")
+            if reset_since:
+                try:
+                    self._ev_reset_since = date.fromisoformat(str(reset_since))
+                except ValueError:
+                    self._ev_reset_since = None
             ev_day_offset = state.get("ev_day_offset")
             ev_day_key = state.get("ev_day_key")
             if _valid_hhmm(ev_day_offset) and ev_day_key:
