@@ -57,7 +57,7 @@ RESTING_VERBS = frozenset({"idle", "off", "normal", "release", "disable",
 
 _TEXT_MAX = 120
 _INPUT_KEYS = ("import_price", "export_rate", "price_level", "soc",
-               "surplus_w", "target_kwh", "target_soc")
+               "solar_w", "surplus_w", "target_kwh", "target_soc")
 
 
 def _clean_inputs(inputs: Optional[Mapping[str, Any]]) -> Dict[str, Any]:

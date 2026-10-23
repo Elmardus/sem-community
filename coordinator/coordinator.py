@@ -666,6 +666,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             if (not getattr(power, "battery_soc_unavailable", False)
                     and getattr(power, "battery_soc_known", True)):
                 inputs["soc"] = getattr(power, "battery_soc", None)
+            # (#1084) the Why? card shows the sun SEM decided on
+            inputs["solar_w"] = getattr(power, "solar_power", None)
             inputs["surplus_w"] = getattr(charging_context, "available_power", None)
             inputs["target_kwh"] = getattr(charging_context, "night_target_kwh", None)
         except Exception:  # noqa: BLE001 — the log never costs a cycle
