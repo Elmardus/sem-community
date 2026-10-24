@@ -230,6 +230,24 @@ multilingual keyword coverage per brand — #597 added Huawei's `charge_discharg
 **Open siblings:** the `solar` list (`pv_power`/`solar_power`/`production_power`) and `grid` list are
 still English-shaped — Huawei's `inverter_input_power` / German PV slugs are *not* covered; sweep them
 if a Huawei/localized user reports solar or grid reading 0 (grid already matches via `power_meter`).
+**Instance (#1172, @mrietdijk80-jpg, HomeWizard P1, Dutch HA) — a name with no word in it:** the
+Sankey drew no line in or out of the Grid node while the Grid total was right. Grid power read 0 W
+all day: the Energy Dashboard's grid entry had counters and no power sensor, and HomeWizard names the
+meter's net power by its device class alone (`sensor.p1_meter_power` EN, `sensor.p1_meter_vermogen`
+NL) — no keyword can fit a name that is just the word "power" in the user's language, and the
+split-grid search finds no pair on a one-sensor meter. **Closure:** a second tier, asked FIRST — a
+rule's `declared` map `{integration: (entity key, …)}`, matched on the registry's unique_id /
+translation_key through the one roster matcher `hardware_detection._entry_matches_declared`, never on
+the entity_id. Scoped to the counter's device like the keywords, and to the integration that declares
+the key. Before the meter's integration has loaded, the registry's own device class answers (the grid
+has no cold-start retry: `power_resolution_incomplete` leaves it out). **Swept:** grid and battery
+take HomeWizard's net power `active_power_w`; solar takes `active_production_power_w` (the meter's
+power × −1, positive while producing — the plain one would read solar negative, and solar has no sign
+check). **Guard:** `tests/test_1172_declared_power_key.py` — six languages, phase/average/peak twins
+on the same device, cold start, wrong integration, the reporter's night end to end with a control that
+reads 0 without the tier. **Still open:** other brands that name power by device class alone get
+the same tier only by adding their key; a home where nothing is found is told by one log line, no
+Repair (filed separately).
 **Missing-wiring sibling (#744, @Azlinon, 2026-08-11) — the derivation existed but was never called
 for LOADS.** The keyword gap above is one facet; the sharper one is a source where the whole
 derivation is *absent*. The Energy Dashboard's individual-device UI collects only the kWh energy
@@ -255,7 +273,7 @@ channel; energy/reactive sensors excluded; a power-only 400 W load reads ON end-
 payload; and a brand-named *derived* sensor does NOT make a controlless load controllable). **Sweep
 question:** for every power/energy figure a surface derives from an Energy-Dashboard entity, is the
 companion power sensor *derived* when the ED has no `stat_rate`, or assumed present — and does that
-derivation leak into a *control* decision? Refs #250 #274 #597 #600 #744.
+derivation leak into a *control* decision? Refs #250 #274 #597 #600 #744 #1172.
 
 ### 11. Corrected value overwrites a raw display field (paired-figure basis mismatch) — GUARDED
 **Symptom:** two figures shown side by side on a card disagree in a way that reads as a
