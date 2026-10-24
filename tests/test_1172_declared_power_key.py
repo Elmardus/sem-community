@@ -48,12 +48,13 @@ _KWH = {"device_class": "energy", "unit_of_measurement": "kWh",
         "state_class": "total_increasing"}
 
 
-def _device(hass, platform="homewizard", serial=SERIAL, name="P1 meter"):
-    entry = MockConfigEntry(domain=platform, unique_id=f"HWE-P1_{serial}")
+def _device(hass, platform="homewizard", serial=SERIAL, name="P1 meter",
+            model_id="HWE-P1"):
+    entry = MockConfigEntry(domain=platform, unique_id=f"{model_id}_{serial}")
     entry.add_to_hass(hass)
     dev = dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
-        identifiers={(platform, serial)}, name=name)
+        identifiers={(platform, serial)}, name=name, model_id=model_id)
     return entry, dev
 
 
@@ -68,9 +69,10 @@ def _entity(hass, entry, dev, entity_id, key, *, platform="homewizard",
     )
 
 
-def _p1_meter(hass, power=POWER, *, power_state=True, platform="homewizard"):
+def _p1_meter(hass, power=POWER, *, power_state=True, platform="homewizard",
+              model_id="HWE-P1"):
     """A three-phase HomeWizard P1 meter, as its integration registers it."""
-    entry, dev = _device(hass, platform=platform)
+    entry, dev = _device(hass, platform=platform, model_id=model_id)
     base = power.rsplit("_", 1)[0]
     rows = [
         (IMPORT, "total_power_import_kwh", "energy", "total_energy_import_kwh"),
@@ -284,15 +286,19 @@ async def test_without_the_key_the_same_night_has_no_grid_lines(hass, monkeypatc
 
 # ── the sign: a meter SEM found itself is seeded like the one it guessed ──
 
-def _first_cycle(hass, **config):
+def _first_read(hass, model_id="HWE-P1", **config):
     """One read with the warm-up a fresh start has — no counter vote yet."""
-    _p1_meter(hass)
+    _p1_meter(hass, model_id=model_id)
     hass.states.async_set("sensor.solaredge_current_power", "0", _W)
     hass.states.async_set("sensor.alphaess_battery_power", "700", _W)
     reader = SensorReader(hass, {"update_interval": 10, **config})
     if not config:
         reader.set_energy_dashboard_config(_parse_prefs(hass, PREFS, quiet=True))
-    return reader.read_power()
+    return reader, reader.read_power()
+
+
+def _first_cycle(hass, model_id="HWE-P1", **config):
+    return _first_read(hass, model_id, **config)[1]
 
 
 async def test_the_first_cycle_already_reads_import(hass):
@@ -336,3 +342,56 @@ async def test_a_dutch_socket_load_finds_its_power(hass):
             == "sensor.boiler_vermogen")
     assert _find_power_sensor_on_device(
         hass, counter, _rule("load", declared=False)) is None
+
+
+async def test_a_kwh_meter_is_not_seeded(hass):
+    """A HomeWizard kWh meter reads the way it was wired, so its sign is not
+    the brand's to give: unseeded, the counters decide, as before #1172. Its
+    power is still found — only the sign seed is a P1's alone."""
+    reader, readings = _first_read(hass, model_id="HWE-KWH3")
+    assert reader._energy_dashboard_config.derived_power.get("grid") == POWER
+    assert reader._grid_sign_detected is False
+    assert readings.grid_export_power == pytest.approx(800)
+    diag = reader.grid_sign_diagnostics()
+    assert diag["grid_platform"] == "homewizard"
+    assert diag["brand_seeded"] is False
+
+
+async def test_the_sign_report_names_the_seeded_meter(hass):
+    """Support reads the sign report: a seeded derived meter must say so,
+    not report no sensor and no seed while the sign is negated."""
+    reader, _ = _first_read(hass)
+    diag = reader.grid_sign_diagnostics()
+    assert diag["grid_power_sensor"] is None
+    assert diag["grid_seed_sensor"] == POWER
+    assert diag["grid_platform"] == "homewizard"
+    assert diag["brand_seeded"] is True
+    assert diag["auto_inverted"] is True
+
+
+async def test_another_brands_derived_meter_takes_its_own_seed(hass):
+    """The derived meter of any brand in the sign table is seeded with that
+    brand's sign: a Huawei meter (+ = export, SEM's own) is not negated."""
+    entry, dev = _device(hass, platform="huawei_solar", serial="hw1",
+                         name="Power meter", model_id="DTSU666-H")
+    counter = "sensor.power_meter_consumption"
+    meter = "sensor.power_meter_active_power"
+    _entity(hass, entry, dev, counter, "grid_consumption",
+            platform="huawei_solar", device_class="energy")
+    _entity(hass, entry, dev, meter, "power_meter_active_power",
+            platform="huawei_solar", device_class="power")
+    hass.states.async_set(counter, "100.0", _KWH)
+    hass.states.async_set(meter, "-800", _W)        # Huawei: importing 800 W
+    hass.states.async_set("sensor.solaredge_current_power", "0", _W)
+    hass.states.async_set("sensor.alphaess_battery_power", "700", _W)
+    prefs = {**PREFS, "energy_sources": [
+        {"type": "grid", "stat_energy_from": counter, "stat_energy_to": None},
+        *PREFS["energy_sources"][1:]]}
+    config = _parse_prefs(hass, prefs, quiet=True)
+    assert config.derived_power.get("grid") == meter
+    reader = SensorReader(hass, {"update_interval": 10})
+    reader.set_energy_dashboard_config(config)
+    readings = reader.read_power()
+    assert reader._grid_sign_detected is True
+    assert reader._grid_sign_inverted is False
+    assert readings.grid_import_power == pytest.approx(800)

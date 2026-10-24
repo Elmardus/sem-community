@@ -246,10 +246,13 @@ power × −1, positive while producing — the plain one would read solar negat
 check). **Guard:** `tests/test_1172_declared_power_key.py` — six languages, phase/average/peak twins
 on the same device, cold start, wrong integration, the reporter's night end to end with a control that
 reads 0 without the tier. **Sign:** a derived grid meter now gets the brand seed too
-(`_seed_grid_sign_from_platform`, `homewizard: True`), so its import is not read as export while
-the counters vote. **Still open:** other brands that name power by device class alone get
-the same tier only by adding their key; a home where nothing is found is told by one log line, no
-Repair (filed separately).
+(`_grid_seed_entity` → `_grid_brand_seed`, `homewizard: True`), so its import is not read as export
+while the counters vote. HomeWizard is seeded for its P1 meter only (`PLATFORM_GRID_SIGN_MODELS`,
+device `model_id` `HWE-P1`): a kWh meter reads the way it was wired, so its counters still decide.
+The sign report names the meter the seed asked (`grid_seed_sensor`). **Still open:** other brands
+that name power by device class alone get the same tier only by adding their key; a home where
+nothing is found is told by one log line, no Repair (#1188); the split-pair search has the same
+English-word gap for a Dutch/German DSMR meter, whose declared keys the lexicon does not map (#1189).
 **Missing-wiring sibling (#744, @Azlinon, 2026-08-11) — the derivation existed but was never called
 for LOADS.** The keyword gap above is one facet; the sharper one is a source where the whole
 derivation is *absent*. The Energy Dashboard's individual-device UI collects only the kWh energy
