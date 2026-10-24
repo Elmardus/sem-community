@@ -81,6 +81,12 @@ async def async_release_batteries_on_unload(coordinator) -> dict:
     outcome: dict = {}
     adapters = getattr(coordinator, "_battery_adapters", {}) or {}
     for bid, adapter in adapters.items():
+        # (#1178) a cycle still running may have left another battery as
+        # this one's limit writer; the hand-back is every battery's own
+        try:
+            adapter._limit_writer = None
+        except Exception:  # noqa: BLE001 — a read-only stand-in in tests
+            pass
         why = unload_release_reason(adapter, was_observer)
         if why is None:
             outcome[bid] = ("observer mode — nothing was ever commanded, nothing written"
@@ -167,6 +173,34 @@ class BatteryControlAdapter(ABC):
     #: refusing is not written every cycle (#538, #900).
     _limit_resend_due: bool = False
     _limit_resent_for_w: "Optional[float]" = None
+
+    #: (#1178) Set by the pipeline only while the cycle's commands run, when
+    #: another battery shares this adapter's discharge limit entity: the
+    #: battery that writes it (its own id on a cycle nobody writes it, after
+    #: a stop). ``None``: this adapter writes it. See
+    #: ``coordinator/battery_shared_limit.py``.
+    _limit_writer: "Optional[str]" = None
+    #: (#1178) The ``(watts, force)`` of the limit write held back this
+    #: cycle — sent after all if the writer's sale did not go out.
+    _limit_withheld: "Optional[tuple]" = None
+    #: (#1178) This cycle's command sent a stop that the device must not
+    #: get a write right after (Huawei's one write per cycle). Reset by the
+    #: pipeline each cycle.
+    _sent_stop: bool = False
+    #: (#1178) This cycle's command sent the sale, or found it running.
+    #: Reset by the pipeline each cycle: ``last_intent`` outlives a sale that
+    #: has stopped going out.
+    _sale_sent: bool = False
+
+    def _limit_not_mine(self, watts: float, force: bool = False) -> bool:
+        """(#1178) True when this adapter must not write the shared
+        discharge limit this cycle: every ``_apply_discharge_limit`` then
+        sends nothing and keeps what it would have sent. The pipeline gives
+        this adapter the writer's record after the cycle."""
+        if self._limit_writer is None:
+            return False
+        self._limit_withheld = (float(watts), bool(force))
+        return True
 
     def _limit_already_sent(self, watts: float) -> bool:
         """The same-limit skip for ``command_limit_discharge``: True when the
@@ -534,6 +568,7 @@ class BatteryControlAdapter(ABC):
         watts = max(0.0, min(float(power_w), self.max_discharge_power_w))
         ok = await self._write_force_discharge(watts)
         if ok:
+            self._sale_sent = True   # (#1178)
             self._last_error = None
             self._last_intent = BatteryIntent.FORCE_DISCHARGE
         else:

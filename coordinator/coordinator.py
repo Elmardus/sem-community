@@ -8115,6 +8115,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         list), SEM would have them fight over one setpoint — the second
         write clobbers the first. We can't auto-resolve it, but a loud,
         de-duplicated warning makes the mis-config visible.
+
+        (#1178) Not the discharge limit: batteries behind one inverter often
+        share it (#691), and the pipeline gives a shared limit ONE writer
+        per cycle (``battery_shared_limit``), so they no longer fight.
         """
         seen = getattr(self, "_battery_control_entity_owner", None)
         if seen is None:
@@ -8123,7 +8127,6 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         for key in (
             "battery_force_discharge_control_entity",
             "battery_strategy_control_entity",
-            "battery_discharge_control_entity",
         ):
             ent = pbc.get(key)
             if not ent:
@@ -9188,8 +9191,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 a. Build a :class:`BatteryView` from per-battery runtime
                    + the shared scheduler decision + fleet context.
                 b. ``decide_battery(view)`` → :class:`BatteryDecision`.
-                c. ``actuate_battery(decision, adapter)`` invokes the
-                   per-battery adapter.
+          3. Once every battery has decided, ``actuate_batteries`` sends
+             each decision through ``actuate_battery(decision, adapter)``,
+             with one writer per shared discharge limit entity (#1178).
 
         Adapters are cached per-battery in ``self._battery_adapters``
         (#375) — keyed by ``battery_id`` so brand-specific hysteresis
@@ -9211,6 +9215,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             return
         from .actuate_battery import actuate_battery
         from .battery_adapters import adapter_for, _integration_loaded
+        from .battery_shared_limit import actuate_batteries
         from .charger_types import (
             BatteryIntent, BatteryRuntime, BatteryView,
             FleetContext,
@@ -9631,6 +9636,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             _LOGGER.warning("ending a finished manual battery mode failed "
                             "(#1131)", exc_info=True)
 
+        # (#1178) Every battery decides before any command goes out: two
+        # batteries on one discharge limit entity need ONE writer, and the
+        # rule needs both decisions (battery_shared_limit).
+        _cycle_rows: list = []
         for batt_idx, (battery_id, runtime) in enumerate(battery_items):
             # Per-battery adapter cache. Each battery gets its OWN control
             # entities when configured (#523 multi-battery — RienduPre's
@@ -9805,15 +9814,26 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             if decision.intent is BatteryIntent.FORCE_DISCHARGE:
                 self._battery_arbitrage_active = True
 
-            # 4. Actuate (#764: observer cuts here, inside the actuator)
+            _cycle_rows.append((battery_id, adapter, decision))
+
+        # 4. Actuate (#764: observer cuts here, inside the actuator).
+        # (#1178) One writer per shared discharge limit entity.
+        _degraded = bool(getattr(power, "inputs_degraded", False))
+
+        async def _send(decision, adapter):
             await actuate_battery(
                 decision, adapter,
                 observer=self._observer_mode,
                 controller=self._surplus_controller,
                 # (#818) same signal the charger side uses
-                inputs_degraded=bool(
-                    getattr(power, "inputs_degraded", False)),
+                inputs_degraded=_degraded,
             )
+
+        _writers = await actuate_batteries(
+            _cycle_rows, _send, observer=self._observer_mode,
+            inputs_degraded=_degraded)
+        for battery_id, writer_id in _writers.items():
+            self._last_battery_decisions[battery_id]["limit_written_by"] = writer_id
 
         # Reset scheduler when night ends — preserved from legacy
         if (scheduler.enabled
