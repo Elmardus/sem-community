@@ -2217,6 +2217,19 @@ class CurrentControlDevice(ControllableDevice):
     Supports multi-phase charging with configurable current limits.
     """
 
+
+    @property
+    def _session_active(self) -> bool:
+        return bool(self.__dict__.get("_session_active_flag", False))
+
+    @_session_active.setter
+    def _session_active(self, value: bool) -> None:
+        # (#1163) Every way a session starts passes here, so a start voids
+        # any dead-man's OFF still waiting or resending.
+        if value:
+            self._deadman_gen = getattr(self, "_deadman_gen", 0) + 1
+        self.__dict__["_session_active_flag"] = bool(value)
+
     def __init__(
         self,
         hass: HomeAssistant,

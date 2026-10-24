@@ -114,3 +114,28 @@ class TestTheDeadManIsAskedAgain:
             await dev.arm_failsafe_off()
         assert sleeps and sleeps[0] >= 0.5
         assert len(_zero_asks(hass)) == 1
+
+    async def test_any_start_during_the_wait_cancels_the_ask(self):
+        """A start by switch, service or the per-cycle re-enable marks the
+        session active without arming the failsafe; it must still win."""
+        dev, hass = _box([8.0])
+
+        async def start_meanwhile(_s):
+            dev._session_active = True
+        with patch.object(base_mod.asyncio, "sleep", start_meanwhile), \
+             patch("homeassistant.helpers.event.async_call_later"):
+            await dev.arm_failsafe_off()
+        assert _zero_asks(hass) == []
+
+    async def test_a_start_after_the_ask_voids_its_resend(self):
+        dev, hass = _box([8.0])
+        later = []
+        with patch("homeassistant.helpers.event.async_call_later",
+                   side_effect=lambda h, d, a: later.append(a)):
+            await dev.arm_failsafe_off()
+            dev._session_active = True
+            dev._session_active = False     # stopped again, by a path that sends no ask
+            for a in later:
+                a(None)
+            await _drain(hass)
+        assert len(_zero_asks(hass)) == 1
