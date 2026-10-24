@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A stopped KEBA no longer starts charging again by itself** (#1163). SEM resends the stop setting when the wallbox missed it.
 - 🐛 **Daily home energy no longer goes down during the day** (#1177). When the inverter's reading drops out for a moment, SEM counts its last value.
 - 🐛 **Two batteries on one discharge limit no longer undo each other's limit** (#1178). The lowest limit holds, unless a battery sells.
 - 🐛 **The battery discharge limit no longer moves with every short burst of home load** (#1173). It goes up only when the load stays higher.

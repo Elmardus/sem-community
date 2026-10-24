@@ -34,6 +34,7 @@ from custom_components.solar_energy_management.coordinator.charger_reconciler im
     ObservedState,
 )
 from custom_components.solar_energy_management.devices.base import (
+    DEADMAN_MAX_TRIES,
     FAILSAFE_READBACK_DELAY_S,
     CurrentControlDevice,
 )
@@ -171,6 +172,8 @@ def _keba(hass=None):
     hass = hass or MagicMock()
     hass.services.async_call = AsyncMock()
     hass.services.has_service = MagicMock(return_value=True)
+    hass.pending = []
+    hass.async_create_task = hass.pending.append
     dev = CurrentControlDevice(
         hass, "keba1", "Keba",
         charger_service="keba.set_current",
@@ -190,6 +193,19 @@ def _run_now(hass, delay, action):
     action(None)
 
 
+async def _arm(dev, hass):
+    """One stop's dead-man's OFF, every resend (#1163) included."""
+    await dev.arm_failsafe_off()
+    while hass.pending:
+        await hass.pending.pop(0)
+
+
+@pytest.fixture(autouse=True)
+def _no_settle(monkeypatch):
+    monkeypatch.setattr(
+        "custom_components.solar_energy_management.devices.base.DEADMAN_SETTLE_S", 0)
+
+
 @pytest.mark.asyncio
 class TestTheReadBackSaysWhatTheBoxDid:
     async def test_a_refused_zero_is_a_warning_once(self, caplog):
@@ -197,9 +213,9 @@ class TestTheReadBackSaysWhatTheBoxDid:
         hass.states.async_all = MagicMock(return_value=[_fs_state(8.0)])
         with patch("homeassistant.helpers.event.async_call_later", side_effect=_run_now) as later, \
              caplog.at_level(logging.INFO):
-            await dev.arm_failsafe_off()
-            await dev.arm_failsafe_off()
-        assert later.call_count == 2
+            await _arm(dev, hass)
+            await _arm(dev, hass)
+        assert later.call_count == 2 * DEADMAN_MAX_TRIES, "each stop asks every try (#1163)"
         assert later.call_args.args[1] == FAILSAFE_READBACK_DELAY_S
         warns = [r for r in caplog.records
                  if r.levelno == logging.WARNING and "refuses a 0 A fallback" in r.getMessage()]
@@ -214,7 +230,7 @@ class TestTheReadBackSaysWhatTheBoxDid:
         hass.states.async_all = MagicMock(return_value=[_fs_state(0.0, timeout=10)])
         with patch("homeassistant.helpers.event.async_call_later", side_effect=_run_now), \
              caplog.at_level(logging.INFO):
-            await dev.arm_failsafe_off()
+            await _arm(dev, hass)
         assert not [r for r in caplog.records if r.levelno == logging.WARNING]
         assert [r for r in caplog.records if "confirmed on read-back" in r.getMessage()]
 
@@ -223,7 +239,7 @@ class TestTheReadBackSaysWhatTheBoxDid:
         hass.states.async_all = MagicMock(return_value=[])
         with patch("homeassistant.helpers.event.async_call_later", side_effect=_run_now), \
              caplog.at_level(logging.DEBUG):
-            await dev.arm_failsafe_off()
+            await _arm(dev, hass)
         msgs = [r.getMessage() for r in caplog.records]
         assert not [m for m in msgs if "confirmed on read-back" in m]
         assert not [r for r in caplog.records if r.levelno == logging.WARNING]
@@ -235,7 +251,7 @@ class TestTheReadBackSaysWhatTheBoxDid:
             _fs_state(6.0, eid="binary_sensor.other_box_failsafe_mode")])
         with patch("homeassistant.helpers.event.async_call_later", side_effect=_run_now), \
              caplog.at_level(logging.DEBUG):
-            await dev.arm_failsafe_off()
+            await _arm(dev, hass)
         assert not [r for r in caplog.records if r.levelno == logging.WARNING]
 
     async def test_a_fixed_box_makes_a_later_relapse_worth_saying_again(self, caplog):
@@ -243,11 +259,11 @@ class TestTheReadBackSaysWhatTheBoxDid:
         hass.states.async_all = MagicMock(return_value=[_fs_state(8.0)])
         with patch("homeassistant.helpers.event.async_call_later", side_effect=_run_now), \
              caplog.at_level(logging.INFO):
-            await dev.arm_failsafe_off()                          # refused → warning
+            await _arm(dev, hass)                          # refused → warning
             hass.states.async_all.return_value = [_fs_state(0.0, timeout=10)]
-            await dev.arm_failsafe_off()                          # fixed → confirmed, flag cleared
+            await _arm(dev, hass)                          # fixed → confirmed, flag cleared
             hass.states.async_all.return_value = [_fs_state(8.0)]
-            await dev.arm_failsafe_off()                          # relapse → warning again
+            await _arm(dev, hass)                          # relapse → warning again
         warns = [r for r in caplog.records if r.levelno == logging.WARNING and "refuses a 0 A fallback" in r.getMessage()]
         assert len(warns) == 2
 
@@ -267,6 +283,6 @@ class TestTheReadBackSaysWhatTheBoxDid:
         hass.states.async_all = MagicMock(return_value=[_fs_state(8.0)])
         with patch("homeassistant.helpers.event.async_call_later", side_effect=_run_now) as later, \
              caplog.at_level(logging.INFO):
-            await dev.arm_failsafe_off()
+            await _arm(dev, hass)
         assert later.call_count == 0, "the rigs share the real box: never judge a write SEM did not make"
         assert not [r for r in caplog.records if r.levelno == logging.WARNING]
