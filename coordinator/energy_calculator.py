@@ -388,6 +388,7 @@ class EnergyCalculator:
         #: read; the inputs held this cycle; the battery's live flow shares
         self._integral_last_live: Dict[str, Tuple[Tuple[float, ...], datetime]] = {}
         self._integral_held: frozenset = frozenset()
+        self._integral_live: frozenset = frozenset()
         self._battery_live_flows: Optional[SimpleNamespace] = None
 
         # Cost rates
@@ -747,21 +748,24 @@ class EnergyCalculator:
         Home books the house SEM shows (``home_shown_w``, #1047) while it
         holds one: the raw home is built from a dark input's 0 W. Steering
         never reads these values — they exist for the integrals only.
-        ``_integral_held`` names the inputs held this cycle.
+        ``_integral_held`` / ``_integral_live`` name the inputs held / read
+        live this cycle.
         """
         watts: Dict[str, float] = {}
-        held = set()
+        held, live = set(), set()
         for name, flag, fields in _INTEGRAL_INPUTS:
             read = tuple(float(getattr(power, f, 0.0) or 0.0) for f in fields)
             last = self._integral_last_live.get(name)
             if getattr(power, flag, False) is not True:
                 self._integral_last_live[name] = (read, at)
+                live.add(name)
             elif (last is not None and 0.0 <= (at - last[1]).total_seconds()
                   <= SENSOR_DARK_READ_GRACE_S):
                 read = last[0]
                 held.add(name)
             watts.update(zip(fields, read, strict=True))
         self._integral_held = frozenset(held)
+        self._integral_live = frozenset(live)
         shown = getattr(power, "home_shown_w", None)
         if not isinstance(shown, (int, float)) or isinstance(shown, bool):
             shown = power.home_consumption_power
@@ -775,15 +779,18 @@ class EnergyCalculator:
         charge split on those flows is lost and a discharge counts as
         delivered in full — a sale from the pack paid twice (#776). So
         while the battery is held, its shares from the same live read go
-        with it; a live battery uses this cycle's flows.
+        with it; a live battery uses this cycle's flows. The shares are
+        taken only when the battery is live, the read its watts are held
+        from.
         """
-        if "battery" not in self._integral_held:
+        if "battery" in self._integral_held:
+            return self._battery_live_flows
+        if "battery" in self._integral_live:
             self._battery_live_flows = None if power_flows is None else (
                 SimpleNamespace(**{
                     f: float(getattr(power_flows, f, 0.0) or 0.0)
                     for f in _BATTERY_FLOW_FIELDS}))
-            return power_flows
-        return self._battery_live_flows
+        return power_flows
 
     def calculate_energy(
         self, power: PowerReadings,

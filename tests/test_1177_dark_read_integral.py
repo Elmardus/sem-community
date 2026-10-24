@@ -287,6 +287,25 @@ class TestTheAutumnClockChange:
             dt_util.set_default_time_zone(before)
         assert total == pytest.approx(_kwh(3000.0)), "held past the grace"
 
+    def test_a_blank_across_the_change_is_held_for_its_real_age(self):
+        """02:59 CEST live, 02:01 CET dark: 120 s later, not 58 min before."""
+        from zoneinfo import ZoneInfo
+        from homeassistant.util import dt as dt_util
+        before = dt_util.get_default_time_zone()
+        dt_util.set_default_time_zone(ZoneInfo("Europe/Zurich"))
+        try:
+            with freeze_time("2026-10-25 00:59:00") as clock:   # 02:59 CEST
+                calc, _ = _calc()
+                calc._daily_accumulators.clear()
+                _cycle(calc, grid_power=-3000.0)
+                clock.tick(timedelta(minutes=2))                 # 02:01 CET
+                _cycle(calc, grid_power=0.0, grid_power_unavailable=True)
+                total = sum(v for k, v in calc._daily_accumulators.items()
+                            if k.startswith("grid_import_"))
+        finally:
+            dt_util.set_default_time_zone(before)
+        assert total == pytest.approx(_kwh(3000.0, 2)), "not held"
+
 
 @pytest.mark.unit
 @pytest.mark.usefixtures("clock")
