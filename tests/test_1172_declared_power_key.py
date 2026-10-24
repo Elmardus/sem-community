@@ -280,3 +280,59 @@ async def test_without_the_key_the_same_night_has_no_grid_lines(hass, monkeypatc
     assert readings.grid_import_power == 0
     assert energy.grid_to_battery == 0
     assert energy.grid_to_home == 0
+
+
+# ── the sign: a meter SEM found itself is seeded like the one it guessed ──
+
+def _first_cycle(hass, **config):
+    """One read with the warm-up a fresh start has — no counter vote yet."""
+    _p1_meter(hass)
+    hass.states.async_set("sensor.solaredge_current_power", "0", _W)
+    hass.states.async_set("sensor.alphaess_battery_power", "700", _W)
+    reader = SensorReader(hass, {"update_interval": 10, **config})
+    if not config:
+        reader.set_energy_dashboard_config(_parse_prefs(hass, PREFS, quiet=True))
+    return reader.read_power()
+
+
+async def test_the_first_cycle_already_reads_import(hass):
+    readings = _first_cycle(hass)
+    assert readings.grid_power == pytest.approx(-800)
+    assert readings.grid_import_power == pytest.approx(800)
+
+
+async def test_without_the_seed_the_first_cycle_reads_export(hass, monkeypatch):
+    """The control: unseeded, HomeWizard's +800 is SEM's export until the
+    counters have voted — the night surplus the seed prevents."""
+    from custom_components.solar_energy_management.coordinator import (
+        sensor_reader as sr,
+    )
+    table = dict(sr.PLATFORM_GRID_SIGN_INVERT)
+    table.pop("homewizard")
+    monkeypatch.setattr(sr, "PLATFORM_GRID_SIGN_INVERT", table)
+    readings = _first_cycle(hass)
+    assert readings.grid_export_power == pytest.approx(800)
+
+
+async def test_a_picked_homewizard_meter_reads_import_without_a_dashboard(hass):
+    """The seed is the integration's, whatever path chose the sensor: a
+    Grid power pick on a home with no Energy Dashboard reads it too."""
+    readings = _first_cycle(hass, grid_power_sensor=POWER,
+                            solar_production_sensor="sensor.solaredge_current_power")
+    assert readings.grid_import_power == pytest.approx(800)
+
+
+async def test_a_dutch_socket_load_finds_its_power(hass):
+    """The service-device load path asks the same rules (``devices/base``)."""
+    entry, dev = _device(hass, serial="skt1", name="Boiler")
+    _entity(hass, entry, dev, "sensor.boiler_energie_import",
+            "total_power_import_kwh", device_class="energy")
+    _entity(hass, entry, dev, "sensor.boiler_vermogen", "active_power_w",
+            device_class="power")
+    hass.states.async_set("sensor.boiler_energie_import", "40.0", _KWH)
+    hass.states.async_set("sensor.boiler_vermogen", "1900", _W)
+    counter = "sensor.boiler_energie_import"
+    assert (_find_power_sensor_on_device(hass, counter, _rule("load"))
+            == "sensor.boiler_vermogen")
+    assert _find_power_sensor_on_device(
+        hass, counter, _rule("load", declared=False)) is None

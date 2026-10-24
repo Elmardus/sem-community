@@ -220,7 +220,7 @@ resolves the power entity, so every derived flow for that source is silently 0. 
 the Energy Dashboard has no `stat_rate` power link, SEM *derives* power from the energy sensor's
 device via a hardcoded English keyword substring list (`_POWER_DERIVE_RULES`); any brand/locale
 whose entity_id isn't in the list is invisible, and unlike SOC there's *no manual override* to fall
-back on. The device+`device_class=power` scoping keeps it from being a pure "match anything" rule, so
+back on (since #1103 the grid has one: the Config card's Grid power pick). The device+`device_class=power` scoping keeps it from being a pure "match anything" rule, so
 the list must actually name each brand's slug (EN **and** localized). **Where it lives:**
 `ha_energy_reader.py::_POWER_DERIVE_RULES` — the `solar`, `grid` **and** `battery` include lists (same
 shape as the multilingual `_DISCHARGE_CONTROL_PATTERNS` in `hardware_detection.py`). **Closure:**
@@ -240,12 +240,14 @@ rule's `declared` map `{integration: (entity key, …)}`, matched on the registr
 translation_key through the one roster matcher `hardware_detection._entry_matches_declared`, never on
 the entity_id. Scoped to the counter's device like the keywords, and to the integration that declares
 the key. Before the meter's integration has loaded, the registry's own device class answers (the grid
-has no cold-start retry: `power_resolution_incomplete` leaves it out). **Swept:** grid and battery
-take HomeWizard's net power `active_power_w`; solar takes `active_production_power_w` (the meter's
+has no cold-start retry: `power_resolution_incomplete` leaves it out). **Swept:** grid, battery and the
+service-device load rule (`devices/base.py`) take HomeWizard's net power `active_power_w`; solar takes `active_production_power_w` (the meter's
 power × −1, positive while producing — the plain one would read solar negative, and solar has no sign
 check). **Guard:** `tests/test_1172_declared_power_key.py` — six languages, phase/average/peak twins
 on the same device, cold start, wrong integration, the reporter's night end to end with a control that
-reads 0 without the tier. **Still open:** other brands that name power by device class alone get
+reads 0 without the tier. **Sign:** a derived grid meter now gets the brand seed too
+(`_seed_grid_sign_from_platform`, `homewizard: True`), so its import is not read as export while
+the counters vote. **Still open:** other brands that name power by device class alone get
 the same tier only by adding their key; a home where nothing is found is told by one log line, no
 Repair (filed separately).
 **Missing-wiring sibling (#744, @Azlinon, 2026-08-11) — the derivation existed but was never called

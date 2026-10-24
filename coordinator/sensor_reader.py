@@ -209,6 +209,10 @@ PLATFORM_GRID_SIGN_INVERT: dict[str, bool] = {
     "powerwall": True,
     "solaredge": True,
     "kostal_plenticore": True,
+    # (#1172) HomeWizard P1 / kWh meter: ``active_power_w`` is +=import. HA's
+    # own integration defines the meter's production sensor as that value
+    # × −1, "positive while producing".
+    "homewizard": True,
     # Pattern C — grid +=export, no negation
     "goodwe": False,
     # Pattern D — grid +=import, negate
@@ -1637,6 +1641,15 @@ class SensorReader:
         if not entity_id:
             # Split-grid install: try the discovered import sensor's brand.
             entity_id = (self._split_grid_discovery or {}).get("import")
+        if not entity_id:
+            # (#1172) …or the meter SEM found on the grid counter's own device
+            # because the Energy Dashboard named no power sensor. Like the
+            # split pick it is SEM's choice, not a sign the user declared, and
+            # without a seed a P1 meter's import read as export until the
+            # counters had voted — minutes of surplus that was not there.
+            derived = getattr(self._energy_dashboard_config, "derived_power", None)
+            if isinstance(derived, dict):
+                entity_id = derived.get("grid")
         if not entity_id:
             return
         try:

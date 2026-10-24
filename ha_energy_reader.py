@@ -91,6 +91,8 @@ _POWER_DERIVE_RULES: Dict[str, Dict[str, Any]] = {
             "active_power", "current_power",
         ),
         "prefer": ("total", "current"),
+        # (#1172) a HomeWizard socket's power is ``…_vermogen`` in Dutch
+        "declared": {"homewizard": ("active_power_w",)},
     },
 }
 # Substrings that disqualify a candidate regardless of type (non-real power).
