@@ -8063,6 +8063,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         if entry_id:
             ctx["config_entry_id"] = entry_id
         ctx["battery_id"] = str(battery_id)
+        # (#1180) one hold for the entry, shared by every battery: the packs
+        # behind one inverter write the same charge-target number
+        ctx["charge_target_hold"] = self._charge_target_hold()
         platform = (ctx.get("battery_charge_platform") or "auto").lower()
         if platform == "deye":
             if not entry_id:
@@ -8077,6 +8080,30 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     self.hass, entry_id, ctx["battery_id"],
                 )
         return ctx
+
+    def _charge_target_hold(self):
+        """(#1180) The charge-target number as SEM found it, for the whole
+        entry. Persisted, like the pacer's capture (#949): an HA restart
+        never unloads the entry, so the number still carries SEM's value
+        when the next lifetime starts. Scoped to the config entry; no
+        record without one (a shared scope is worse than none)."""
+        hold = getattr(self, "_charge_target_hold_obj", None)
+        if hold is not None:
+            return hold
+        from .battery_adapters.charge_target import ChargeTargetHold
+        entry_id = str(getattr(
+            getattr(self, "config_entry", None), "entry_id", "") or "")
+        store = None
+        if entry_id:
+            try:
+                from homeassistant.helpers.storage import Store
+                store = Store(self.hass, 1, f"sem.charge_target.{entry_id}")
+            except Exception:  # noqa: BLE001 — a store never costs a cycle
+                store = None
+        hold = self._charge_target_hold_obj = ChargeTargetHold(
+            self.hass, store=store,
+            configured=(self.config.get("battery_target_soc_entity", ""),))
+        return hold
 
     def _warn_battery_entity_collision(self, battery_id: str, pbc: dict) -> None:
         """Warn (once per entity) when two batteries share a control entity.
@@ -9664,7 +9691,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     _integration_loaded(self.hass, "huawei_solar")
                     or _integration_loaded(self.hass, "goodwe")
                 ):
-                    _rebuilt = adapter_for(self.hass, _heal_cfg)
+                    # (#1180) built like the first one, so it gets the
+                    # entry's charge-target hold and runtime scope too
+                    _rebuilt = adapter_for(self.hass, self._battery_adapter_context(
+                        battery_id, batt_idx, _bat_count))
                     if type(_rebuilt).__name__ != "GenericBatteryAdapter":
                         adapter = _rebuilt
                         if hasattr(adapter, "_orphan_guard"):

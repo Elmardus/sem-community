@@ -594,6 +594,11 @@ async def async_get_config_entry_diagnostics(
                 "state": str(getattr(getattr(sched, "state", None), "value", "")) or None,
             },
         }
+        # (#1180) each charge-target number SEM wrote and has not put back
+        from .coordinator.battery_adapters.charge_target import ChargeTargetHold
+        _hold = getattr(coordinator, "_charge_target_hold_obj", None)
+        if isinstance(_hold, ChargeTargetHold):
+            battery_info["charge_target_held"] = _hold.snapshot()
         # #709 — Deye forced-grid-charge observability. Read-only. Keep the
         # generic payload unchanged when no Deye adapter exists.
         deye_info = _build_deye_diagnostics(_adapters)

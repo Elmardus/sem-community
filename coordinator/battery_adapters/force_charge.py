@@ -17,6 +17,8 @@ from enum import Enum
 
 from homeassistant.core import HomeAssistant
 
+from .charge_target import ChargeTargetHold
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -103,11 +105,41 @@ class BatteryChargeAdapter(ABC):
         self.config = config
         self._active = False
         self._target_soc: float = 0.0
+        #: (#1180) the charge-target number as SEM found it. The coordinator
+        #: hands every battery the entry's one hold; a stand-in gets its own.
+        hold = config.get("charge_target_hold")
+        self.target_hold = (
+            hold if isinstance(hold, ChargeTargetHold)
+            else ChargeTargetHold(
+                hass, configured=(config.get("battery_target_soc_entity", ""),)))
 
     @property
     def is_active(self) -> bool:
         """Whether a forced charge session is currently active."""
         return self._active
+
+    async def _put_target_back(self) -> None:
+        """(#1180) The stop's last step: the charge-target number back to
+        the value SEM found. One that has not landed is checked and sent
+        again on later cycles — the stop itself has landed, so it is not
+        sent again for it. Never raises."""
+        try:
+            await self.target_hold.put_back(
+                self.config.get("battery_target_soc_entity", ""))
+        except Exception:  # noqa: BLE001 — the stop has landed regardless
+            _LOGGER.warning("Battery: putting the charge target back failed "
+                            "(#1180)", exc_info=True)
+
+    async def _release_target(self) -> None:
+        """(#1180) A start that failed after the target went out: nothing
+        stops a charge that never started, so the value goes back on the
+        next cycle without a forced charge. Never raises."""
+        try:
+            await self.target_hold.release(
+                self.config.get("battery_target_soc_entity", ""))
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Battery: releasing the charge target failed "
+                            "(#1180)", exc_info=True)
 
     @abstractmethod
     async def start_forced_charge(self, command: ChargeCommand) -> ChargeStatus:
@@ -292,11 +324,9 @@ class GoodWeChargeAdapter(BatteryChargeAdapter):
 
         try:
             if soc_target_entity:
-                await self.hass.services.async_call(
-                    "number",
-                    "set_value",
-                    {"entity_id": soc_target_entity, "value": int(command.target_soc)},
-                )
+                # (#1180) saved first, put back on the stop
+                await self.target_hold.write(
+                    soc_target_entity, int(command.target_soc))
 
             await self.hass.services.async_call(
                 "select",
@@ -314,6 +344,7 @@ class GoodWeChargeAdapter(BatteryChargeAdapter):
             )
         except Exception as exc:
             _LOGGER.error("Failed to start GoodWe forced charge: %s", exc)
+            await self._release_target()
             return ChargeStatus(
                 status=ChargeCommandStatus.FAILED,
                 message=f"Service call failed: {exc}",
@@ -350,6 +381,9 @@ class GoodWeChargeAdapter(BatteryChargeAdapter):
             )
             self._active = False
             self._target_soc = 0.0
+            # (#1180) the mode first: a higher target under Eco Charge would
+            # charge on from the grid
+            await self._put_target_back()
             return ChargeStatus(
                 status=ChargeCommandStatus.IDLE,
                 message=f"Restored {normal_mode} mode",
@@ -409,11 +443,9 @@ class GenericChargeAdapter(BatteryChargeAdapter):
 
         try:
             if soc_target_entity:
-                await self.hass.services.async_call(
-                    "number",
-                    "set_value",
-                    {"entity_id": soc_target_entity, "value": int(command.target_soc)},
-                )
+                # (#1180) saved first, put back on the stop
+                await self.target_hold.write(
+                    soc_target_entity, int(command.target_soc))
 
             await self.hass.services.async_call(
                 "switch",
@@ -429,6 +461,7 @@ class GenericChargeAdapter(BatteryChargeAdapter):
                 message="Force charge switch enabled",
             )
         except Exception as exc:
+            await self._release_target()
             return ChargeStatus(
                 status=ChargeCommandStatus.FAILED,
                 message=f"Failed: {exc}",
@@ -465,6 +498,9 @@ class GenericChargeAdapter(BatteryChargeAdapter):
             )
             self._active = False
             self._target_soc = 0.0
+            # (#1180) the switch first: a higher target with the switch on
+            # would charge on from the grid
+            await self._put_target_back()
             return ChargeStatus(
                 status=ChargeCommandStatus.IDLE,
                 message="Force charge switch disabled",
