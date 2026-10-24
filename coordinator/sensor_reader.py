@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 from dataclasses import dataclass, replace
 
 from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from . import repair_issues as _ri
@@ -209,6 +210,10 @@ PLATFORM_GRID_SIGN_INVERT: dict[str, bool] = {
     "powerwall": True,
     "solaredge": True,
     "kostal_plenticore": True,
+    # (#1172) HomeWizard: ``active_power_w`` is +=import. HA's own
+    # integration defines the meter's production sensor as that value × −1,
+    # "positive while producing". P1 meters only — see the table below.
+    "homewizard": True,
     # Pattern C — grid +=export, no negation
     "goodwe": False,
     # Pattern D — grid +=import, negate
@@ -218,6 +223,14 @@ PLATFORM_GRID_SIGN_INVERT: dict[str, bool] = {
     # behavior (−4.9 kW while exporting, SEM read it as import until the
     # manual flip). HIGH-CONFIDENCE: platform string from his diagnostics.
     "deyecloud": True,
+}
+
+# (#1172) An integration whose sign holds for some of its devices only: the
+# seed applies when the meter's device model_id is listed. A HomeWizard P1
+# reads the utility meter, so its direction is fixed. A HomeWizard kWh meter
+# reads the way it was wired, so the counters decide, as they always did.
+PLATFORM_GRID_SIGN_MODELS: dict[str, tuple[str, ...]] = {
+    "homewizard": ("HWE-P1",),
 }
 
 # #588 battery-sign brand-lookup tier — same semantics as PLATFORM_GRID_SIGN_INVERT
@@ -1193,19 +1206,28 @@ class SensorReader:
             return [single] if single else []
 
         grid_entity = self.config.grid_power_sensor
+        # (#1172) the sensor the brand seed asks — the pick, or the split or
+        # derived meter SEM chose — so a seeded sign is told from a voted one
+        seed_entity = None
         raw_state = None
         grid_platform = None
+        brand_seeded = False
+        try:
+            seed_entity = self._grid_seed_entity()
+        except Exception:  # noqa: BLE001 — diagnostics must never raise
+            seed_entity = None
         if grid_entity and self.hass is not None:
             st = self.hass.states.get(grid_entity)
             if st is not None:
                 raw_state = st.state
+        if seed_entity and self.hass is not None:
             try:
                 # (#912, class 87) via _entity_owner, not the registry alone:
                 # this is the triage payload a reporter pastes into an issue,
                 # and reporting null for a YAML-declared sensor is how three
                 # betas went by without anyone seeing it was a template.
-                pf = self._entity_owner(grid_entity)[0]
-                grid_platform = pf if isinstance(pf, str) else None
+                grid_platform, negate = self._grid_brand_seed(seed_entity)
+                brand_seeded = negate is not None
             except Exception:  # noqa: BLE001 — diagnostics must never raise
                 grid_platform = None
 
@@ -1216,9 +1238,9 @@ class SensorReader:
         return {
             "grid_power_sensor": grid_entity,
             "grid_power_raw_state": raw_state,
+            "grid_seed_sensor": seed_entity,
             "grid_platform": grid_platform,
-            "brand_seeded": grid_platform in PLATFORM_GRID_SIGN_INVERT
-            if grid_platform else False,
+            "brand_seeded": brand_seeded,
             "manual_grid_sign_invert": bool(
                 self._raw_config.get("grid_sign_invert", False)
             ),
@@ -1611,6 +1633,56 @@ class SensorReader:
             "re-learned from Energy Dashboard counters"
         )
 
+    def _grid_seed_entity(self) -> Optional[str]:
+        """The grid sensor whose integration the brand seed asks: the Config
+        card pick, else the split-grid import pick, else (#1172) the meter
+        SEM found on the grid counter's own device because the Energy
+        Dashboard named no power sensor. Like the split pick, that one is
+        SEM's choice, not a sign the user declared, and without a seed a P1
+        meter's import read as export until the counters had voted."""
+        entity_id = self.config.grid_power_sensor
+        if not entity_id:
+            entity_id = (self._split_grid_discovery or {}).get("import")
+        if not entity_id:
+            derived = getattr(self._energy_dashboard_config, "derived_power", None)
+            if isinstance(derived, dict):
+                entity_id = derived.get("grid")
+        return entity_id or None
+
+    def _grid_brand_seed(self, entity_id: str) -> tuple[Optional[str], Optional[bool]]:
+        """``(platform, needs_negate)`` for ``entity_id``; ``needs_negate`` is
+        None when its integration (or, for #1172, its device model) has no
+        known sign. The seed and the sign diagnostics share this answer."""
+        try:
+            # (#912, class 87) the brand is the entity's OWNER, and the entity
+            # registry lists only entities that carry a unique_id — a
+            # YAML-declared brand sensor got no seed at all, for no better
+            # reason than that. _entity_owner reads the same fact from HA's
+            # source map when the registry cannot see the entity.
+            platform = self._entity_owner(entity_id)[0]
+        except Exception as e:  # noqa: BLE001 — belt and braces: _entity_owner
+            # contains its own registry/source-map failures and answers None.
+            _LOGGER.debug("Grid-sign brand lookup failed for %s: %s", entity_id, e)
+            return None, None
+        if not isinstance(platform, str) or platform not in PLATFORM_GRID_SIGN_INVERT:
+            return (platform if isinstance(platform, str) else None), None
+        models = PLATFORM_GRID_SIGN_MODELS.get(platform)
+        if models and self._device_model_id(entity_id) not in models:
+            return platform, None
+        return platform, PLATFORM_GRID_SIGN_INVERT[platform]
+
+    def _device_model_id(self, entity_id: str) -> Optional[str]:
+        """(#1172) The model_id of the device that owns ``entity_id``."""
+        try:
+            entry = er.async_get(self.hass).async_get(entity_id)
+            if entry is None or not entry.device_id:
+                return None
+            device = dr.async_get(self.hass).async_get(entry.device_id)
+        except Exception:  # noqa: BLE001 — no device, no model: no seed
+            return None
+        model_id = getattr(device, "model_id", None) if device else None
+        return model_id if isinstance(model_id, str) else None
+
     def _seed_grid_sign_from_platform(self) -> None:
         """Deterministic grid-sign seed from the meter's integration (#461).
 
@@ -1633,27 +1705,14 @@ class SensorReader:
             return
         self._brand_seed_done = True
 
-        entity_id = self.config.grid_power_sensor
-        if not entity_id:
-            # Split-grid install: try the discovered import sensor's brand.
-            entity_id = (self._split_grid_discovery or {}).get("import")
+        entity_id = self._grid_seed_entity()
         if not entity_id:
             return
-        try:
-            # (#912, class 87) the brand is the entity's OWNER, and the entity
-            # registry lists only entities that carry a unique_id — a
-            # YAML-declared brand sensor got no seed at all, for no better
-            # reason than that. _entity_owner reads the same fact from HA's
-            # source map when the registry cannot see the entity.
-            platform = self._entity_owner(entity_id)[0]
-        except Exception as e:  # noqa: BLE001 — belt and braces: _entity_owner
-            # contains its own registry/source-map failures and answers None.
-            _LOGGER.debug("Grid-sign brand lookup failed for %s: %s", entity_id, e)
-            return
-        if not isinstance(platform, str) or platform not in PLATFORM_GRID_SIGN_INVERT:
+        platform, needs_negate = self._grid_brand_seed(entity_id)
+        if needs_negate is None:
             return
 
-        self._grid_sign_inverted = PLATFORM_GRID_SIGN_INVERT[platform]
+        self._grid_sign_inverted = needs_negate
         self._grid_sign_detected = True
         _LOGGER.info(
             "Grid sign seeded from integration '%s' (%s): %s — "

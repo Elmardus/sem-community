@@ -27,10 +27,14 @@ _LOGGER = logging.getLogger(__name__)
 # that break ties (earlier = higher priority). Device-scoped search + device_class
 # filtering keeps false positives low even when one device exposes every sensor
 # (as SolaX solax-modbus does).
-_POWER_DERIVE_RULES: Dict[str, Dict[str, tuple]] = {
+_POWER_DERIVE_RULES: Dict[str, Dict[str, Any]] = {
     "solar": {
         "include": ("pv_power", "solar_power", "production_power"),
         "prefer": ("total",),
+        # (#1172) see the grid rule. A HomeWizard socket or kWh meter that
+        # counts a solar inverter adds its power × −1 under this key, so it
+        # reads positive while the panels produce — the sign SEM expects.
+        "declared": {"homewizard": ("active_production_power_w",)},
     },
     "grid": {
         "include": (
@@ -39,6 +43,13 @@ _POWER_DERIVE_RULES: Dict[str, Dict[str, tuple]] = {
             "grid_active_power",
         ),
         "prefer": ("measured", "total"),
+        # (#1172) integration → the entity key it gives the meter's own net
+        # power. Matched on the registry's unique_id / translation_key, which
+        # do not change with the user's language — the entity_id does.
+        # HomeWizard names this sensor by its device class alone, so a P1
+        # meter's power is ``sensor.p1_meter_power`` in English and
+        # ``sensor.p1_meter_vermogen`` in Dutch, and no word above fits.
+        "declared": {"homewizard": ("active_power_w",)},
     },
     "battery": {
         # No "charge"/"discharge" preference on purpose: when a device exposes a
@@ -66,6 +77,10 @@ _POWER_DERIVE_RULES: Dict[str, Dict[str, tuple]] = {
         # combined deterministically (SolaX's `battery_power` vs
         # `battery_power_charge` still discriminates on length as before).
         "prefer": ("total", "batteries", "batterien"),
+        # (#1172) the grid rule's twin: a HomeWizard Plug-In Battery, or a
+        # HomeWizard meter counting a battery, gives its net power the same
+        # key. Its sign is checked against the counters like any other.
+        "declared": {"homewizard": ("active_power_w",)},
     },
     # #600 — generic LOAD device (heat pump / hot water / switch): find the
     # device's own power sensor to feed a kWh-only load. Broad power keywords
@@ -76,6 +91,8 @@ _POWER_DERIVE_RULES: Dict[str, Dict[str, tuple]] = {
             "active_power", "current_power",
         ),
         "prefer": ("total", "current"),
+        # (#1172) a HomeWizard socket's power is ``…_vermogen`` in Dutch
+        "declared": {"homewizard": ("active_power_w",)},
     },
 }
 # Substrings that disqualify a candidate regardless of type (non-real power).
@@ -792,8 +809,25 @@ def _extract_ev_from_devices(
         break
 
 
+def _declared_power_entry(hass: HomeAssistant, entry) -> bool:
+    """(#1172) A declared power sensor still has to measure power.
+
+    Its live state answers when it has one. Before its integration has
+    loaded — a cold start, where SEM often sets up first — the registry's
+    own record answers, so the meter is not missed for the whole run: the
+    grid has no retry, because a split meter never resolves here at all.
+    """
+    state = hass.states.get(entry.entity_id)
+    if state is not None:
+        return (state.attributes.get("device_class") == "power"
+                or is_power_unit(state))
+    dc = getattr(entry, "device_class", None) or getattr(
+        entry, "original_device_class", None)
+    return dc == "power"
+
+
 def _find_power_sensor_on_device(
-    hass: HomeAssistant, energy_entity: str, rule: Dict[str, tuple],
+    hass: HomeAssistant, energy_entity: str, rule: Dict[str, Any],
 ) -> Optional[str]:
     """Find a power sensor on the same device as ``energy_entity``.
 
@@ -804,21 +838,34 @@ def _find_power_sensor_on_device(
     keyword order, then by shortest entity_id (favours the "total"/parent over
     per-string variants like pv_power_1).
 
+    (#1172) A sensor whose integration DECLARES it as this power — the
+    rule's ``declared`` keys, matched on its unique_id / translation_key —
+    wins over any name match, and needs no English word in its entity_id.
+
     Returns the entity_id, or None if no suitable candidate exists.
     """
     if not energy_entity:
         return None
     try:
+        from .hardware_detection import _entry_matches_declared
+
         registry = er.async_get(hass)
         energy_entry = registry.async_get(energy_entity)
         if not energy_entry or not energy_entry.device_id:
             return None
 
+        declared = rule.get("declared") or {}
+        keyed: List[str] = []
         candidates: List[str] = []
         for entry in er.async_entries_for_device(registry, energy_entry.device_id):
             if entry.domain != "sensor" or entry.disabled_by is not None:
                 continue
             eid = entry.entity_id
+            keys = declared.get(str(getattr(entry, "platform", "") or ""), ())
+            if keys and _entry_matches_declared(entry, keys) is not None:
+                if _declared_power_entry(hass, entry):
+                    keyed.append(eid)
+                continue
             eid_lower = eid.lower()
             if any(x in eid_lower for x in _POWER_DERIVE_EXCLUDE):
                 continue
@@ -835,6 +882,8 @@ def _find_power_sensor_on_device(
                 continue
             candidates.append(eid)
 
+        if keyed:
+            return sorted(keyed)[0]
         if not candidates:
             return None
 
