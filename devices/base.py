@@ -10,6 +10,7 @@ Device Types:
 - ScheduleDevice: start signal with deadline (dishwasher, washer)
 """
 import asyncio
+from functools import partial
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -77,6 +78,13 @@ FAILSAFE_OFF_TIMEOUT_S = 10
 # failsafe back. Brand integrations poll their box every few seconds; 30 s
 # is one honest look, not a heartbeat.
 FAILSAFE_READBACK_DELAY_S = 30
+
+# #1163 — a box's own integration may poll it the instant a stop lands, and
+# a command arriving in the same moment is dropped without an answer (PROD
+# 24.10.2026: 14 of 16 dead-man's OFFs lost). Wait out that burst first,
+# and resend while the read-back still shows a non-zero fallback.
+DEADMAN_SETTLE_S = 0.5
+DEADMAN_MAX_TRIES = 3
 
 #: (#935) How long a teardown will wait on a charger before giving up on it.
 #: ``hass.services.async_call`` is unbounded, and a removal that hangs on a
@@ -2209,6 +2217,19 @@ class CurrentControlDevice(ControllableDevice):
     Supports multi-phase charging with configurable current limits.
     """
 
+
+    @property
+    def _session_active(self) -> bool:
+        return bool(self.__dict__.get("_session_active_flag", False))
+
+    @_session_active.setter
+    def _session_active(self, value: bool) -> None:
+        # (#1163) Every way a session starts passes here, so a start voids
+        # any dead-man's OFF still waiting or resending.
+        if value:
+            self._deadman_gen = getattr(self, "_deadman_gen", 0) + 1
+        self.__dict__["_session_active_flag"] = bool(value)
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -3246,6 +3267,8 @@ class CurrentControlDevice(ControllableDevice):
         can be set False for boxes that CAN disable the failsafe at the charger
         (evcc-style); then SEM doesn't touch it and a Repair guides the user to
         disable it. ``steady_failsafe`` (default on) controls persistence."""
+        # (#1163) A start voids any dead-man's OFF still waiting or resending.
+        self._deadman_gen = getattr(self, "_deadman_gen", 0) + 1
         if not bool(getattr(self, "arm_failsafe_enabled", True)):
             _LOGGER.debug(
                 "%s: not arming the charger failsafe (arm-failsafe option "
@@ -3270,7 +3293,7 @@ class CurrentControlDevice(ControllableDevice):
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning("Failed to set charger failsafe: %s", e)
 
-    async def arm_failsafe_off(self) -> None:
+    async def arm_failsafe_off(self, attempt: int = 1) -> None:
         """(#740) Re-arm the failsafe as a dead-man's OFF after a stop.
 
         The charging arm (``arm_failsafe``) points the fallback at the
@@ -3289,7 +3312,12 @@ class CurrentControlDevice(ControllableDevice):
         domain = (self.charger_service or "").split(".", 1)[0]
         if not domain or not self.hass.services.has_service(domain, "set_failsafe"):
             return
+        self._deadman_gen = getattr(self, "_deadman_gen", 0) + 1
+        gen = self._deadman_gen
         try:
+            await asyncio.sleep(DEADMAN_SETTLE_S)
+            if gen != self._deadman_gen:
+                return      # a start or a newer stop came in while we waited
             sent = await self.send(domain, "set_failsafe", {"failsafe_timeout": FAILSAFE_OFF_TIMEOUT_S,
                  "failsafe_fallback": 0, "failsafe_persist": 1})
             # (#1009) "Asked", not "re-armed". A brand integration may floor
@@ -3302,21 +3330,22 @@ class CurrentControlDevice(ControllableDevice):
             _LOGGER.info(
                 "%s: asked the box for a dead-man's OFF (failsafe timeout=%ds, "
                 "fallback 0 A, persisted); read-back in %ds says whether it "
-                "took (#740, #1009)", self.name, FAILSAFE_OFF_TIMEOUT_S,
-                FAILSAFE_READBACK_DELAY_S,
+                "took (#740, #1009, try %d of %d)", self.name, FAILSAFE_OFF_TIMEOUT_S,
+                FAILSAFE_READBACK_DELAY_S, attempt, DEADMAN_MAX_TRIES,
             )
             if sent:
-                self._schedule_failsafe_readback()
+                self._schedule_failsafe_readback(gen, attempt)
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning(
                 "Failed to arm the dead-man's-off failsafe: %s", e)
 
-    def _schedule_failsafe_readback(self) -> None:
+    def _schedule_failsafe_readback(self, gen: int = 0, attempt: int = 1) -> None:
         """(#1009) One delayed look at the box's failsafe, after asking."""
         try:
             from homeassistant.helpers.event import async_call_later
             async_call_later(self.hass, FAILSAFE_READBACK_DELAY_S,
-                             self._failsafe_readback)
+                             partial(self._failsafe_readback, gen=gen,
+                                     attempt=attempt))
         except Exception as e:  # noqa: BLE001
             _LOGGER.debug("%s: failsafe read-back not scheduled: %s",
                           self.name, e)
@@ -3346,8 +3375,11 @@ class CurrentControlDevice(ControllableDevice):
         return None
 
     @callback
-    def _failsafe_readback(self, _now=None) -> None:
+    def _failsafe_readback(self, _now=None, *, gen: int = 0,
+                           attempt: int = DEADMAN_MAX_TRIES) -> None:
         """(#1009) Say what the box did with the dead-man's OFF, once."""
+        if gen and gen != getattr(self, "_deadman_gen", 0):
+            return      # SEM has armed the box again since: this ask is stale
         st = self._failsafe_readback_state()
         if st is None:
             _LOGGER.debug("%s: no failsafe read-back entity — the dead-man's "
@@ -3363,6 +3395,15 @@ class CurrentControlDevice(ControllableDevice):
             self._deadman_refused_logged = False   # fixed: a relapse is worth saying again
             _LOGGER.info("%s: dead-man's OFF confirmed on read-back (%s: "
                          "%.0f s / 0 A)", self.name, st.entity_id, timeout)
+            return
+        # (#1163) A dropped command, not a refusal, until it fails every
+        # try. Only while the car is still stopped: a resend during a
+        # session would point a charging box at 0 A.
+        if attempt < DEADMAN_MAX_TRIES and not getattr(self, "_session_active", False):
+            _LOGGER.info("%s: the box still shows %.0f s / %.0f A — asking "
+                         "again (try %d of %d)", self.name, timeout, fallback,
+                         attempt + 1, DEADMAN_MAX_TRIES)
+            self.hass.async_create_task(self.arm_failsafe_off(attempt + 1))
             return
         if getattr(self, "_deadman_refused_logged", False):
             return
