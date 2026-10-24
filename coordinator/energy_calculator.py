@@ -15,6 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from ..const import DEFAULT_ELECTRICITY_IMPORT_RATE, DOMAIN
+from ..consts.core import SENSOR_DARK_READ_GRACE_S
 
 from .types import (
     PowerReadings, EnergyTotals, CostData, PerformanceMetrics,
@@ -74,6 +75,20 @@ _EV_CLOSING_KEYS = ("row", "anchor", "base", "last", "drawn_at", "owed",
 # band would leave half the error in place. Below this the integrator keeps the
 # row — the point is to stop drift, not to chase noise.
 METER_RECONCILIATION_THRESHOLD = 0.05
+
+# (#1177) The power inputs the daily rows integrate: the input, the flag that
+# says every read of it was dark this cycle (``SensorReader``, #818), and the
+# fields the integral books from it. A dark read is the reader's 0 W, right
+# for steering and wrong for an integral (bug class 58): on PROD the modbus
+# inverter was dark 26 % of a noon hour, the solar row lost that share, and
+# home — the balance of the metered rows — went down.
+_INTEGRAL_INPUTS = (
+    ("solar", "solar_power_unavailable", ("solar_power",)),
+    ("grid", "grid_power_unavailable",
+     ("grid_import_power", "grid_export_power")),
+    ("battery", "battery_power_all_unavailable",
+     ("battery_charge_power", "battery_discharge_power")),
+)
 
 # Sanity ceiling for one day of a metered category (#628). Solar and EV have
 # physical bounds to check against (kWp × 16 h, chargers × amps × 24 h); grid
@@ -364,6 +379,8 @@ class EnergyCalculator:
 
         # Last update time for integration
         self._last_update: Optional[datetime] = None
+        #: (#1177) input → (its fields' watts, when) at its last live read
+        self._integral_last_live: Dict[str, Tuple[Tuple[float, ...], datetime]] = {}
 
         # Cost rates
         self._import_rate = config.get("electricity_import_rate",
@@ -709,6 +726,33 @@ class EnergyCalculator:
         self._ev_day_key = day
         return day
 
+    def _integral_watts(self, power: PowerReadings, now: datetime) -> Dict[str, float]:
+        """(#1177) The watts this cycle's integrals book, by field.
+
+        A dark input books its last live read for ``SENSOR_DARK_READ_GRACE_S``
+        — the window its own entity shows that value — and the reader's 0 W
+        after it. The age counts from the live read, so a dark cycle never
+        renews it. A live 0 W is a reading and is booked and held as 0.
+
+        Home books the house SEM shows (``home_shown_w``, #1047) while it
+        holds one: the raw home is built from a dark input's 0 W. Steering
+        never reads these values — they exist for the integrals only.
+        """
+        watts: Dict[str, float] = {}
+        for name, flag, fields in _INTEGRAL_INPUTS:
+            read = tuple(float(getattr(power, f, 0.0) or 0.0) for f in fields)
+            last = self._integral_last_live.get(name)
+            if not getattr(power, flag, False):
+                self._integral_last_live[name] = (read, now)
+            elif (last is not None
+                  and (now - last[1]).total_seconds() <= SENSOR_DARK_READ_GRACE_S):
+                read = last[0]
+            watts.update(zip(fields, read, strict=True))
+        shown = getattr(power, "home_shown_w", None)
+        watts["home_consumption_power"] = float(
+            (power.home_consumption_power if shown is None else shown) or 0.0)
+        return watts
+
     def calculate_energy(
         self, power: PowerReadings,
         power_flows: "Optional[PowerFlows]" = None,
@@ -760,10 +804,12 @@ class EnergyCalculator:
 
         # Integrate power to energy
         energy = EnergyTotals()
+        # (#1177) a dark input books its last live read, not 0 W
+        held_w = self._integral_watts(power, now)
 
         # Solar energy
-        if power.solar_power >= MIN_POWER_THRESHOLD:
-            solar_increment = (power.solar_power * interval_hours) / 1000  # kWh
+        if held_w["solar_power"] >= MIN_POWER_THRESHOLD:
+            solar_increment = (held_w["solar_power"] * interval_hours) / 1000  # kWh
             self._accumulate("solar", today, month_key, year_key, solar_increment)
         # (#556) hardware-counter reconciliation — upward-only correction
         # for cloud-polled power sensors; must run before the read below.
@@ -777,8 +823,8 @@ class EnergyCalculator:
         # fallback and the anchor — but the READ moved below every other
         # category (#628): home is a residual of those categories, so it can
         # only be reconciled once they have been.
-        if power.home_consumption_power >= MIN_POWER_THRESHOLD:
-            home_increment = (power.home_consumption_power * interval_hours) / 1000
+        if held_w["home_consumption_power"] >= MIN_POWER_THRESHOLD:
+            home_increment = (held_w["home_consumption_power"] * interval_hours) / 1000
             self._accumulate("home", today, month_key, year_key, home_increment)
 
         # EV charging. The sunrise/deadline reset lives entirely in the DAY KEY
@@ -836,8 +882,8 @@ class EnergyCalculator:
         energy.yearly_ev = self._get_yearly(EV_CATEGORY, year_key)
 
         # Grid import
-        if power.grid_import_power >= MIN_POWER_THRESHOLD:
-            import_increment = (power.grid_import_power * interval_hours) / 1000
+        if held_w["grid_import_power"] >= MIN_POWER_THRESHOLD:
+            import_increment = (held_w["grid_import_power"] * interval_hours) / 1000
             self._accumulate("grid_import", today, month_key, year_key, import_increment)
             # (#812) split here, in the one booking, when a device is on its
             # own tariff; with none, exactly ``import_increment × rate``
@@ -863,8 +909,8 @@ class EnergyCalculator:
         energy.yearly_grid_import = self._get_yearly("grid_import", year_key)
 
         # Grid export
-        if power.grid_export_power >= MIN_POWER_THRESHOLD:
-            export_increment = (power.grid_export_power * interval_hours) / 1000
+        if held_w["grid_export_power"] >= MIN_POWER_THRESHOLD:
+            export_increment = (held_w["grid_export_power"] * interval_hours) / 1000
             self._accumulate("grid_export", today, month_key, year_key, export_increment)
             self._accumulate_cost("cost_export", today, month_key, year_key, export_increment * self._export_rate)
             # (#871, arc #921) The same kWh counted again when the meter was
@@ -902,8 +948,7 @@ class EnergyCalculator:
         # lifetime total), a restart keeps it (it is an accumulator), and a
         # cycle with no usable reading adds exactly 0 — the fixed value.
         if self._co2_live and self._grid_co2_kg is not None:
-            used_w = max(0.0, float(power.solar_power or 0.0)
-                         - float(power.grid_export_power or 0.0))
+            used_w = max(0.0, held_w["solar_power"] - held_w["grid_export_power"])
             if used_w >= MIN_POWER_THRESHOLD:
                 used_kwh = used_w * interval_hours / 1000
                 self._accumulate(
@@ -920,8 +965,8 @@ class EnergyCalculator:
         energy.yearly_grid_export = self._get_yearly("grid_export", year_key)
 
         # Battery charge
-        if power.battery_charge_power >= MIN_POWER_THRESHOLD:
-            charge_increment = (power.battery_charge_power * interval_hours) / 1000
+        if held_w["battery_charge_power"] >= MIN_POWER_THRESHOLD:
+            charge_increment = (held_w["battery_charge_power"] * interval_hours) / 1000
             self._accumulate("battery_charge", today, month_key, year_key, charge_increment)
             # (#770) …and again, told apart by origin. The flow layer has
             # always known which part came off the roof; it just never
@@ -942,8 +987,8 @@ class EnergyCalculator:
         energy.yearly_battery_charge = self._get_yearly("battery_charge", year_key)
 
         # Battery discharge
-        if power.battery_discharge_power >= MIN_POWER_THRESHOLD:
-            discharge_increment = (power.battery_discharge_power * interval_hours) / 1000
+        if held_w["battery_discharge_power"] >= MIN_POWER_THRESHOLD:
+            discharge_increment = (held_w["battery_discharge_power"] * interval_hours) / 1000
             self._accumulate("battery_discharge", today, month_key, year_key, discharge_increment)
             # (#770) What this discharge actually saved, not what a discharge
             # of free solar would have saved. Drawn from the pool in
@@ -1055,14 +1100,14 @@ class EnergyCalculator:
                  * interval_hours) / 1000
             )
         else:
-            home_incr = (power.home_consumption_power * interval_hours) / 1000 if power.home_consumption_power >= MIN_POWER_THRESHOLD else 0.0
+            home_incr = (held_w["home_consumption_power"] * interval_hours) / 1000 if held_w["home_consumption_power"] >= MIN_POWER_THRESHOLD else 0.0
             # FLEET-READ: legacy fallback path. ``power_flows`` is the
             # preferred input in the v1.7.0+ coordinator pipeline; this
             # branch only fires for the two-arg test fixtures that
             # pre-date the per-cycle ``calculate_power_flows`` call.
             ev_incr = (power.ev_power * interval_hours) / 1000 if power.ev_power >= MIN_POWER_THRESHOLD else 0.0
-            import_incr = (power.grid_import_power * interval_hours) / 1000 if power.grid_import_power >= MIN_POWER_THRESHOLD else 0.0
-            discharge_incr = (power.battery_discharge_power * interval_hours) / 1000 if power.battery_discharge_power >= MIN_POWER_THRESHOLD else 0.0
+            import_incr = (held_w["grid_import_power"] * interval_hours) / 1000 if held_w["grid_import_power"] >= MIN_POWER_THRESHOLD else 0.0
+            discharge_incr = (held_w["battery_discharge_power"] * interval_hours) / 1000 if held_w["battery_discharge_power"] >= MIN_POWER_THRESHOLD else 0.0
             # Solar self-consumed = total consumption minus what came from grid or battery discharge
             solar_self_consumed = max(0.0, (home_incr + ev_incr) - import_incr - discharge_incr)
         if solar_self_consumed > 0.0:
