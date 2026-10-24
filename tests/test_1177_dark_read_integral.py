@@ -263,6 +263,79 @@ class TestTheHouseDoesNotGoDown:
             _kwh(self.PV_W, 360), abs=0.01)
 
 
+@pytest.mark.unit
+class TestTheAutumnClockChange:
+    """(#1177 review) 25.10.2026 03:00 CEST is 02:00 CET. Aged on the local
+    clock, a read from 02:57 CEST looked 57 minutes in the future and held
+    a whole hour of import that never flowed."""
+
+    def test_the_hold_does_not_come_back_when_the_clock_goes_back(self):
+        from zoneinfo import ZoneInfo
+        from homeassistant.util import dt as dt_util
+        before = dt_util.get_default_time_zone()
+        dt_util.set_default_time_zone(ZoneInfo("Europe/Zurich"))
+        try:
+            with freeze_time("2026-10-25 00:57:00") as clock:   # 02:57 CEST
+                calc, _ = _calc()
+                calc._daily_accumulators.clear()
+                _cycle(calc, grid_power=-3000.0)
+                clock.tick(timedelta(minutes=4))                 # 02:01 CET
+                _cycle(calc, grid_power=0.0, grid_power_unavailable=True)
+                total = sum(v for k, v in calc._daily_accumulators.items()
+                            if k.startswith("grid_import_"))
+        finally:
+            dt_util.set_default_time_zone(before)
+        assert total == pytest.approx(_kwh(3000.0)), "held past the grace"
+
+
+@pytest.mark.unit
+@pytest.mark.usefixtures("clock")
+class TestTheBatteryBooksKeepItsShares:
+    """(#1177 review) A held discharge on 0 W flows was counted as delivered
+    in full — a sale from the pack paid twice (#776)."""
+
+    def _sale(self, calc, *, dark: bool):
+        from custom_components.solar_energy_management.coordinator.types import (
+            PowerFlows,
+        )
+        calc._last_update = None
+        before = calc._daily_cost_accumulators.get(f"cost_batt_savings_{DAY}", 0.0)
+        p = PowerReadings(battery_power=0.0 if dark else -5000.0,
+                          grid_power=0.0 if dark else 4500.0,
+                          battery_power_all_unavailable=dark,
+                          grid_power_unavailable=dark)
+        p.calculate_derived()
+        flows = PowerFlows() if dark else PowerFlows(
+            battery_to_home=500.0, battery_to_grid=4500.0)
+        calc.calculate_energy(p, flows)
+        return calc._daily_cost_accumulators.get(
+            f"cost_batt_savings_{DAY}", 0.0) - before
+
+    def test_a_held_sale_earns_what_the_live_one_did(self):
+        calc, _ = _calc()
+        calc._import_rate = 0.30
+        live = self._sale(calc, dark=False)
+        held = self._sale(calc, dark=True)
+        assert live > 0
+        assert held == pytest.approx(live, rel=0.05)
+
+    def test_a_held_charge_keeps_its_origin_split(self):
+        from custom_components.solar_energy_management.coordinator.types import (
+            PowerFlows,
+        )
+        calc, _ = _calc()
+        for dark in (False, True):
+            calc._last_update = None
+            p = PowerReadings(solar_power=3000.0, battery_power=0.0 if dark else 2500.0,
+                              battery_power_all_unavailable=dark)
+            p.calculate_derived()
+            calc.calculate_energy(
+                p, PowerFlows() if dark else PowerFlows(solar_to_battery=2500.0))
+        assert _row(calc, "battery_charge_solar") == pytest.approx(
+            _row(calc, "battery_charge"))
+        assert _row(calc, "battery_charge") == pytest.approx(_kwh(2500.0, 2))
+
+
 def _w_state(value):
     import homeassistant.util.dt as dt_util
     s = Mock()
@@ -277,7 +350,7 @@ def _w_state(value):
 class TestThroughTheRealReader:
     """The flags are the reader's own, not ones the test hands in: a dark
     inverter through ``SensorReader.read_power`` and the coordinator's home
-    steps (#1047 PROD 04.10 15:25) into the integral."""
+    steps (the #1047 PROD shape, 04.10 15:25) into the integral."""
 
     def test_a_dark_inverter_keeps_its_energy(self):
         from custom_components.solar_energy_management.coordinator.coordinator import (
@@ -286,7 +359,7 @@ class TestThroughTheRealReader:
         from custom_components.solar_energy_management.coordinator.sensor_reader import (
             SensorReader,
         )
-        values = {"sensor.pv": "4596", "sensor.grid": "6", "sensor.bat": "3916"}
+        values = {"sensor.pv": "4596", "sensor.grid": "50", "sensor.bat": "3916"}
         hass = Mock()
         hass.states.get = lambda eid: (
             _w_state(values[eid]) if eid in values else None)
@@ -317,7 +390,20 @@ class TestThroughTheRealReader:
         assert dark.solar_power_unavailable and dark.solar_power == 0.0
         assert _row(calc, "solar") == pytest.approx(_kwh(4596.0, 2))
         assert _row(calc, "battery_charge") == pytest.approx(_kwh(3916.0, 2))
-        assert _row(calc, "home") == pytest.approx(_kwh(674.0, 2), abs=1e-6)
+        assert _row(calc, "home") == pytest.approx(_kwh(630.0, 2), abs=1e-6)
+        # PROD 04.10 15:26: the battery goes dark while it charges — raw home
+        # is the whole solar output, the shown home is the house
+        steering = []
+        for n in range(3, 7):
+            dark = cycle(**{"sensor.pv": "4596", "sensor.bat": "unavailable",
+                            "sensor.grid": "unavailable"})
+            assert dark.battery_power_all_unavailable and dark.grid_power_unavailable
+            assert dark.home_shown_w == pytest.approx(630.0)
+            steering.append(dark.home_consumption_power)
+            assert _row(calc, "battery_charge") == pytest.approx(_kwh(3916.0, n))
+            assert _row(calc, "grid_export") == pytest.approx(_kwh(50.0, n))
+            assert _row(calc, "home") == pytest.approx(_kwh(630.0, n), abs=1e-6)
+        assert max(steering) > 4000, "the case never reached the raw home"
 
 
 @pytest.mark.unit

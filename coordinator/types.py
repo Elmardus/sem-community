@@ -246,7 +246,8 @@ class PowerReadings:
     #: home is built from that input's 0.0 fallback, so the coordinator
     #: shows the last home value instead (``_hold_shown_home``). ``None``
     #: means "show ``home_consumption_power``". Never read by steering —
-    #: decide, budgets and energy totals keep ``home_consumption_power``.
+    #: decide and budgets keep ``home_consumption_power``. The daily home
+    #: row books this one while it is set (#1177).
     home_shown_w: Optional[float] = None
     # (#910) True for a cycle in which a charger's power read was a blink
     # held at its last accepted value (status still charging).
