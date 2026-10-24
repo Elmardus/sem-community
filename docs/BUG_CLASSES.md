@@ -129,8 +129,8 @@ not changed); the #1065 hold lives in memory, so a restart between sunrise and t
 shows the dusk value again, and the W3 Repair text at dawn still says the stale value is used while
 a held report reads 0 W; multi-unit partial-availability sums silently under-report
 (audit W6; the lifetime seed's half closed by #1043, see class 52) — one dark unit of N is still 0 W
-in home AND in the published total; the flow figures and the daily home energy still integrate the
-dark cycle's raw home (they share the steering figure; the #771 partition check ties them together);
+in home AND in the published total; the flow figures still integrate the dark cycle's raw inputs
+(the daily rows hold them for the grace — #1177, class 58);
 the steering home itself still reads a dark battery as idle (safe for the EV budget — the meter
 answers — but the discharge limit home/n is wide for the gap; holding it needs the battery charge
 held beside it); an EV power dropout is not in the dark tally at all (its own #910 hold + the 2-cycle
@@ -2831,6 +2831,22 @@ the guard charge the house's held draw against the allowance. **Guard:**
 `tests/test_906_blind_meter_slot_guard.py`. **Sweep question:** for every fallback value, ask which
 DIRECTION it errs in — does the default open a gate, widen a budget, or lower a floor? Refs #906 #875
 #902 #818.
+**Round 2 — the daily rows (#1177, PROD 23.10):** the energy integrator booked a dark read as 0 W. The
+modbus inverter was dark 26 % of a noon hour; the solar row lost that share (9.86 kWh against 14.78 kWh
+of held power that day). The battery and grid rows follow their meters, so they kept it, and home — the
+balance — went DOWN in 23 hours on 15 days (0.5–2.4 kWh). The hybrid's AC yield counter could not fix
+solar (it trails PV while the pack charges, class 28). **Closure:** `EnergyCalculator._integral_watts` —
+a dark solar, grid or battery input (`*_unavailable`, every read dark) books its last live read for
+`SENSOR_DARK_READ_GRACE_S`, the window its entity shows it, aged in UTC from the live read (a local
+clock goes back an hour in autumn: the review measured a whole hour of import held); home books the
+house SEM shows (`home_shown_w`, #1047); a held battery keeps its live flow shares
+(`_battery_flows`), or a held sale is paid twice (#776). Steering never reads these. **Guard:**
+`tests/test_1177_dark_read_integral.py` — each input, the grace edge, no renewal, a live 0, never-read,
+the clock change, the cost, the battery's shares, the PROD hour (home never goes down; solar is the
+PV), the real reader's flags, and an AST pin that `calculate_energy` reads none of the six fields off
+`power`. **Left open:** past the grace a dark input still books 0 W (what it read is not known); the
+daily flows and the solar savings built on them; one dark unit of N, and one dark half of a split
+grid pair (class 5 W6).
 
 ### 59. A limit smoothed like a preference — GUARDED
 **Symptom:** the guard says 10 A, the wire carries 14 → 12 → 12 → 10 over two minutes. **Root
