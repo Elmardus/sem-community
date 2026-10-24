@@ -203,7 +203,8 @@ class TestAcrossARestart:
             await real(domain, service, data, **kw)
         hass.services.async_call = spy
         await _charge(_generic(hass, ChargeTargetHold(hass, store, configured=(TARGET,))))
-        assert seen[0]["entities"][TARGET] == {"prior": 100.0, "sent": 60.0, "held": True}
+        assert seen[0]["entities"][TARGET] == {
+            "prior": 100.0, "sent": [60.0], "held": True, "pending": False}
 
     async def test_without_the_record_the_bug_comes_back(self):
         """Vacuity check: a hold with NO store saves SEM's own 60 after the
@@ -228,8 +229,8 @@ class TestAcrossARestart:
         hass, store = _Hass("100"), _Store()
         await _charge(_generic(hass, ChargeTargetHold(hass, store, configured=(TARGET,))))
         assert hass.read(TARGET) == "60"
-        hold = ChargeTargetHold(hass, store, configured=("number.other",))
-        await hold.put_back_owed()
+        hold = _hold(hass, store, configured=("number.other",))
+        await hold.settle()
         assert hass.read(TARGET) == "100"
 
 
@@ -260,9 +261,10 @@ class TestNeverWriteWhatCannotBePutBack:
 
 
 @pytest.mark.asyncio
-class TestOwedPutBack:
+class TestThePutBackLands:
+    """A put-back is done when a read shows it, not when it is sent."""
 
-    async def test_unavailable_at_the_stop_is_owed_not_lost(self):
+    async def test_unavailable_at_the_stop_goes_once_it_can_be_read(self):
         hass = _Hass("100")
         hold = _hold(hass)
         adapter = _generic(hass, hold)
@@ -272,20 +274,18 @@ class TestOwedPutBack:
         # the stop itself landed: it is not sent again for the target
         assert status.status is ChargeCommandStatus.IDLE
         assert hass.target_writes() == [60]
-        assert hold.snapshot()[TARGET]["owed"] is True
-        # back, but inside the retry interval: nothing yet
-        hass.set(TARGET, "60")
-        hold.now[0] = 59.0
-        await hold.put_back_owed()
+        assert hold.snapshot()[TARGET]["pending"] is True
+        await hold.settle()                         # still unreadable
         assert hass.target_writes() == [60]
-        hold.now[0] = 60.0
-        await hold.put_back_owed()
+        hass.set(TARGET, "60")
+        await hold.settle()                         # never sent: goes at once
         assert hass.target_writes() == [60, 100]
+        await hold.settle()                         # reads 100: done
         assert hold.snapshot() == {}
-        await hold.put_back_owed()
+        await hold.settle()
         assert hass.target_writes() == [60, 100]
 
-    async def test_a_raising_put_back_is_owed(self):
+    async def test_a_raising_put_back_is_sent_again(self):
         hass = _Hass("100")
         hold = _hold(hass)
         adapter = _generic(hass, hold)
@@ -293,23 +293,75 @@ class TestOwedPutBack:
         hass.raise_on = ("number", "set_value")
         status = await adapter.stop_forced_charge()
         assert status.status is ChargeCommandStatus.IDLE
-        assert hold.snapshot()[TARGET]["owed"] is True
+        assert hold.snapshot()[TARGET]["pending"] is True
         hass.raise_on = None
-        hold.now[0] = 60.0
-        await hold.put_back_owed()
+        hold.now[0] = ChargeTargetHold.RETRY_S - 1
+        await hold.settle()
+        assert hass.read(TARGET) == "60"
+        hold.now[0] = ChargeTargetHold.RETRY_S
+        await hold.settle()
         assert hass.read(TARGET) == "100"
 
-    async def test_a_new_charge_takes_an_owed_number_over(self):
+    async def test_the_put_back_is_sent_blocking(self):
+        """Non-blocking, a refused write is only in HA's log."""
         hass = _Hass("100")
-        hold = ChargeTargetHold(hass, configured=(TARGET,))
+        seen = []
+        real = hass._call
+
+        async def spy(domain, service, data, **kw):
+            seen.append((data.get("value"), kw.get("blocking")))
+            await real(domain, service, data, **kw)
+        hass.services.async_call = spy
+        adapter = _generic(hass)
+        await _charge(adapter)
+        await adapter.stop_forced_charge()
+        assert (100, True) in seen
+
+    async def test_a_dropped_put_back_is_sent_again_then_said(self, caplog):
+        """The number never takes it (a GoodWe UDP write lost). Sent
+        again ``MAX_TRIES`` times, ``RETRY_S`` apart, then a warning."""
+        hass = _Hass("100")
+        hold = _hold(hass)
+        adapter = _generic(hass, hold)
+        await _charge(adapter)
+        hass.lag = True                             # writes go, never read
+        await adapter.stop_forced_charge()
+        for i in range(1, 6):
+            hold.now[0] = i * ChargeTargetHold.RETRY_S
+            await hold.settle()
+        assert hass.target_writes() == [60] + [100] * ChargeTargetHold.MAX_TRIES
+        assert "set it back by hand" in caplog.text
+
+    async def test_a_new_charge_takes_a_pending_number_over(self):
+        hass = _Hass("100")
+        hold = _hold(hass)
         adapter = _generic(hass, hold)
         await _charge(adapter)
         hass.set(TARGET, "unavailable")
         await adapter.stop_forced_charge()
         hass.set(TARGET, "60")
         await _charge(adapter, 70.0)               # the next block
-        assert hold.snapshot()[TARGET] == {"saved": 100.0, "sent": 70.0, "owed": False}
+        snap = hold.snapshot()[TARGET]
+        assert (snap["saved"], snap["held"], snap["pending"]) == (100.0, True, False)
         await adapter.stop_forced_charge()
+        assert hass.read(TARGET) == "100"
+
+    async def test_a_failed_start_gives_the_value_back_after_the_block(self):
+        """The switch call raised after the target went out. No charge, so
+        no stop will come: the value goes back on the next cycle without a
+        forced charge — not during the block, where it would flip."""
+        hass = _Hass("100")
+        hold = _hold(hass)
+        adapter = _generic(hass, hold)
+        hass.raise_on = ("switch", "turn_on")
+        status = await _charge(adapter)
+        assert status.status is ChargeCommandStatus.FAILED
+        assert hass.read(TARGET) == "60"
+        assert hold.snapshot()[TARGET]["pending"] is True
+        await _charge(adapter)                      # the block retries
+        assert hass.target_writes() == [60, 60]
+        hass.raise_on = None
+        await hold.settle()                         # out of the block
         assert hass.read(TARGET) == "100"
 
 
@@ -330,6 +382,51 @@ class TestOwnEcho:
         await adapter.stop_forced_charge()
         assert hass.read(TARGET) == "100"
 
+    async def test_every_value_sem_wrote_is_its_own_not_only_the_last(self):
+        """Review, HIGH: the target rose 60 → 70 in one charge. A restart
+        before the number read back the put-back: it still shows 60."""
+        hass, store = _Hass("100"), _Store()
+        first = _generic(hass, _hold(hass, store))
+        await _charge(first, 60.0)
+        await _charge(first, 70.0)
+        hass.lag = True
+        await first.stop_forced_charge()
+        hass.set(TARGET, "60")                      # an old read
+        hass.lag = False
+        second = _generic(hass, _hold(hass, store))
+        await _charge(second, 50.0)
+        await second.stop_forced_charge()
+        assert hass.read(TARGET) == "100"
+
+    async def test_two_packs_asking_two_values(self):
+        hass = _Hass("90")                          # the user's limit
+        hold = _hold(hass)
+        b1, b2 = _generic(hass, hold), _generic(hass, hold)
+        await _charge(b1, 100.0)                    # a manual Force charge
+        await _charge(b2, 60.0)                     # the plan
+        hass.lag = True
+        await b1.stop_forced_charge()
+        await b2.stop_forced_charge()
+        hass.set(TARGET, "100")
+        hass.lag = False
+        await _charge(b2, 60.0)                     # reads b1's 100: SEM's
+        await b2.stop_forced_charge()
+        assert hass.read(TARGET) == "90"
+
+    async def test_an_inverter_that_rounds_sems_value_still_shows_sems(self):
+        hass = _Hass("100")
+        hass._states[TARGET].attributes = {"step": 5}
+        adapter = _generic(hass)
+        await _charge(adapter, 62.0)
+        hass.set(TARGET, "60")                      # the inverter's step
+        hass._states[TARGET].attributes = {"step": 5}
+        hass.lag = True
+        await adapter.stop_forced_charge()
+        hass.lag = False
+        await _charge(adapter, 62.0)
+        await adapter.stop_forced_charge()
+        assert hass.read(TARGET) == "100"
+
     async def test_a_value_the_user_changed_is_saved(self):
         hass = _Hass("100")
         adapter = _generic(hass)
@@ -340,6 +437,33 @@ class TestOwnEcho:
         await adapter.stop_forced_charge()
         assert hass.read(TARGET) == "90"
 
+    async def test_once_the_put_back_landed_sems_old_value_is_the_users(self):
+        """Review, MEDIUM: SEM charged to 80. Days later the user sets 80
+        on purpose. That is their value now, not SEM's echo."""
+        hass = _Hass("100")
+        hold = _hold(hass)
+        adapter = _generic(hass, hold)
+        await _charge(adapter, 80.0)
+        await adapter.stop_forced_charge()
+        await hold.settle()                         # reads 100: landed
+        hass.set(TARGET, "80")                      # the user's choice
+        await _charge(adapter, 60.0)
+        await adapter.stop_forced_charge()
+        assert hass.read(TARGET) == "80"
+
+    async def test_a_user_value_while_pending_ends_it(self):
+        hass = _Hass("100")
+        hold = _hold(hass)
+        adapter = _generic(hass, hold)
+        await _charge(adapter)
+        hass.lag = True
+        await adapter.stop_forced_charge()
+        hass.set(TARGET, "95")                      # set by hand meanwhile
+        hold.now[0] = 10 * ChargeTargetHold.RETRY_S
+        await hold.settle()
+        assert hass.read(TARGET) == "95"
+        assert hold.snapshot() == {}
+
 
 @pytest.mark.asyncio
 class TestTwoPacksOneNumber:
@@ -348,7 +472,7 @@ class TestTwoPacksOneNumber:
         """No per-battery target list: two packs behind one inverter write
         the same number. One hold for the entry, keyed by the number."""
         hass = _Hass("100")
-        hold = ChargeTargetHold(hass, configured=(TARGET,))
+        hold = _hold(hass)
         b1, b2 = _generic(hass, hold), _generic(hass, hold)
         await _charge(b1)
         await _charge(b2)                           # reads b1's 60
@@ -368,7 +492,58 @@ class TestTwoPacksOneNumber:
 
 
 @pytest.mark.asyncio
-class TestTheCycleRetriesAnOwedPutBack:
+class TestTheRecordFailsClosed:
+
+    async def test_a_record_that_cannot_be_read_means_no_target_write(self):
+        class _Broken(_Store):
+            async def async_load(self):
+                raise ValueError("corrupt")
+        hass = _Hass("60")                          # maybe SEM's own
+        adapter = _generic(hass, _hold(hass, _Broken()))
+        status = await _charge(adapter, 70.0)
+        assert status.status is ChargeCommandStatus.CHARGING
+        assert hass.target_writes() == []
+
+    async def test_a_record_that_cannot_be_saved_means_no_target_write(self):
+        class _Full(_Store):
+            async def async_save(self, data):
+                raise OSError("disk full")
+        hass = _Hass("100")
+        hold = _hold(hass, _Full())
+        adapter = _generic(hass, hold)
+        await _charge(adapter)
+        assert hass.target_writes() == []
+        assert hold.snapshot() == {}
+
+    async def test_a_record_with_a_lost_value_writes_nothing_over_sems_own(self):
+        hass, store = _Hass("60"), _Store()
+        store.raw = json.dumps({"entities": {TARGET: {
+            "prior": None, "sent": [60], "held": True, "pending": False}}})
+        adapter = _generic(hass, _hold(hass, store))
+        await adapter.stop_forced_charge()          # nothing known to put back
+        await _charge(adapter)
+        assert hass.target_writes() == []
+
+    async def test_saves_only_when_something_new_happens(self):
+        """Review, MEDIUM: two packs asking 100 and 60 saved the record on
+        every cycle, all night."""
+        class _Counting(_Store):
+            saves = 0
+
+            async def async_save(self, data):
+                _Counting.saves += 1
+                await super().async_save(data)
+        hass = _Hass("100")
+        hold = _hold(hass, _Counting())
+        b1, b2 = _generic(hass, hold), _generic(hass, hold)
+        for _ in range(50):
+            await _charge(b1, 100.0)
+            await _charge(b2, 60.0)
+        assert _Counting.saves == 2                 # the save, then 60 joins
+
+
+@pytest.mark.asyncio
+class TestTheCycleSettlesAPutBack:
 
     def _adapter(self, hass, hold):
         return GenericBatteryAdapter(hass, {
@@ -377,7 +552,7 @@ class TestTheCycleRetriesAnOwedPutBack:
             "charge_target_hold": hold,
         })
 
-    async def _owed(self):
+    async def _pending(self):
         hass = _Hass("100")
         hold = _hold(hass)
         adapter = self._adapter(hass, hold)
@@ -389,28 +564,54 @@ class TestTheCycleRetriesAnOwedPutBack:
         return hass, hold, adapter
 
     @pytest.mark.parametrize("intent", [
-        BatteryIntent.NORMAL, BatteryIntent.STOP_FORCE_CHARGE, BatteryIntent.OFF])
+        BatteryIntent.NORMAL, BatteryIntent.STOP_FORCE_CHARGE, BatteryIntent.OFF,
+        BatteryIntent.LIMIT_DISCHARGE])
     async def test_a_cycle_without_a_charge_puts_it_back(self, intent):
-        hass, hold, adapter = await self._owed()
-        hold.now[0] = 60.0
-        await actuate_battery(BatteryDecision(battery_id="b1", intent=intent), adapter)
+        hass, hold, adapter = await self._pending()
+        await actuate_battery(BatteryDecision(battery_id="b1", intent=intent,
+                                              discharge_limit_w=1000.0), adapter)
         assert hass.read(TARGET) == "100"
 
     async def test_observer_writes_nothing(self):
-        hass, hold, adapter = await self._owed()
-        hold.now[0] = 60.0
+        hass, hold, adapter = await self._pending()
         await actuate_battery(BatteryDecision(battery_id="b1", intent=BatteryIntent.NORMAL),
                               adapter, observer=True)
         assert hass.read(TARGET) == "60"
 
     async def test_a_charge_cycle_takes_the_number_over_instead(self):
-        hass, hold, adapter = await self._owed()
-        hold.now[0] = 60.0
+        hass, hold, adapter = await self._pending()
         await actuate_battery(BatteryDecision(
             battery_id="b1", intent=BatteryIntent.FORCE_CHARGE, target_soc=60.0,
             charge_power_w=3000.0, duration_min=60), adapter)
         assert hass.target_writes() == [60, 60]
-        assert hold.snapshot()[TARGET]["owed"] is False
+        assert hold.snapshot()[TARGET]["held"] is True
+
+    async def test_the_stop_cycle_turns_the_switch_off_before_the_value_goes(self):
+        hass = _Hass("100")
+        hold = _hold(hass)
+        adapter = self._adapter(hass, hold)
+        await actuate_battery(BatteryDecision(
+            battery_id="b1", intent=BatteryIntent.FORCE_CHARGE, target_soc=60.0,
+            charge_power_w=3000.0, duration_min=60), adapter)
+        await actuate_battery(BatteryDecision(
+            battery_id="b1", intent=BatteryIntent.STOP_FORCE_CHARGE), adapter)
+        off = hass.calls.index(("switch", "turn_off", {"entity_id": SWITCH}))
+        back = hass.calls.index(("number", "set_value",
+                                 {"entity_id": TARGET, "value": 100}))
+        assert off < back
+        assert hass.read(TARGET) == "100"
+
+    async def test_no_switch_no_put_back_of_another_adapters_value(self):
+        """Review, LOW: a GoodWe install on the generic fallback at boot.
+        Its stop with no switch must not hand the value back while the
+        GoodWe charge may still run."""
+        hass, store = _Hass("100"), _Store()
+        await _charge(_goodwe(hass, _hold(hass, store)))
+        fallback = GenericChargeAdapter(hass, {
+            "battery_target_soc_entity": TARGET,
+            "charge_target_hold": _hold(hass, store)})
+        await fallback.stop_forced_charge()
+        assert hass.read(TARGET) == "60"
 
 
 class _FakeStore:

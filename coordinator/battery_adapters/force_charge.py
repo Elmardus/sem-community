@@ -120,14 +120,25 @@ class BatteryChargeAdapter(ABC):
 
     async def _put_target_back(self) -> None:
         """(#1180) The stop's last step: the charge-target number back to
-        the value SEM found. A put-back that cannot go out yet is owed and
-        tried again on a later cycle — the stop itself has landed, so it is
-        not sent again for it. Never raises."""
+        the value SEM found. One that has not landed is checked and sent
+        again on later cycles — the stop itself has landed, so it is not
+        sent again for it. Never raises."""
         try:
             await self.target_hold.put_back(
                 self.config.get("battery_target_soc_entity", ""))
         except Exception:  # noqa: BLE001 — the stop has landed regardless
             _LOGGER.warning("Battery: putting the charge target back failed "
+                            "(#1180)", exc_info=True)
+
+    async def _release_target(self) -> None:
+        """(#1180) A start that failed after the target went out: nothing
+        stops a charge that never started, so the value goes back on the
+        next cycle without a forced charge. Never raises."""
+        try:
+            await self.target_hold.release(
+                self.config.get("battery_target_soc_entity", ""))
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Battery: releasing the charge target failed "
                             "(#1180)", exc_info=True)
 
     @abstractmethod
@@ -333,6 +344,7 @@ class GoodWeChargeAdapter(BatteryChargeAdapter):
             )
         except Exception as exc:
             _LOGGER.error("Failed to start GoodWe forced charge: %s", exc)
+            await self._release_target()
             return ChargeStatus(
                 status=ChargeCommandStatus.FAILED,
                 message=f"Service call failed: {exc}",
@@ -358,7 +370,6 @@ class GoodWeChargeAdapter(BatteryChargeAdapter):
         if not work_mode_entity:
             self._active = False
             self._target_soc = 0.0
-            await self._put_target_back()
             return _say_nothing_to_stop(
                 self, "no inverter_work_mode_entity configured")
 
@@ -450,6 +461,7 @@ class GenericChargeAdapter(BatteryChargeAdapter):
                 message="Force charge switch enabled",
             )
         except Exception as exc:
+            await self._release_target()
             return ChargeStatus(
                 status=ChargeCommandStatus.FAILED,
                 message=f"Failed: {exc}",
@@ -475,7 +487,6 @@ class GenericChargeAdapter(BatteryChargeAdapter):
         if not charge_switch:
             self._active = False
             self._target_soc = 0.0
-            await self._put_target_back()
             return _say_nothing_to_stop(
                 self, "no battery_force_charge_switch configured")
 

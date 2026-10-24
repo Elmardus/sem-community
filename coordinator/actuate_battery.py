@@ -189,16 +189,16 @@ def _note_forced_op(adapter, attr: str, ret, landed_intent, value: bool) -> None
         _set(adapter, "_sem_stop_misses", 0)
 
 
-async def _put_back_owed_target(adapter) -> None:
-    """(#1180) A charge-target value a stop could not put back (the number
-    was unreadable, the call raised) is tried again on a cycle that sends no
-    forced charge — never by re-sending the stop. Never raises."""
+async def _settle_charge_target(adapter) -> None:
+    """(#1180) A charge-target value SEM has to put back and has not seen
+    land is checked — and sent again when due — on a cycle that sends no
+    forced charge, never by re-sending the stop. Never raises."""
     from .battery_adapters.charge_target import ChargeTargetHold
     hold = getattr(getattr(adapter, "_charge_adapter", None), "target_hold", None)
     if not isinstance(hold, ChargeTargetHold):
         return
     try:
-        await hold.put_back_owed()
+        await hold.settle()
     except Exception:  # noqa: BLE001 — a put-back never costs a cycle
         _LOGGER.debug("charge target put-back failed", exc_info=True)
 
@@ -266,6 +266,26 @@ async def actuate_battery(
     controller=None,
     inputs_degraded: bool = False,
 ) -> None:
+    """Apply a per-battery decision through the adapter (see
+    :func:`_dispatch_battery`), then, on a cycle that sends no forced
+    charge, settle a charge target SEM still has to put back (#1180). After
+    the command, so a stop turns the switch off before the value goes back.
+    Never in observer mode."""
+    await _dispatch_battery(decision, adapter, observer=observer,
+                            controller=controller,
+                            inputs_degraded=inputs_degraded)
+    if not observer and decision.intent is not BatteryIntent.FORCE_CHARGE:
+        await _settle_charge_target(adapter)
+
+
+async def _dispatch_battery(
+    decision: "BatteryDecision",
+    adapter: "BatteryControlAdapter",
+    *,
+    observer: bool = False,
+    controller=None,
+    inputs_degraded: bool = False,
+) -> None:
     """Apply a per-battery decision through the adapter.
 
     Args:
@@ -297,9 +317,6 @@ async def actuate_battery(
         record_battery(_log, decision, value_w=_would_w, observer=True)
         _observe(decision, controller=controller)
         return
-
-    if decision.intent is not BatteryIntent.FORCE_CHARGE:
-        await _put_back_owed_target(adapter)   # (#1180)
 
     # (#818) A cycle that cannot see must not flip the EV protection
     # clamp. LIMIT_DISCHARGE engages when solar surplus sits below the
@@ -398,7 +415,7 @@ async def actuate_battery(
     if decision.intent is BatteryIntent.FORCE_CHARGE:
         decision = _calm_capped_charge(decision, adapter)
         if decision is None:
-            await _put_back_owed_target(adapter)   # (#1180) nothing goes out
+            await _settle_charge_target(adapter)   # (#1180) nothing goes out
             return
         if not adapter.supports_forced_charge:
             log_on_change(   # (#762) once per episode, not per cycle
