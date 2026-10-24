@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Two batteries on one discharge limit no longer undo each other's limit** (#1178). The lowest limit holds, unless a battery sells.
 - 🐛 **The battery discharge limit no longer moves with every short burst of home load** (#1173). It goes up only when the load stays higher.
 - 🐛 **Force charge ends on a battery set to stop below 90 %** (#1166). Pick its end-of-charge level in Settings. SEM only reads it.
 - 🐛 **A grid charge puts the battery's charge limit back when it stops** (#1180). A night charge to 60 % no longer leaves it at 60 %.

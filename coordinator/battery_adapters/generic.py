@@ -614,6 +614,8 @@ class GenericBatteryAdapter(BatteryControlAdapter):
 
     async def _apply_discharge_limit(self, watts: float, *,
                                      force: bool = False) -> None:
+        if self._limit_not_mine(watts, force):          # (#1178)
+            return
         if not self._discharge_control_entity:
             self._last_discharge_limit_w = watts
             return

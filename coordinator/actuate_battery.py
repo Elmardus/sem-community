@@ -69,6 +69,19 @@ _POWER_DERIVED_INTENTS = frozenset({
 })
 
 
+def held_on_blind_cycle(decision, adapter, inputs_degraded: bool) -> bool:
+    """(#818) Does this cycle send nothing for ``decision``? A flip between
+    the power-derived pair on a cycle that cannot see is held. (#1178) The
+    shared-limit rule asks it too, so a held battery counts as its last
+    command, not as one it will not send."""
+    return bool(
+        inputs_degraded
+        and decision.intent in _POWER_DERIVED_INTENTS
+        and getattr(adapter, "last_intent", None) in _POWER_DERIVED_INTENTS
+        and decision.intent is not adapter.last_intent
+    )
+
+
 # (#900) The discharge limit follows the load's TREND, not its noise.
 # Under LIMIT_DISCHARGE the value written is the live house load, re-decided
 # every cycle; the adapters' 100 W hysteresis was narrower than a fridge, so
@@ -329,12 +342,7 @@ async def _dispatch_battery(
     # between them. Force charge/discharge, OFF, arbitrage and the
     # scheduler are decided from SOC, the plan or the user's own mode,
     # and pass through a dark cycle untouched.
-    if (
-        inputs_degraded
-        and decision.intent in _POWER_DERIVED_INTENTS
-        and getattr(adapter, "last_intent", None) in _POWER_DERIVED_INTENTS
-        and decision.intent is not adapter.last_intent
-    ):
+    if held_on_blind_cycle(decision, adapter, inputs_degraded):
         log_on_change(
             _LOGGER, f"degraded:{decision.battery_id}", logging.DEBUG,
             "actuate_battery(%s): inputs degraded — holding %s, not "
