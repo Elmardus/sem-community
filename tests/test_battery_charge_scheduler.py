@@ -242,6 +242,8 @@ class TestGoodWeAdapter:
 
     @pytest.mark.asyncio
     async def test_start_forced_charge(self, mock_hass, goodwe_config):
+        # (#1180) the target is written only when its value can be read
+        mock_hass.states.get.return_value = MagicMock(state="100")
         adapter = GoodWeChargeAdapter(mock_hass, goodwe_config)
         cmd = ChargeCommand(target_soc=75.0, max_power_w=4000)
 
