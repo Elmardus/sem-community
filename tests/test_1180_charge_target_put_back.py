@@ -50,6 +50,9 @@ class _Hass:
         self._states = {TARGET: SimpleNamespace(state=target, attributes={})}
         self.calls: list[tuple] = []
         self.lag = False
+        #: non-blocking writes wait in ``queued`` until ``flush()``
+        self.delay = False
+        self.queued: list[tuple] = []
         self.raise_on = None
         self.states = SimpleNamespace(get=self._states.get)
         self.services = SimpleNamespace(async_call=self._call)
@@ -60,14 +63,26 @@ class _Hass:
     def read(self, entity_id):
         return self._states[entity_id].state
 
-    async def _call(self, domain, service, data, **_kw):
+    async def _call(self, domain, service, data, **kw):
         if self.raise_on == (domain, service):
             raise RuntimeError("bus timeout")
         self.calls.append((domain, service, dict(data)))
+        if service == "set_value" and self.delay and not kw.get("blocking"):
+            self.queued.append(dict(data))
+            return
+        self._take(data)
+
+    def _take(self, data):
         ent = data.get("entity_id")
-        if (service == "set_value" and not self.lag and ent in self._states
-                and self._states[ent].state not in ("unavailable", "unknown")):
+        if (not self.lag and ent in self._states
+                and self._states[ent].state not in ("unavailable", "unknown")
+                and "value" in data):
             self.set(ent, data["value"])
+
+    def flush(self):
+        for data in self.queued:
+            self._take(data)
+        self.queued = []
 
     def target_writes(self, entity_id=TARGET):
         return [c[2]["value"] for c in self.calls
@@ -216,13 +231,34 @@ class TestAcrossARestart:
         await second.stop_forced_charge()
         assert hass.read(TARGET) == "60"
 
-    async def test_a_damaged_record_is_ignored(self):
+    @pytest.mark.parametrize("raw", [
+        {"entities": {TARGET: "junk"}}, {"entities": ["junk"]}, ["junk"]])
+    async def test_a_damaged_record_means_no_target_write(self, raw):
+        """It may have held SEM's 60: the number cannot be trusted."""
+        hass, store = _Hass("60"), _Store()
+        store.raw = json.dumps(raw)
+        adapter = _generic(hass, _hold(hass, store))
+        status = await _charge(adapter, 70.0)
+        assert status.status is ChargeCommandStatus.CHARGING
+        assert hass.target_writes() == []
+
+    async def test_an_empty_record_is_no_record(self):
         hass, store = _Hass("100"), _Store()
-        store.raw = json.dumps({"entities": {TARGET: "junk"}, "x": 1})
-        adapter = _generic(hass, ChargeTargetHold(hass, store, configured=(TARGET,)))
+        store.raw = json.dumps({"entities": {}})
+        adapter = _generic(hass, _hold(hass, store))
         await _charge(adapter)
         await adapter.stop_forced_charge()
-        assert hass.read(TARGET) == "100"
+        assert hass.target_writes() == [60, 100]
+
+    async def test_a_value_the_user_set_while_sem_was_down_is_kept(self):
+        """Review 2: held at the restart, the user moved it meanwhile."""
+        hass, store = _Hass("100"), _Store()
+        await _charge(_generic(hass, _hold(hass, store)))
+        hass.set(TARGET, "90")                      # set by hand, SEM down
+        second = _generic(hass, _hold(hass, store))
+        await _charge(second)
+        await second.stop_forced_charge()
+        assert hass.read(TARGET) == "90"
 
     async def test_a_target_setting_that_moved_gets_its_value_back(self):
         """The user repointed the target while SEM's 60 sat on the old one."""
@@ -361,8 +397,44 @@ class TestThePutBackLands:
         await _charge(adapter)                      # the block retries
         assert hass.target_writes() == [60, 60]
         hass.raise_on = None
-        await hold.settle()                         # out of the block
+        await hold.settle()                         # out of the block: waits
+        assert hass.read(TARGET) == "60"
+        hold.now[0] = ChargeTargetHold.RETRY_S
+        await hold.settle()
         assert hass.read(TARGET) == "100"
+
+    async def test_a_read_from_before_the_write_does_not_end_a_failed_start(self):
+        """Review 2, MEDIUM: the target write is non-blocking. Right after a
+        failed start the number still reads 100 — from before SEM's 60
+        lands. That read must not end it: SEM's 60 would then stay, and the
+        next start would save it as the user's."""
+        hass = _Hass("100")
+        hass.delay = True
+        hold = _hold(hass)
+        adapter = _generic(hass, hold)
+        hass.raise_on = ("switch", "turn_on")
+        await _charge(adapter)
+        hass.raise_on = None
+        await hold.settle()                         # reads 100: not proof
+        hass.flush()                                # SEM's 60 lands
+        hold.now[0] = ChargeTargetHold.RETRY_S
+        await hold.settle()                         # sent once, blocking
+        await hold.settle()                         # reads 100: landed
+        assert hass.read(TARGET) == "100"
+        assert hold.snapshot() == {}
+
+    async def test_a_failing_pack_and_a_normal_pack_do_not_flip_the_number(self):
+        """Review 2: b1's switch fails all block, b2 runs NORMAL beside it.
+        b2's cycle must not put the value back between b1's retries."""
+        hass = _Hass("100")
+        hold = _hold(hass)
+        b1 = _generic(hass, hold)
+        hass.raise_on = ("switch", "turn_on")
+        for i in range(10):
+            hold.now[0] = i * 10.0
+            await _charge(b1)
+            await hold.settle()                     # b2's NORMAL cycle
+        assert hass.target_writes() == [60] * 10
 
 
 @pytest.mark.asyncio
@@ -515,13 +587,18 @@ class TestTheRecordFailsClosed:
         assert hass.target_writes() == []
         assert hold.snapshot() == {}
 
-    async def test_a_record_with_a_lost_value_writes_nothing_over_sems_own(self):
+    @pytest.mark.parametrize("stop_first", [True, False])
+    async def test_a_record_with_a_lost_value_writes_nothing_over_sems_own(
+            self, stop_first):
         hass, store = _Hass("60"), _Store()
         store.raw = json.dumps({"entities": {TARGET: {
             "prior": None, "sent": [60], "held": True, "pending": False}}})
-        adapter = _generic(hass, _hold(hass, store))
-        await adapter.stop_forced_charge()          # nothing known to put back
-        await _charge(adapter)
+        hold = _hold(hass, store)
+        adapter = _generic(hass, hold)
+        if stop_first:
+            await adapter.stop_forced_charge()      # nothing known to put back
+            await hold.settle()
+        await _charge(adapter, 70.0)
         assert hass.target_writes() == []
 
     async def test_saves_only_when_something_new_happens(self):
@@ -660,7 +737,7 @@ class TestCoordinatorWiring:
         from pathlib import Path
         src = (Path(__file__).resolve().parent.parent
                / "coordinator" / "coordinator.py").read_text(encoding="utf-8")
-        bad = []
+        bad, found = [], 0
         for n in ast.walk(ast.parse(src)):
             if (isinstance(n, ast.Call) and getattr(n.func, "id", "") == "adapter_for"
                     and len(n.args) == 2):
@@ -668,8 +745,10 @@ class TestCoordinatorWiring:
                 ok = (isinstance(arg, ast.Name) and arg.id == "_pbc") or (
                     isinstance(arg, ast.Call)
                     and getattr(arg.func, "attr", "") == "_battery_adapter_context")
+                found += 1
                 if not ok:
                     bad.append(n.lineno)
+        assert found >= 2, "the battery adapter builds were not found"
         assert not bad, f"battery adapter built without its context at {bad}"
 
     def test_the_record_goes_on_removal(self):

@@ -63,6 +63,8 @@ class _Target:
     #: put-backs sent while pending, and when the last one went
     tries: int = 0
     tried_at: Optional[float] = None
+    #: held in the last lifetime: read again before SEM writes over it
+    adopted: bool = False
 
 
 def _as_number(raw) -> Optional[float]:
@@ -87,6 +89,8 @@ class ChargeTargetHold:
     RETRY_S: float = 300.0
     #: …and no more often than this, then SEM says so and stops
     MAX_TRIES: int = 3
+    #: the longest a put-back may hold the cycle
+    SEND_TIMEOUT_S: float = 10.0
 
     def __init__(self, hass, store: Any = None,
                  configured: Iterable[str] = ()) -> None:
@@ -122,7 +126,7 @@ class ChargeTargetHold:
                           "(#1180)", entity_id)
                 return False
             t = self._targets.get(entity_id)
-            new = t if t is not None and t.held else None
+            new = t if t is not None and t.held and not t.adopted else None
             if new is None:
                 read = self._read(entity_id)
                 if read is None:
@@ -185,20 +189,22 @@ class ChargeTargetHold:
             await self._adopt()
             t = self._targets.get(str(entity_id or ""))
             if t is not None and t.held:
-                t.held, t.pending, t.tries = False, True, 0
+                t.held, t.pending, t.tries, t.tried_at = False, True, 0, None
                 await self._send_back(str(entity_id), t)
                 await self._save()
 
     async def release(self, entity_id: str) -> None:
         """A start that failed after the target went out: nothing charges,
-        so the value goes back — on the next cycle with no forced charge,
-        not now, or a switch that keeps failing would flip the number on
-        every cycle of the block."""
+        so the value goes back — ``RETRY_S`` later on a cycle with no forced
+        charge, not now: a switch that keeps failing would flip the number
+        on every cycle of the block (the block's own retries take it over
+        again and restart the wait)."""
         async with self._lock:
             await self._adopt()
             t = self._targets.get(str(entity_id or ""))
             if t is not None and t.held:
-                t.held, t.pending, t.tries, t.tried_at = False, True, 0, None
+                t.held, t.pending, t.tries = False, True, 0
+                t.tried_at = self._clock()
                 await self._save()
 
     async def settle(self) -> None:
@@ -215,23 +221,28 @@ class ChargeTargetHold:
                     continue                    # unreadable: wait, send nothing
                 tol = self._tol(entity_id)
                 ours = any(abs(read - v) < tol for v in t.sent)
-                if t.prior is None or abs(read - t.prior) < tol or not ours:
-                    # landed — or the user set a value of their own
+                at_prior = t.prior is not None and abs(read - t.prior) < tol
+                if (not ours and not at_prior) or (t.tries and at_prior):
+                    # the user set a value of their own — or a put-back that
+                    # went out reads back. A put-back never sent is sent
+                    # once whatever the read says: it may predate SEM's write.
                     del self._targets[entity_id]
                     changed = True
                     self._say(entity_id, logging.INFO,
                               "Battery: %s reads %s — SEM's charge target is "
                               "gone (#1180)", entity_id, read)
                     continue
+                if t.prior is None:
+                    continue                    # nothing known to put back
                 if t.tries >= self.MAX_TRIES:
                     self._say(entity_id, logging.WARNING,
                               "Battery: %s still reads SEM's %s after %d "
                               "put-backs to %s — set it back by hand (#1180)",
                               entity_id, read, t.tries, t.prior)
                     continue
-                if (t.tries and t.tried_at is not None
+                if (t.tried_at is not None
                         and self._clock() - t.tried_at < self.RETRY_S):
-                    continue
+                    continue                    # sent, or released, too lately
                 await self._send_back(entity_id, t)
                 changed = True
             if changed:
@@ -264,12 +275,14 @@ class ChargeTargetHold:
         t.tries += 1
         t.tried_at = self._clock()
         try:
-            # blocking: a refusal must reach SEM, not only HA's log
-            await self._hass.services.async_call(
-                "number", "set_value",
-                {"entity_id": entity_id, "value": _wire(t.prior)},
-                blocking=True,
-            )
+            # blocking: a refusal must reach SEM, not only HA's log — and
+            # bounded, so a device that never answers cannot hold the cycle
+            async with asyncio.timeout(self.SEND_TIMEOUT_S):
+                await self._hass.services.async_call(
+                    "number", "set_value",
+                    {"entity_id": entity_id, "value": _wire(t.prior)},
+                    blocking=True,
+                )
         except Exception as exc:  # noqa: BLE001 — tried again, never fatal
             self._say(entity_id, logging.WARNING,
                       "Battery: putting %s back to %s failed (%s) — SEM "
@@ -312,11 +325,18 @@ class ChargeTargetHold:
                             "wrote cannot be read (#1180)", exc_info=True)
             self._blind = True
             return
+        if record is None:
+            return
         entities = record.get("entities") if isinstance(record, dict) else None
-        if not isinstance(entities, dict):
+        if not isinstance(entities, dict) or not all(
+                isinstance(v, dict) for v in entities.values()):
+            # a record of another shape says nothing SEM can trust
+            _LOGGER.warning("Battery: SEM's record of the charge targets it "
+                            "wrote is damaged (#1180)")
+            self._blind = True
             return
         for entity_id, raw in entities.items():
-            if not isinstance(raw, dict) or not entity_id:
+            if not entity_id:
                 continue
             sent = raw.get("sent")
             t = _Target(
@@ -330,6 +350,10 @@ class ChargeTargetHold:
             if t.held and str(entity_id) not in self._configured:
                 # no longer SEM's target setting: hand it back
                 t.held, t.pending = False, True
+            # read again before SEM writes over it: the user may have set it
+            # while SEM was down, or its value may be lost (then SEM's own
+            # value is refused, not saved)
+            t.adopted = t.held
             self._targets[str(entity_id)] = t
             _LOGGER.info(
                 "Battery: %s may still carry SEM's charge target %s — %s "
