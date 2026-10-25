@@ -232,12 +232,19 @@ class SEMTabHeader extends SEMLitBase {
         ];
         if (tab === 'config') {
             const t = (k) => _t(k, this._hass);
+            // The key reads this on every hass update: test the cheap prefix first.
             const chargers = Object.keys(this._hass?.states || {})
-                .filter(e => e.match(/^number\.sem_charger_.+_minimum_current$/)).length;
-            const hp = this._hass?.states[`${this._prefix}heat_pump_registered`]?.state === 'on';
+                .filter(e => e.startsWith('number.sem_charger_')
+                    && /^number\.sem_charger_.+_minimum_current$/.test(e)).length;
+            // (#1198) A binary sensor (#437), so not under the sensor. prefix:
+            // read there, this always said Off. No entity means no heat pump
+            // module, so Off; an entity that is out is the dash.
+            const hpState = this._hass?.states[
+                this._prefix.replace(/^sensor\./, 'binary_sensor.') + 'heat_pump_registered']?.state;
             return [
                 String(chargers),
-                hp ? t('on') : t('off'),
+                hpState === 'on' ? t('on')
+                    : (hpState === undefined || hpState === 'off') ? t('off') : MISSING,
                 socDisplay(this._getState('battery_soc')).label,
             ];
         }

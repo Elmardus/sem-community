@@ -120,10 +120,10 @@ for (const state of ['unavailable', 'unknown', 'n/a']) {
             const figures = tab === 'home'
                 ? [words(text(el._renderHomeHero()))]
                 : el._getStatValues();
-            for (const f of figures) {
-                // The Config tab counts charger entities and names the heat
-                // pump; neither is a sensor reading.
-                if (tab === 'config' && f !== figures[2]) continue;
+            for (const [i, f] of figures.entries()) {
+                // The Config tab's first figure counts charger entities; the
+                // heat pump has its own test below.
+                if (tab === 'config' && i < 2) continue;
                 if (tab === 'home') {
                     assert.match(f, /^— /, `the hero: ${f}`);
                     assert.doesNotMatch(f, /\d|NaN/, `the hero: ${f}`);
@@ -142,6 +142,22 @@ test('a missing sensor prints "—" too', () => {
         assert.deepEqual(figures, ['—', '—', '—'], tab);
     }
     assert.equal(header('config', {})._getStatValues()[2], '—');
+    assert.match(words(text(header('home', {})._renderHomeHero())), /^— /);
+});
+
+test('config tab: the heat pump is read from its binary sensor', () => {
+    const hp = (state) => header('config', state === undefined ? {}
+        : { 'binary_sensor.sem_heat_pump_registered': { state, attributes: {} } })._getStatValues()[1];
+    assert.equal(hp('on'), 'on', 'a registered heat pump said Off');
+    assert.equal(hp('off'), 'off');
+    assert.equal(hp(undefined), 'off', 'no entity: no heat pump module');
+    assert.equal(hp('unavailable'), '—');
+    assert.equal(hp('unknown'), '—');
+    // The sensor. id does not exist; a stray one must not decide.
+    const stray = header('config', {
+        'sensor.sem_heat_pump_registered': { state: 'on', attributes: {} },
+    })._getStatValues()[1];
+    assert.equal(stray, 'off');
 });
 
 test('battery tab: a power sensor that is out is not "0 W", the SOC not "0%"', () => {
@@ -192,6 +208,9 @@ test('real readings print as before', () => {
         'sensor.sem_daily_net_cost': { state: '2.256', attributes: {} },
     });
     assert.deepEqual(costs._getStatValues(), ['3.46 EUR', '1.20 EUR', '2.26 EUR']);
+    // #554: a net gain reads as "+".
+    const gain = header('costs', { 'sensor.sem_daily_net_cost': { state: '-1.5', attributes: {} } });
+    assert.equal(gain._getStatValues()[2], '+1.50 EUR');
     const hero = words(text(header('home', {
         'sensor.sem_daily_solar_energy': { state: '12.34', attributes: {} },
         'sensor.sem_solar_power': { state: '1500', attributes: {} },
@@ -218,6 +237,29 @@ test('every figure the header shows draws it again when it changes', () => {
             assert.ok(redraws(tab, base, s, '5', 'unavailable'), `${tab}: ${s} went out, no redraw`);
         }
     }
+});
+
+test('the heat pump, the "no grid limit" flag and the currency draw it again', () => {
+    const states = (extra) => ({ ...all('control', '5'), ...extra });
+    const el = header('control', states({
+        'sensor.sem_target_peak_limit': { state: '8.0', attributes: { peak_limit_unlimited: false } },
+    }));
+    let before = el.__updates || 0;
+    el.hass = { states: states({
+        'sensor.sem_target_peak_limit': { state: '8.0', attributes: { peak_limit_unlimited: true } },
+    }), language: 'en', config: { currency: 'EUR' } };
+    assert.ok((el.__updates || 0) > before, 'the flag alone changed, no redraw');
+
+    const cfg = header('config', { 'binary_sensor.sem_heat_pump_registered': { state: 'off', attributes: {} } });
+    before = cfg.__updates || 0;
+    cfg.hass = { states: { 'binary_sensor.sem_heat_pump_registered': { state: 'on', attributes: {} } },
+        language: 'en', config: { currency: 'EUR' } };
+    assert.ok((cfg.__updates || 0) > before, 'the heat pump changed, no redraw');
+
+    const costs = header('costs', all('costs', '5'));
+    before = costs.__updates || 0;
+    costs.hass = { states: all('costs', '5'), language: 'en', config: { currency: 'CHF' } };
+    assert.ok((costs.__updates || 0) > before, 'the currency changed, no redraw');
 });
 
 test('a change the header does not show draws nothing', () => {
