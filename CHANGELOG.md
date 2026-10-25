@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Each battery keeps its own settings when you add or remove a battery** (#1195). A new battery no longer takes another battery's entities.
+
 # [2.2.0-beta.27] — 25.10.2026
 
 - 🐛 **The battery is no longer held back for a plugged-in car that is not charging** (#1199). It ends 15 minutes after the last draw.
