@@ -3849,16 +3849,23 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # Ensure battery discharge limit is restored after restart
             # (protects against stale limit left by previous run)
             from .actuate_battery import restore_discharge_limit_on_startup
-            restore_cfg = self.config
+            await restore_discharge_limit_on_startup(self.hass, self.config)
             # (#1195) …and the limit of a battery taken out of the Energy
-            # Dashboard while SEM was off: its slot went at setup, but the
-            # cap SEM last wrote is still on it.
-            dropped = getattr(self, "_dropped_battery_limit_entities", None)
-            if isinstance(dropped, list) and dropped:
-                restore_cfg = {**self.config, "battery_discharge_control_entities": [
-                    *(self.config.get("battery_discharge_control_entities") or []),
-                    *dropped]}
-            await restore_discharge_limit_on_startup(self.hass, restore_cfg)
+            # Dashboard while SEM was off. Its slot went at setup; the list
+            # kept it before, and this restore lifted it. Each on its own: a
+            # battery SEM no longer runs may not answer, and that must not
+            # cost the start.
+            for entity in getattr(self, "_dropped_battery_limit_entities", None) or []:
+                try:
+                    await restore_discharge_limit_on_startup(self.hass, {
+                        **self.config, "battery_discharge_control_entity": "",
+                        "battery_discharge_control_entities": [entity]})
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning(
+                        "Could not lift the discharge limit of a battery no "
+                        "longer in the Energy Dashboard (%s): %s (#1195)",
+                        entity, err)
+            self._dropped_battery_limit_entities = []
 
         # Run deployment health check once after startup
         if self._initial_update_done and not getattr(self, '_health_checked', False):

@@ -380,7 +380,10 @@ async def test_the_start_lifts_a_removed_batterys_cap_and_holds_while_a_reload_i
     restored = []
 
     async def _restore(_hass, config):
-        restored.append(list(config.get("battery_discharge_control_entities") or []))
+        listed = list(config.get("battery_discharge_control_entities") or [])
+        restored.append(listed)
+        if "number.sessy1_limit" in listed:
+            raise RuntimeError("the removed battery does not answer")
     monkeypatch.setattr(actuate_battery, "restore_discharge_limit_on_startup", _restore)
     entry, _read = await _setup(hass, monkeypatch, TWO_PAIRS, {
         BATTERY_SLOT_UNITS_KEY: [C, A, B],
@@ -388,7 +391,11 @@ async def test_the_start_lifts_a_removed_batterys_cap_and_holds_while_a_reload_i
             "number.sessy1_limit", "number.verto1_limit", "number.verto2_limit"]})
     assert entry.options["battery_discharge_control_entities"] == [
         "number.verto1_limit", "number.verto2_limit"]
-    assert restored and "number.sessy1_limit" in restored[0]
+    # the live batteries first, then the removed one on its own: its write
+    # fails, and the start goes on
+    assert restored[:2] == [["number.verto1_limit", "number.verto2_limit"],
+                            ["number.sessy1_limit"]]
+    assert entry.state.value == "loaded"
 
     coordinator = entry.runtime_data
     sent = AsyncMock(return_value={})
@@ -401,6 +408,13 @@ async def test_the_start_lifts_a_removed_batterys_cap_and_holds_while_a_reload_i
     coordinator._battery_reload_pending = False
     await coordinator.async_refresh()
     assert sent.called and coordinator._finish_manual_battery_modes.called
+
+    # Due part way through the cycle (the scheduler awaits): still no command.
+    sent.reset_mock()
+    coordinator._finish_manual_battery_modes = MagicMock(
+        side_effect=lambda *a, **k: setattr(coordinator, "_battery_reload_pending", True))
+    await coordinator.async_refresh()
+    assert coordinator._finish_manual_battery_modes.called and not sent.called
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
 

@@ -291,10 +291,6 @@ def align_battery_slots(hass: Any, entry: Any, coordinator: Any, units: Any,
     if running and not moved:
         # the options listener must not reload for a record alone
         coordinator._skip_options_reload = dict(new_options)
-    if running and moved:
-        # until the reload, the battery pipeline sends nothing: the adapters
-        # still hold the old places' entities
-        coordinator._battery_reload_pending = True
     limits = "battery_discharge_control_entities"
     old_limits, new_limits = merged.get(limits), changes.get(limits, merged.get(limits))
     if not running and isinstance(old_limits, list):
@@ -304,7 +300,11 @@ def align_battery_slots(hass: Any, entry: Any, coordinator: Any, units: Any,
         dropped = [e for e in old_limits if isinstance(e, str) and e and e not in kept]
         if dropped:
             coordinator._dropped_battery_limit_entities = dropped
-    hass.config_entries.async_update_entry(entry, options=new_options)
+    written = hass.config_entries.async_update_entry(entry, options=new_options)
+    if running and moved and written:
+        # until the reload, the battery pipeline sends nothing: the adapters
+        # still hold the old places' entities
+        coordinator._battery_reload_pending = True
     if moved:
         old_units = merged.get(BATTERY_SLOT_UNITS_KEY) or []
         new_units = [u for u in changes[BATTERY_SLOT_UNITS_KEY] if u not in old_units]
