@@ -8,8 +8,15 @@
 import { SEMLitBase, html, css, svg, nothing } from '../base/sem-lit-base.js';
 import { semTheme, semFormatPower, semGetCurrency, semDefineCard } from '../base/sem-shared.js';
 import { peakLimitText } from '../util/peak-slot.js';
+import { MISSING, isMissing, socDisplay } from '../util/missing-value.js';
 
 const _t = (key, hass) => (typeof semLocalize === 'function') ? semLocalize(key, hass?.language) : key;
+
+// (#1198) A figure: the number in its format, or the dash when its sensor
+// is out. A 0 printed for a sensor that is out looks like a reading.
+const fig = (v, fmt) => (v == null ? MISSING : fmt(v));
+const pct = (v) => v.toFixed(0) + '%';
+const kwh = (v) => v.toFixed(1) + ' kWh';
 
 // Icon templates use Lit's `svg` tag so child elements are created in the SVG
 // namespace. With plain `html` they get the HTML namespace, render as
@@ -167,32 +174,25 @@ class SEMTabHeader extends SEMLitBase {
         if (!this._responsiveApplied) this._applyResponsiveContainer();
     }
 
+    // (#1198, class 127) The key is the text the header shows, so no figure
+    // can be left out of it. The old hand-made list missed the EV tab's
+    // session and the Config tab's SOC, and those figures stood still.
     _buildStatsKey(hass) {
         if (!hass) return '';
-        const g = (s) => hass.states[`${this._prefix}${s}`]?.state || '';
-        const tab = this._tab;
-        if (tab === 'home') return [g('solar_power'), g('daily_solar_energy')].join(',');
-        if (tab === 'energy') return [g('daily_solar_energy'), g('daily_home_energy'), g('self_consumption_rate')].join(',');
-        if (tab === 'battery') return [g('battery_soc'), g('battery_power'), g('battery_health_score')].join(',');
-        if (tab === 'ev') return [g('ev_power'), g('daily_ev_energy'), g('charging_state')].join(',');
-        if (tab === 'control') return [g('target_peak_limit'), hass.states[`${this._prefix}target_peak_limit`]?.attributes?.peak_limit_unlimited, g('controllable_devices_count'), g('surplus_active_devices')].join(',');
-        if (tab === 'config') return [g('charging_state'), g('heat_pump_registered'), g('battery_status')].join(',');
-        if (tab === 'costs') return [g('daily_costs'), g('daily_savings'), g('daily_net_cost')].join(',');
-        if (tab === 'system') return [g('energy_optimization_score'), g('lifetime_total_savings'), g('lifetime_co2_avoided')].join(',');
-        if (tab === 'simulation') return '';  // #1083 — no entity stats; the card owns the numbers
-        return '';
+        if (this._tab === 'home') return this._heroValues().join('|');
+        return this._getStatValues().join('|');
     }
 
-    _getState(suffix, fallback = 0) {
+    // (#1198) null when the sensor is out: unavailable, unknown, missing or
+    // not a number. There is no fallback on purpose; `fig` prints the dash.
+    _getState(suffix) {
         const e = this._hass?.states[`${this._prefix}${suffix}`];
-        if (!e || e.state === 'unavailable' || e.state === 'unknown') return fallback;
-        return parseFloat(e.state) ?? fallback;
+        return isMissing(e) ? null : parseFloat(e.state);
     }
 
     _getStatLabels() {
         const t = (k) => _t(k, this._hass);
         const tab = this._tab;
-        if (tab === 'home') return [t('solar'), t('autarky'), t('self_use'), t('today')];
         if (tab === 'energy') return [t('solar'), t('home'), t('self_use')];
         if (tab === 'battery') return [t('soc'), t('power'), t('health')];
         if (tab === 'ev') return [t('power'), t('today'), t('session')];
@@ -207,67 +207,74 @@ class SEMTabHeader extends SEMLitBase {
     _getStatValues() {
         const tab = this._tab;
         const _c = semGetCurrency(this._hass) || 'EUR';
-        if (tab === 'home') return [
-            semFormatPower(this._getState('solar_power', 0)),
-            this._getState('autarky_rate', 0).toFixed(0) + '%',
-            this._getState('self_consumption_rate', 0).toFixed(0) + '%',
-            this._getState('daily_solar_energy', 0).toFixed(1) + ' kWh',
-        ];
+        const money = (d) => (v) => v.toFixed(d) + ' ' + _c;
+        // The Home tab shows its hero, not these figures (`_heroValues`).
         if (tab === 'energy') return [
-            this._getState('daily_solar_energy', 0).toFixed(1) + ' kWh',
-            this._getState('daily_home_energy', 0).toFixed(1) + ' kWh',
-            this._getState('self_consumption_rate', 0).toFixed(0) + '%',
+            fig(this._getState('daily_solar_energy'), kwh),
+            fig(this._getState('daily_home_energy'), kwh),
+            fig(this._getState('self_consumption_rate'), pct),
         ];
         if (tab === 'battery') return [
-            this._getState('battery_soc', 0).toFixed(0) + '%',
-            semFormatPower(this._getState('battery_power', 0)),
-            this._getState('battery_health_score', 100).toFixed(0) + '%',
+            socDisplay(this._getState('battery_soc')).label,
+            fig(this._getState('battery_power'), semFormatPower),
+            fig(this._getState('battery_health_score'), pct),
         ];
         if (tab === 'ev') return [
-            semFormatPower(this._getState('ev_power', 0)),
-            this._getState('daily_ev_energy', 0).toFixed(1) + ' kWh',
-            this._getState('session_energy', 0).toFixed(1) + ' kWh',
+            fig(this._getState('ev_power'), semFormatPower),
+            fig(this._getState('daily_ev_energy'), kwh),
+            fig(this._getState('session_energy'), kwh),
         ];
         if (tab === 'control') return [
             peakLimitText(this._hass?.states[`${this._prefix}target_peak_limit`],
                 _t('uncapped', this._hass)),
-            this._getState('controllable_devices_count', 0).toFixed(0),
-            this._getState('surplus_active_devices', 0).toFixed(0),
+            fig(this._getState('controllable_devices_count'), (v) => v.toFixed(0)),
+            fig(this._getState('surplus_active_devices'), (v) => v.toFixed(0)),
         ];
         if (tab === 'config') {
             const t = (k) => _t(k, this._hass);
+            // The key reads this on every hass update: test the cheap prefix first.
             const chargers = Object.keys(this._hass?.states || {})
-                .filter(e => e.match(/^number\.sem_charger_.+_minimum_current$/)).length;
-            const hp = this._hass?.states[`${this._prefix}heat_pump_registered`]?.state === 'on';
-            const batt = this._hass?.states[`${this._prefix}battery_soc`];
+                .filter(e => e.startsWith('number.sem_charger_')
+                    && /^number\.sem_charger_.+_minimum_current$/.test(e)).length;
+            // (#1198) A binary sensor (#437), so not under the sensor. prefix:
+            // read there, this always said Off. No entity means no heat pump
+            // module, so Off; an entity that is out is the dash.
+            const hpState = this._hass?.states[
+                this._prefix.replace(/^sensor\./, 'binary_sensor.') + 'heat_pump_registered']?.state;
             return [
                 String(chargers),
-                hp ? t('on') : t('off'),
-                batt ? Math.round(parseFloat(batt.state) || 0) + '%' : '—',
+                hpState === 'on' ? t('on')
+                    : (hpState === undefined || hpState === 'off') ? t('off') : MISSING,
+                socDisplay(this._getState('battery_soc')).label,
             ];
         }
         if (tab === 'costs') return [
-            this._getState('daily_costs', 0).toFixed(2) + ' ' + _c,
-            this._getState('daily_savings', 0).toFixed(2) + ' ' + _c,
+            fig(this._getState('daily_costs'), money(2)),
+            fig(this._getState('daily_savings'), money(2)),
             // #554 — savings-positive framing, consistent with the costs card
-            (() => { const n = this._getState('daily_net_cost', 0);
-                     return (n <= 0 ? '+' : '') + Math.abs(n).toFixed(2) + ' ' + _c; })(),
+            fig(this._getState('daily_net_cost'),
+                (n) => (n <= 0 ? '+' : '') + Math.abs(n).toFixed(2) + ' ' + _c),
         ];
         if (tab === 'system') return [
-            this._getState('energy_optimization_score', 0).toFixed(0),
-            this._getState('lifetime_total_savings', 0).toFixed(0) + ' ' + _c,
-            this._getState('lifetime_co2_avoided', 0).toFixed(0) + ' kg',
+            fig(this._getState('energy_optimization_score'), (v) => v.toFixed(0)),
+            fig(this._getState('lifetime_total_savings'), money(0)),
+            fig(this._getState('lifetime_co2_avoided'), (v) => v.toFixed(0) + ' kg'),
         ];
-        return ['—', '—', '—'];
+        return [MISSING, MISSING, MISSING];
+    }
+
+    // Today's solar energy and the solar power now; null when out.
+    _heroValues() {
+        return [this._getState('daily_solar_energy'), this._getState('solar_power')];
     }
 
     _renderHomeHero() {
-        const today = this._getState('daily_solar_energy', 0);
-        const power = this._getState('solar_power', 0);
+        const [today, power] = this._heroValues();
         return html`
             <div class="hero">
                 <div class="hero-main">
-                    <div class="hero-value">${today.toFixed(1)}<span class="unit">kWh</span></div>
+                    <div class="hero-value">${today == null ? MISSING
+                        : html`${today.toFixed(1)}<span class="unit">kWh</span>`}</div>
                     <div class="hero-label">${_t('todays_solar_production', this._hass)}</div>
                 </div>
                 ${power > 0 ? html`
