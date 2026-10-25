@@ -229,11 +229,11 @@ def realign_battery_slots(saved: Any, units: Any) -> tuple[dict, bool] | None:
     already are in this order. Pure. An empty ``units`` (no battery read
     yet) changes nothing.
     """
-    if not isinstance(units, (list, tuple)):
+    if not isinstance(units, (list, tuple)) or not units:
         return None
-    units = [u for u in units if isinstance(u, str) and u]
-    if not units:
-        return None
+    if not all(isinstance(u, str) and u for u in units):
+        return None     # a gap would move every later battery: no answer
+    units = list(units)
     record = saved.get(BATTERY_SLOT_UNITS_KEY)
     if not (isinstance(record, list) and all(isinstance(u, str) for u in record)):
         record = None
@@ -272,7 +272,9 @@ def align_battery_slots(hass: Any, entry: Any, coordinator: Any, units: Any,
     battery's adapter holds its control entities from when it was built, and
     each select and number its slot number, so a battery list that changed
     while SEM runs reloads the entry once. A first record alone moves no
-    slot and does not reload. True when the options were written.
+    slot and does not reload. Until the reload the battery pipeline sends
+    nothing (``_battery_reload_pending``). True when the options were
+    written.
     """
     options = getattr(entry, "options", None)
     data = getattr(entry, "data", None)
@@ -289,12 +291,28 @@ def align_battery_slots(hass: Any, entry: Any, coordinator: Any, units: Any,
     if running and not moved:
         # the options listener must not reload for a record alone
         coordinator._skip_options_reload = dict(new_options)
+    if running and moved:
+        # until the reload, the battery pipeline sends nothing: the adapters
+        # still hold the old places' entities
+        coordinator._battery_reload_pending = True
+    limits = "battery_discharge_control_entities"
+    old_limits, new_limits = merged.get(limits), changes.get(limits, merged.get(limits))
+    if not running and isinstance(old_limits, list):
+        # a removed battery's cap is lifted at start (the unload lifts it
+        # when SEM runs): ``restore_discharge_limit_on_startup``
+        kept = new_limits if isinstance(new_limits, list) else []
+        dropped = [e for e in old_limits if isinstance(e, str) and e and e not in kept]
+        if dropped:
+            coordinator._dropped_battery_limit_entities = dropped
     hass.config_entries.async_update_entry(entry, options=new_options)
     if moved:
+        old_units = merged.get(BATTERY_SLOT_UNITS_KEY) or []
+        new_units = [u for u in changes[BATTERY_SLOT_UNITS_KEY] if u not in old_units]
         _LOGGER.warning(
             "The batteries in the Energy Dashboard changed (%s → %s). Each "
-            "battery keeps its own SEM settings at its new number%s.",
-            ", ".join(merged.get(BATTERY_SLOT_UNITS_KEY) or []),
-            ", ".join(changes[BATTERY_SLOT_UNITS_KEY]),
+            "battery keeps its own SEM settings at its new number%s%s.",
+            ", ".join(old_units), ", ".join(changes[BATTERY_SLOT_UNITS_KEY]),
+            "; new, starting on Auto with no entities of their own: "
+            + ", ".join(new_units) if new_units else "",
             "; reloading to rebuild the battery controls" if running else "")
     return True

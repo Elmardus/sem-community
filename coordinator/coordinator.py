@@ -3849,7 +3849,16 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # Ensure battery discharge limit is restored after restart
             # (protects against stale limit left by previous run)
             from .actuate_battery import restore_discharge_limit_on_startup
-            await restore_discharge_limit_on_startup(self.hass, self.config)
+            restore_cfg = self.config
+            # (#1195) …and the limit of a battery taken out of the Energy
+            # Dashboard while SEM was off: its slot went at setup, but the
+            # cap SEM last wrote is still on it.
+            dropped = getattr(self, "_dropped_battery_limit_entities", None)
+            if isinstance(dropped, list) and dropped:
+                restore_cfg = {**self.config, "battery_discharge_control_entities": [
+                    *(self.config.get("battery_discharge_control_entities") or []),
+                    *dropped]}
+            await restore_discharge_limit_on_startup(self.hass, restore_cfg)
 
         # Run deployment health check once after startup
         if self._initial_update_done and not getattr(self, '_health_checked', False):
@@ -9677,6 +9686,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # synthetic "primary" from the first cycles stays in the cache once
         # b1/b2 exist, and its frozen write ledger is no battery's answer.
         self._live_battery_ids = frozenset(bid for bid, _ in battery_items)
+        # (#1195) The batteries changed while SEM runs: their settings moved
+        # to their new places and the entry reloads. Until it does, the
+        # cached adapters hold the old places' entities and this cycle's
+        # readings may be in the old order — so nothing is written. Asked
+        # again before the commands: the scheduler above awaits.
+        if getattr(self, "_battery_reload_pending", False) is True:
+            return
         # (#1131) A manual charge or sale that has done its job hands the
         # battery back to Auto before this cycle decides — on a level that is
         # a reading this cycle (not held, not the never-read 0.0).
@@ -9881,6 +9897,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 inputs_degraded=_degraded,
             )
 
+        if getattr(self, "_battery_reload_pending", False) is True:
+            return          # (#1195) see above: an adapter may await
         _writers = await actuate_batteries(
             _cycle_rows, _send, observer=self._observer_mode,
             inputs_degraded=_degraded)

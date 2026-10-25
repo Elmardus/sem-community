@@ -93,12 +93,8 @@ def test_the_first_record_takes_the_slots_as_they_stand_and_drops_the_rest():
     # …and the third battery added later starts unset.
     grown, moved = realign_battery_slots({**saved, **changes}, [A, B, C])
     assert moved is True
-    # C's slot past the end is unset; nothing else moves
+    # C's slot past the end is unset ("number.old" is gone); nothing moves
     assert grown == {BATTERY_SLOT_UNITS_KEY: [A, B, C]}
-    # the old third slot came back on the old code: C took "number.old"
-    assert realign_battery_slots({**saved, **changes, BATTERY_SLOT_UNITS_KEY: [A, B]},
-                                 [C, A, B])[0]["battery_force_discharge_entities"] == [
-        None, "number.a", "number.b"]
 
 
 def test_lists_already_in_order_change_nothing():
@@ -107,9 +103,11 @@ def test_lists_already_in_order_change_nothing():
     assert realign_battery_slots(saved, (A, B)) is None
 
 
-@pytest.mark.parametrize("units", [[], None, "sensor.x", [None, ""]])
+@pytest.mark.parametrize("units", [[], None, "sensor.x", [None, ""], [A, None, B], [A, ""]])
 def test_no_battery_read_is_no_answer(units):
-    """An empty read (no battery yet, a cold start) must not drop slots."""
+    """An empty read (no battery yet, a cold start) must not drop slots, and
+    a gap in the read is no answer either: closed up, it would move every
+    battery after it."""
     saved = {BATTERY_SLOT_UNITS_KEY: [A, B], "battery_modes": ["off", "auto"]}
     assert realign_battery_slots(saved, units) is None
 
@@ -317,6 +315,94 @@ def test_a_first_record_while_running_arms_the_no_reload_snapshot():
     hass.config_entries.async_update_entry.reset_mock()
     assert not align_battery_slots(hass, entry, coordinator, [C, A, B], running=True)
     hass.config_entries.async_update_entry.assert_not_called()
+
+
+def test_a_moved_list_while_running_holds_the_battery_commands():
+    """Until the reload, the adapters hold the old places' entities: the
+    pipeline is told to send nothing. A first record, or a move at setup
+    (nothing built yet), holds nothing."""
+    from types import SimpleNamespace
+
+    from custom_components.solar_energy_management.coordinator.battery_controls import (
+        align_battery_slots,
+    )
+    saved = {BATTERY_SLOT_UNITS_KEY: [A, B], "battery_modes": ["off", "auto"]}
+    for running, units, held in ((True, [C, A, B], True), (False, [C, A, B], False),
+                                 (True, [A, B, C], True)):
+        entry = SimpleNamespace(entry_id="e", data={}, options=dict(saved))
+        coordinator = SimpleNamespace(config=dict(saved))
+        assert align_battery_slots(MagicMock(), entry, coordinator, units, running=running)
+        assert getattr(coordinator, "_battery_reload_pending", False) is held, (running, units)
+    entry = SimpleNamespace(entry_id="e", data={}, options={"battery_modes": ["off"]})
+    coordinator = SimpleNamespace(config={})
+    assert align_battery_slots(MagicMock(), entry, coordinator, [A, B], running=True)
+    assert not hasattr(coordinator, "_battery_reload_pending")
+
+
+def test_a_battery_removed_while_sem_was_off_has_its_cap_lifted_at_start():
+    """SEM's last discharge cap stays on a battery taken out of the
+    Energy Dashboard while SEM was off. Its slot goes, so the start-up
+    restore is handed its limit entity; a kept or shared one is not."""
+    from types import SimpleNamespace
+
+    from custom_components.solar_energy_management.coordinator.battery_controls import (
+        align_battery_slots,
+    )
+    saved = {BATTERY_SLOT_UNITS_KEY: [C, A, B],
+             "battery_discharge_control_entities": [
+                 "number.c_limit", "number.shared_limit", "number.shared_limit"]}
+    entry = SimpleNamespace(entry_id="e", data={}, options=dict(saved))
+    coordinator = SimpleNamespace(config=dict(saved))
+    align_battery_slots(MagicMock(), entry, coordinator, [A, B], running=False)
+    assert coordinator._dropped_battery_limit_entities == ["number.c_limit"]
+    # running: the unload lifts it, nothing is kept for a start
+    entry = SimpleNamespace(entry_id="e", data={}, options=dict(saved))
+    coordinator = SimpleNamespace(config=dict(saved))
+    align_battery_slots(MagicMock(), entry, coordinator, [A, B], running=True)
+    assert not hasattr(coordinator, "_dropped_battery_limit_entities")
+    # B removed: its shared entity is still A's
+    entry = SimpleNamespace(entry_id="e", data={}, options=dict(saved))
+    coordinator = SimpleNamespace(config=dict(saved))
+    align_battery_slots(MagicMock(), entry, coordinator, [C, A], running=False)
+    assert not hasattr(coordinator, "_dropped_battery_limit_entities")
+
+
+@real_ha
+@pytest.mark.asyncio
+async def test_the_start_lifts_a_removed_batterys_cap_and_holds_while_a_reload_is_due(
+        hass, enable_custom_integrations, monkeypatch):
+    """Through SEM's real setup and cycle: the start-up restore covers the
+    removed battery's limit, and a cycle with a reload due sends no command
+    and ends no manual mode (the twin: without it, both run)."""
+    from custom_components.solar_energy_management.coordinator import (
+        actuate_battery, battery_shared_limit,
+    )
+    restored = []
+
+    async def _restore(_hass, config):
+        restored.append(list(config.get("battery_discharge_control_entities") or []))
+    monkeypatch.setattr(actuate_battery, "restore_discharge_limit_on_startup", _restore)
+    entry, _read = await _setup(hass, monkeypatch, TWO_PAIRS, {
+        BATTERY_SLOT_UNITS_KEY: [C, A, B],
+        "battery_discharge_control_entities": [
+            "number.sessy1_limit", "number.verto1_limit", "number.verto2_limit"]})
+    assert entry.options["battery_discharge_control_entities"] == [
+        "number.verto1_limit", "number.verto2_limit"]
+    assert restored and "number.sessy1_limit" in restored[0]
+
+    coordinator = entry.runtime_data
+    sent = AsyncMock(return_value={})
+    monkeypatch.setattr(battery_shared_limit, "actuate_batteries", sent)
+    coordinator._finish_manual_battery_modes = MagicMock()
+    coordinator._battery_reload_pending = True
+    await coordinator.async_refresh()
+    assert not sent.called and not coordinator._finish_manual_battery_modes.called
+
+    coordinator._battery_reload_pending = False
+    await coordinator.async_refresh()
+    assert sent.called and coordinator._finish_manual_battery_modes.called
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
 
 
 # ── Guards ─────────────────────────────────────────────────────────────────
