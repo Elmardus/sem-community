@@ -43,6 +43,7 @@ from .utils.device_names import charger_display_name  # (#1053)
 from .const import SENSOR_LABEL_MAPPING
 from .consts.labels import SEM_LABELS
 from .coordinator import SEMCoordinator
+from .ha_energy_reader import battery_units
 from .coordinator.install_modules import (
     Module, keeps, kept_descriptions, presence_of, presence_summary,
 )
@@ -2442,13 +2443,13 @@ async def async_setup_entry(
 
     # Phase A of per-battery card mirror — auto-discover the multi-
     # battery surface from the coordinator's sensor reader (single-
-    # battery installs leave ``battery_power_list`` at length 1 and
-    # produce zero per-battery sensors, preserving today's fleet-
-    # sensor behaviour). Same gating + getattr pattern as per-PV-
-    # string surface above.
+    # battery installs have one battery unit and produce zero
+    # per-battery sensors, preserving today's fleet-sensor behaviour).
+    # (#1171) A unit is a combined sensor or a two-sensor pair. Same
+    # gating + getattr pattern as per-PV-string surface above.
     per_battery_descriptions = []
     _ed = getattr(_sr, "_energy_dashboard_config", None) if _sr is not None else None
-    batt_list = list(getattr(_ed, "battery_power_list", []) or []) if _ed is not None else []
+    batt_list = battery_units(_ed)
     if len(batt_list) > 1:
         for idx in range(len(batt_list)):
             bid = f"b{idx + 1}"

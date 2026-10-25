@@ -30,6 +30,8 @@ from typing import Any
 
 from homeassistant.helpers import entity_registry as er
 
+from ..ha_energy_reader import battery_units
+
 _LOGGER = logging.getLogger(__name__)
 
 _BATTERY_SLUG_RE = re.compile(r"^sensor\.sem_battery_(b\d+)_power$")
@@ -38,8 +40,9 @@ _BATTERY_SLUG_RE = re.compile(r"^sensor\.sem_battery_(b\d+)_power$")
 def discover_battery_control_slugs(coordinator: Any) -> tuple[str, ...]:
     """Short per-battery slugs (``b1`` …) for multi-battery installs.
 
-    Primary source is the Energy Dashboard ``battery_power_list`` order
-    (same as the per-battery sensors in ``sensor.py``). But that depends
+    Primary source is the Energy Dashboard's batteries, combined sensors and
+    two-sensor pairs (``battery_units``, #1171; the same list as the
+    per-battery sensors in ``sensor.py``). But that depends
     on ``_energy_dashboard_config`` being populated at capture time, which
     a cold start (#274) can miss — so we FALL BACK to the
     persisted per-battery power sensors in the entity registry
@@ -50,7 +53,7 @@ def discover_battery_control_slugs(coordinator: Any) -> tuple[str, ...]:
     """
     sr = getattr(coordinator, "_sensor_reader", None)
     ed = getattr(sr, "_energy_dashboard_config", None) if sr is not None else None
-    batt_list = list(getattr(ed, "battery_power_list", []) or []) if ed is not None else []
+    batt_list = battery_units(ed)
     if len(batt_list) > 1:
         return tuple(f"b{i + 1}" for i in range(len(batt_list)))
 

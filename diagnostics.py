@@ -353,14 +353,21 @@ async def async_get_config_entry_diagnostics(
                 return {"state": "missing"}
             return {"state": s.state, "unit": s.attributes.get("unit_of_measurement")}
 
+        # (#1171) two-sensor batteries: (discharge, charge) per battery
+        battery_pairs = [
+            list(p) for p in (getattr(ed_config, "battery_power_pairs", []) or [])
+            if isinstance(p, (list, tuple))]
         per_source_lists = {
             "solar_power_list": list(getattr(ed_config, "solar_power_list", []) or []),
             "battery_power_list": list(getattr(ed_config, "battery_power_list", []) or []),
+            "battery_power_pairs": battery_pairs,
             "grid_power_list": list(getattr(ed_config, "grid_power_list", []) or []),
         }
         per_source_readings = {
             "solar": {eid: _read_state(eid) for eid in per_source_lists["solar_power_list"]},
-            "battery": {eid: _read_state(eid) for eid in per_source_lists["battery_power_list"]},
+            "battery": {eid: _read_state(eid) for eid in (
+                per_source_lists["battery_power_list"]
+                + [e for pair in battery_pairs for e in pair])},
             "grid": {eid: _read_state(eid) for eid in per_source_lists["grid_power_list"]},
         }
 

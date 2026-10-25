@@ -12680,6 +12680,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 for val in (getattr(ed, name, None) or []):
                     if isinstance(val, str) and "." in val:
                         out.add(val)
+            # (#1171) a two-sensor battery is read on both of its sensors
+            for pair in (getattr(ed, "battery_power_pairs", None) or []):
+                for val in pair:
+                    if isinstance(val, str) and "." in val:
+                        out.add(val)
         except Exception:  # noqa: BLE001
             pass
         return out

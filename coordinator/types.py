@@ -1647,7 +1647,7 @@ class SEMData:
         # Per-battery flat-dict unpack (Phase A of #TBD fleet/per-battery
         # card mirror). Mirrors the per-charger pattern above. Powered
         # by ``PowerReadings.batteries`` (populated by sensor_reader
-        # only when ``battery_power_list`` length > 1 — single-battery
+        # only with two or more battery units — single-battery
         # installs leave it empty and produce zero per-battery keys,
         # preserving today's fleet-sensor behaviour). Status is
         # derived from the sign of power_w (positive = charging,
