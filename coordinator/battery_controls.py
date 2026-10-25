@@ -35,6 +35,10 @@ from ..ha_energy_reader import battery_units
 _LOGGER = logging.getLogger(__name__)
 
 _BATTERY_SLUG_RE = re.compile(r"^sensor\.sem_battery_(b\d+)_power$")
+# (#1171) the same sensor by its unique id (a renamed entity keeps it), and
+# the per-battery Mode select (``<entry_id>_battery_<bid>_mode``)
+_BATTERY_SENSOR_UID_RE = re.compile(r"^sem_battery_(b\d+)_power$")
+_BATTERY_SELECT_UID_RE = re.compile(r"_battery_(b\d+)_mode$")
 
 
 def discover_battery_control_slugs(coordinator: Any) -> tuple[str, ...]:
@@ -50,6 +54,14 @@ def discover_battery_control_slugs(coordinator: Any) -> tuple[str, ...]:
     so once a multi-battery install has its sensors the control entities
     are created deterministically on every boot. Empty on single-battery
     installs (no per-battery control entities created).
+
+    (#1171) The per-battery Mode selects count too, and a sensor is known
+    by its unique id as well. A cold start builds the per-battery sensors
+    from the Energy Dashboard, so one that misses it sweeps them; the
+    selects stay. Without them a second such start fell back to the one
+    shared select, and the next normal start's handover
+    (``adopt_shared_battery_settings``) wrote the shared mode over every
+    battery's own.
     """
     sr = getattr(coordinator, "_sensor_reader", None)
     ed = getattr(sr, "_energy_dashboard_config", None) if sr is not None else None
@@ -61,14 +73,29 @@ def discover_battery_control_slugs(coordinator: Any) -> tuple[str, ...]:
     # this entry's own (#1071 review: a second SEM entry's batteries are not
     # this install's).
     entry_id = getattr(getattr(coordinator, "config_entry", None), "entry_id", None)
+    from ..const import DOMAIN
+
+    def _slug(ent) -> str | None:
+        m = _BATTERY_SLUG_RE.match(ent.entity_id)
+        if m:
+            return m.group(1)
+        if ent.platform != DOMAIN or not isinstance(ent.unique_id, str):
+            return None
+        if ent.domain == "sensor":
+            m = _BATTERY_SENSOR_UID_RE.match(ent.unique_id)
+        elif (ent.domain == "select" and isinstance(entry_id, str)
+              and ent.unique_id.startswith(f"{entry_id}_")):
+            m = _BATTERY_SELECT_UID_RE.search(ent.unique_id)
+        return m.group(1) if m else None
+
     try:
         reg = er.async_get(coordinator.hass)
         slugs = sorted({
-            m.group(1)
+            slug
             for ent in reg.entities.values()
             if (not isinstance(entry_id, str)
                 or ent.config_entry_id == entry_id)
-            and (m := _BATTERY_SLUG_RE.match(ent.entity_id))
+            and (slug := _slug(ent))
         })
         _LOGGER.debug("battery slugs (registry fallback): %s", slugs)
         return tuple(slugs) if len(slugs) > 1 else ()
@@ -137,12 +164,15 @@ def adopt_shared_battery_settings(hass: Any, entry: Any, coordinator: Any,
         "battery_reserve_socs": [reserve] * len(slugs),
     }
     if isinstance(getattr(coordinator, "config", None), dict):
-        coordinator.config.update({**(entry.data or {}), **new_options})
+        # only these two: the coordinator's copy of the rest is its own
+        coordinator.config.update({k: new_options[k] for k in (
+            "battery_modes", "battery_reserve_socs")})
     hass.config_entries.async_update_entry(entry, options=new_options)
     _LOGGER.warning(
-        "Battery controls: one Mode select and reserve per battery now (%s). "
-        "Each battery starts on the shared mode %s and reserve %s. %s is "
-        "removed; automations that set it need the per-battery selects.",
+        "Battery controls: one Mode select and one reserve per battery now "
+        "(%s). Each battery starts on the shared mode %s and reserve %s. %s "
+        "and the shared reserve number go away; automations that set them "
+        "need the per-battery ones.",
         ", ".join(slugs), mode or "auto",
         "default" if reserve is None else reserve, shared)
     return True

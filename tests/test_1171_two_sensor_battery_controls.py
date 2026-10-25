@@ -284,6 +284,68 @@ def test_a_home_without_the_shared_select_is_left_alone():
     hass.config_entries.async_update_entry.assert_not_called()
 
 
+def test_unset_shared_values_stay_unset_and_only_the_slots_are_written():
+    """No shared mode or reserve: each slot is unset (Auto, the default
+    reserve — what the shared controls showed), a leftover list is still
+    cleared, and the coordinator's own copy of the rest is not touched."""
+    from types import SimpleNamespace
+
+    from custom_components.solar_energy_management.coordinator import battery_controls
+    reg = MagicMock()
+    reg.async_get_entity_id.side_effect = lambda _p, _d, uid: (
+        "select.sem_battery_mode" if uid == "e_battery_mode" else None)
+    entry = SimpleNamespace(entry_id="e", data={"ev_phases": 1},
+                            options={"battery_modes": ["force_charge", "force_charge"]})
+    coordinator = SimpleNamespace(config={"ev_phases": 3})
+    hass = MagicMock()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(battery_controls.er, "async_get", lambda _h: reg)
+        assert battery_controls.adopt_shared_battery_settings(
+            hass, entry, coordinator, ("b1", "b2"))
+    written = hass.config_entries.async_update_entry.call_args.kwargs["options"]
+    assert written["battery_modes"] == [None, None]
+    assert written["battery_reserve_socs"] == [None, None]
+    assert coordinator.config == {"ev_phases": 3, "battery_modes": [None, None],
+                                  "battery_reserve_socs": [None, None]}
+
+
+@real_ha
+@pytest.mark.asyncio
+async def test_a_cold_start_keeps_the_per_battery_controls(hass):
+    """A cold start that misses the Energy Dashboard sweeps the per-battery
+    sensors; the per-battery selects are what stays. Counted, a second such
+    start keeps them — and no handover writes the shared mode over them."""
+    from types import SimpleNamespace
+
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.solar_energy_management.const import DOMAIN
+    from custom_components.solar_energy_management.coordinator.battery_controls import (
+        discover_battery_control_slugs,
+    )
+    mine = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    other = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    mine.add_to_hass(hass)
+    other.add_to_hass(hass)
+    reg = er.async_get(hass)
+    for bid in ("b1", "b2"):
+        reg.async_get_or_create("select", DOMAIN, f"{mine.entry_id}_battery_{bid}_mode",
+                                config_entry=mine)
+        reg.async_get_or_create("select", DOMAIN, f"{other.entry_id}_battery_{bid}_mode",
+                                config_entry=mine)   # not this entry's id
+    coordinator = SimpleNamespace(hass=hass, config_entry=mine, _sensor_reader=None)
+    assert discover_battery_control_slugs(coordinator) == ("b1", "b2")
+    coordinator.config_entry = other
+    assert discover_battery_control_slugs(coordinator) == ()
+
+    # A renamed per-battery sensor is still found by its unique id.
+    for bid in ("b1", "b2"):
+        reg.async_get_or_create("sensor", DOMAIN, f"sem_battery_{bid}_power",
+                                suggested_object_id=f"my_pack_{bid}", config_entry=other)
+    assert discover_battery_control_slugs(coordinator) == ("b1", "b2")
+
+
 def test_the_handover_runs_before_the_first_command():
     """Right after the capture and before the first refresh, which already
     commands the batteries."""
