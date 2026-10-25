@@ -388,21 +388,25 @@ class TestAnUnseenBatteryIsNotWalked:
                             soc=50.0)["soc_curve"]) > 1
 
 
-class TestWhenPlansRunIsUnchanged:
-    """This fix changes what the card SHOWS, not when a plan runs. The
-    ready check still reads the saved key: asking the module verdict there
-    would start plans (and plan actuation) on battery-less homes that saved
-    a size — a control change, left open on purpose (review of #1063)."""
+class TestPlanReadinessUsesBatteryPresence:
+    """A saved default size must not make an absent battery block planning.
+
+    This is the control-side follow-up deliberately left out of #1063's
+    display fix. A real battery must still wait for a readable SOC.
+    """
 
     @staticmethod
-    def _tick_tries_a_stamp(presence, saved):
+    def _tick_tries_a_stamp(presence, saved, *, unavailable=True,
+                           soc_read=None, detected=None):
         tried = []
         fake = MagicMock()
         fake.config = {} if saved is None else {"battery_capacity_kwh": saved}
         fake.setup_presence = presence
         fake._detected_battery_capacity_kwh = None
+        fake._battery_detect_miss_at = None
         fake._sensor_reader = SimpleNamespace(
-            auto_detect_battery_capacity_kwh=lambda: None)
+            auto_detect_battery_capacity_kwh=lambda: detected,
+            _last_valid_soc=soc_read)
         fake._runtimes_restored = True
         fake._shadow_plan_date = None
         fake._plan_ev_conn_sig = None
@@ -417,14 +421,29 @@ class TestWhenPlansRunIsUnchanged:
             tried.append(1)
             return False
         fake._shadow_energy_plan.side_effect = _shadow
-        # A home with no battery: the SOC reads unavailable every cycle.
-        power = SimpleNamespace(battery_soc=0.0, battery_soc_unavailable=True)
+        power = SimpleNamespace(battery_soc=0.0,
+                                battery_soc_unavailable=unavailable)
         SEMCoordinator._energy_plan_tick(fake, power, MagicMock())
         return bool(tried)
 
-    def test_a_saved_size_still_waits_for_a_soc(self):
-        assert self._tick_tries_a_stamp(ABSENT, 15.0) is False
-        assert self._tick_tries_a_stamp(None, 15.0) is False
+    def test_absent_battery_with_saved_size_can_plan(self):
+        assert self._tick_tries_a_stamp(ABSENT, 15.0) is True
+
+    def test_unknown_with_no_battery_evidence_can_plan(self):
+        assert self._tick_tries_a_stamp(UNKNOWN, 15.0) is True
+        assert self._tick_tries_a_stamp(None, 15.0) is True
+
+    def test_present_battery_with_unavailable_soc_still_waits(self):
+        assert self._tick_tries_a_stamp(PRESENT, 15.0) is False
+
+    def test_unknown_with_a_previous_soc_read_still_waits(self):
+        assert self._tick_tries_a_stamp(UNKNOWN, 15.0, soc_read=0.0) is False
+
+    def test_unknown_with_detected_capacity_still_waits(self):
+        assert self._tick_tries_a_stamp(UNKNOWN, 15.0, detected=7.5) is False
+
+    def test_present_battery_with_readable_zero_soc_can_plan(self):
+        assert self._tick_tries_a_stamp(PRESENT, 15.0, unavailable=False) is True
 
     def test_no_saved_size_stamps_as_before(self):
         assert self._tick_tries_a_stamp(ABSENT, None) is True

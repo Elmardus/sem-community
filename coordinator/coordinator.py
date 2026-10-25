@@ -11455,9 +11455,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # and every battery demand yielded a battery that was
                 # actually at 63 %. A silent sensor is not an empty
                 # battery (#638 finding #3) — wait for the reading; the
-                # no-battery install shape (capacity 0) stamps normally.
+                # A saved capacity is not proof of a battery (#1063): the
+                # settings flow saves a default even on battery-less homes.
+                # Use the same presence check as battery_capacity_kwh so
+                # an absent pack cannot leave EV/load plans stale forever.
                 _batt_ready = (
-                    float(self.config.get("battery_capacity_kwh", 0) or 0) <= 0
+                    battery_unseen(self)
+                    or float(self.config.get("battery_capacity_kwh", 0) or 0) <= 0
                     or not getattr(power, "battery_soc_unavailable", False)  # DARK-SOC: plan — a skipped rebuild retries next cycle
                 )
                 if _batt_ready and self._shadow_energy_plan(
