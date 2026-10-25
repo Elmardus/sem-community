@@ -951,9 +951,11 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
     # (#1199) …but only for a car that may draw: drawing now, or within the
     # last 15 minutes (the Zoe's pulses). A plugged-in car that has been
     # idle that long leaves the pack alone.
+    # The #1066 "may not feed the car" no keeps every plugged-in car.
+    _plugged = view.ev_connected or view.ev_charging
     _car_live = view.ev_charging or (
         view.ev_connected and getattr(view, "ev_drew_recently", True))
-    if (protection_enabled or not _assist_ok) and _car_live:
+    if (protection_enabled and _car_live) or (not _assist_ok and _plugged):
         f = view.fleet
         # Pure solar-vs-house surplus. Intentionally does NOT subtract
         # battery_charge_w (unlike decide.self_consumption_surplus_w): the
