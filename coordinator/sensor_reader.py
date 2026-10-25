@@ -761,7 +761,7 @@ class SensorReader:
             return 0.0
         return value
 
-    def _read_pv_string_source(self, slot: str, source) -> float:
+    def _read_pv_string_source(self, slot: str, source) -> float | None:
         """Read one per-PV-string source (v1.7.0 / #312).
 
         Handles both registered source shapes:
@@ -774,9 +774,10 @@ class SensorReader:
           on HA-PROD 2026-06-01: ``inverter_pv_1_spannung`` and
           ``..._strom`` exist but no ``..._power``).
 
-        Returns 0.0 on any read failure (unavailable sensor, non-
-        numeric state, etc.) — same fail-soft contract as
-        ``_read_sensor``. The synthesised power is then surfaced
+        (#1196) Returns None on a dark read (unavailable, unknown or not a
+        number; for a V+I pair, either half): ``_read_pv_strings`` books
+        0.0 for the sums and marks the string not read, so its entity
+        shows no 0 W. The synthesised power is then surfaced
         through the same ``solar_power_per_string`` dict as a
         directly-read value; downstream consumers don't need to
         know the source shape.
@@ -789,17 +790,34 @@ class SensorReader:
         """
         if isinstance(source, tuple):
             v_entity, i_entity = source
-            v = self._read_sensor(v_entity, f"pv_{slot}_voltage")
-            i = self._read_sensor(i_entity, f"pv_{slot}_current")
+            v = self._read_sensor(v_entity, f"pv_{slot}_voltage", allow_none=True)
+            i = self._read_sensor(i_entity, f"pv_{slot}_current", allow_none=True)
+            if v is None or i is None:
+                return None              # half a pair is no number
             watts = float(v) * float(i)
             entities = (v_entity, i_entity)
         else:
             # Direct power entity — keep the legacy fast path.
-            watts = self._read_sensor(source, f"pv_{slot}")
+            watts = self._read_sensor(source, f"pv_{slot}", allow_none=True)
+            if watts is None:
+                return None
             entities = (source,)
         if watts and self._asleep_at_night(entities, watts):
             return 0.0
         return watts
+
+    def _read_pv_strings(self, readings: PowerReadings) -> None:
+        """(#1196) Read every registered string into ``readings``: its watts
+        (0.0 when dark, for the sums) and whether its own sensor was read.
+        Gated on len ≥ 2 — single-string setups get nothing here and
+        downstream readers fall back to ``readings.solar_power``."""
+        if len(self._pv_strings) < 2:
+            return
+        for slot, source in self._pv_strings.items():
+            watts = self._read_pv_string_source(slot, source)
+            readings.solar_power_per_string[slot] = (
+                float(watts) if watts is not None else 0.0)
+            readings.solar_power_per_string_read[slot] = watts is not None
 
     def set_pv_strings(
         self,
@@ -2415,11 +2433,7 @@ class SensorReader:
         # capped the slot count at 4, so the loop is O(≤4). Sources
         # may be either a direct power entity (str) or a V+I sibling
         # pair (tuple) — the per-cycle helper handles both.
-        if len(self._pv_strings) >= 2:
-            for slot, source in self._pv_strings.items():
-                readings.solar_power_per_string[slot] = self._read_pv_string_source(
-                    slot, source,
-                )
+        self._read_pv_strings(readings)
 
         # Grid power from Energy Dashboard.
         # Three modes:
@@ -4332,11 +4346,7 @@ class SensorReader:
         # Same len ≥ 2 gate as the Energy Dashboard path. (#1065) Through
         # the same per-string door, so a string asleep at night reads 0 W
         # here too (and a V+I pair is multiplied, not read as an entity id).
-        if len(self._pv_strings) >= 2:
-            for slot, source in self._pv_strings.items():
-                readings.solar_power_per_string[slot] = self._read_pv_string_source(
-                    slot, source,
-                )
+        self._read_pv_strings(readings)
 
         # Grid power (hardware convention: negative=import, positive=export)
         #

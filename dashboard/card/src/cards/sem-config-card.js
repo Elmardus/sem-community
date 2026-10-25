@@ -2977,6 +2977,9 @@ class SEMConfigCard extends SEMLitBase {
             const m = id.match(/^sensor\.sem_pv_string_(pv\d+)_power$/);
             if (!m) continue;
             const s = st[id];
+            // (#1196) the rule semDiscoverPVStrings keeps: a registry-only
+            // entity (a string that was removed) is not a string.
+            if (s?.attributes?.restored === true) continue;
             out.push({
                 slot: m[1],
                 power: parseFloat(s.state),

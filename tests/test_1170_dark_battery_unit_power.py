@@ -225,11 +225,13 @@ _DECLARED = {
     ("battery", "status"): "power_read (#1170)",
     ("battery", "soc"): "soc_pct None while unresolved (#694)",
     ("battery", "capacity_kwh"): "a size, not a reading",
-    ("pv_string", "power"): "OPEN #1196 — no read flag per string yet",
+    ("pv_string", "power"): "solar_power_per_string_read (#1196)",
     ("pv_string", "daily_energy"): "an integral (class 58)",
 }
 _BLANKS_ON_POWER_READ = {k for k, why in _DECLARED.items()
                          if why.startswith("power_read")}
+_BLANKS_ON_STRING_READ = {k for k, why in _DECLARED.items()
+                          if why.startswith("solar_power_per_string_read")}
 
 
 def _every_unit_dark():
@@ -241,6 +243,8 @@ def _every_unit_dark():
                            capacity_kwh=5.0, power_read=False),
     }
     data.power.solar_power_per_string = {"pv1": 0.0, "pv2": 0.0}
+    # (#1196) pv1 a real 0 W (night), pv2 dark
+    data.power.solar_power_per_string_read = {"pv1": True, "pv2": False}
     data.energy_flows.per_string = {"pv1": StringEnergy(1.0),
                                     "pv2": StringEnergy(0.0)}
     return data.to_dict()
@@ -268,3 +272,7 @@ def test_every_power_read_key_blanks_on_the_dark_unit_only():
     for prefix, field in _BLANKS_ON_POWER_READ:
         assert out[f"{prefix}_b2_{field}"] is None, f"{prefix}_b2_{field}"
         assert out[f"{prefix}_b1_{field}"] is not None, f"{prefix}_b1_{field}"
+    assert _BLANKS_ON_STRING_READ, "the string rule is declared"
+    for prefix, field in _BLANKS_ON_STRING_READ:
+        assert out[f"{prefix}_pv2_{field}"] is None, f"{prefix}_pv2_{field}"
+        assert out[f"{prefix}_pv1_{field}"] == 0.0, f"{prefix}_pv1_{field}"

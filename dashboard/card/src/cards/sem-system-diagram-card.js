@@ -25,7 +25,7 @@
 import { SEMLitBase, html, css, svg, nothing } from '../base/sem-lit-base.js';
 import {
     semFormatPower, semFormatTime, semCalcDuration, semDefineCard, SEM_DEVICE_ACCENT,
-    semDiscoverPVStrings, semPVStringsCSS, semPVStringStatesKey, semTheme,
+    semDiscoverPVStrings, semPVStringKW, semPVStringsCSS, semPVStringStatesKey, semTheme,
 } from '../base/sem-shared.js';
 import { nightArcPos } from '../util/night-arc.js';
 import { formatTemperatureLabel } from '../util/temperature.js';
@@ -835,7 +835,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
                                  data-entity="${s.entityId}"
                                  @click=${() => this._fireMoreInfo(s.entityId)}>
                                 <span class="pv-chip-label">${s.name}</span>
-                                <span class="pv-chip-value">${(Math.abs(s.watts)/1000).toFixed(2)} kW</span>
+                                <span class="pv-chip-value">${semPVStringKW(s.watts)}</span>
                             </div>
                         `)}
                     </div>
