@@ -15,7 +15,7 @@ import { capacityConsequence, horizonLabel, trustConsequence }
     from '../util/forecast-evidence.js';
 import { semTheme, semFormatPower, semGetCurrency, semCardSurfaceCSS, SEM_COLORS, semDefineCard } from '../base/sem-shared.js';
 import { temperatureUnit } from '../util/temperature.js';
-import { socDisplay } from '../util/missing-value.js';
+import { MISSING, socDisplay } from '../util/missing-value.js';
 import { solarSharePct } from '../util/solar-share.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
@@ -373,9 +373,11 @@ class SEMBatteryCard extends SEMLitBase {
 
     _renderBatterySection(bid, idx) {
         const color = BATTERY_COLORS[idx % BATTERY_COLORS.length];
-        const power = this._val(`battery_${bid}_power`, 0);
+        // (#1170) null, not 0, when this battery's sensor is out: the row
+        // reads "— W", never the 0 W of an idle pack.
+        const power = this._val(`battery_${bid}_power`, null);
         const soc = this._val(`battery_${bid}_soc`, null);
-        const statusRaw = (this._valStr(`battery_${bid}_status`) || 'idle').toLowerCase();
+        const statusRaw = (this._valStr(`battery_${bid}_status`) || '').toLowerCase();
         const capacity = this._val(`battery_${bid}_capacity_kwh`, 0);
         const name = this._batteryName(bid);
 
@@ -387,6 +389,8 @@ class SEMBatteryCard extends SEMLitBase {
         const statusKey = isSelling ? 'selling_to_grid'
             : isCharging ? 'charging'
             : isDischarging ? 'discharging' : 'idle';
+        // Neither a power nor a status: nothing says the pack is idle.
+        const statusKnown = power != null || statusRaw !== '';
         const flowColor = isSelling ? '#FCD170'
             : isCharging ? '#f06292'
             : isDischarging ? '#4db6ac' : '#999';
@@ -402,7 +406,7 @@ class SEMBatteryCard extends SEMLitBase {
                     <span class="battery-section-name">${name}</span>
                     <span class="battery-section-status"
                           style="color:${flowColor}">
-                        ${this._t(statusKey)}
+                        ${statusKnown ? this._t(statusKey) : MISSING}
                     </span>
                 </div>
                 <div class="battery-section-body">
@@ -676,7 +680,8 @@ class SEMBatteryCard extends SEMLitBase {
         // em-dash with an empty gauge, never as a flat pack (PROD 02.09).
         const soc = this._val('battery_soc', null);
         const socShown = socDisplay(soc);
-        const power = this._val('battery_power', 0);
+        // (#1170) and the fleet's: an unavailable power reads "— W".
+        const power = this._val('battery_power', null);
         const chargePower = this._val('battery_charge_power', 0);
         const dischargePower = this._val('battery_discharge_power', 0);
         // Lowercase — the sensor publishes title-cased values ("Selling",
