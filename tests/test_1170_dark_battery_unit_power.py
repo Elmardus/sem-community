@@ -14,8 +14,8 @@ Each unit now publishes its power and status as None when its own
 * the real reader → ``SEMData.to_dict`` for a dark, unknown, not-a-number,
   impossible and half-dark (two-sensor pair) unit, and the sign flip;
 * the real ``SEMSolarSensor`` holds the unit's last value for the grace and
-  then shows unavailable — never 0 W; the status holds on the same clock
-  and never says "idle";
+  then shows unavailable — never 0 W; the status holds on the same clock,
+  then shows unknown (#1197), and never says "idle";
 * a structural list of every per-unit key ``to_dict`` publishes, so a new
   per-unit reading cannot ship without the rule (or a filed reason).
 """
@@ -187,16 +187,18 @@ class TestTheEntityHoldsThenShowsUnavailable:
 
         _cycle([power, status], "unavailable",
                1000.0 + SENSOR_DARK_READ_GRACE_S + 1)
-        assert status._attr_available is False
+        # (#1197) unknown, not unavailable: the entity stays, and with it
+        # its decision attributes (#1084).
+        assert status._attr_available is True
         assert status.native_value is None
         assert power._attr_available is False, "one clock for both"
 
-    def test_a_status_never_read_is_unavailable_not_idle(self,
-                                                          mock_coordinator):
+    def test_a_status_never_read_is_unknown_not_idle(self,
+                                                      mock_coordinator):
         status = _entity(mock_coordinator, "battery_b2_status", None)
         _cycle([status], "unavailable", 1000.0)
-        assert status._attr_available is False
-        assert status.native_value is None
+        assert status.native_value is None, "not idle"
+        assert status._attr_available is True, "unknown (#1197)"
 
     def test_only_a_battery_unit_status_is_held(self, mock_coordinator):
         """The twin: every other text sensor shows its None at once."""

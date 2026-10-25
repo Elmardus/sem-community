@@ -718,8 +718,9 @@ class PerformanceMetrics:
 @dataclass
 class SystemStatus:
     """System status indicators."""
-    grid_status: str = "idle"  # import, export, idle
-    battery_status: str = "idle"  # charging, discharging, idle
+    # None while every read of the power it is built from is dark (#1197)
+    grid_status: Optional[str] = "idle"  # import, export, idle
+    battery_status: Optional[str] = "idle"  # selling, charging, discharging, idle
     solar_active: bool = False
     ev_connected: bool = False
     ev_charging: bool = False

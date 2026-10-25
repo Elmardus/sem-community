@@ -19,6 +19,7 @@
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semTheme, semFormatPower, semGetCurrency, semCardSurfaceCSS, SEM_COLORS, semDefineCard } from '../base/sem-shared.js';
 import { priceLevelColor, priceLevelKey } from '../util/price-level.js';
+import { MISSING, isMissing } from '../util/missing-value.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
 
@@ -132,8 +133,13 @@ class SEMGridCard extends SEMLitBase {
         const glowOpacity = (isImporting || isExporting) ? '0.45' : '0.1';
 
         const statusRaw = this._valStr('grid_status');
+        // (#1197) The status is out while the meter is dark, and so are the
+        // powers: their 0 is no reading, so nothing says the grid is idle.
+        const powerKnown = ['grid_power', 'grid_import_power', 'grid_export_power']
+            .some(s => !isMissing(this._hass?.states[`${this._prefix}${s}`]));
         const statusText = statusRaw !== '' && statusRaw !== '—'
             ? this._t(statusRaw.toLowerCase())
+            : !powerKnown ? MISSING
             : isExporting ? this._t('exporting')
             : isImporting ? this._t('importing')
             : this._t('idle');

@@ -12,6 +12,7 @@
 import { LitElement, html, css, svg, nothing } from 'lit';
 import { semTheme } from './sem-shared.js';
 import { stateLabel } from '../util/state-label.js';
+import { allOut } from '../util/missing-value.js';
 
 export { html, css, svg, nothing };
 
@@ -81,10 +82,10 @@ export class SEMLitBase extends LitElement {
         // Skip transient unavailable states caused by coordinator refresh —
         // async_request_refresh() briefly marks all entities unavailable before
         // new data arrives (~600ms). Rendering during this window causes visual flashes.
-        if (watched.length > 0 && !localeChanged) {
-            const firstState = hass.states[watched[0]]?.state;
-            if (firstState === 'unavailable' || firstState === 'unknown') return;
-        }
+        // (#1197) Only when every watched entity is out: one that is out on
+        // its own (solar power while the inverter is dark) must not stop the
+        // card drawing.
+        if (!localeChanged && allOut(hass.states, watched)) return;
 
         let changed = false;
         for (const id of watched) {
