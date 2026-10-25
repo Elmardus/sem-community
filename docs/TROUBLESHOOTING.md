@@ -1058,8 +1058,9 @@ On a KEBA the settings are `Curr FS` (fallback current) and `Tmo FS`
 (timeout); on a Modbus-driven box they usually sit in the register block the
 integration already uses. **If this is a KEBA on the official integration**,
 the timer is SEM's own: SEM arms the box's failsafe at every start (600 s,
-charging floor) so a dead controller still charges the car, and asks for 0 A
-at every stop — which the KEBA refuses (its floor is 6 A). Turn SEM's arming
+charging floor) so a dead controller still charges the car. At every stop it
+asks for 0 A, up to 3 times. If the box still turns itself back on, it kept
+its fallback after every try. Turn SEM's arming
 off first (`solar_energy_management.set_option` with `keba_arm_failsafe:
 false`), then set the box. Until then, Off and Pause hold for about the
 interval the notice names. Rule out another controller (a second SEM, an

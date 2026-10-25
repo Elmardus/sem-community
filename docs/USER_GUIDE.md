@@ -556,13 +556,12 @@ There is no Resume button, because the Charge Mode select already is one.
 Pressing Pause on a charger you set to Off yourself does nothing: there is
 nothing to pause and no mode to come back to.
 
-**On a KEBA, Off and Pause are best-effort.** SEM sends one stop and then
-leaves the box alone. About 10 minutes later the box switches itself back
-on at its fallback current (8 A on a typical setup): that is its failsafe,
-which SEM itself sets at every start so a dead controller still charges the
-car, and which the KEBA will not let SEM set to 0 A. SEM does not fight it —
-re-sending the stop every 10 minutes would only strobe the contactor. When
-this happens SEM raises a Repair, *"Your wallbox undoes SEM's stop on a
+**On a KEBA, SEM sets the box's fallback current.** At every start it sets
+the charging minimum, so a dead controller still charges the car. At every
+stop it sets 0 A, and asks again if the box missed it, up to 3 times. A box
+that keeps its fallback anyway switches itself back on about 10 minutes
+later. SEM does not fight it: sending the stop every 10 minutes would only
+switch the box on and off. When this happens SEM raises a Repair, *"Your wallbox undoes SEM's stop on a
 timer"*. To make a stop hold: turn SEM's own arming off with the service
 `solar_energy_management.set_option` and `keba_arm_failsafe: false`, then
 set the box's failsafe current (`Curr FS`) to 0 at the wallbox.
