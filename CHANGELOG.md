@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+# [2.2.0-beta.27] — 25.10.2026
+
 - 🐛 **The battery is no longer held back for a plugged-in car that is not charging** (#1199). It ends 15 minutes after the last draw.
 - 🐛 **Batteries with two power sensors now get their own Mode and reserve controls** (#1171). Each one starts on the shared setting you had.
 - 🐛 **A battery whose power sensor is out no longer shows 0 W** (#1170). It shows its last value for a short time, then unavailable.
