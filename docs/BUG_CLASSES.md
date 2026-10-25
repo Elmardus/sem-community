@@ -62,8 +62,8 @@ on a real config entry, and AST guards: the per-battery branch reads no fleet po
 into each unit's two flags names no fleet flag (a copy into a local first counts too), and the check
 gets those two maps by name. Left open: the sell gates still read the fleet SOC flag on every unit
 (#932: a sale waits), and a dark unit's SOC is averaged into the fleet level as 0 % (#1169). One shared mode select still waits for every pack it drives, so a dark pack
-keeps the other's Force charge on there (#1131 by design); a fleet of two-sensor pairs gets only that
-shared select, because the per-battery controls count combined sensors only (#1171). A unit's 0 %
+keeps the other's Force charge on there (#1131 by design); a fleet of two-sensor pairs got only that
+shared select, because the per-battery controls counted combined sensors only (#1171, fixed: class 162). A unit's 0 %
 blink is now one level read; the three reads in a row are what guard it. Refs v1.6.0–6.6, #589, #1167.
 
 ### 4. Strand-across-restart (a force op left running on the real inverter) — GUARDED
@@ -660,7 +660,7 @@ picked the control by the slugs found at setup; \`_per_battery_config\` picked t
 \`['auto','auto']\`) showed the global select and the list shadowed every write — select
 \`force_charge\`, SEM \`auto\`. The same split hid two more: per-battery controls on a
 one-battery cycle (cold-start ED, #274) read the stale global key (#531's hazard), and a global
-select (two-sensor batteries, #553, never get per-battery controls) did nothing once two were
+select (two-sensor batteries, #553, got no per-battery controls until #1171, class 162) did nothing once two were
 live. And an UNSET reserve showed 20 % (\`DEFAULT_BATTERY_RESERVE_SOC\`) while the runtime sold
 to 0 %. **Closure:** ONE decision — \`coordinator/battery_controls.py::discover_battery_control_slugs\`
 (registry fallback scoped to the entry), captured as \`coordinator.battery_control_slugs\` in
@@ -6309,3 +6309,13 @@ Refs #1175 #1165 #1178 #523 #936 #879 #1180 #1181.
 **Sweep question:** when two units write one register, whose value should it hold — and does every writer's "already sent" skip read the register's record, or only its own?
 **Left open:** the sale power setpoint (`battery_force_discharge_control_entity`) has the same shape: on one shared setpoint a sibling's NORMAL zeroes a sale on the first cycle, and the seller's own record then skips every later write. Fixing it needs a rule for the sale split too (class 6), so it is filed on its own (#1182). A shared strategy select is two Sessys set up wrong: each has its own, and SEM warns.
 Refs #1178 #1182 #1175 #691 #533 #915 #1138 #936.
+
+### 162. A unit count taken from one of the two lists that hold the units — GUARDED
+**Symptom:** a home whose batteries use HA's "Two sensors" option (one charge and one discharge power sensor, no combined one) got no `sensor.sem_battery_b<N>_*` and no per-battery Mode select or reserve. One shared select drove both batteries, so Force charge on one waited for the other (#1171, found while fixing #1167). A home with one combined and one two-sensor battery was hit the same way.
+**Root shape:** a battery is a combined sensor (`battery_power_list`) or a two-sensor pair (`battery_power_pairs`, #551/#553). The reader counted both and published `b1`, `b2` for every kind, but the sensor platform and the control discovery each counted `len(battery_power_list)`. Each site restated the count (class 46) from the list it knew, and the two-sensor kind came later. Nothing failed: one shared control is the right answer for a one-battery home, so the wrong count looked like that home.
+**Where it lives:** `sensor.py` per-battery sensors (**fixed**); `coordinator/battery_controls.py::discover_battery_control_slugs`, which select.py, number.py and `_per_battery_config` all follow (**fixed**); `config_flow.py` `_battery_label_source` (the per-battery limit page named a two-sensor battery by SEM's own sensor, **fixed**) and the setup summary (counted and listed combined sensors only, **fixed**); `coordinator.py::_configured_entity_ids` (a pair's two sensors were not "in use", so the Config card could propose them, **fixed**); `diagnostics.py` per-source lists (pairs not dumped, **fixed**); the reader's own counts and SOC average (correct, now read the same list); the ED read log (**fixed**). Kept on the combined list on purpose: sign detection, its #647 audit and the sign payload, because a pair's sign is declared by the user and never checked.
+**Closure:** one list, `ha_energy_reader.battery_units(ed)`: one entity per battery in slug order, combined sensors first, then each pair by its charge sensor (the reader's own order and name). Every battery count and slug list reads it.
+**Guard:** `tests/test_1171_two_sensor_battery_controls.py` — the list from HA's real prefs layout (two pairs; a pair listed before a combined sensor, so the order is checked); the reader publishes exactly those batteries with those names; SEM's real setup on a real registry builds four sensors, a Mode select and a reserve per battery and no shared select, each power sensor shows its battery's own net, and Force charge on b2 drives b2 only; the twin: one two-sensor battery keeps the one shared select. An AST check lists every function that reads `battery_power_list` with why the combined list alone is right there; a new reader fails until declared, and a twin shows the two #1171 counts would fail it. The setup tests fail on the old code.
+**Sweep question:** where one kind of unit lives in two lists, does every count and every slug list ask both?
+**Left open:** the per-battery sign check matches a combined battery to energy counters by list position, but the counter lists follow the Energy Dashboard order and hold the two-sensor batteries too, so a mixed home can check one battery against another's counters (#1193). A combined sensor the user marked "Inverted" in HA is read as it is once a home has two batteries (#1194). Both are class 1. A home that gains its own controls this way starts each battery at Auto and the default reserve; the old shared values are not copied (the same as any home that grows to two batteries).
+Refs #1171 #1167 #553 #551 #1071 #1089.
