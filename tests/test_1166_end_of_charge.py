@@ -334,6 +334,8 @@ _ALLOWED = {
     "config_flow.py", "__init__.py",
     "diagnostics.py", "consts/role_lexicon.py",
     "coordinator/install_modules.py",
+    # (#1195) moves the saved list with its battery; sends nothing
+    "coordinator/battery_controls.py",
 }
 
 
