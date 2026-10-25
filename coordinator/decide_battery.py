@@ -948,7 +948,12 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
     # switch, whatever the surplus or the spend consent: the newer, more
     # specific "no" wins (the class-75 rule). UNSET resolves to True, so no
     # install that has not asked moves.
-    if (protection_enabled or not _assist_ok) and (view.ev_connected or view.ev_charging):
+    # (#1199) …but only for a car that may draw: drawing now, or within the
+    # last 15 minutes (the Zoe's pulses). A plugged-in car that has been
+    # idle that long leaves the pack alone.
+    _car_live = view.ev_charging or (
+        view.ev_connected and getattr(view, "ev_drew_recently", True))
+    if (protection_enabled or not _assist_ok) and _car_live:
         f = view.fleet
         # Pure solar-vs-house surplus. Intentionally does NOT subtract
         # battery_charge_w (unlike decide.self_consumption_surplus_w): the

@@ -459,6 +459,9 @@ class BatteryView:
     # sink. Defaults keep every existing install untouched: no master
     # switch, no budget, and a dynamic floor of None contributes nothing
     # to the max() rather than being read as a floor of zero.
+    ev_drew_recently: bool = True
+    """(#1199) A car drew in the last 15 minutes. The discharge clamp holds
+    for a plugged-in car only while this is true; an idle car is not fed."""
     ev_wants_pack: bool = False
     """(03.09) A CONNECTED charger in *Solar + battery* mode — the consent
     the charger side already acts on (``_battery_assist_split``), so the
