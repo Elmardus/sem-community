@@ -226,7 +226,9 @@ class BatteryPower:
     number this cycle (both sides for a two-sensor pair) and the number is
     one a battery can produce. ``power_w`` is 0.0 on a dark read, which is
     also what an idle pack reads. The fleet's flag cannot stand in for it:
-    one dark unit would make every other unit's 0 W no reading too."""
+    one dark unit would make every other unit's 0 W no reading too.
+    (#1170) ``SEMData.to_dict`` publishes this unit's power and status as
+    None while it is False, so its entity shows no 0 W."""
 
 
 # ─────────────────────────────────────────────────────────────────

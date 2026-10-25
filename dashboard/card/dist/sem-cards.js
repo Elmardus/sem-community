@@ -1578,33 +1578,33 @@ const e=globalThis,t=e.ShadowRoot&&(void 0===e.ShadyCSS||e.ShadyCSS.nativeShadow
                     </div>
                 `:K}
             </div>
-        `}_renderBatterySection(e,t){const i=pt[t%pt.length],s=this._val(`battery_${e}_power`,0),r=this._val(`battery_${e}_soc`,null),a=(this._valStr(`battery_${e}_status`)||"idle").toLowerCase(),o=this._val(`battery_${e}_capacity_kwh`,0),n=this._batteryName(e),l="selling"===a,c=!l&&("charging"===a||s>50),d=!l&&("discharging"===a||s<-50),p=c||d||l,h=l?"selling_to_grid":c?"charging":d?"discharging":"idle",_=l?"#FCD170":c?"#f06292":d?"#4db6ac":"#999",g=null!=r&&o>0?r/100*o:null,u=this._batteryEta(r,o,s);return W`
+        `}_renderBatterySection(e,t){const i=pt[t%pt.length],s=this._val(`battery_${e}_power`,null),r=this._val(`battery_${e}_soc`,null),a=(this._valStr(`battery_${e}_status`)||"").toLowerCase(),o=this._val(`battery_${e}_capacity_kwh`,0),n=this._batteryName(e),l="selling"===a,c=!l&&("charging"===a||s>50),d=!l&&("discharging"===a||s<-50),p=c||d||l,h=l?"selling_to_grid":c?"charging":d?"discharging":"idle",_=null!=s||""!==a,g=l?"#FCD170":c?"#f06292":d?"#4db6ac":"#999",u=null!=r&&o>0?r/100*o:null,m=this._batteryEta(r,o,s);return W`
             <div class="battery-section">
                 <div class="battery-section-header">
                     <div class="battery-dot" style="background:${i}"></div>
                     <span class="battery-section-name">${n}</span>
                     <span class="battery-section-status"
-                          style="color:${_}">
-                        ${this._t(h)}
+                          style="color:${g}">
+                        ${_?this._t(h):ot}
                     </span>
                 </div>
                 <div class="battery-section-body">
                     <div class="battery-section-glyph">
-                        ${this._renderBatteryGlyph(r,_,p)}
+                        ${this._renderBatteryGlyph(r,g,p)}
                         <span class="battery-section-soc-label">SOC</span>
                     </div>
                     <div class="battery-section-metrics">
                         <div class="bs-row">
                             <span class="bs-label">${this._t("power")}</span>
                             <span class="bs-val"
-                                  style="color:${s>50||s<-50?_:""}">
+                                  style="color:${s>50||s<-50?g:""}">
                                 ${ge(s)}
                             </span>
                         </div>
-                        ${null!=g?W`
+                        ${null!=u?W`
                             <div class="bs-row">
                                 <span class="bs-label">${this._t("stored")}</span>
-                                <span class="bs-val">${this._fmt(g,1)} kWh</span>
+                                <span class="bs-val">${this._fmt(u,1)} kWh</span>
                             </div>
                         `:K}
                         ${o>0?W`
@@ -1613,10 +1613,10 @@ const e=globalThis,t=e.ShadowRoot&&(void 0===e.ShadyCSS||e.ShadyCSS.nativeShadow
                                 <span class="bs-val">${this._fmt(o,1)} kWh</span>
                             </div>
                         `:K}
-                        ${u?W`
+                        ${m?W`
                             <div class="bs-row">
-                                <span class="bs-label">${this._t(u.key)}</span>
-                                <span class="bs-val">${u.text}</span>
+                                <span class="bs-label">${this._t(m.key)}</span>
+                                <span class="bs-val">${m.text}</span>
                             </div>
                         `:K}
                     </div>
@@ -1660,7 +1660,7 @@ const e=globalThis,t=e.ShadowRoot&&(void 0===e.ShadyCSS||e.ShadyCSS.nativeShadow
                         <div class="ev-sub">${e.sub}</div>
                     </div>`)}
             </div>
-        `}render(){if(!this._hass||!this._config)return K;const e=this._theme(),t=2*Math.PI*42,i=t.toFixed(1),s=this._val("battery_soc",null),r=lt(s),a=this._val("battery_power",0),o=this._val("battery_charge_power",0),n=this._val("battery_discharge_power",0),l=(this._valStr("battery_status")||"").toLowerCase(),c=this._val("battery_health_score",0),d=this._val("battery_cycles_estimated",0),p=this._val("daily_battery_charge_energy",0),h=this._val("daily_battery_discharge_energy",0),_=this._val("daily_battery_savings",0),g=this._val("monthly_battery_charge_energy",0),u=this._val("monthly_battery_discharge_energy",0),m=this._val("flow_solar_to_battery_energy",0),f=this._val("flow_grid_to_battery_energy",0),v=fe(this._hass),y=this._hass?.states[`${this._prefix}battery_temperature`],b=y&&"unavailable"!==y.state&&"unknown"!==y.state?parseFloat(y.state):null,x=($=y)&&$.attributes&&$.attributes.unit_of_measurement||"°C";var $;const w="selling"===l,k=!w&&("charging"===l||o>10),S=!w&&("discharging"===l||n>10),C=this._hass?.states["sensor.sem_tariff_current_export_rate"],z=C&&"unavailable"!==C.state&&"unknown"!==C.state?parseFloat(C.state):null,M="#FCD170",D=w?this._t("selling_to_grid"):k?this._t("charging"):S?this._t("discharging"):this._t("idle"),E=w?M:k?"#f06292":"#4db6ac",F=w?M:k?"#f06292":S?"#4db6ac":e.textSec||"#888",N=k||S||w?"0.5":"0.2",A=k||S||w?"socPulse 2s ease-in-out infinite":"none",R=r.fraction,T=(t*(1-R)).toFixed(1),I=p>0?Math.round(function(e,...t){const i=e=>{const t=Number(e);return Number.isFinite(t)&&t>0?t:0},s=i(e),r=t.reduce((e,t)=>e+i(t),s);return r>0?s/r*100:null}(m,f)??0):0,B=this._valStr("battery_session_type"),L="charge"===B||"discharge"===B,P="charge"===B,O=L?this._val("battery_session_energy",0):0,U=L?this._val("battery_session_duration",0):0,H=L?this._val("battery_session_avg_power",0):0,j=L?this._val("battery_session_solar_share",0):0,G=L?this._val("battery_session_cost",0):0,q=L?this._val("battery_session_savings",0):0,V=P?"#f06292":"#4db6ac";e.dotColor;const Y=e.surface||"rgba(255,255,255,0.06)",Z=e.surfaceBorder||"rgba(255,255,255,0.05)",X=e.surfaceHover||"rgba(255,255,255,0.12)",J=e.textSec||"#999",Q=e.textTertiary||"#888";return W`
+        `}render(){if(!this._hass||!this._config)return K;const e=this._theme(),t=2*Math.PI*42,i=t.toFixed(1),s=this._val("battery_soc",null),r=lt(s),a=this._val("battery_power",null),o=this._val("battery_charge_power",0),n=this._val("battery_discharge_power",0),l=(this._valStr("battery_status")||"").toLowerCase(),c=this._val("battery_health_score",0),d=this._val("battery_cycles_estimated",0),p=this._val("daily_battery_charge_energy",0),h=this._val("daily_battery_discharge_energy",0),_=this._val("daily_battery_savings",0),g=this._val("monthly_battery_charge_energy",0),u=this._val("monthly_battery_discharge_energy",0),m=this._val("flow_solar_to_battery_energy",0),f=this._val("flow_grid_to_battery_energy",0),v=fe(this._hass),y=this._hass?.states[`${this._prefix}battery_temperature`],b=y&&"unavailable"!==y.state&&"unknown"!==y.state?parseFloat(y.state):null,x=($=y)&&$.attributes&&$.attributes.unit_of_measurement||"°C";var $;const w="selling"===l,k=!w&&("charging"===l||o>10),S=!w&&("discharging"===l||n>10),C=this._hass?.states["sensor.sem_tariff_current_export_rate"],z=C&&"unavailable"!==C.state&&"unknown"!==C.state?parseFloat(C.state):null,M="#FCD170",D=w?this._t("selling_to_grid"):k?this._t("charging"):S?this._t("discharging"):this._t("idle"),E=w?M:k?"#f06292":"#4db6ac",F=w?M:k?"#f06292":S?"#4db6ac":e.textSec||"#888",N=k||S||w?"0.5":"0.2",A=k||S||w?"socPulse 2s ease-in-out infinite":"none",R=r.fraction,T=(t*(1-R)).toFixed(1),I=p>0?Math.round(function(e,...t){const i=e=>{const t=Number(e);return Number.isFinite(t)&&t>0?t:0},s=i(e),r=t.reduce((e,t)=>e+i(t),s);return r>0?s/r*100:null}(m,f)??0):0,B=this._valStr("battery_session_type"),L="charge"===B||"discharge"===B,P="charge"===B,O=L?this._val("battery_session_energy",0):0,U=L?this._val("battery_session_duration",0):0,H=L?this._val("battery_session_avg_power",0):0,j=L?this._val("battery_session_solar_share",0):0,G=L?this._val("battery_session_cost",0):0,q=L?this._val("battery_session_savings",0):0,V=P?"#f06292":"#4db6ac";e.dotColor;const Y=e.surface||"rgba(255,255,255,0.06)",Z=e.surfaceBorder||"rgba(255,255,255,0.05)",X=e.surfaceHover||"rgba(255,255,255,0.12)",J=e.textSec||"#999",Q=e.textTertiary||"#888";return W`
             <style>
                 :host { display: block; contain: layout style paint; }
                 .wrap {
