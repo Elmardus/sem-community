@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Batteries with two power sensors now get their own Mode and reserve controls** (#1171). Each one starts on the shared setting you had.
+
 # [2.2.0-beta.26] — 25.10.2026
 
 - 🐛 **A stopped KEBA no longer starts charging again by itself** (#1163). SEM resends the stop setting when the wallbox missed it.
