@@ -655,7 +655,7 @@ Each mode promise is tested: `tests/test_docs_contracts_battery.py`.
 - `select.sem_battery_<id>_mode` — set the mode (auto / self_consumption / force_charge / force_discharge / off)
 - `number.sem_battery_<id>_reserve_soc` — the SOC this battery will not discharge below
 
-With one battery, SEM makes one `select.sem_battery_mode` and one `number.sem_battery_reserve_soc` instead. The same happens when the Energy Dashboard lists each battery as two sensors (charge and discharge); then these two controls set every battery. The controls you see are the ones SEM uses. A reserve you never set is 20 %.
+With one battery, SEM makes one `select.sem_battery_mode` and one `number.sem_battery_reserve_soc` instead. A battery that the Energy Dashboard lists as two sensors (charge and discharge) counts as one battery. Two such batteries get their own controls too. When you move from the shared controls to one per battery, each battery starts on the shared mode and reserve, and the shared controls go away. Update any automation that set them. The controls you see are the ones SEM uses. A reserve you never set is 20 %.
 
 The discharge *rate* is not per-battery: **`number.sem_battery_max_discharge_power`** (default 5000 W) caps it for the whole fleet.
 
