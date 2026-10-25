@@ -1113,6 +1113,8 @@ battery becomes one demand among the EV, the deferrable loads and the comfort
 bands, placed in the cheapest hours of the overnight window (or across the
 full window on a static tariff) under your peak limit and priority order.
 SEM then issues forced charge commands only while that block is open.
+On some inverters this sets the battery's charge limit, for example to 60 %.
+When the charge stops, SEM puts your own value back.
 
 > Since v2.0 the scheduler no longer picks its own window (#638). Two
 > consequences: the battery's charge hours now respect the same peak limit
