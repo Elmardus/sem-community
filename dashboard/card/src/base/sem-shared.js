@@ -193,9 +193,13 @@ export function semDiscoverPVStrings(hass, prefix) {
     for (const slot of ['pv1', 'pv2', 'pv3', 'pv4']) {
         const eid = `${pfx}pv_string_${slot}_power`;
         const st = hass.states[eid];
-        if (!st) continue;
+        // (#1196) A string whose sensor is out stays in the list with no
+        // watts, and the cards print "—". Dropping it made the section go
+        // away when one of two strings was dark. An entity HA only restored
+        // from the registry (no integration provides it now, e.g. a string
+        // that was removed) is not a string.
+        if (!st || st.attributes?.restored === true) continue;
         const raw = parseFloat(st.state);
-        if (isNaN(raw)) continue;
 
         // Sibling daily-energy sensor (v1.7.0). Always companions the
         // power sensor when the gate trips, so we surface it on the
@@ -209,18 +213,30 @@ export function semDiscoverPVStrings(hass, prefix) {
 
         found.push({
             slot,
-            watts: raw,
+            watts: isNaN(raw) ? null : raw,
             entityId: eid,
             energyKwh: isNaN(eKwh) ? null : eKwh,
             energyEntityId: eSt ? eEid : null,
             // (#566) user-chosen display name (East/South/…), published as a
             // string_name attribute on the power sensor; falls back to the
-            // compact "PVn" when unset.
-            name: (st.attributes && st.attributes.string_name)
+            // compact "PVn" when unset. (#1196) HA drops that attribute
+            // while the power sensor is unavailable; the energy sensor
+            // beside it carries the same name.
+            name: st.attributes?.string_name
+                || eSt?.attributes?.string_name
                 || ('PV' + slot.replace(/^pv/, '')),
         });
     }
     return found.length >= 2 ? found : [];
+}
+
+/**
+ * (#1196) A string's chip value: "1.23 kW", or "— kW" while its sensor is
+ * out (``watts`` is null). Never the 0.00 kW of a string at night.
+ */
+export function semPVStringKW(watts) {
+    if (watts == null || isNaN(watts)) return '— kW';
+    return `${(Math.abs(watts) / 1000).toFixed(2)} kW`;
 }
 
 /**
@@ -243,10 +259,9 @@ export function semBuildPVStringsHTML(strings, theme) {
     const T = theme || { text: '#fff', textSec: '#aaa' };
     const chips = strings.map(s => {
         const n = s.slot.replace(/^pv/, '');
-        const kW = (Math.abs(s.watts) / 1000).toFixed(2);
         return `<div class="pv-chip" title="${s.entityId}" data-entity="${s.entityId}">
             <span class="pv-chip-label">PV${n}</span>
-            <span class="pv-chip-value">${kW} kW</span>
+            <span class="pv-chip-value">${semPVStringKW(s.watts)}</span>
         </div>`;
     }).join('');
     return `<div class="pv-strings-row">${chips}</div>`;

@@ -12,7 +12,7 @@
 import { SEMLitBase, html, css, nothing, semGlassCss } from '../base/sem-lit-base.js';
 import {
     semTheme, semFormatPower, semCardSurfaceCSS, SEM_COLORS, semDefineCard,
-    semDiscoverPVStrings, semPVStringsCSS,
+    semDiscoverPVStrings, semPVStringKW, semPVStringsCSS,
 } from '../base/sem-shared.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
@@ -348,7 +348,7 @@ class SEMSolarCard extends SEMLitBase {
                                      data-entity="${s.entityId}"
                                      @click=${() => this._fireMoreInfo(s.entityId)}>
                                     <span class="pv-chip-label">${s.name}</span>
-                                    <span class="pv-chip-value">${(Math.abs(s.watts)/1000).toFixed(2)} kW</span>
+                                    <span class="pv-chip-value">${semPVStringKW(s.watts)}</span>
                                 </div>
                             `)}
                         </div>

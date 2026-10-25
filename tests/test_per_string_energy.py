@@ -249,6 +249,9 @@ class TestDataDict:
         d = SEMData()
         d.power.solar_power_per_string["pv1"] = 2500.0
         d.power.solar_power_per_string["pv2"] = 1500.0
+        # (#1196) the reader marks each string it read; an unmarked one
+        # publishes no power.
+        d.power.solar_power_per_string_read.update(pv1=True, pv2=True)
         d.energy_flows.per_string["pv1"] = StringEnergy(energy_kwh=2.5)
         d.energy_flows.per_string["pv2"] = StringEnergy(energy_kwh=1.5)
         out = d.to_dict()

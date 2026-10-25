@@ -16,7 +16,7 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
     semTheme, semFormatPower, semCalcDuration, semGetCurrency, semDefineCard,
     SEM_COLORS, SEM_DEVICE_COLORS, SEM_FLOW_ACTIVE_THRESHOLD,
-    semDiscoverPVStrings, semPVStringsCSS, semPVStringStatesKey,
+    semDiscoverPVStrings, semPVStringKW, semPVStringsCSS, semPVStringStatesKey,
 } from '../base/sem-shared.js';
 
 /* ── Defaults ── */
@@ -247,7 +247,7 @@ class SEMFlowCard extends SEMLitBase {
                                  data-entity="${s.entityId}"
                                  @click=${() => this._fireMoreInfo(s.entityId)}>
                                 <span class="pv-chip-label">${s.name}</span>
-                                <span class="pv-chip-value">${(Math.abs(s.watts)/1000).toFixed(2)} kW</span>
+                                <span class="pv-chip-value">${semPVStringKW(s.watts)}</span>
                             </div>
                         `)}
                     </div>

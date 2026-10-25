@@ -171,6 +171,11 @@ class PowerReadings:
     # inverter setups; downstream readers must fall back to
     # ``solar_power``.
     solar_power_per_string: "Dict[str, float]" = field(default_factory=dict)
+    #: (#1196) True for a string whose own sensor (both halves of a V+I pair)
+    #: gave a number this cycle. A dark string's watts above are the reader's
+    #: 0.0 for the sums, which is also what a string reads at night. A slot
+    #: missing here was not read.
+    solar_power_per_string_read: "Dict[str, bool]" = field(default_factory=dict)
 
     # v1.7.0 arch/multi-inverter-battery-primary.
     #
@@ -1339,8 +1344,15 @@ class SEMData:
             # multi-string discovery populated these. Single-string
             # / single-inverter setups skip the keys and the fleet
             # ``sensor.sem_solar_power`` stays authoritative.
+            # (#1196) A string whose own sensor was not read this cycle
+            # publishes None, as a dark battery unit does (#1170): its 0.0 is
+            # the reader's fallback, which is also what a string reads at
+            # night. The entity holds its last value for the dark-read
+            # grace, then shows unavailable.
             **{
-                f"pv_string_{sid}_power": w
+                f"pv_string_{sid}_power": (
+                    w if (self.power.solar_power_per_string_read or {}).get(sid)
+                    is True else None)
                 for sid, w in (self.power.solar_power_per_string or {}).items()
             },
             **{
