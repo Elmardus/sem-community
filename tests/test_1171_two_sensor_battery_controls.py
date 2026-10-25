@@ -292,3 +292,52 @@ def test_the_guard_bites_on_the_old_counts():
     assert old == {("sensor.py", "async_setup_entry"),
                    ("coordinator/battery_controls.py", "discover_battery_control_slugs")}
     assert not old & set(DECLARED_READERS)
+
+
+# ── Siblings: what SEM says it reads ───────────────────────────────────────
+
+def test_both_sensors_of_a_pair_count_as_in_use():
+    """The Config card proposes no entity SEM already reads (#915); a
+    two-sensor battery is read on both of its sensors."""
+    from types import SimpleNamespace
+
+    from custom_components.solar_energy_management.coordinator.coordinator import (
+        SEMCoordinator,
+    )
+    coord = SEMCoordinator.__new__(SEMCoordinator)
+    coord.config = {}
+    coord._sensor_reader = SimpleNamespace(
+        config=SimpleNamespace(), _energy_dashboard_config=_config(HOMES["two_pairs"]))
+    used = coord._configured_entity_ids()
+    for n in (1, 2):
+        assert {f"sensor.verto{n}_charge_power",
+                f"sensor.verto{n}_discharge_power"} <= used
+
+
+@pytest.mark.asyncio
+async def test_the_diagnostics_list_and_read_each_pair():
+    from custom_components.solar_energy_management.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+    ed = _config(HOMES["pair_and_combined"])
+    coordinator = MagicMock()
+    coordinator._energy_dashboard_config = ed
+    entry = MagicMock()
+    entry.entry_id = "e1171"
+    entry.data, entry.options = {}, {}
+    entry.runtime_data = coordinator
+    hass = MagicMock()
+    hass.data = {"solar_energy_management": {"e1171": coordinator}}
+    hass.states.get = lambda eid: (
+        MagicMock(state=STATES[eid], attributes={"unit_of_measurement": "W"})
+        if eid in STATES else None)
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    block = result["energy_dashboard"]
+    assert block["per_source_lists"]["battery_power_pairs"] == [
+        ["sensor.verto1_discharge_power", "sensor.verto1_charge_power"]]
+    battery = block["per_source_readings"]["battery"]
+    assert battery["sensor.verto1_charge_power"]["state"] == "1200"
+    assert battery["sensor.verto1_discharge_power"]["state"] == "0"
+    assert battery["sensor.sessy1_power"]["state"] == "1200"
