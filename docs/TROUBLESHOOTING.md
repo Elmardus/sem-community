@@ -882,7 +882,8 @@ or, once you point SEM at another sensor, about five minutes after you save
 While a sensor is out, the tab headers show "—" for its figure, not 0. A real
 0 still shows 0. When the battery or grid power sensor is out, its status shows
 "—", not Idle. The Battery card and the Home diagram keep updating from the
-sensors that still work.
+sensors that still work. A solar string whose sensor is out shows "—"; the
+other strings still show their power.
 
 ## A sensor stopped updating (stale)
 
