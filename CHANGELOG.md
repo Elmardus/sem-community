@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **The battery is no longer held back for a plugged-in car that is not charging** (#1199). It ends 15 minutes after the last draw.
 - 🐛 **Batteries with two power sensors now get their own Mode and reserve controls** (#1171). Each one starts on the shared setting you had.
 - 🐛 **A battery whose power sensor is out no longer shows 0 W** (#1170). It shows its last value for a short time, then unavailable.
 - 🐛 **Tab header figures show "—", not 0, when their sensor is out** (#1198). The Config tab no longer shows your heat pump as Off.

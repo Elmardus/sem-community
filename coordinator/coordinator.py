@@ -146,6 +146,20 @@ def _manual_stall_clock() -> float:
     return time.monotonic()
 
 
+def _ev_draw_clock() -> float:
+    """(#1199) The clock the car's last draw is measured on."""
+    return time.monotonic()
+
+
+#: (#1199) How long the battery stays capped after a plugged-in car last
+#: drew. Covers a car that pulses on and off (PROD 24.06: a Zoe drained the
+#: pack 93 → 41 % between bursts); an idle car leaves the pack alone.
+EV_CLAMP_HOLD_S = 900.0
+#: (#1199) A draw above this counts, so a car that never reaches the 500 W
+#: charging flag still keeps the cap.
+EV_CLAMP_DRAW_W = 100.0
+
+
 def _f_or_none(value):
     """(#778) A float, or None — so "unconfigured" never reads as zero."""
     try:
@@ -8397,6 +8411,25 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             out.append(mode in takers)
         return out
 
+    def _ev_drew_recently(self, power) -> bool:
+        """(#1199) Did any car draw in the last ``EV_CLAMP_HOLD_S``? A
+        restart counts as a draw, so the cap holds for one window first."""
+        now = _ev_draw_clock()
+        last = getattr(self, "_ev_last_draw_at", None)
+        try:
+            draw_w = float(power.ev_power.as_fleet_total(
+                "battery clamp: any car drawing at all"))
+        except (AttributeError, TypeError, ValueError):
+            draw_w = 0.0
+        # A started session counts at once: the charging flag waits for
+        # 500 W and can lag a minute behind the real start.
+        starting = any(getattr(d, "_session_active", False)
+                       for d in (getattr(self, "_ev_devices", None) or {}).values())
+        if (last is None or starting or draw_w > EV_CLAMP_DRAW_W
+                or bool(getattr(power, "ev_charging", False))):
+            self._ev_last_draw_at = last = now
+        return now - last <= EV_CLAMP_HOLD_S
+
     def _ev_wants_pack(self, power) -> bool:
         """(03.09) Is any CONNECTED charger in a mode that takes the pack?
         The battery-side discharge clamp (``decide_battery``) reads it."""
@@ -9738,6 +9771,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # (03.09) the charger-side consent: a connected car whose
                 # mode is Solar + battery — the clamp reads it too.
                 ev_wants_pack=self._ev_wants_pack(power),
+                ev_drew_recently=self._ev_drew_recently(power),
                 # (#1130) …and how much of the pack those cars may have
                 # while a connected car may not use it.
                 ev_pack_shared_w=self._ev_pack_shared_w(power),
