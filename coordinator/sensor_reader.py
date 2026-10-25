@@ -29,6 +29,7 @@ from .units import (
     temperature_state_to_celsius,
 )
 
+from ..ha_energy_reader import battery_units
 from ..utils.log_gate import log_on_change
 from ..utils.own_entity import is_sem_entity
 from ..consts.core import (
@@ -1049,9 +1050,7 @@ class SensorReader:
         # #553 — units = combined entities + two-sensor pairs (#551). Pairs
         # are convention-authoritative (the user declared charge/discharge
         # directions in HA), so only combined units go through sign detect.
-        _n_units = 0 if ed is None else (
-            len(ed.battery_power_list) + len(ed.battery_power_pairs)
-        )
+        _n_units = len(battery_units(ed))
         per_battery_mode = (
             ed is not None
             and _n_units >= 2
@@ -2665,8 +2664,9 @@ class SensorReader:
         # sign convention.
         from .charger_types import BatteryPower
         # #553 — a battery "unit" is either a combined power entity OR a
-        # two-sensor pair (#551). Multi-battery handling counts both.
-        n_units = len(ed.battery_power_list) + len(ed.battery_power_pairs)
+        # two-sensor pair (#551). Multi-battery handling counts both, and
+        # so does everything that builds a unit's sensors and controls (#1171).
+        n_units = len(battery_units(ed))
         # Per-battery breakdown is DECOUPLED from fleet-scalar selection: the
         # ``readings.batteries`` surface (which feeds the per-battery
         # ``sensor.sem_battery_b*`` entities AND the actuator's
@@ -2805,9 +2805,7 @@ class SensorReader:
             # stat_soc from one source must not masquerade as the fleet SOC).
             # #553 — pair units contribute via their charge-power entity's
             # device (same auto-detect heuristic).
-            soc_val = self._read_battery_soc_average(
-                ed.battery_power_list + [to for _, to in ed.battery_power_pairs]
-            ) or None
+            soc_val = self._read_battery_soc_average(battery_units(ed)) or None
             # Coverage, in three numbers because there are three states and
             # they call for different reactions: units CONFIGURED, units whose
             # SOC sensor is KNOWN, units that actually READ this cycle.

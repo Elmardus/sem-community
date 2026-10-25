@@ -213,9 +213,10 @@ async def async_setup_entry(
                     cname,
                 ))
 
-    # Per-battery mode selects (#523). Multi-battery installs (Energy
-    # Dashboard battery_power_list ≥ 2) get one ``select.sem_battery_<bid>_mode``
-    # each; single-battery installs create none and keep today's behaviour.
+    # Per-battery mode selects (#523). Multi-battery installs (two or more
+    # Energy Dashboard batteries, two-sensor ones too — ``battery_units``,
+    # #1171) get one ``select.sem_battery_<bid>_mode`` each; single-battery
+    # installs create none and keep today's behaviour.
     batt_slugs = _battery_slugs(coordinator)
     batt_modes_cfg = full_config.get("battery_modes") or []
     per_battery_keys: set[str] = set()

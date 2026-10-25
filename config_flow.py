@@ -68,7 +68,9 @@ from .coordinator.ev_taper_detector import resolve_charge_efficiency
 from .coordinator.units import energy_state_to_kwh, normalize_unit
 from .coordinator.install_modules import has_managed_charger
 from .coordinator.battery_controls import captured_battery_control_slugs
-from .ha_energy_reader import read_energy_dashboard_config, EnergyDashboardConfig
+from .ha_energy_reader import (
+    battery_units, read_energy_dashboard_config, EnergyDashboardConfig,
+)
 from .hardware_detection import (
     CHARGER_ENTITY_KEYS,
     EV_REQUIRED_SENSORS,
@@ -924,14 +926,22 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ("Export energy", cfg.grid_export_energy),
                 ])
         if cfg.has_battery:
-            if len(cfg.battery_power_list) > 1:
+            # (#1171) a battery is a combined sensor or a two-sensor pair
+            n_units = len(battery_units(cfg))
+            if n_units > 1:
                 fields = [(f"Power ({i+1})", p) for i, p in enumerate(cfg.battery_power_list)]
+                for k, (p_from, p_to) in enumerate(cfg.battery_power_pairs):
+                    n = len(cfg.battery_power_list) + k + 1
+                    fields += [(f"Charge power ({n})", p_to),
+                               (f"Discharge power ({n})", p_from)]
                 fields += [(f"Charge energy ({i+1})", e) for i, e in enumerate(cfg.battery_charge_energy_list)]
                 fields += [(f"Discharge energy ({i+1})", e) for i, e in enumerate(cfg.battery_discharge_energy_list)]
-                _add(f"Battery ({len(cfg.battery_power_list)} units)", fields)
+                _add(f"Battery ({n_units} units)", fields)
             else:
                 _add("Battery", [
                     ("Power", cfg.battery_power),
+                    ("Charge power", cfg.battery_power_to),
+                    ("Discharge power", cfg.battery_power_from),
                     ("Charge energy", cfg.battery_charge_energy),
                     ("Discharge energy", cfg.battery_discharge_energy),
                 ])
@@ -2695,7 +2705,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
         reader = getattr(coordinator, "_sensor_reader", None)
         ed = getattr(reader, "_energy_dashboard_config", None)
-        sources = list(getattr(ed, "battery_power_list", None) or [])
+        sources = battery_units(ed)   # (#1171) two-sensor batteries too
         if idx < len(sources) and isinstance(sources[idx], str) and sources[idx]:
             return sources[idx]
         return f"sensor.sem_battery_{slug}_power"

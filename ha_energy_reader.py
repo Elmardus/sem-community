@@ -259,6 +259,24 @@ def energy_counters(ed_config: Any, category: str) -> List[str]:
     return [single] if isinstance(single, str) and single else []
 
 
+def battery_units(ed_config: Any) -> List[str]:
+    """One entity per battery, in the order of its slug ``b1``, ``b2`` … (#1171).
+
+    A battery is a combined power sensor (``battery_power_list``) or a
+    two-sensor pair (``battery_power_pairs``, #551/#553). The reader numbers
+    the combined ones first, then the pairs; a pair is named by its charge
+    sensor, the one its SOC is found from. Every battery count and every
+    slug list is this list: counting ``battery_power_list`` alone gave a home
+    of two-sensor batteries no sensors and no controls of their own.
+    """
+    combined = getattr(ed_config, "battery_power_list", None)
+    pairs = getattr(ed_config, "battery_power_pairs", None)
+    units = list(combined) if isinstance(combined, (list, tuple)) else []
+    if isinstance(pairs, (list, tuple)):
+        units += [to for _from, to in pairs]
+    return units
+
+
 def _parse_prefs(
     hass: HomeAssistant, data: Any, quiet: bool = False,
 ) -> EnergyDashboardConfig:
@@ -310,7 +328,7 @@ def _parse_prefs(
         "Read Energy Dashboard config: solar=%s (%d sources), grid=%s (%d import, %d export), battery=%s (%d units), ev=%s",
         config.has_solar, len(config.solar_power_list),
         config.has_grid, len(config.grid_import_energy_list), len(config.grid_export_energy_list),
-        config.has_battery, len(config.battery_power_list),
+        config.has_battery, len(battery_units(config)),
         config.has_ev,
     )
 
