@@ -62,10 +62,14 @@ from ..const import (
 )
 from ..utils.time_manager import TimeManager
 from ..ha_energy_reader import (
-    read_energy_dashboard_config_outcome, EnergyDashboardConfig, energy_counters,
+    read_energy_dashboard_config_outcome, EnergyDashboardConfig, battery_units,
+    energy_counters,
 )
 from .install_modules import Module, Presence, module_reload_due, module_verdict, presence_of
-from .battery_controls import has_per_battery_controls  # (#1071)
+from .battery_controls import (  # (#1071, #1195)
+    PER_BATTERY_ENTITY_LISTS, PER_BATTERY_SETTING_LISTS, align_battery_slots,
+    has_per_battery_controls,
+)
 from ..consts.battery_modes import (
     DEFAULT_BATTERY_MODE, DEFAULT_BATTERY_RESERVE_SOC, reserve_soc_of,
 )
@@ -2707,6 +2711,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             if dashboard_config and dashboard_config.is_minimally_configured():
                 self._energy_dashboard_config = dashboard_config
                 self._sensor_reader.set_energy_dashboard_config(dashboard_config)
+                # (#1195) each battery's saved settings follow it to the
+                # number this read gives it
+                self._align_battery_slots(dashboard_config)
                 _info(
                     f"Using Energy Dashboard sensors: "
                     f"solar={dashboard_config.solar_power}, "
@@ -2834,6 +2841,22 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
 
         self._check_module_growth()
         return self._energy_dashboard_config is not None
+
+    def _align_battery_slots(self, dashboard_config) -> None:
+        """(#1195) Put the per-battery lists in the order of the batteries
+        just read (``battery_controls.align_battery_slots``). A loaded entry
+        reloads when its battery list changed; at setup nothing is built."""
+        entry = self.config_entry
+        if entry is None:
+            return
+        try:
+            from homeassistant.config_entries import ConfigEntryState
+            align_battery_slots(
+                self.hass, entry, self, battery_units(dashboard_config),
+                running=getattr(entry, "state", None) is ConfigEntryState.LOADED)
+        except Exception:  # noqa: BLE001 — a settings move never costs the read
+            _LOGGER.warning("keeping battery settings with their batteries "
+                            "failed (#1195)", exc_info=True)
 
     async def _retry_energy_dashboard_resolution(self) -> None:
         """Re-derive Energy Dashboard power sensors after a cold start (#274).
@@ -7836,14 +7859,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # battery is removed, or empty on a cold boot while two run — and a
         # Sessy b2 that loses its strategy select is built as the
         # inverter's battery (#531).
+        # (#1195) Slot ``idx`` is this battery's: ``align_battery_slots``
+        # keeps the lists in the order of the batteries read now.
         if count > 1:
-            for list_key, single_key in (
-                ("battery_force_discharge_entities", "battery_force_discharge_control_entity"),
-                ("battery_discharge_control_entities", "battery_discharge_control_entity"),
-                ("battery_strategy_entities", "battery_strategy_control_entity"),
-                # (#1166) each pack's own end-of-charge level (read only)
-                ("battery_charge_end_soc_entities", "battery_charge_end_soc_entity"),
-            ):
+            for list_key, single_key in PER_BATTERY_ENTITY_LISTS:
                 lst = cfg.get(list_key)
                 if isinstance(lst, list) and idx < len(lst) and lst[idx]:
                     overrides[single_key] = lst[idx]
@@ -7851,11 +7870,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # per-battery controls (#1071) — with the one global control the
         # scalar keys stand as they are, for every battery.
         if has_per_battery_controls(self, count):
-            for list_key, single_key, shown_default in (
-                ("battery_modes", "battery_mode", DEFAULT_BATTERY_MODE),
-                ("battery_reserve_socs", "battery_reserve_soc",
-                 DEFAULT_BATTERY_RESERVE_SOC),
-            ):
+            shown_defaults = {"battery_mode": DEFAULT_BATTERY_MODE,
+                              "battery_reserve_soc": DEFAULT_BATTERY_RESERVE_SOC}
+            for list_key, single_key in PER_BATTERY_SETTING_LISTS:
+                shown_default = shown_defaults[single_key]
                 lst = cfg.get(list_key)
                 if isinstance(lst, list) and idx < len(lst) and lst[idx] not in (None, ""):
                     overrides[single_key] = lst[idx]
