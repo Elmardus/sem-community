@@ -21,6 +21,7 @@
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semTheme, semDefineCard, semCardSurfaceCSS } from '../base/sem-shared.js';
 import { priceLevelKey } from '../util/price-level.js';
+import { socDisplay } from '../util/missing-value.js';
 import { chargerAddPlan, detectRowLabelKey, isCo2IntensityEntity, isOutdoorTemperatureCandidate, isPowerEntity, nearMissAction, watchOnlyHelpKey } from '../util/detect-rows.js';
 import { roleSource, showsRoleLegend } from '../util/role-source.js';
 import { getAllSettings, setAllSettings, VIEW_MODE_EVENT } from '../util/view-mode.js';
@@ -720,8 +721,9 @@ class SEMConfigCard extends SEMLitBase {
         return `${n}`;
     }
     _batteryZonesSubtitle() {
-        const soc = this._valNum('battery_soc');
-        return `${this._t('soc')} ${soc.toFixed(0)}%`;
+        // (#1197) the dash, not 0 %, while the SOC is out
+        const soc = socDisplay(this._valNum('battery_soc', null)).label;
+        return `${this._t('soc')} ${soc}`;
     }
     _tariffSubtitle() {
         const provider = this._valLabel('tariff_provider') || '—';

@@ -61,3 +61,28 @@ export function socDisplay(soc, stale = false) {
         known: true,
     };
 }
+
+/**
+ * (#1197) Is SEM itself out, not just one of its sensors?
+ *
+ * A card skips its redraw while SEM is out (a reload or a failed cycle makes
+ * every SEM entity unavailable), so it does not flash zeros. It used to ask
+ * ONE entity. That entity can be out on its own: the battery status while
+ * the battery sensor is dark, the solar power while the inverter is dark.
+ * Then the card stopped drawing and kept old figures that looked live.
+ *
+ * @param {object} states  hass.states
+ * @param {string[]} ids   the entity ids the card reads
+ * @returns {boolean} true when at least one of them exists and every one
+ *   that exists is unavailable or unknown
+ */
+export function allOut(states, ids) {
+    let seen = false;
+    for (const id of ids || []) {
+        const st = id ? states?.[id] : undefined;
+        if (!st) continue;
+        seen = true;
+        if (st.state !== 'unavailable' && st.state !== 'unknown') return false;
+    }
+    return seen;
+}

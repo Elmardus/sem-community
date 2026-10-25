@@ -2555,8 +2555,10 @@ def _decision_attributes(coordinator, key: str) -> Dict[str, Any]:
 
 # (#1170) A battery's own status is built from its own power reading, so it
 # blinks and blanks on that reading's clock: held through the dark-read grace
-# like the number beside it. Every other text sensor shows its None at once.
-_HELD_TEXT_KEY = re.compile(r"battery_b\d+_status")
+# like the number beside it. (#1197) So are the fleet battery status and the
+# grid status, each built from its fleet power. Every other text sensor shows
+# its None at once.
+_HELD_TEXT_KEY = re.compile(r"battery(_b\d+)?_status|grid_status")
 
 
 class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
@@ -2987,10 +2989,14 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 self._last_good_value = value
                 self._last_good_at = _now
             self._attr_native_value = value
-            if self.entity_description.device_class in (
-                    SensorDeviceClass.TIMESTAMP, SensorDeviceClass.ENUM):
+            if (self.entity_description.device_class in (
+                    SensorDeviceClass.TIMESTAMP, SensorDeviceClass.ENUM)
+                    or _HELD_TEXT_KEY.fullmatch(self.entity_description.key)):
                 # (#1022) an enum with no verdict yet is "unknown", a state
                 # of its own — the sensor is there and says "not yet".
+                # (#1197) So is a status SEM cannot tell while its power is
+                # dark: the entity stays, and with it the decision
+                # attributes the Why card reads (#1084).
                 self._attr_available = True
             else:
                 self._attr_available = value is not None

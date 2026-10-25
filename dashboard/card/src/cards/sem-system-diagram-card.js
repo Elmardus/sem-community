@@ -29,7 +29,7 @@ import {
 } from '../base/sem-shared.js';
 import { nightArcPos } from '../util/night-arc.js';
 import { formatTemperatureLabel } from '../util/temperature.js';
-import { socDisplay } from '../util/missing-value.js';
+import { allOut, socDisplay } from '../util/missing-value.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
 
@@ -304,13 +304,13 @@ class SEMSystemDiagramCard extends SEMLitBase {
 
         if (this._isFrozen() && !localeChanged) return;
 
-        // Skip transient unavailable states caused by coordinator refresh —
-        // matches sem-battery-card.js:89-92. ~600ms window after every cycle.
-        // #455: routed through _eid; in entities mode an unmapped solar key
-        // resolves to null and the skip never blocks updates.
-        const solarEid = this._eid('solar_power');
-        const solarState = solarEid ? hass?.states[solarEid]?.state : undefined;
-        if ((solarState === 'unavailable' || solarState === 'unknown') && !localeChanged) {
+        // Skip transient unavailable states caused by coordinator refresh.
+        // (#1197) Only when every SEM entity it reads is out: the solar power
+        // alone is out while the inverter is dark, and the diagram must keep
+        // drawing the battery, grid and home. In entities mode (#455) it
+        // reads the user's own entities, which do not go out with SEM.
+        if (!localeChanged && this._mode !== 'entities'
+                && allOut(hass?.states, WATCHED_SUFFIXES.map(s => this._eid(s)))) {
             return;
         }
 

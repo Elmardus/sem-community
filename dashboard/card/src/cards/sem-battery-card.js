@@ -15,7 +15,7 @@ import { capacityConsequence, horizonLabel, trustConsequence }
     from '../util/forecast-evidence.js';
 import { semTheme, semFormatPower, semGetCurrency, semCardSurfaceCSS, SEM_COLORS, semDefineCard } from '../base/sem-shared.js';
 import { temperatureUnit } from '../util/temperature.js';
-import { MISSING, socDisplay } from '../util/missing-value.js';
+import { MISSING, allOut, socDisplay } from '../util/missing-value.js';
 import { solarSharePct } from '../util/solar-share.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
@@ -94,10 +94,15 @@ class SEMBatteryCard extends SEMLitBase {
         // Skip transient unavailable states caused by coordinator refresh —
         // async_request_refresh() briefly marks all entities unavailable before
         // new data arrives (~600ms). Rendering during this window shows "Idle".
-        const statusState = hass?.states[`${this._prefix}battery_status`]?.state;
-        if (statusState === 'unavailable' || statusState === 'unknown') {
-            if (!localeChanged) return;
+        // (#1197) Only when every entity it reads is out: the status alone is
+        // out while every battery power sensor is dark, and the card must
+        // then say so, not keep the last figures.
+        const ids = WATCHED_SUFFIXES.map(s => `${this._prefix}${s}`);
+        for (const bid of this._batteries) {
+            ids.push(`${this._prefix}battery_${bid}_power`,
+                `${this._prefix}battery_${bid}_soc`);
         }
+        if (!localeChanged && allOut(hass?.states, ids)) return;
 
         let key = WATCHED_SUFFIXES
             .map(s => hass?.states[`${this._prefix}${s}`]?.state || '')
@@ -715,10 +720,12 @@ class SEMBatteryCard extends SEMLitBase {
         const exportRate = (exportEnt && exportEnt.state !== 'unavailable' && exportEnt.state !== 'unknown')
             ? parseFloat(exportEnt.state) : null;
         const SELL = '#FCD170';
+        // (#1197) Neither a power nor a status: nothing says the pack is idle.
+        const statusKnown = power != null || statusRaw !== '';
         const statusText = isSelling ? this._t('selling_to_grid')
             : isCharging ? this._t('charging')
             : isDischarging ? this._t('discharging')
-            : this._t('idle');
+            : statusKnown ? this._t('idle') : MISSING;
         const arcColor = isSelling ? SELL : (isCharging ? '#f06292' : '#4db6ac');
         const statusColor = isSelling ? SELL
             : isCharging ? '#f06292' : isDischarging ? '#4db6ac' : (T.textSec || '#888');

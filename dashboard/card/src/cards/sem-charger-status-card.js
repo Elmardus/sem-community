@@ -12,6 +12,7 @@
 
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semDefineCard } from '../base/sem-shared.js';
+import { allOut } from '../util/missing-value.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
 
@@ -46,10 +47,11 @@ class SEMChargerStatusCard extends SEMLitBase {
         if (this._isFrozen() && !localeChanged) return;
 
         // Skip transient unavailable states caused by coordinator refresh
+        // (#1197: only when every charger's power is out, not one).
         if (this._chargers?.length > 0 && !localeChanged) {
             const prefix = this._config?.entity_prefix || DEFAULT_PREFIX;
-            const canary = hass.states[`${prefix}charger_${this._chargers[0]}_power`]?.state;
-            if (canary === 'unavailable' || canary === 'unknown') return;
+            if (allOut(hass.states,
+                this._chargers.map(id => `${prefix}charger_${id}_power`))) return;
         }
 
         // Re-discover chargers when entity count changes

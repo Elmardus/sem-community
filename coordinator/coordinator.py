@@ -16338,8 +16338,17 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         """Build system status from power readings."""
         status = SystemStatus()
 
+        # (#1197) A status is built from a power, and a dark power reads
+        # 0.0, which is also what an idle battery or a quiet meter reads. So
+        # while every read of that power is dark, the status is None, as
+        # ``to_dict`` publishes the power itself. The entity holds its last
+        # word for the dark-read grace, on the power's clock (sensor.py
+        # ``_HELD_TEXT_KEY``), then shows unavailable.
+
         # Grid status
-        if power.grid_import_power > 50:
+        if getattr(power, "grid_power_unavailable", False) is True:
+            status.grid_status = None
+        elif power.grid_import_power > 50:
             status.grid_status = "import"
         elif power.grid_export_power > 50:
             status.grid_status = "export"
@@ -16350,7 +16359,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # the grid (FORCE_DISCHARGE this cycle), surface a distinct
         # "selling" state so the Battery card can show it instead of a
         # generic "discharging".
-        if getattr(self, "_battery_arbitrage_active", False) and power.battery_discharge_power > 50:
+        if getattr(power, "battery_power_all_unavailable", False) is True:
+            status.battery_status = None
+        elif getattr(self, "_battery_arbitrage_active", False) and power.battery_discharge_power > 50:
             status.battery_status = "selling"
         elif power.battery_charge_power > 50:
             status.battery_status = "charging"

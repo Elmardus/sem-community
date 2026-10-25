@@ -18,6 +18,7 @@ import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semTheme, semFormatPower, semGetCurrency, semDefineCard } from '../base/sem-shared.js';
 import { priceLevelKey } from '../util/price-level.js';
 import { isUncapped } from '../util/peak-slot.js';
+import { socDisplay } from '../util/missing-value.js';
 
 // EV section removed in #282 audit: every control (charging mode, night
 // charging, smart night, target, currents, phases, stall cooldown) is
@@ -38,10 +39,11 @@ const SECTIONS = [
     {
         id: 'battery', icon: 'mdi:battery-medium', color: '#4db6ac', titleKey: 'battery_management',
         subtitleFn: (c) => {
-            const soc = c._valNum('battery_soc').toFixed(0);
+            // (#1197) the dash, not 0 %, beside the dash for the status
+            const soc = socDisplay(c._valNum('battery_soc', null)).label;
             const statusRaw = c._val('battery_status') || '';
             const status = statusRaw ? c._t(statusRaw.toLowerCase()) : '—';
-            return `SOC ${soc}% · ${status}`;
+            return `SOC ${soc} · ${status}`;
         },
     },
     {
