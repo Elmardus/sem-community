@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **A battery whose power sensor is out no longer shows 0 W** (#1170). It shows its last value for a short time, then unavailable.
 - 🐛 **Tab header figures show "—", not 0, when their sensor is out** (#1198). The Config tab no longer shows your heat pump as Off.
 - 🐛 **Battery and grid status no longer say Idle while their power sensor is out** (#1197). The Battery card and the Home diagram keep updating.
+- 🐛 **A solar string whose sensor is out no longer shows 0 W** (#1196). The cards show "—" for it and keep the other strings.
 
 # [2.2.0-beta.26] — 25.10.2026
 
