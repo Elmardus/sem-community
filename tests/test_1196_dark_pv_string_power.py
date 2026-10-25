@@ -107,7 +107,7 @@ class TestADarkStringPublishesNoPower:
         }, sun="below_horizon")[0])
         assert out["pv_string_pv1_power"] == 0.0
         assert out["pv_string_pv2_power"] == 0.0
-        assert power.solar_power_per_string_read == {"pv1": True, "pv2": True}
+        assert power.solar_power_per_string == {"pv1": 0.0, "pv2": 0.0}
 
     def test_both_strings_dark(self):
         _, out = _published(_ed_reader({
@@ -121,12 +121,13 @@ class TestADarkStringPublishesNoPower:
         reader, _ = _reader({
             INV: _state(3000, FRESH_S), PV1: _state(1800, FRESH_S),
             PV2: _state("unavailable", FRESH_S),
-        }, sun="above_horizon", config={"solar_power_sensor": INV})
+        }, sun="above_horizon", config={"solar_production_sensor": INV})
         reader.set_pv_strings({"pv1_power": PV1, "pv2_power": PV2})
         assert not reader._energy_dashboard_config, "the legacy path ran"
         _, out = _published(reader)
         assert out["pv_string_pv2_power"] is None
         assert out["pv_string_pv1_power"] == 1800.0
+        assert out["solar_power"] == 3000.0, "the total read its own sensor"
 
     def test_a_single_string_publishes_nothing(self):
         """The gate is unchanged: one string has no per-string surface."""
@@ -134,7 +135,7 @@ class TestADarkStringPublishesNoPower:
         reader.set_pv_strings({"pv1_power": PV1})
         power, out = _published(reader)
         assert power.solar_power_per_string == {}
-        assert power.solar_power_per_string_read == {}
+        assert not getattr(power, "solar_power_per_string_read", {})
         assert not [k for k in out if k.startswith("pv_string_")]
 
 

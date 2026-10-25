@@ -63,7 +63,7 @@ globalThis.IntersectionObserver = observer;
 const { semDiscoverPVStrings, semPVStringKW, semBuildPVStringsHTML } =
     await import('../src/base/sem-shared.js');
 const CARDS = ['sem-solar-card', 'sem-flow-card', 'sem-system-diagram-card'];
-for (const f of CARDS) await import(`../src/cards/${f}.js`);
+for (const f of [...CARDS, 'sem-config-card']) await import(`../src/cards/${f}.js`);
 
 // Template parts → the text a person would read.
 function text(part) {
@@ -126,6 +126,14 @@ test('a string only restored from the registry is not a string', () => {
         [`${P}pv3_power`]: st('unavailable', { restored: true }) };
     const found = semDiscoverPVStrings({ states }, 'sensor.sem_');
     assert.deepEqual(found.map(s => s.slot), ['pv1', 'pv2']);
+});
+
+test('the config card counts the strings by the same rule', () => {
+    const el = new (customElements.get('sem-config-card'))();
+    el._hass = { states: { ...ONE_DARK,
+        [`${P}pv3_power`]: st('unavailable', { restored: true }) } };
+    assert.deepEqual(el._pvStrings().map(s => s.slot), ['pv1', 'pv2'],
+        'a removed string kept its rename row and the count');
 });
 
 test('one string alone still gives no per-string row', () => {
@@ -192,6 +200,47 @@ test('sem-solar-card: the per-string section reads "— W" for the dark string',
 
 // ── 4. Every reader of a string's watts handles "no watts" ─────────────────
 
+// Each read of a `.watts` field (any name, `?.`, `['watts']`) must sit
+// alone inside a formatter that knows null; destructuring `watts` is a read
+// the scan cannot follow, so it fails too. `.watts` is only a PV string's.
+const SAFE_READ = /^(semPVStringKW|semFormatPower)\(\s*[\w$]+\s*$/;
+function wattsOffenders(src) {
+    const out = [];
+    let seen = 0;
+    for (const m of src.matchAll(/(\??\.watts\b|\[\s*['"]watts['"]\s*\])/g)) {
+        seen++;
+        const before = src.slice(Math.max(0, m.index - 60), m.index);
+        const after = src.slice(m.index + m[0].length, m.index + m[0].length + 2);
+        const call = before.match(/(semPVStringKW|semFormatPower)\(\s*[\w$]+\s*$/);
+        if (!call || !SAFE_READ.test(call[0]) || m[0] !== '.watts'
+                || !/^\s*\)/.test(after)) {
+            out.push(before.slice(-30) + m[0] + after);
+        }
+    }
+    for (const m of src.matchAll(/\{[^{}]*\bwatts\b[^{}]*\}\s*(=[^=>]|\)\s*=>)/g)) {
+        seen++;
+        out.push(m[0]);
+    }
+    return { out, seen };
+}
+
+test('the watts scan catches a read past the formatters', () => {
+    const probe = [
+        'a(semPVStringKW(s.watts));',             // ok
+        'a(semFormatPower(pv.watts));',           // ok
+        'a(s.watts.toFixed(2));',
+        'a(x?.watts);',
+        "a(s['watts']);",
+        'a(semFormatPower(s.watts / 1000));',
+        'a(Math.abs(s.watts));',
+        'const { watts } = s;',
+        'list.map(({ watts }) => watts);',
+    ].join('\n');
+    const { out, seen } = wattsOffenders(probe);
+    assert.equal(seen, 9);
+    assert.equal(out.length, 7, out.join(' | '));
+});
+
 test('every card prints a string\'s watts through a formatter that knows null', () => {
     const dir = new URL('../src/', import.meta.url);
     const files = [];
@@ -206,14 +255,9 @@ test('every card prints a string\'s watts through a formatter that knows null', 
     const offenders = [];
     let seen = 0;
     for (const f of files) {
-        const src = readFileSync(f, 'utf8');
-        if (!src.includes('semDiscoverPVStrings')) continue;
-        for (const m of src.matchAll(/(\w+\()?\s*s\.watts\b/g)) {
-            seen++;
-            if (!['semPVStringKW(', 'semFormatPower('].includes(m[1])) {
-                offenders.push(`${f.pathname.split('/src/')[1]}: ${m[0]}`);
-            }
-        }
+        const r = wattsOffenders(readFileSync(f, 'utf8'));
+        seen += r.seen;
+        offenders.push(...r.out.map(o => `${f.pathname.split('/src/')[1]}: ${o}`));
     }
     assert.ok(seen >= 5, `the scan saw ${seen} reads — it proves nothing`);
     assert.deepEqual(offenders, []);
