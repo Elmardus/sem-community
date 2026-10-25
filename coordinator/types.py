@@ -1656,13 +1656,14 @@ class SEMData:
         # dead-band so the per-battery status doesn't toggle on
         # inverter rebalance noise.
         # (#1170) A unit whose own power sensor was not read this cycle
-        # (``power_read``: dark, not a number, impossible, one side of a
-        # pair dark) publishes None — the fleet total's rule
-        # (``battery_power_all_unavailable``), asked of the unit. Its 0.0 is
-        # the reader's fallback, which is also what an idle pack reads. The
-        # entity holds its last value for the dark-read grace, then shows
-        # unavailable. The status is built from the same number, so it has
-        # nothing to say either.
+        # publishes None, as the fleet total does when every read is dark
+        # (``battery_power_all_unavailable``). The unit's flag is its own
+        # ``power_read`` (#1167): dark, not a number, impossible, or one side
+        # of a two-sensor pair dark (half a number). Its 0.0 is the reader's
+        # fallback, which is also what an idle pack reads. The entity holds
+        # its last value for the dark-read grace, then shows unavailable. The
+        # status is built from the same number, so it is None too (held on
+        # the same clock, sensor.py ``_HELD_TEXT_KEY``).
         try:
             _STATUS_DEADBAND_W = 50.0
             for bid, bp in self.power.batteries.items():

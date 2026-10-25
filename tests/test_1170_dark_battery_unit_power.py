@@ -14,7 +14,8 @@ Each unit now publishes its power and status as None when its own
 * the real reader → ``SEMData.to_dict`` for a dark, unknown, not-a-number,
   impossible and half-dark (two-sensor pair) unit, and the sign flip;
 * the real ``SEMSolarSensor`` holds the unit's last value for the grace and
-  then shows unavailable — never 0 W; the status shows unavailable;
+  then shows unavailable — never 0 W; the status holds on the same clock
+  and never says "idle";
 * a structural list of every per-unit key ``to_dict`` publishes, so a new
   per-unit reading cannot ship without the rule (or a filed reason).
 """
@@ -34,7 +35,10 @@ from custom_components.solar_energy_management.consts.core import (
 from custom_components.solar_energy_management.coordinator.charger_types import (
     BatteryPower,
 )
-from custom_components.solar_energy_management.coordinator.types import SEMData
+from custom_components.solar_energy_management.coordinator.types import (
+    SEMData,
+    StringEnergy,
+)
 from custom_components.solar_energy_management.sensor import SEMSolarSensor
 from custom_components.solar_energy_management.tests.test_1164_force_charge_stall import (  # noqa: E501
     _state,
@@ -164,20 +168,55 @@ class TestTheEntityHoldsThenShowsUnavailable:
         assert power._attr_available is False
         assert power.native_value is None
 
-    def test_the_status_says_nothing_rather_than_idle(self, mock_coordinator):
+    def test_the_status_holds_on_the_power_clock_and_never_says_idle(
+            self, mock_coordinator):
+        """The status is built from the power, so it blinks and blanks with
+        it: held through the grace (no flip to unavailable or to "idle" on
+        a one-cycle blink), then unavailable."""
+        power = _entity(mock_coordinator, "battery_b2_power",
+                        SensorDeviceClass.POWER)
         status = _entity(mock_coordinator, "battery_b2_status", None)
-        _cycle([status], -800, 1000.0)
+        _cycle([power, status], -800, 1000.0)
         assert status.native_value == "discharging"
-        _cycle([status], "unavailable", 1010.0)
-        assert status.native_value != "idle"
+
+        _cycle([power, status], "unavailable", 1010.0)
+        assert status._attr_available is True
+        assert status.native_value == "discharging", "held, not idle"
+        assert status.extra_state_attributes.get("stale_s") == 10
+        assert power.native_value == -800.0, "the number beside it agrees"
+
+        _cycle([power, status], "unavailable",
+               1000.0 + SENSOR_DARK_READ_GRACE_S + 1)
         assert status._attr_available is False
+        assert status.native_value is None
+        assert power._attr_available is False, "one clock for both"
+
+    def test_a_status_never_read_is_unavailable_not_idle(self,
+                                                          mock_coordinator):
+        status = _entity(mock_coordinator, "battery_b2_status", None)
+        _cycle([status], "unavailable", 1000.0)
+        assert status._attr_available is False
+        assert status.native_value is None
+
+    def test_only_a_battery_unit_status_is_held(self, mock_coordinator):
+        """The twin: every other text sensor shows its None at once."""
+        other = _entity(mock_coordinator, "battery_session_type", None)
+        for value, t in (("charge", 1000.0), (None, 1010.0)):
+            other.coordinator.data = {**other.coordinator.data,
+                                      "battery_session_type": value}
+            other._now_monotonic = lambda t=t: t
+            other._update_from_coordinator()
+        assert other._attr_available is False
+        assert other.native_value is None
 
 
 # ── 3. Every per-unit key to_dict publishes is declared ────────────────────
 
-# A per-unit key and the rule that blanks it when the unit's own sensor is
-# dark. A new per-unit key fails until it is listed here with its rule — or
-# with the filed issue that says why it does not have one yet.
+# A per-battery or per-PV-string key and the rule that blanks it when the
+# unit's own sensor is dark. A new key of these units fails until it is
+# listed here with its rule — or with the filed issue that says why it does
+# not have one yet. (Per-charger keys are SEM's own sums and sessions, not a
+# sensor read, and the per-charger power is published by the coordinator.)
 _PER_UNIT = re.compile(r"^(battery|pv_string)_((?:b|pv)\d+)_(\w+)$")
 _DECLARED = {
     ("battery", "power"): "power_read (#1170)",
@@ -200,6 +239,8 @@ def _every_unit_dark():
                            capacity_kwh=5.0, power_read=False),
     }
     data.power.solar_power_per_string = {"pv1": 0.0, "pv2": 0.0}
+    data.energy_flows.per_string = {"pv1": StringEnergy(1.0),
+                                    "pv2": StringEnergy(0.0)}
     return data.to_dict()
 
 
@@ -215,8 +256,9 @@ def test_every_per_unit_key_is_declared():
         assert family in _DECLARED, (
             f"{key}: a per-unit key with no declared dark rule (#1170) — "
             "does it blank when its unit's own sensor is dark?")
-    assert ("battery", "power") in seen and ("pv_string", "power") in seen, (
-        "the fixture must publish both families, or the scan proves nothing")
+    assert seen == set(_DECLARED), (
+        "the fixture must publish every declared key, or the scan proves "
+        f"nothing: missing {set(_DECLARED) - seen}")
 
 
 def test_every_power_read_key_blanks_on_the_dark_unit_only():

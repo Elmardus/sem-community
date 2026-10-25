@@ -2553,6 +2553,12 @@ def _decision_attributes(coordinator, key: str) -> Dict[str, Any]:
     return {}
 
 
+# (#1170) A battery's own status is built from its own power reading, so it
+# blinks and blanks on that reading's clock: held through the dark-read grace
+# like the number beside it. Every other text sensor shows its None at once.
+_HELD_TEXT_KEY = re.compile(r"battery_b\d+_status")
+
+
 class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
     """SEM Solar Energy Management sensor with state persistence."""
 
@@ -2956,7 +2962,8 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
             # Exception: timestamp sensors (e.g. ev_last_full_charge) are available
             # even when None — "no event yet" is a valid state, not unavailable.
             # Dark-read grace (03.09: "it was very stable before"). A
-            # numeric measurement whose source is unreadable THIS cycle keeps
+            # numeric measurement (and a battery's own status, #1170:
+            # ``_HELD_TEXT_KEY``) whose source is unreadable THIS cycle keeps
             # its last good value for SENSOR_DARK_READ_GRACE_S and reports
             # ``stale_s``; only a sustained outage blanks it. Never invents:
             # a value that was never read stays unavailable (#875), and the
@@ -2974,7 +2981,9 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 self._last_good_value = None
                 self._last_good_at = None
             self._stale_s = 0
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if ((isinstance(value, (int, float)) and not isinstance(value, bool))
+                    or (isinstance(value, str) and _HELD_TEXT_KEY.fullmatch(
+                        self.entity_description.key))):
                 self._last_good_value = value
                 self._last_good_at = _now
             self._attr_native_value = value

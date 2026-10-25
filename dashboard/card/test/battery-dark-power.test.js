@@ -87,11 +87,13 @@ const UNIT = (bid, power, status, soc = '60') => ({
 
 test('a dark battery reads "— W" with no status, not "0 W" and idle', () => {
     const el = card({ ...UNIT('b1', '1500', 'charging'), ...UNIT('b2', 'unavailable', 'unavailable', 'unknown') });
-    const row = words(text(el._renderBatterySection('b2', 1)));
+    const raw = text(el._renderBatterySection('b2', 1));
+    const row = words(raw);
     assert.match(row, /— W/, row);
     assert.doesNotMatch(row, /(^|[^0-9.])0 W/, row);
     assert.doesNotMatch(row, /\bidle\b/, row);
-    assert.match(row, /— /, 'the status cell is the dash');
+    assert.match(raw, /class="battery-section-status"[^>]*>\s*—\s*</,
+        'the status cell itself is the dash');
 });
 
 test('the other battery still reads its own power and status', () => {
@@ -108,9 +110,9 @@ test('a real 0 W idle pack still says 0 W and idle', () => {
     assert.match(row, /\bidle\b/, row);
 });
 
-test('a held power with no status yet (the grace) still says what it does', () => {
-    // SEM publishes no status for a dark read; the power entity holds its
-    // last value for the grace, so the row follows the held number.
+test('a power with no status still says what it does', () => {
+    // The status entity can be out while the power reads (it is not read
+    // yet after a restart); the row follows the number.
     const el = card({ ...UNIT('b1', '0', 'idle'), ...UNIT('b2', '-2000', 'unavailable') });
     const row = words(text(el._renderBatterySection('b2', 1)));
     assert.match(row, /-2\.0 kW/, row);
