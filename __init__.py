@@ -2684,8 +2684,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
     # battery?" — taken BEFORE the first refresh, which already commands the
     # batteries. select.py and number.py build from it, and
     # _per_battery_config reads the store of the controls they build.
-    from .coordinator.battery_controls import discover_battery_control_slugs
+    from .coordinator.battery_controls import (
+        adopt_shared_battery_settings, discover_battery_control_slugs,
+    )
     coordinator.battery_control_slugs = discover_battery_control_slugs(coordinator)
+    # (#1171) …and the first start after one shared control: each battery
+    # starts on what that control drove, before anything is commanded.
+    adopt_shared_battery_settings(
+        hass, entry, coordinator, coordinator.battery_control_slugs)
     _LOGGER.debug("Battery controls: %s",
                   ", ".join(coordinator.battery_control_slugs) or "one global")
 

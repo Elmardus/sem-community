@@ -138,7 +138,8 @@ MINIMAL_DATA = {
 PER_BATTERY_SENSORS = ("power", "soc", "status", "capacity_kwh")
 
 
-async def _setup(hass, monkeypatch, batteries):
+async def _setup(hass, monkeypatch, batteries, options=None, shared_select=False):
+    from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     from custom_components.solar_energy_management.const import DOMAIN
@@ -149,9 +150,14 @@ async def _setup(hass, monkeypatch, batteries):
     monkeypatch.setattr(f"{COORDINATOR_MODULE}.read_energy_dashboard_config_outcome",
                         AsyncMock(return_value=(ed, True)))
     entry = MockConfigEntry(domain=DOMAIN, version=12, minor_version=1,
-                            data=dict(MINIMAL_DATA), options={},
+                            data=dict(MINIMAL_DATA), options=dict(options or {}),
                             title="SEM #1171")
     entry.add_to_hass(hass)
+    if shared_select:
+        # what the old code built for this home, still in the registry
+        er.async_get(hass).async_get_or_create(
+            "select", DOMAIN, f"{entry.entry_id}_battery_mode",
+            config_entry=entry, suggested_object_id="sem_battery_mode")
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     return entry
@@ -212,6 +218,88 @@ async def test_one_two_sensor_battery_keeps_the_one_shared_mode(
     assert _entity(hass, "sensor", "sem_battery_b1_power") is None
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+# ── The update: each battery starts on what the shared select drove ────────
+
+@real_ha
+@pytest.mark.asyncio
+async def test_each_battery_starts_on_the_shared_mode_and_reserve(
+        hass, enable_custom_integrations, monkeypatch):
+    """The old code gave this home one shared select, set to Off (SEM hands
+    off) at a 50 % reserve. Empty slots would run Auto at 20 %, and the list
+    left from an older layout would drive again (#531)."""
+    from custom_components.solar_energy_management.consts.battery_modes import (
+        reserve_soc_of,
+    )
+    from custom_components.solar_energy_management.coordinator.battery_controls import (
+        adopt_shared_battery_settings,
+    )
+    entry = await _setup(
+        hass, monkeypatch, HOMES["two_pairs"], shared_select=True,
+        options={"battery_mode": "off", "battery_reserve_soc": 50,
+                 "battery_modes": ["force_discharge", "force_discharge"]})
+    coordinator = entry.runtime_data
+
+    assert entry.options["battery_modes"] == ["off", "off"]
+    assert entry.options["battery_reserve_socs"] == [50, 50]
+    for idx, bid in enumerate(("b1", "b2")):
+        cfg = coordinator._per_battery_config(idx, 2)
+        assert cfg["battery_mode"] == "off" and reserve_soc_of(cfg) == 50
+        select = hass.states.get(
+            _entity(hass, "select", f"{entry.entry_id}_battery_{bid}_mode"))
+        assert select.state == "off", bid
+    assert _entity(hass, "select", f"{entry.entry_id}_battery_mode") is None
+
+    # Once: the next start finds the per-battery selects and leaves them.
+    await hass.services.async_call(
+        "select", "select_option",
+        {"entity_id": _entity(hass, "select", f"{entry.entry_id}_battery_b1_mode"),
+         "option": "auto"},
+        blocking=True)
+    assert adopt_shared_battery_settings(
+        hass, entry, coordinator, coordinator.battery_control_slugs) is False
+    assert entry.options["battery_modes"] == ["auto", "off"]
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+def test_a_home_without_the_shared_select_is_left_alone():
+    """No shared select in the registry: a fresh install, or one that had
+    per-battery controls all along. One battery: nothing to hand over."""
+    from types import SimpleNamespace
+
+    from custom_components.solar_energy_management.coordinator import battery_controls
+    reg = MagicMock()
+    reg.async_get_entity_id.return_value = None
+    entry = SimpleNamespace(entry_id="e", data={}, options={"battery_mode": "off"})
+    hass = MagicMock()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(battery_controls.er, "async_get", lambda _h: reg)
+        assert not battery_controls.adopt_shared_battery_settings(
+            hass, entry, MagicMock(), ("b1", "b2"))
+        reg.async_get_entity_id.return_value = "select.sem_battery_mode"
+        assert not battery_controls.adopt_shared_battery_settings(
+            hass, entry, MagicMock(), ())
+    hass.config_entries.async_update_entry.assert_not_called()
+
+
+def test_the_handover_runs_before_the_first_command():
+    """Right after the capture and before the first refresh, which already
+    commands the batteries."""
+    tree = ast.parse((ROOT / "__init__.py").read_text(encoding="utf-8"))
+    setup = next(n for n in ast.walk(tree)
+                 if isinstance(n, ast.AsyncFunctionDef) and n.name == "async_setup_entry")
+    calls = {}
+    for n in ast.walk(setup):
+        if isinstance(n, ast.Call):
+            name = getattr(n.func, "attr", None) or getattr(n.func, "id", None)
+            calls.setdefault(name, []).append(n.lineno)
+    capture = calls["discover_battery_control_slugs"]
+    handover = calls["adopt_shared_battery_settings"]
+    first = calls["async_config_entry_first_refresh"] + calls["async_forward_entry_setups"]
+    assert len(handover) == 1
+    assert capture[0] < handover[0] < min(first)
 
 
 # ── Guard: who may read the combined list on its own ───────────────────────

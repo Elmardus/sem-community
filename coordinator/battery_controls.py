@@ -96,3 +96,53 @@ def has_per_battery_controls(coordinator: Any, count: int) -> bool:
     if slugs is not None:
         return len(slugs) > 1
     return count > 1
+
+
+def adopt_shared_battery_settings(hass: Any, entry: Any, coordinator: Any,
+                                  slugs: tuple[str, ...]) -> bool:
+    """(#1171) The first start with one Mode select per battery, after the one
+    shared select: each battery starts on what the shared select drove.
+
+    A home moves to per-battery controls when it gains a second battery, or
+    when an update first counts its two-sensor batteries (#1171). Under the
+    shared select the ``battery_modes`` / ``battery_reserve_socs`` slots were
+    not read. Empty, they run Auto at the default reserve, so a shared Off
+    (SEM hands off) would become Auto with no one asking; a list left from an
+    older layout would drive again (#531). So the shared mode and reserve are
+    copied into every slot, once. The move is read from the registry, which
+    still holds the shared select and no per-battery one: the platforms have
+    not built or swept anything yet. True when the slots were written.
+    """
+    if len(slugs) < 2:
+        return False
+    from ..const import DOMAIN
+    entry_id = entry.entry_id
+    try:
+        reg = er.async_get(hass)
+        shared = reg.async_get_entity_id("select", DOMAIN, f"{entry_id}_battery_mode")
+        own = any(
+            reg.async_get_entity_id("select", DOMAIN, f"{entry_id}_battery_{bid}_mode")
+            for bid in slugs)
+    except Exception as exc:  # noqa: BLE001 — never break setup
+        _LOGGER.debug("battery control handover check failed: %s", exc)
+        return False
+    if not shared or own:
+        return False
+    merged = {**(entry.data or {}), **(entry.options or {})}
+    mode = merged.get("battery_mode") or None
+    reserve = merged.get("battery_reserve_soc")
+    new_options = {
+        **(entry.options or {}),
+        "battery_modes": [mode] * len(slugs),
+        "battery_reserve_socs": [reserve] * len(slugs),
+    }
+    if isinstance(getattr(coordinator, "config", None), dict):
+        coordinator.config.update({**(entry.data or {}), **new_options})
+    hass.config_entries.async_update_entry(entry, options=new_options)
+    _LOGGER.warning(
+        "Battery controls: one Mode select and reserve per battery now (%s). "
+        "Each battery starts on the shared mode %s and reserve %s. %s is "
+        "removed; automations that set it need the per-battery selects.",
+        ", ".join(slugs), mode or "auto",
+        "default" if reserve is None else reserve, shared)
+    return True
