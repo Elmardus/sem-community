@@ -879,6 +879,9 @@ in the Configuration tab. The notice clears itself when the sensor returns —
 or, once you point SEM at another sensor, about five minutes after you save
 (within the hour when you changed it in the Energy Dashboard).
 
+While a sensor is out, the tab headers show "—" for its figure, not 0. A real
+0 still shows 0.
+
 ## A sensor stopped updating (stale)
 
 The sensor exists and has a state, but it has not changed for far longer than
