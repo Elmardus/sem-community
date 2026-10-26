@@ -397,6 +397,8 @@ cycle.
 
 **How SEM detects battery direction:** SEM compares the battery power sensor's sign against the charge/discharge energy counters from the Energy Dashboard. If the discharge counter is growing while battery power is positive, SEM knows positive means discharge (opposite of SEM convention) and auto-corrects.
 
+**Did you mark the battery "Inverted" in the Energy Dashboard?** Then it shows charging the right way from the start, with one or more batteries. A battery that showed the right way before an update still does.
+
 **Requirements:**
 - HA Energy Dashboard must be configured with battery charge AND discharge energy sensors
 - Both energy sensors must be available (not "unknown" or "unavailable")
