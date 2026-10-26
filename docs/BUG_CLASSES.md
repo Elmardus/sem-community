@@ -6385,3 +6385,13 @@ Refs #1193 #1171 #647 #589 #1194 #1195 #1205 #1210.
 **Sweep question:** when a new field's absence means "an older build", can the new build ever write that same empty value?
 **Left open:** a tap during a dark cycle says "flipped" but binds to no meter; the diagnostics show it (`grid_read_source`). The balance self-heal can negate a declared pair (#1215); a flip that does not apply no longer stops it.
 Refs #1192 #971 #1172 #690 #1215.
+
+### 169. A view that lists by hand what the data publishes — a new row is counted but never drawn — GUARDED
+**Symptom:** the Energy tab Sankey had no Battery → Grid line. A battery sale was in the Export total, but no line led to it (#1190, found while fixing #1172).
+**Root shape:** #776 added the `battery_to_grid` flow and its sensors. The Sankey lists each flow by hand in the template, and nothing tied that list to the flows SEM publishes, so the new flow was never added there. Kin of class 66 (keys written that nothing reads).
+**Where it lives:** `dashboard/sem_dashboard_template.yaml`, the `custom:sankey-chart` card (**fixed**: the Battery node's child and a `Bat>Grid` node into Export, its label in all 16 tables of `dashboard/translations.json`). Swept: `icons.json` had no icon for `flow_battery_to_grid_power` / `_energy`, and the Sankey shows entity icons (**fixed**). Checked and right: the system diagram draws node power, not flows; the solar card lists all four solar flows; the EV chart lists all three EV sources; the battery card shows the two charge sources; the native `energy-sankey` fallback is fed by HA's Energy dashboard, not SEM's flows.
+**Closure:** the Sankey draws every `flow_<from>_to_<to>_energy` sensor: a child of its source total, and a middle node that leads to its target total. A battery-less home loses the new line with the other battery entities (#923).
+**Guard:** `tests/test_1190_sankey_every_flow.py` — reads the flow keys from `SENSOR_TYPES`, so a flow added later fails until the Sankey draws it; the label in every language; the prune for a home without a battery; the German name through the real translation step. Four of its five tests fail on the old template.
+**Sweep question:** when SEM publishes a new row, which hand-written lists in views should hold it too?
+**Left open:** the Energy Impact card computes its own CO2 figure from two flows instead of reading `sensor.sem_daily_co2_avoided` (a second copy of a formula, not this shape; filed separately).
+Refs #1190 #776 #1172 #923.
