@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A battery marked "Inverted" in the Energy Dashboard now shows charging the right way from the start** (#1194). One that already reads right stays right.
 - 🐛 **Each battery keeps its own settings when you add or remove a battery** (#1195). A new battery no longer takes another battery's entities.
 
 # [2.2.0-beta.27] — 25.10.2026

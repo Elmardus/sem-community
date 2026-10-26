@@ -107,15 +107,17 @@ class EnergyDashboardConfig:
     solar_power: Optional[str] = None
     grid_import_power: Optional[str] = None
     grid_export_power: Optional[str] = None
-    battery_power: Optional[str] = None  # Combined: positive=charge, negative=discharge
+    # Combined. HA's sign is + while discharging; SEM reads it as it is and
+    # learns its sign (#1194).
+    battery_power: Optional[str] = None
     ev_power: Optional[str] = None
 
     # #551 — battery ``power_config`` alternatives (HA ≥2026.x battery dialog).
     # Two-sensor mode has NO single combined entity: HA stores
     # ``power_config: {stat_rate_from, stat_rate_to}`` (from=discharge,
     # to=charge) and battery_power stays None — the reader computes
-    # net = to − from. ``stat_rate_inverted`` flags a combined sensor whose
-    # sign must be flipped on read.
+    # net = to − from. ``stat_rate_inverted`` is a combined sensor with the
+    # other sign: + while charging, which is SEM's sign (#1194).
     battery_power_from: Optional[str] = None  # discharge power sensor
     battery_power_to: Optional[str] = None    # charge power sensor
     # #553 — grid two-sensor power_config (from=import, to=export). Consumed
@@ -123,6 +125,9 @@ class EnergyDashboardConfig:
     # (grid_power = export − import, sign fixed by declaration).
     grid_power_from: Optional[str] = None
     grid_power_to: Optional[str] = None
+    #: (#1194) Some combined battery sensor is marked "Inverted". Read as it
+    #: is like any other; the flag only moves a fleet sign lock saved while
+    #: the one-battery read still flipped it (one flag: only that read was).
     battery_power_inverted: bool = False
     # #553 — ALL two-sensor pairs (multi-battery installs may configure more
     # than one battery in Two-sensor mode). Each entry: (from, to). The
@@ -644,10 +649,12 @@ def _extract_battery_config(source: Dict[str, Any], config: EnergyDashboardConfi
     Battery uses:
     - stat_energy_from: discharge energy
     - stat_energy_to: charge energy
-    - stat_rate/stat_power: combined power (positive=charge, negative=discharge in HA 2025.12)
+    - stat_rate/stat_power: combined power (HA: positive=discharge, negative=charge)
     - power_config (#551, HA ≥2026.x): {stat_rate} | {stat_rate_inverted} |
       {stat_rate_from, stat_rate_to} — the "Standard / Inverted / Two sensors"
       choices in HA's battery dialog. Two-sensor mode has NO combined entity.
+      For Inverted, HA's top-level stat_rate is its own ``<sensor>_inverted``
+      (the user's sensor × −1); SEM reads the user's sensor (#1194).
     - stat_soc (#551): the user's explicit battery state-of-charge sensor.
     """
     discharge_energy = source.get("stat_energy_from")

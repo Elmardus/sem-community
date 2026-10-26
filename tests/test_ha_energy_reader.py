@@ -396,7 +396,7 @@ class TestExtractBatteryConfig:
         assert config.battery_power_from is None
 
     def test_extract_battery_power_config_inverted(self):
-        """#551 — power_config.stat_rate_inverted flags the sign flip."""
+        """#551 — power_config.stat_rate_inverted: the user's sensor, flagged (#1194)."""
         config = EnergyDashboardConfig()
         source = {
             "stat_energy_from": "sensor.batt_discharge_e",
