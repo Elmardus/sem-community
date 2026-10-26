@@ -42,7 +42,7 @@ from .const import (
     MAX_PEAK_LIMIT_KW,
 )
 from .consts.core import DEFAULT_LOAD_MANAGEMENT_ENABLED
-from .coordinator.sensor_reader import GRID_TRIGGER_HINTS
+from .coordinator.sensor_reader import GRID_TRIGGER_HINTS, NO_GRID_SOURCE
 from .utils.select_option import listed_option
 from .utils.own_entity import is_sem_entity  # (#1103)
 from .coordinator import SEMCoordinator
@@ -6677,14 +6677,22 @@ async def _async_register_phase_services(
                 _LOGGER.debug("flip_grid_sign: diagnostics snapshot failed", exc_info=True)
 
         current = bool((target.options or {}).get("grid_sign_user_flip", False))
+        # (#1192) A saved flip that does not apply to the meter read now (one
+        # tapped with no meter, or on another, #971) is off for this meter: the
+        # tap flips this meter, as the log line asks, instead of only clearing it.
+        if current and reader is not None:
+            current = reader.user_flip_applies()
         new_flip = not current
         # (#971) the tap is bound to the grid source it corrects; the reader
         # knows which branch read the meter this cycle.
         if reader is not None:
             new_options = reader.user_flip_options(target.options or {}, new_flip)
         else:
+            # (#1192) no reader, no meter read: bound to none, never to the
+            # next meter found
             new_options = {**(target.options or {}), "grid_sign_user_flip": new_flip,
-                           "grid_sign_user_flip_source": None}
+                           "grid_sign_user_flip_source": (
+                               NO_GRID_SOURCE if new_flip else None)}
         # Suppress the update-listener reload; we issue one explicit reload
         # so the new sign is live without a double tear-down (set_option
         # pattern).
