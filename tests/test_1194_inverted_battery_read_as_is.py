@@ -228,12 +228,13 @@ def test_the_fleet_lock_waits_while_the_home_reads_per_battery():
     assert reader.export_sign_state()["battery_basis"] == "sensor"
 
 
-def test_a_reset_leaves_nothing_to_move():
-    reader = _reader([_inverted(1)], {1: 1200}, {"battery_sign_user_flip": False})
+@pytest.mark.parametrize("flip", [False, True])
+def test_a_reset_leaves_nothing_to_move(flip):
+    reader = _reader([_inverted(1)], {1: 1200}, {"battery_sign_user_flip": flip})
     reader.restore_sign_state({"battery_detected": {FLEET: True},
                                "battery_inverted": {FLEET: True}})
     reader.reset_sign_state()
-    assert reader.read_power().battery_power == pytest.approx(1200.0)
+    assert reader.read_power().battery_power == pytest.approx(-1200.0 if flip else 1200.0)
     assert not reader._battery_sign_detected.get(FLEET)
     assert not reader._battery_sign_inverted.get(FLEET)
     assert reader.export_sign_state()["battery_basis"] == "sensor"
@@ -245,17 +246,25 @@ OLD_STORE_NO_LOCK = {"grid_detected": False, "grid_inverted": False,
                      "battery_detected": {}, "battery_inverted": {}}
 
 
+def _inverted_no_counters(n):
+    return {"type": "battery",
+            "power_config": {"stat_rate_inverted": f"sensor.batt{n}_power"}}
+
+
+@pytest.mark.parametrize("counters", [True, False])
 @pytest.mark.parametrize("brand", [None, "goodwe", "huawei_solar"])
 @pytest.mark.parametrize("raw", [1200, -800])
-def test_a_flip_set_against_the_old_read_reads_the_same(brand, raw):
+def test_a_flip_set_against_the_old_read_reads_the_same(brand, raw, counters):
     """The user's "Fix battery sign" corrected the flipped read. With no lock
-    to turn over, SEM locks the old read's sign (its brand seed, else none)
-    on the sensor as it is: the user sees what they saw, also after a
+    to turn over, SEM locks the old read's sign on the sensor as it is: the
+    brand seed, which the old sign check asked only with both energy
+    counters set, else none. The user sees what they saw, also after a
     restart."""
-    seeded = brand == "goodwe"          # the table negates goodwe
+    seeded = brand == "goodwe" and counters     # the table negates goodwe
+    battery = _inverted(1) if counters else _inverted_no_counters(1)
 
     def make():
-        r = _reader([_inverted(1)], {1: raw}, {"battery_sign_user_flip": True})
+        r = _reader([battery], {1: raw}, {"battery_sign_user_flip": True})
         r._entity_owner = lambda eid: (brand, None)
         return r
 
@@ -272,15 +281,24 @@ def test_a_flip_set_against_the_old_read_reads_the_same(brand, raw):
     assert again.read_power().battery_power == pytest.approx(float(old))
 
 
-@pytest.mark.parametrize("case", ["no_flip", "no_store", "new_store"])
+@pytest.mark.parametrize("case", ["no_flip", "no_store", "new_store",
+                                  "per_battery_first"])
 def test_no_lock_is_made_without_an_old_flip(case):
     """No flip set against the old read: nothing is kept, and the battery
-    reads right from the start. ``{}`` is no store (or a reset)."""
+    reads right from the start. ``{}`` is no store (or a reset). A flip on a
+    home that read per battery at the update judged each sensor as it is."""
     options = {"battery_sign_user_flip": case != "no_flip"}
     state = {"no_flip": dict(OLD_STORE_NO_LOCK), "no_store": {},
-             "new_store": {**OLD_STORE_NO_LOCK, "battery_basis": "sensor"}}[case]
-    reader = _reader([_inverted(1)], {1: 1200}, options)
-    reader.restore_sign_state(state)
+             "new_store": {**OLD_STORE_NO_LOCK, "battery_basis": "sensor"},
+             "per_battery_first": dict(OLD_STORE_NO_LOCK)}[case]
+    if case == "per_battery_first":
+        reader = _reader([_inverted(1), _standard(2)], {1: 1200, 2: 500}, options)
+        reader.restore_sign_state(state)
+        reader.read_power()
+        reader.set_energy_dashboard_config(_ed([_inverted(1)]))
+    else:
+        reader = _reader([_inverted(1)], {1: 1200}, options)
+        reader.restore_sign_state(state)
     reader.read_power()
     assert not reader._battery_sign_detected.get(FLEET)
     assert not reader._battery_sign_inverted.get(FLEET)

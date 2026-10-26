@@ -126,8 +126,9 @@ class EnergyDashboardConfig:
     grid_power_from: Optional[str] = None
     grid_power_to: Optional[str] = None
     #: (#1194) Some combined battery sensor is marked "Inverted". Read as it
-    #: is like any other; the flag only moves a fleet sign lock saved while
-    #: the one-battery read still flipped it (one flag: only that read was).
+    #: is like any other; the flag only changes what an older store saved
+    #: while the one-battery read still flipped it (one flag: only that
+    #: read was). See ``SensorReader._move_lock_learned_on_flip``.
     battery_power_inverted: bool = False
     # #553 — ALL two-sensor pairs (multi-battery installs may configure more
     # than one battery in Two-sensor mode). Each entry: (from, to). The
