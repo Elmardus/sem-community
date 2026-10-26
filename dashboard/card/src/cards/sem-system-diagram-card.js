@@ -133,6 +133,10 @@ class SEMSystemDiagramCard extends SEMLitBase {
         // without a battery drew a permanent "— W / sensor unavailable"
         // battery node. Generator injects show_battery:false from has_battery.
         this._showBattery = config.show_battery !== false;
+        // The EV node's state of charge (util/ev-node-soc.js, #1211). Default
+        // true; false hides it for two cars that share one charger, where the
+        // figure can be the other car's (docs/KNOWN_LIMITATIONS.md).
+        this._showEvSoc = config.show_ev_soc !== false;
     }
 
     /** Resolve a logical suffix to an entity id (#455).
@@ -391,7 +395,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
     // and only while exactly one charger is set up (one car can be meant).
     _evSocLabel(hass) {
         const states = hass?.states;
-        if (!states) return '';
+        if (!states || !this._showEvSoc) return '';
         if (this._mode === 'entities') {
             const eid = this._eid('ev_soc');
             return eid ? evNodeSocLabel({ soc: socFromState(states[eid]) }) : '';

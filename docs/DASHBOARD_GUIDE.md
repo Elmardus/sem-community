@@ -690,7 +690,15 @@ marked "~". With more than one charger it shows no SOC: no single car is
 
 SEM models one car per charger, so if two cars share one charger the figure can
 belong to the other car (see
-[One vehicle per charger](KNOWN_LIMITATIONS.md#one-vehicle-per-charger)).
+[One vehicle per charger](KNOWN_LIMITATIONS.md#one-vehicle-per-charger)). Set
+`show_ev_soc: false` on the card to hide the figure in that case; the default
+is to show it.
+
+```yaml
+type: custom:sem-system-diagram-card
+entity_prefix: sensor.sem_
+show_ev_soc: false
+```
 
 #### sem-tab-header
 
