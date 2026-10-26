@@ -34,7 +34,6 @@ from custom_components.solar_energy_management.coordinator.flow_calculator impor
 )
 from custom_components.solar_energy_management.coordinator.types import (
     EnergyTotals,
-    PowerFlows,
     PowerReadings,
 )
 from custom_components.solar_energy_management.utils.helpers import (
