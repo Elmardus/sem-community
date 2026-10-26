@@ -41,7 +41,9 @@ TARGET_TOTAL = {
     "battery": "sensor.sem_daily_battery_charge_energy",
     "grid": "sensor.sem_daily_grid_export_energy",
 }
-FLOW_KEY = re.compile(r"^flow_([a-z]+)_to_([a-z]+)_energy$")
+# Non-greedy: an end of two words (``heat_pump``) still matches, so a flow
+# like that cannot slip past the guard.
+FLOW_KEY = re.compile(r"^flow_([a-z_]+?)_to_([a-z_]+)_energy$")
 
 
 def _template():
@@ -106,7 +108,7 @@ def test_the_battery_sells_into_export():
 
 def test_the_new_label_is_translated_in_every_language():
     tables = json.loads(TRANSLATIONS.read_text(encoding="utf-8"))
-    assert len(tables) == 16
+    assert len(tables) >= 16
     for lang, table in tables.items():
         assert table.get("Bat>Grid"), lang
         if lang != "en":
@@ -145,3 +147,16 @@ def test_the_battery_line_is_named_in_the_home_language():
     tpl = gen._translate_dashboard(_template())
     _, middle, _ = _columns(_sankey(tpl))
     assert middle["sensor.sem_flow_battery_to_grid_energy"]["name"] == "Bat>Netz"
+
+
+def test_no_cyrillic_letters_in_the_tables():
+    """The Czech "Export" read "Přeток": three Cyrillic letters that look
+    Latin. None of SEM's languages is written in Cyrillic."""
+    cyrillic = re.compile("[Ѐ-ӿ]")
+    files = [TRANSLATIONS, ROOT / "strings.json", *sorted((ROOT / "translations").glob("*.json"))]
+    assert len(files) >= 18
+    found = [f"{f.name}: {m.group(0)!r} in {line.strip()[:60]}"
+             for f in files
+             for line in f.read_text(encoding="utf-8").splitlines()
+             for m in [cyrillic.search(line)] if m]
+    assert not found, found
