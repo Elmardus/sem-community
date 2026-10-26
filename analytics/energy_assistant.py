@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from ..coordinator.price_signal import is_cheap_name, is_expensive_name
-from ..utils.helpers import solar_share_pct
+from ..utils.helpers import solar_export, solar_share_pct
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ class EnergyAssistant:
         daily_ev_kwh: float = 0.0,
         daily_grid_import_kwh: float = 0.0,
         daily_grid_export_kwh: float = 0.0,
+        daily_battery_export_kwh: float = 0.0,
         daily_battery_charge_kwh: float = 0.0,
         daily_battery_discharge_kwh: float = 0.0,
         solar_to_ev_kwh: float = 0.0,
@@ -123,12 +124,17 @@ class EnergyAssistant:
             solar_to_ev_kwh, grid_to_ev_kwh, battery_to_ev_kwh,
         )
 
+        # (#1191) "% of solar exported" counts solar's export only: a
+        # battery sale was never part of the solar it is divided by.
+        solar_export_kwh = solar_export(
+            daily_grid_export_kwh, daily_battery_export_kwh)
+
         # Generate tips based on current data
         self._analyze_ev_charging(
             daily_ev_kwh, ev_share, forecast_remaining_kwh,
         )
         self._analyze_surplus(
-            daily_grid_export_kwh, daily_solar_kwh,
+            solar_export_kwh, daily_solar_kwh,
             has_heat_pump, has_hot_water,
         )
         self._analyze_self_consumption(
@@ -148,7 +154,7 @@ class EnergyAssistant:
         # Calculate optimization score
         score = self._calculate_score(
             self_consumption_rate, autarky_rate,
-            daily_grid_export_kwh, daily_solar_kwh,
+            solar_export_kwh, daily_solar_kwh,
             daily_ev_kwh, ev_share,
         )
 
@@ -227,7 +233,7 @@ class EnergyAssistant:
 
     def _analyze_surplus(
         self,
-        daily_export_kwh: float,
+        solar_export_kwh: float,
         daily_solar_kwh: float,
         has_heat_pump: bool,
         has_hot_water: bool,
@@ -236,7 +242,7 @@ class EnergyAssistant:
         if daily_solar_kwh <= 0:
             return
 
-        export_pct = (daily_export_kwh / daily_solar_kwh * 100)
+        export_pct = (solar_export_kwh / daily_solar_kwh * 100)
         if export_pct > 100:
             # (#1051) More exported than the sun made is not a fact about the
             # house — the inputs disagree (his solar read one inverter of
@@ -254,7 +260,7 @@ class EnergyAssistant:
                 description=_t("tip_high_export_desc",
                     "{export_pct:.0f}% of solar is exported. "
                     "Adding a hot water diverter would capture ~{capture:.1f} kWh/day.",
-                    export_pct=export_pct, capture=daily_export_kwh * 0.4),
+                    export_pct=export_pct, capture=solar_export_kwh * 0.4),
                 estimated_savings=_t("tip_high_export_savings", "10-20 {currency}/month", currency=currency),
                 priority=3,
                 created=datetime.now(),
@@ -461,7 +467,7 @@ class EnergyAssistant:
         self,
         self_consumption_rate: float,
         autarky_rate: float,
-        export_kwh: float,
+        solar_export_kwh: float,
         solar_kwh: float,
         ev_kwh: float,
         ev_share: Optional[float],
@@ -484,7 +490,7 @@ class EnergyAssistant:
 
         # Low export bonus (10 points max)
         if solar_kwh > 0:
-            export_pct = (export_kwh / solar_kwh * 100)
+            export_pct = (solar_export_kwh / solar_kwh * 100)
             score += max(0, 10 - export_pct * 0.1)
 
         return max(0, min(100, int(score)))

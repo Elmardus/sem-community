@@ -486,6 +486,14 @@ class EnergyTotals:
     yearly_grid_export_negative: float = 0.0
     monthly_grid_export_negative_cost: float = 0.0
     yearly_grid_export_negative_cost: float = 0.0
+    #: (#1191) The battery's part of the export — a sale. Booked beside
+    #: ``grid_export``, never instead of it, from each cycle's
+    #: ``battery_to_grid`` flow. 0.0 (all export is solar's) where no flows
+    #: said otherwise. ``utils.helpers.solar_export`` takes it out of the
+    #: export.
+    daily_grid_export_battery: float = 0.0
+    monthly_grid_export_battery: float = 0.0
+    yearly_grid_export_battery: float = 0.0
     daily_battery_charge: float = 0.0
     daily_battery_discharge: float = 0.0
 
@@ -1259,6 +1267,8 @@ class SEMData:
             "daily_total_consumption": self.energy.daily_total_consumption,
             "daily_grid_import_energy": self.energy.daily_grid_import,
             "daily_grid_export_energy": self.energy.daily_grid_export,
+            # (#1191) the battery's part of that export; diagnostics only
+            "daily_grid_export_battery_kwh": self.energy.daily_grid_export_battery,
             "daily_grid_export_negative_kwh": self.energy.daily_grid_export_negative,
             "daily_grid_export_negative_cost": self.energy.daily_grid_export_negative_cost,
             "daily_battery_charge_energy": self.energy.daily_battery_charge,

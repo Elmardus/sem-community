@@ -90,7 +90,8 @@ def _run_one_cycle(calc: EnergyCalculator) -> EnergyTotals:
     power.grid_export_power = 3500.0
     power.battery_charge_power = 2500.0
     power.battery_discharge_power = 2000.0
-    flows = PowerFlows(solar_to_battery=1500.0, grid_to_battery=1000.0)
+    flows = PowerFlows(solar_to_battery=1500.0, grid_to_battery=1000.0,
+                       battery_to_grid=1000.0)
     return calc.calculate_energy(power, flows)
 
 
@@ -107,11 +108,12 @@ class TestAccumulatorKeyRoundTrip666:
         # accumulators rather than accumulated itself, which is why it has
         # no monthly/yearly twin; the round-trip test below skips periods
         # that do not exist, and was confirmed to cover this one.
-        assert len(_categories()) == 12, (
-            f"expected 12 daily categories, found {_categories()} — if a "
+        assert len(_categories()) == 13, (
+            f"expected 13 daily categories, found {_categories()} — if a "
             "category was added or removed, confirm the guard still covers it "
             "(#871 added grid_export_negative and grid_export_negative_cost, "
-            "which integrate only while the export rate is NEGATIVE)"
+            "which integrate only while the export rate is NEGATIVE; #1191 "
+            "added grid_export_battery, fed by the battery_to_grid flow)"
         )
 
     @freeze_time("2026-07-15 12:00:00")
