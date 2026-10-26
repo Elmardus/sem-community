@@ -357,10 +357,16 @@ async def async_get_config_entry_diagnostics(
         battery_pairs = [
             list(p) for p in (getattr(ed_config, "battery_power_pairs", []) or [])
             if isinstance(p, (list, tuple))]
+        unit_counters = getattr(ed_config, "battery_unit_counters", None)
         per_source_lists = {
             "solar_power_list": list(getattr(ed_config, "solar_power_list", []) or []),
             "battery_power_list": list(getattr(ed_config, "battery_power_list", []) or []),
             "battery_power_pairs": battery_pairs,
+            # (#1193) each battery's own (charge, discharge) counters
+            "battery_unit_counters": {
+                unit: list(pair) for unit, pair in unit_counters.items()
+                if isinstance(pair, (list, tuple))
+            } if isinstance(unit_counters, dict) else {},
             "grid_power_list": list(getattr(ed_config, "grid_power_list", []) or []),
         }
         per_source_readings = {

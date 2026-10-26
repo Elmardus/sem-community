@@ -29,7 +29,7 @@ from .units import (
     temperature_state_to_celsius,
 )
 
-from ..ha_energy_reader import battery_units
+from ..ha_energy_reader import battery_units, unit_energy_counters
 from ..utils.log_gate import log_on_change
 from ..utils.own_entity import is_sem_entity
 from ..consts.core import (
@@ -437,6 +437,14 @@ class SensorReader:
         #: the one-battery read still flipped an "Inverted" sensor. Moved
         #: once, on the first Energy Dashboard read.
         self._battery_lock_on_flipped = False
+        #: (#1193) Restored battery locks, by bid, learned while each battery
+        #: was judged by entry N of the counter lists and not checked yet.
+        #: Each is checked once, on an Energy Dashboard read that uses it.
+        self._battery_locks_to_check: set = set()
+        #: (#1193) Bids whose lock was judged again: their sign is a kept
+        #: start value until the sign check locks again. Saved, so a restart
+        #: in between keeps it.
+        self._battery_sign_kept: set = set()
         self._flip_ignored_logged = False
         # #461: accumulated sign-of-correlation evidence. The old ±1 vote
         # locked after three *consecutive* instantaneous matches — and a
@@ -521,15 +529,15 @@ class SensorReader:
         # Battery sign autodetect — #404: per-battery state.
         # Multi-battery installs (≥ 2 ``battery_power_list`` entries) run
         # the detection independently per battery using each one's own
-        # ``battery_charge_energy_list[i]`` / ``discharge_energy_list[i]``
-        # counters, so a dual-brand fleet (e.g., Sessy + Huawei) with
+        # counters (``unit_energy_counters``, #1193 — not entry i of the
+        # counter lists), so a dual-brand fleet (e.g., Sessy + Huawei) with
         # opposite sign conventions ends up canonical for both. Each
         # dict is keyed by the stable per-battery slug (``b1``, ``b2`` …)
         # assigned in the read-power loop below.
         #
         # Single-battery / combined-sensor installs fall back to the
-        # legacy fleet-level detection using the ``ed.battery_*_energy``
-        # (singular) counters. Both code paths share the same voting +
+        # legacy fleet-level detection using the one battery's own counters,
+        # else the ``ed.battery_*_energy`` (singular) ones. Both code paths share the same voting +
         # threshold heuristic — only the input scope differs.
         self._battery_sign_inverted: Dict[str, bool] = {}
         self._battery_sign_detected: Dict[str, bool] = {}
@@ -1087,14 +1095,10 @@ class SensorReader:
                 bp = readings.batteries.get(bid)
                 if bp is None:
                     continue
-                charge_entity = (
-                    ed.battery_charge_energy_list[idx]
-                    if idx < len(ed.battery_charge_energy_list) else None
-                )
-                discharge_entity = (
-                    ed.battery_discharge_energy_list[idx]
-                    if idx < len(ed.battery_discharge_energy_list) else None
-                )
+                # (#1193) this battery's own counters, never entry idx of the
+                # counter lists: those hold the two-sensor batteries too.
+                charge_entity, discharge_entity = (
+                    unit_energy_counters(ed, entity) or (None, None))
                 needs_negate = self._detect_battery_sign_for(
                     bid, bp.power_w, charge_entity, discharge_entity,
                     power_entity=entity,
@@ -1322,10 +1326,21 @@ class SensorReader:
             except Exception:  # noqa: BLE001 — diagnostics must never raise
                 battery_platform = None
 
+        # (#1193) the counters each battery is judged by
+        units = battery_units(ed) if ed is not None else []
         per_bid = {}
         for bid in set(self._battery_sign_inverted) | set(self._battery_sign_detected):
             mag = self._battery_sign_total_mag.get(bid, 0.0)
             ev = self._battery_sign_evidence.get(bid, 0.0)
+            if ed is None:
+                counters = None
+            elif bid == self._FLEET_BID:
+                counters = (self._one_battery_own_counters(ed)
+                            or (ed.battery_charge_energy, ed.battery_discharge_energy))
+            else:
+                n = int(bid[1:]) if bid[1:].isdigit() else 0
+                counters = (unit_energy_counters(ed, units[n - 1])
+                            if 0 < n <= len(units) else None)
             per_bid[bid] = {
                 "detected": self._battery_sign_detected.get(bid, False),
                 "inverted": self._battery_sign_inverted.get(bid, False),
@@ -1334,6 +1349,7 @@ class SensorReader:
                 "samples": self._battery_sign_samples.get(bid, 0),
                 "confidence": round(abs(ev) / mag if mag > 0 else 0.0, 3),
                 "brand_seed_done": self._battery_brand_seed_done.get(bid, False),
+                "counters": list(counters) if counters else None,
             }
 
         return {
@@ -1507,6 +1523,15 @@ class SensorReader:
             # restart before the first read still moves it.
             **({} if getattr(self, "_battery_lock_on_flipped", False)
                else {"battery_basis": "sensor"}),
+            # (#1193) each lock judged by its own battery's counters, but for
+            # the restored ones not checked yet (a restart keeps them waiting).
+            "battery_counters": "own",
+            **({"battery_counters_pending": sorted(self._battery_locks_to_check)}
+               if getattr(self, "_battery_locks_to_check", None) else {}),
+            **({"battery_sign_kept": kept} if (kept := {
+                b: self._battery_sign_inverted.get(b, False)
+                for b in sorted(getattr(self, "_battery_sign_kept", ()))
+                if not self._battery_sign_detected.get(b)}) else {}),
         }
 
     def restore_sign_state(self, state) -> None:
@@ -1548,6 +1573,26 @@ class SensorReader:
         # lock, or the user's flip, may judge the flipped value
         # (``_move_lock_learned_on_flip``). ``{}`` is no store (or a reset).
         self._battery_lock_on_flipped = bool(state) and "battery_basis" not in state
+        # (#1193) A store without ``battery_counters`` judged each battery by
+        # entry N of the counter lists: every lock it holds is checked
+        # (``_drop_locks_on_other_counters``). A newer store names the ones
+        # still waiting for their check.
+        locked = {b for b, det in self._battery_sign_detected.items() if det}
+        if "battery_counters" not in state:
+            self._battery_locks_to_check = locked
+        else:
+            pending = state.get("battery_counters_pending")
+            self._battery_locks_to_check = locked & {
+                b for b in (pending if isinstance(pending, list) else [])
+                if isinstance(b, str)}
+        # (#1193) a lock judged again keeps its sign as the start value
+        kept = state.get("battery_sign_kept")
+        for bid, inverted in (kept.items() if isinstance(kept, dict) else ()):
+            if (isinstance(bid, str) and isinstance(inverted, bool)
+                    and not self._battery_sign_detected.get(bid)):
+                self._battery_sign_inverted[bid] = inverted
+                self._battery_brand_seed_done[bid] = True
+                self._battery_sign_kept.add(bid)
 
     def _manual_grid_pair(self):
         """(#1103) The manual import/export pair, minus SEM's own sensors.
@@ -1647,6 +1692,8 @@ class SensorReader:
         self._battery_sign_inverted.clear()
         self._battery_sign_detected.clear()
         self._battery_lock_on_flipped = False   # (#1194) nothing left to move
+        self._battery_locks_to_check = set()   # (#1193) nothing left to check
+        self._battery_sign_kept = set()
         self._battery_sign_evidence.clear()
         self._battery_sign_total_mag.clear()
         self._battery_sign_samples.clear()
@@ -2166,8 +2213,9 @@ class SensorReader:
             # the grid-path fix. Default False = pre-#476 behaviour.
             return self._battery_sign_inverted.get(self._FLEET_BID, False)
 
-        charge_entity = ed.battery_charge_energy
-        discharge_entity = ed.battery_discharge_energy
+        charge_entity, discharge_entity = (
+            self._one_battery_own_counters(ed)
+            or (ed.battery_charge_energy, ed.battery_discharge_energy))
         return self._detect_battery_sign_for(
             self._FLEET_BID,
             readings.battery_power,
@@ -2175,6 +2223,27 @@ class SensorReader:
             discharge_entity,
             power_entity=getattr(ed, "battery_power", None),
         )
+
+    def _one_battery_own_counters(
+        self, ed,
+    ) -> Optional[Tuple[Optional[str], Optional[str]]]:
+        """(#1193) The counters of the one battery the fleet read comes from.
+
+        The fleet value is SEM's battery power pick, else the one battery's
+        sensor, so it is judged by that battery's own counters. The first
+        counters in the dashboard can be those of a battery with no power
+        sensor. ``None`` when the fleet value is no battery the dashboard
+        knows: a pick it does not list, no battery sensor, or several.
+        """
+        units = battery_units(ed)
+        if len(units) > 1:
+            return None          # the fleet value is the sum of the batteries
+        pick = getattr(self.config, "battery_power_sensor", None)
+        if pick:
+            # Setup saves the dashboard's own sensor as this pick, so a pick
+            # the dashboard knows is that battery (#1193 review).
+            return unit_energy_counters(ed, pick)
+        return unit_energy_counters(ed, units[0]) if units else None
 
     def _detect_battery_sign_for(
         self,
@@ -2824,6 +2893,8 @@ class SensorReader:
             readings.battery_power = charge_w - discharge_w
         self._move_lock_learned_on_flip(ed, read_alone,
                                         per_battery=per_battery_total is not None)
+        self._drop_locks_on_other_counters(
+            ed, per_battery=per_battery_total is not None)
 
         # Battery SOC — precedence (#551): SEM's own explicit override
         # (battery_soc_sensor option) > multi-battery average (the fleet SOC
@@ -2939,6 +3010,74 @@ class SensorReader:
         self._read_inverter_temperature(readings)
 
         return readings
+
+    def _drop_locks_on_other_counters(self, ed, per_battery: bool) -> None:
+        """(#1193) Judge again a saved battery lock learned on another battery.
+
+        Until #1193 battery bN was judged by entry N of the counter lists, and
+        the one-battery read by the first counters in the dashboard. Those
+        lists hold every battery with a counter, in dashboard order, so on a
+        home with a two-sensor battery, or a battery with no power sensor,
+        listed first, a lock could be learned on another battery's counters.
+
+        Each restored lock is checked once, on the first Energy Dashboard read
+        that uses it (``b<N>`` while the home reads per battery, the fleet
+        lock while it reads one battery; the other kind waits, as the #1194
+        move does). A lock whose old counters were the battery's own stays.
+        Any other is no longer a lock: the sign check judges it again on the
+        battery's own counters. Its sign stays the start value, so nothing
+        reads differently before new evidence, also across a restart
+        (``battery_sign_kept``); most of these locks were right, since
+        batteries of one home mostly charge together. Runs after the #1194
+        move, so a value that move turns over is the one kept. While "Fix
+        battery sign" is on, the locks wait: the user set that against what
+        SEM showed, and a new lock under it could undo it.
+        """
+        pending = getattr(self, "_battery_locks_to_check", None)
+        if not pending:
+            return
+        if bool((getattr(self, "_raw_config", None) or {}).get(
+                "battery_sign_user_flip", False)):
+            return          # checked on the first read with the flip off
+        if per_battery:
+            charge_list = list(getattr(ed, "battery_charge_energy_list", None) or [])
+            discharge_list = list(
+                getattr(ed, "battery_discharge_energy_list", None) or [])
+            checks = [
+                (f"b{idx + 1}", entity,
+                 (charge_list[idx] if idx < len(charge_list) else None,
+                  discharge_list[idx] if idx < len(discharge_list) else None),
+                 unit_energy_counters(ed, entity) or (None, None))
+                for idx, entity in enumerate(
+                    getattr(ed, "battery_power_list", None) or [])]
+        else:
+            first = (ed.battery_charge_energy, ed.battery_discharge_energy)
+            checks = [(self._FLEET_BID,
+                       getattr(self.config, "battery_power_sensor", None)
+                       or ed.battery_power or ed.battery_power_to, first,
+                       self._one_battery_own_counters(ed) or first)]
+        for bid, entity, old, now in checks:
+            if bid not in pending:
+                continue
+            pending.discard(bid)
+            if not self._battery_sign_detected.get(bid) or old == now:
+                continue
+            self._battery_sign_detected[bid] = False
+            self._battery_sign_evidence[bid] = 0.0
+            self._battery_sign_total_mag[bid] = 0.0
+            self._battery_sign_samples[bid] = 0
+            self._battery_charge_baseline[bid] = None
+            self._battery_discharge_baseline[bid] = None
+            # the kept sign is the start value; a brand seed must not move it
+            self._battery_brand_seed_done[bid] = True
+            self._battery_sign_kept.add(bid)
+            self._battery_sign_audits.pop(bid, None)
+            _LOGGER.info(
+                "Battery sign: the saved sign of %s was learned on the energy "
+                "counters %s / %s, which are not its own (%s / %s). SEM keeps "
+                "it for now and judges it again on its own counters. (#1193)",
+                entity, old[0], old[1], now[0], now[1],
+            )
 
     def _move_lock_learned_on_flip(self, ed, read_alone: bool,
                                    per_battery: bool = False) -> None:
@@ -3592,9 +3731,12 @@ class SensorReader:
 
         * **single / combined battery** — the ``__fleet__`` lock is set, so the
           summed counters are audited against the summed power, as in #589.
+          With one battery read from its own sensor, its own counters (#1193).
         * **per-battery mode** — ``__fleet__`` is never locked; each combined
           unit locks its OWN ``b<N>`` sign. So each unit is audited against its
-          own ``battery_charge_energy_list[idx]`` / ``…discharge…[idx]`` pair.
+          own counters (``unit_energy_counters``, #1193). Entry idx of the
+          counter lists can be another battery's: they hold the two-sensor
+          batteries too, in dashboard order.
           Summing here would have been worse than useless: one unit signed
           wrong and one signed right cancel to ≈0 W and get skipped as "idle".
 
@@ -3606,14 +3748,19 @@ class SensorReader:
         so the voter's ``_battery_charge_baseline`` is never disturbed.
         """
         if self._battery_sign_detected.get(self._FLEET_BID):
-            charge_entities = (
-                list(getattr(ed, "battery_charge_energy_list", None) or [])
-                or ([ed.battery_charge_energy] if getattr(ed, "battery_charge_energy", None) else [])
-            )
-            discharge_entities = (
-                list(getattr(ed, "battery_discharge_energy_list", None) or [])
-                or ([ed.battery_discharge_energy] if getattr(ed, "battery_discharge_energy", None) else [])
-            )
+            own = self._one_battery_own_counters(ed)       # (#1193)
+            if own is not None:
+                charge_entities = [own[0]] if own[0] else []
+                discharge_entities = [own[1]] if own[1] else []
+            else:
+                charge_entities = (
+                    list(getattr(ed, "battery_charge_energy_list", None) or [])
+                    or ([ed.battery_charge_energy] if getattr(ed, "battery_charge_energy", None) else [])
+                )
+                discharge_entities = (
+                    list(getattr(ed, "battery_discharge_energy_list", None) or [])
+                    or ([ed.battery_discharge_energy] if getattr(ed, "battery_discharge_energy", None) else [])
+                )
             self._run_battery_sign_audit(
                 self._FLEET_BID, battery_power, charge_entities, discharge_entities,
             )
@@ -3622,20 +3769,18 @@ class SensorReader:
         # Per-battery mode: audit each combined unit against its own counters.
         if readings is None:
             return
-        charge_list = list(getattr(ed, "battery_charge_energy_list", None) or [])
-        discharge_list = list(getattr(ed, "battery_discharge_energy_list", None) or [])
-        for idx in range(len(getattr(ed, "battery_power_list", None) or [])):
+        for idx, entity in enumerate(getattr(ed, "battery_power_list", None) or []):
             bid = f"b{idx + 1}"
             if not self._battery_sign_detected.get(bid):
                 continue
             bp = readings.batteries.get(bid)
             if bp is None:
                 continue
-            if idx >= len(charge_list) or idx >= len(discharge_list):
+            # (#1193) its own counters, as the sign check above used
+            charge, discharge = unit_energy_counters(ed, entity) or (None, None)
+            if not charge or not discharge:
                 continue
-            self._run_battery_sign_audit(
-                bid, bp.power_w, [charge_list[idx]], [discharge_list[idx]],
-            )
+            self._run_battery_sign_audit(bid, bp.power_w, [charge], [discharge])
 
     def _run_battery_sign_audit(
         self, bid: str, power_w: float, charge_entities: list, discharge_entities: list,

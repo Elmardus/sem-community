@@ -512,8 +512,8 @@ def _make_multi_battery_ed(
 ):
     """Build a multi-battery EnergyDashboardConfig mock for #404 tests.
 
-    Mirrors the parallel-list shape ``ha_energy_reader.py`` populates
-    when the HA Energy Dashboard has multiple battery sources configured.
+    Mirrors the lists ``ha_energy_reader.py`` populates when the HA Energy
+    Dashboard has multiple combined battery sources configured.
     """
     config = Mock()
     config.battery_power = None  # No combined sensor in multi-battery mode
@@ -522,6 +522,10 @@ def _make_multi_battery_ed(
     config.battery_power_list = list(battery_power_list)
     config.battery_charge_energy_list = list(battery_charge_energy_list)
     config.battery_discharge_energy_list = list(battery_discharge_energy_list)
+    # (#1193) what the parser records: each battery's own counters
+    config.battery_unit_counters = {
+        p: (c, d) for p, c, d in zip(battery_power_list, battery_charge_energy_list,
+                                     battery_discharge_energy_list, strict=False)}
     config.solar_power = "sensor.solar_power"
     config.solar_power_list = []
     config.grid_power = "sensor.grid_power"
