@@ -313,6 +313,11 @@ GRID_PROOF_MAX_S: float = 7200.0
 #: a value a caller can pass deliberately rather than a missing argument.
 _UNSET = object()
 
+#: (#1192) The source a "Fix grid sign" tap is bound to when SEM read no
+#: grid meter. It applies to no meter, so never to one SEM finds later. A
+#: flip with no source saved at all is from before the binding (#971).
+NO_GRID_SOURCE = "none"
+
 
 def _fresh_grid_proof() -> dict:
     """A corroboration window with nothing in it yet."""
@@ -429,6 +434,10 @@ class SensorReader:
         #: (#971) Which branch produced this cycle's grid_power — the key a
         #: one-tap user flip is bound to. ``None`` until the first read.
         self._grid_source_key = None
+        #: (#1192) The source this cycle read with a live value, or None: what
+        #: a "Fix grid sign" tap is bound to. A tap while the grid reads 0 W
+        #: because nothing (or only a dark meter) was read flips no meter.
+        self._grid_read_source = None
         #: (#1103) The source a restored grid lock was learned on; checked
         #: once, on the first read. ``_UNSET``: nothing to check (no lock,
         #: or a store from before the lock carried its source).
@@ -969,10 +978,21 @@ class SensorReader:
         self._input_dark = {}                 # (#818) per-cycle
         # (#1022) the previous cycle's dark solar verdict has just ended
         self._accrue_solar_downtime(time.monotonic())
-        if self._energy_dashboard_config:
-            readings = self._read_from_energy_dashboard()
-        else:
-            readings = self._read_from_legacy_config()
+        # (#1192) Which source THIS cycle read: each branch that reads the
+        # grid names it. When none does, the last name is kept for the saved
+        # lock (#1103), as before; a tap is bound to this cycle's read only.
+        last_source = self._grid_source_key
+        self._grid_source_key = None
+        self._grid_read_source = None
+        try:
+            if self._energy_dashboard_config:
+                readings = self._read_from_energy_dashboard()
+            else:
+                readings = self._read_from_legacy_config()
+            self._grid_read_source = self._grid_source_key
+        finally:
+            if self._grid_source_key is None:
+                self._grid_source_key = last_source
         self._check_restored_grid_lock()
         # (#902) A value no battery can produce is a dark read, not a number.
         self._gate_battery_power(readings)
@@ -1003,6 +1023,8 @@ class SensorReader:
         # every split-grid install.
         readings.grid_power_unavailable = self._all_dark_any(
             "grid", "grid_import", "grid_export")
+        if readings.grid_power_unavailable:
+            self._grid_read_source = None   # (#1192) a dark meter read nothing
         readings.battery_power_all_unavailable = self._all_dark("battery")
 
         # #661 — forget audits for pairs that are no longer being netted, so a
@@ -1207,9 +1229,13 @@ class SensorReader:
         it always blames the grid, so left unguarded it silently undid the
         user's setting every ~3 min (@hrdilshan: "it automatically changes
         back").
+
+        (#1192) Only a flip that applies to the meter read now counts: one
+        tapped against no meter, or another meter (#971), decided nothing
+        about this one.
         """
         return bool(self._raw_config.get("grid_sign_invert", False)
-                    or self._raw_config.get("grid_sign_user_flip", False))
+                    or self.user_flip_applies())
 
     def grid_sign_diagnostics(self) -> dict:
         """Build a #461 grid-sign support payload.
@@ -1272,8 +1298,14 @@ class SensorReader:
             "user_flip": bool(self._raw_config.get("grid_sign_user_flip", False)),
             # (#971) the tap is bound to a source; both halves are shown so a
             # flip that no longer applies is visible, never silent.
-            "user_flip_source": self._raw_config.get("grid_sign_user_flip_source"),
+            # (#1192) as it is read: NO_GRID_SOURCE for a tap with no meter,
+            # None for a flip from before the binding
+            "user_flip_source": (
+                self._user_flip_source()
+                if self._raw_config.get("grid_sign_user_flip", False) else None),
             "grid_source": self._grid_source_key,
+            # (#1192) what a tap now is bound to: none while the meter is dark
+            "grid_read_source": self._grid_read_source,
             "user_flip_applies": self.user_flip_applies(),
             "auto_detected": self._grid_sign_detected,
             "auto_inverted": self._grid_sign_inverted,
@@ -1512,8 +1544,10 @@ class SensorReader:
             "grid_inverted": self._grid_sign_inverted,
             # (#1103) which source the lock is about — see restore. Before
             # this run's first source is known, keep the one restored.
-            "grid_source": (self._grid_source_key
-                            if self._grid_source_key is not None
+            # (#1192) the read without a dashboard names its source for the
+            # user flip only; its lock is saved as before, with none.
+            "grid_source": (self._lock_source()
+                            if self._lock_source() is not None
                             or self._restored_grid_source is _UNSET
                             else self._restored_grid_source),
             "battery_detected": dict(self._battery_sign_detected),
@@ -1624,6 +1658,12 @@ class SensorReader:
                 entity_id)
         return None
 
+    def _lock_source(self) -> Optional[str]:
+        """(#1192) The source a grid lock is saved with and checked against:
+        the dashboard read's. The read without one keeps its lock with no
+        source, as before it named its source for the user flip."""
+        return self._grid_source_key if self._energy_dashboard_config else None
+
     def _check_restored_grid_lock(self) -> None:
         """(#1103) A restored grid sign lock is about ONE source. If the grid
         is now read from another — the Grid power pick that the reload just
@@ -1632,8 +1672,10 @@ class SensorReader:
         convention read import as export. Drop it then, once, so the new
         source is judged. Same binding as the one-tap flip (#971)."""
         recorded = self._restored_grid_source
-        if recorded is _UNSET or self._grid_source_key is None:
-            return          # nothing to check, or nothing read yet
+        if recorded is _UNSET or self._lock_source() is None:
+            # nothing to check, or nothing read yet — or (#1192) the read
+            # without a dashboard, whose lock waits for a dashboard read
+            return
         self._restored_grid_source = _UNSET
         if recorded == self._grid_source_key:
             return
@@ -2004,32 +2046,68 @@ class SensorReader:
         never to a declared pair — that is the case found live on .175. When a
         flip is present but does not apply, it is said once in the log and
         always in the diagnostics (``user_flip_applies``).
+
+        (#1192) A flip tapped while SEM read no grid meter is bound to
+        ``NO_GRID_SOURCE`` and applies to no meter. Builds since #971 saved
+        such a tap with a None source, which read as a flip from before the
+        binding and flipped the next meter SEM found; a None that is SAVED is
+        that tap, only a missing key is a flip from before.
         """
         if not bool(self._raw_config.get("grid_sign_user_flip", False)):
             return False
-        recorded = self._raw_config.get("grid_sign_user_flip_source") or None
+        recorded = self._user_flip_source()
         current = self._grid_source_key
-        if recorded is not None:
-            applies = (current == recorded)
-        else:
+        if recorded is None:
+            # (#1192) …on the dashboard read only: the read without one named
+            # no source, so it has not applied such a flip since #971, and a
+            # flip off for weeks must not come back on its own.
             kind = (current or "").split(":", 1)[0]
-            applies = kind in self._AUTO_GRID_SOURCES
-        if not applies and not self._flip_ignored_logged:
+            applies = (bool(self._energy_dashboard_config)
+                       and kind in self._AUTO_GRID_SOURCES)
+        else:
+            applies = current is not None and current == recorded
+        if not applies and current is not None and not self._flip_ignored_logged:
             self._flip_ignored_logged = True
             _LOGGER.warning(
                 "grid sign: the one-tap user flip is bound to %s and the grid is "
                 "now read from %s — not applying it (#971). Tap 'Fix grid sign' "
                 "again on the new source if it is inverted, or reset_sign_detection.",
-                recorded or "an auto-detected source", current,
+                ("no grid sensor" if recorded == NO_GRID_SOURCE
+                 else recorded or "an auto-detected source"),
+                current,
             )
         return applies
 
+    def user_flip_on_for_tap(self) -> bool:
+        """(#1192) Is the saved flip on for what a tap now would flip? Yes
+        when it applies to this meter, or when it is bound to just what a tap
+        now would bind (a tap with no meter, tapped again with no meter), so
+        a second tap turns it off. A flip about another meter is off here:
+        the tap flips this meter, as the log line asks."""
+        if not bool(self._raw_config.get("grid_sign_user_flip", False)):
+            return False
+        return (self.user_flip_applies()
+                or self._user_flip_source() == self._tap_source())
+
+    def _tap_source(self) -> str:
+        """(#1192) The source a tap now is bound to."""
+        return self._grid_read_source or NO_GRID_SOURCE
+
+    def _user_flip_source(self) -> Optional[str]:
+        """(#1192) The source the saved flip is bound to: a source key,
+        ``NO_GRID_SOURCE``, or None for a flip from before the binding
+        (#971), whose store has no source key at all."""
+        if "grid_sign_user_flip_source" not in self._raw_config:
+            return None
+        return self._raw_config.get("grid_sign_user_flip_source") or NO_GRID_SOURCE
+
     def user_flip_options(self, options: dict, new_flip: bool) -> dict:
         """(#971) The options dict the flip service persists: the flip, and —
-        when turning it ON — the grid source it was tapped against. Turning it
-        off drops the binding. The ONE production caller is the service."""
+        when turning it ON — the grid source it was tapped against (#1192:
+        ``NO_GRID_SOURCE`` when SEM read none). Turning it off drops the
+        binding. The ONE production caller is the service."""
         out = {**(options or {}), "grid_sign_user_flip": bool(new_flip)}
-        out["grid_sign_user_flip_source"] = self._grid_source_key if new_flip else None
+        out["grid_sign_user_flip_source"] = self._tap_source() if new_flip else None
         return out
 
     def _detect_grid_sign(self, readings: PowerReadings) -> bool:
@@ -4589,12 +4667,17 @@ class SensorReader:
         # both sides positive, and the convention is fixed BY DECLARATION so
         # no sign detection is needed (the solar voter computes the same
         # sign and therefore never flips it).
+        #
+        # (#1192) Each branch names its source, as on the dashboard path: the
+        # "Fix grid sign" tap is bound to it (#971), and with no name every tap
+        # here was a tap with no meter and was never applied.
         manual_import, manual_export = self._manual_grid_pair()
         grid_override = self._not_own_pick(self.config.grid_power_sensor)
         if manual_import and manual_export:
             import_w = self._read_sensor(manual_import, "grid_import")
             export_w = self._read_sensor(manual_export, "grid_export")
             readings.grid_power = export_w - import_w
+            self._grid_source_key = f"manual:{manual_import}|{manual_export}"
             self._grid_sign_detected = True
             self._audit_split_pair(
                 "grid", "Grid (manual import/export override)",
@@ -4613,8 +4696,10 @@ class SensorReader:
                     manual_import, manual_export)
             if grid_override:
                 readings.grid_power = self._read_sensor(grid_override, "grid")
+                self._grid_source_key = f"combined:{grid_override}"
         elif grid_override:
             readings.grid_power = self._read_sensor(grid_override, "grid")
+            self._grid_source_key = f"combined:{grid_override}"
 
         # Battery power
         if self.config.battery_power_sensor:
