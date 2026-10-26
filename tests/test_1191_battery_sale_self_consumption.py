@@ -206,8 +206,9 @@ class TestNoSaleNoChange:
 
     def test_export_the_flows_left_unassigned_stays_solars(self):
         """A read that does not add up: 4.5 kW out, 1 kW of sun, the pack
-        gives 1 kW. The flows give the pack 0.5 kW of the export (the house
-        took the rest of it); the 3 kW nobody made stays solar's."""
+        gives 1 kW, the house takes 1 kW. The sun serves the house, so the
+        flows give the pack 1 kW of the export; the 3.5 kW nobody made stays
+        solar's, as before."""
         calc = _calc()
         _cycle(calc, _read(solar=1000.0, home=1000.0, battery=-1000.0, grid=4500.0))
         assert _row(calc, GRID_EXPORT_BATTERY_CATEGORY) == pytest.approx(
@@ -237,6 +238,125 @@ class TestADarkPack:
                            battery_power_all_unavailable=True))
         assert _row(calc, GRID_EXPORT_BATTERY_CATEGORY) == pytest.approx(
             _kwh(4000.0, 2))
+
+
+@pytest.mark.unit
+@pytest.mark.usefixtures("morning")
+class TestADarkMeter:
+    """(#1191 review) A dark grid meter books its held export (#1177). The
+    live read then has 0 W export, so its flows give the pack no part."""
+
+    def test_a_held_export_keeps_the_battery_part_of_its_read(self):
+        calc = _calc()
+        _cycle(calc, _read(solar=1000.0, home=500.0, battery=-4000.0, grid=4500.0))
+        _cycle(calc, _read(solar=1000.0, home=500.0, battery=-4000.0, grid=0.0,
+                           grid_power_unavailable=True))
+        assert _row(calc, "grid_export") == pytest.approx(_kwh(4500.0, 2))
+        assert _row(calc, GRID_EXPORT_BATTERY_CATEGORY) == pytest.approx(
+            _kwh(4000.0, 2))
+
+    def test_a_meter_dark_past_its_grace_books_nothing(self):
+        calc = _calc()
+        _cycle(calc, _read(solar=1000.0, home=500.0, battery=-4000.0, grid=4500.0))
+        calc._integral_last_live["grid"] = (
+            calc._integral_last_live["grid"][0],
+            calc._integral_last_live["grid"][1] - timedelta(hours=1))
+        _cycle(calc, _read(solar=1000.0, home=500.0, battery=-4000.0, grid=0.0,
+                           grid_power_unavailable=True))
+        assert _row(calc, "grid_export") == pytest.approx(_kwh(4500.0))
+        assert _row(calc, GRID_EXPORT_BATTERY_CATEGORY) == pytest.approx(
+            _kwh(4000.0))
+
+
+EXPORT_METER = "sensor.p1_exported_energy"
+
+
+def _metered_calc(counter: dict, category: str = "grid_export"):
+    """A calculator whose ``category`` row follows a meter (#628)."""
+    def _get(entity_id):
+        if entity_id not in counter:
+            return None
+        state = MagicMock()
+        state.state = str(counter[entity_id])
+        state.attributes = {"unit_of_measurement": "kWh"}
+        return state
+    hass = MagicMock()
+    hass.states.get = _get
+    calc = EnergyCalculator({"update_interval": STEP_S}, TimeManager(hass))
+    calc.configure_meter_counters(hass, {category: list(counter)}, True)
+    return calc
+
+
+@pytest.mark.unit
+@pytest.mark.usefixtures("morning")
+class TestTheMeterCorrection:
+    """(#1191 review) The export row follows its meter; the battery row is
+    the flows'. The meter's correction must keep the battery's share, or a
+    meter ahead of a big sale lands the gap on solar's export."""
+
+    def _morning(self, ahead: float):
+        counter = {EXPORT_METER: 1000.0}
+        calc = _metered_calc(counter)
+        sale = _read(solar=1000.0, home=500.0, battery=-4000.0, grid=4500.0)
+        _cycle(calc, sale)                      # sets the meter's baseline
+        for _ in range(60):
+            counter[EXPORT_METER] += _kwh(4500.0) * ahead
+            energy = _cycle(calc, sale)
+        return calc, energy
+
+    def test_a_meter_ahead_keeps_the_battery_share(self):
+        calc, energy = self._morning(ahead=1.10)
+        export, battery = _row(calc, "grid_export"), _row(
+            calc, GRID_EXPORT_BATTERY_CATEGORY)
+        assert export > _kwh(4500.0, 61) * 1.05, "the meter was not adopted"
+        assert battery / export == pytest.approx(4000.0 / 4500.0, rel=0.01)
+        metrics = calc.calculate_performance(PowerReadings(), energy, None)
+        assert "self_consumption_rate" not in calc.clamp_engagement
+        assert metrics.self_consumption_rate == pytest.approx(45.0, abs=2.0)
+
+    def test_every_period_moves_with_the_correction(self):
+        calc, energy = self._morning(ahead=1.10)
+        daily = _row(calc, GRID_EXPORT_BATTERY_CATEGORY)
+        assert calc._monthly_accumulators[
+            f"{GRID_EXPORT_BATTERY_CATEGORY}_{DAY.year}_{DAY.month}"] == pytest.approx(daily)
+        assert calc._yearly_accumulators[
+            f"{GRID_EXPORT_BATTERY_CATEGORY}_{DAY.year}"] == pytest.approx(daily)
+        assert calc._lifetime_accumulators[
+            f"lifetime_{GRID_EXPORT_BATTERY_CATEGORY}"] == pytest.approx(daily)
+
+    def test_a_meter_behind_keeps_it_too(self):
+        calc, _ = self._morning(ahead=0.90)
+        export, battery = _row(calc, "grid_export"), _row(
+            calc, GRID_EXPORT_BATTERY_CATEGORY)
+        assert export < _kwh(4500.0, 61) * 0.95, "the meter was not adopted"
+        assert battery / export == pytest.approx(4000.0 / 4500.0, rel=0.01)
+
+    def test_a_battery_counter_keeps_the_charge_split_whole(self):
+        """The same shape on the charge-origin rows (#770): a counter 10 %
+        ahead of the integrated charge left solar + grid below the charge."""
+        counter = {"sensor.bms_charged_energy": 500.0}
+        calc = _metered_calc(counter, "battery_charge")
+        charge = _read(solar=5000.0, home=500.0, battery=3000.0, grid=1500.0)
+        _cycle(calc, charge)
+        for _ in range(60):
+            counter["sensor.bms_charged_energy"] += _kwh(3000.0) * 1.1
+            _cycle(calc, charge)
+        total = _row(calc, "battery_charge")
+        assert total > _kwh(3000.0, 61) * 1.05, "the counter was not adopted"
+        assert _row(calc, "battery_charge_solar") + _row(
+            calc, "battery_charge_grid") == pytest.approx(total, rel=0.001)
+        assert calc._yearly_accumulators[f"battery_charge_solar_{DAY.year}"] == \
+            pytest.approx(_row(calc, "battery_charge_solar"))
+
+    def test_with_no_sale_the_correction_moves_nothing_else(self):
+        counter = {EXPORT_METER: 1000.0}
+        calc = _metered_calc(counter)
+        sun = _read(solar=5000.0, home=1000.0, grid=4000.0)
+        _cycle(calc, sun)
+        for _ in range(60):
+            counter[EXPORT_METER] += _kwh(4000.0) * 1.1
+            _cycle(calc, sun)
+        assert _row(calc, GRID_EXPORT_BATTERY_CATEGORY) == 0.0
 
 
 # ── the siblings ─────────────────────────────────────────────────────────
@@ -395,6 +515,29 @@ class TestTheNightAudit:
     def test_without_flows_as_before(self):
         summary = self._night(None)
         assert summary.exported_kwh == pytest.approx(4.5, abs=0.01)
+
+    def test_the_cycle_hands_the_flows_over(self):
+        import inspect
+        from custom_components.solar_energy_management.coordinator.coordinator import (
+            SEMCoordinator,
+        )
+        src = inspect.getsource(SEMCoordinator)
+        assert ("self._record_demand_outcomes(dt_util.now(), power, power_flows)"
+                in src)
+
+
+@pytest.mark.unit
+class TestDiagnostics:
+    def test_the_battery_part_is_in_the_daily_energy(self):
+        from custom_components.solar_energy_management.coordinator.types import (
+            SEMData,
+        )
+        data = SEMData()
+        data.energy = EnergyTotals(daily_grid_export=2.25,
+                                   daily_grid_export_battery=2.0)
+        assert data.to_dict()["daily_grid_export_battery_kwh"] == 2.0
+        src = (REPO / "diagnostics.py").read_text(encoding="utf-8")
+        assert '"grid_export_battery_kwh": data.get("daily_grid_export_battery_kwh")' in src
 
 
 # ── the guard ────────────────────────────────────────────────────────────

@@ -347,6 +347,14 @@ GRID_CO2_KG_PER_KWH = 0.128  # Swiss grid average — the fallback (#1088)
 CO2_CORRECTION_CATEGORY = "co2_live_correction"
 #: (#1191) the battery's part of ``grid_export`` (a sale), booked beside it
 GRID_EXPORT_BATTERY_CATEGORY = "grid_export_battery"
+#: (#1191 review) rows booked beside a metered row, by that row: when the
+#: meter corrects the row, each keeps its share of it. The charge-origin split
+#: (#770) is the same shape: without it, solar + grid stopped summing to the
+#: charge once a battery counter corrected it.
+_ROWS_BESIDE = {
+    "grid_export": (GRID_EXPORT_BATTERY_CATEGORY,),
+    "battery_charge": ("battery_charge_solar", "battery_charge_grid"),
+}
 
 # (#1077) The value layer's cost categories: what solar used at home was
 # worth over exporting it, what exported kWh fetched before the fee, and the
@@ -393,6 +401,9 @@ class EnergyCalculator:
         self._integral_held: frozenset = frozenset()
         self._integral_live: frozenset = frozenset()
         self._battery_live_flows: Optional[SimpleNamespace] = None
+        # (#1191 review) the battery's part of the export, from the last
+        # cycle the grid read live: a held export keeps it (#1177)
+        self._grid_live_battery_export_w: float = 0.0
 
         # Cost rates
         self._import_rate = config.get("electricity_import_rate",
@@ -953,10 +964,17 @@ class EnergyCalculator:
         energy.yearly_grid_import = self._get_yearly("grid_import", year_key)
 
         # (#1191) The battery's part of this cycle's export, booked beside it.
-        # Its flow comes from the same read its held watts came from (#1177).
-        battery_export_w = battery_export_part(
-            held_w["grid_export_power"],
-            getattr(battery_flows, "battery_to_grid", 0.0))
+        # Its flow comes from the read the held watts came from (#1177): a
+        # dark pack's held flows, or a dark meter's last live split.
+        if "grid" in self._integral_held:
+            battery_export_w = min(held_w["grid_export_power"],
+                                   self._grid_live_battery_export_w)
+        else:
+            battery_export_w = battery_export_part(
+                held_w["grid_export_power"],
+                getattr(battery_flows, "battery_to_grid", 0.0))
+            if "grid" in self._integral_live:
+                self._grid_live_battery_export_w = battery_export_w
         # Grid export
         if held_w["grid_export_power"] >= MIN_POWER_THRESHOLD:
             export_increment = (held_w["grid_export_power"] * interval_hours) / 1000
@@ -3382,6 +3400,21 @@ class EnergyCalculator:
             # max(0.0) — the delta can now be negative, and a longer period
             # must never be dragged below zero by one day's correction.
             accumulators[key] = max(0.0, accumulators.get(key, 0.0) + delta)
+        # (#1191 review) A row booked beside this one keeps its share of it:
+        # the flows give the split, the meter the size. Left as integrated,
+        # a meter 10 % ahead of a big sale put the gap on solar's export.
+        for beside in _ROWS_BESIDE.get(category, ()):
+            part = self._daily_accumulators.get(f"{beside}_{today}", 0.0)
+            if part <= 0 or integrated <= 0:
+                continue
+            moved = min(target, part * target / integrated) - part
+            self._daily_accumulators[f"{beside}_{today}"] = part + moved
+            for accumulators, key in (
+                (self._monthly_accumulators, f"{beside}_{month_key}"),
+                (self._yearly_accumulators, f"{beside}_{year_key}"),
+                (self._lifetime_accumulators, f"lifetime_{beside}"),
+            ):
+                accumulators[key] = max(0.0, accumulators.get(key, 0.0) + moved)
 
         if cost_key and rate:
             # (#795) The drift happened across the day; price it at the
@@ -3764,9 +3797,10 @@ class EnergyCalculator:
 
         # Self consumption rate = (solar - solar's export) / solar; whatever
         # solar didn't send to the grid was consumed locally (by home,
-        # battery, or EV). (#1191) The battery's part of the export (a sale)
-        # was never in today's solar: taken away with it, a sunless morning's
-        # sale read below 0 %, the clamp held 0 % and the health check fired.
+        # battery, or EV). (#1191) So the battery's part of the export (a
+        # sale) is the pack's, not solar's: taken away with it, a sunless
+        # morning's sale read below 0 %, the clamp held 0 % and the health
+        # check fired.
         if energy.daily_solar > 0:
             solar_used = energy.daily_solar - solar_export(
                 energy.daily_grid_export, energy.daily_grid_export_battery)

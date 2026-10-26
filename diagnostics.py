@@ -732,6 +732,9 @@ async def async_get_config_entry_diagnostics(
             "ev_kwh": data.get("daily_ev_energy"),
             "grid_import_kwh": data.get("daily_grid_import_energy"),
             "grid_export_kwh": data.get("daily_grid_export_energy"),
+            # (#1191) the part of the export the battery sold; the rest is
+            # the solar export the self-consumption rate takes away
+            "grid_export_battery_kwh": data.get("daily_grid_export_battery_kwh"),
             "battery_charge_kwh": data.get("daily_battery_charge_energy"),
             "battery_discharge_kwh": data.get("daily_battery_discharge_energy"),
             # (#628 visibility) per-category counter-backing today: how many

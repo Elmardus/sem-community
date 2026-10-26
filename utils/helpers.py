@@ -136,7 +136,8 @@ def solar_export(export: float, battery_part: float) -> float:
     part.
 
     Self-consumption, CO2 avoided and "% of solar exported" take this away
-    from solar. A battery sale was never part of today's solar, so taking
+    from solar. Solar that went into the pack counts as used on site (the
+    standard rate); what the pack sells later is the pack's export. Taking
     the whole export away read a sunless morning's sale as solar sent out:
     the rate went below 0 % and the health check fired.
     """

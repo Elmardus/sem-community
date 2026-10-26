@@ -1267,6 +1267,8 @@ class SEMData:
             "daily_total_consumption": self.energy.daily_total_consumption,
             "daily_grid_import_energy": self.energy.daily_grid_import,
             "daily_grid_export_energy": self.energy.daily_grid_export,
+            # (#1191) the battery's part of that export; diagnostics only
+            "daily_grid_export_battery_kwh": self.energy.daily_grid_export_battery,
             "daily_grid_export_negative_kwh": self.energy.daily_grid_export_negative,
             "daily_grid_export_negative_cost": self.energy.daily_grid_export_negative_cost,
             "daily_battery_charge_energy": self.energy.daily_battery_charge,
