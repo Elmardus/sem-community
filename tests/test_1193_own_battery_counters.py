@@ -425,14 +425,64 @@ def test_the_1194_move_runs_first_and_its_value_is_kept():
     assert home.reader._battery_sign_inverted[FLEET] is True, "the #1194 value"
 
 
-def test_fix_battery_sign_on_keeps_every_lock():
+def test_fix_battery_sign_on_keeps_every_lock_until_it_is_off():
     """The user set the flip against what SEM showed; a new lock under it
-    would undo what they set."""
+    would undo what they set. The check waits, and runs once it is off."""
     home = _Home("pair_first", config={"battery_sign_user_flip": True},
                  store=dict(OLD_B1))
-    home.cycle(1)
+    home.cycle(3)
     assert home.reader._battery_sign_detected["b1"] is True
-    assert "battery_counters_pending" not in home.reader.export_sign_state()
+    saved = home.reader.export_sign_state()
+    assert saved["battery_counters_pending"] == ["b1"]
+    off = _Home("pair_first", store=saved)
+    off.cycle(1)
+    assert off.reader._battery_sign_detected["b1"] is False
+
+
+def test_a_restart_before_it_is_learned_again_keeps_the_sign():
+    """The kept start value is saved: a restart between the check and the
+    new lock does not fall back to "no correction" (second review)."""
+    home = _Home("pair_first", store=dict(OLD_B1))
+    home.states["sensor.sessy_power"] = _w(1500)      # + while discharging
+    p = home.cycle(1)
+    assert home.reader._battery_sign_detected["b1"] is False
+    assert p.batteries["b1"].power_w == -1500.0
+    saved = home.reader.export_sign_state()
+    assert saved["battery_sign_kept"] == {"b1": True}
+    after = _Home("pair_first", store=saved)
+    after.states["sensor.sessy_power"] = _w(1500)
+    for _ in range(8):
+        p = after.cycle(1)
+        assert p.batteries["b1"].power_w == -1500.0
+    assert after.reader._battery_sign_detected["b1"] is True
+    assert "battery_sign_kept" not in after.reader.export_sign_state()
+
+
+def test_a_brand_default_does_not_move_the_kept_sign(monkeypatch):
+    """GoodWe's brand default negates. The kept value (no correction) stays
+    the start value, before and after a restart, until the counters say."""
+    store = {"battery_detected": {"b1": True}, "battery_inverted": {"b1": False},
+             "battery_basis": "sensor"}
+    home = _Home("pair_first", store=store)
+    monkeypatch.setattr(home.reader, "_battery_brand", lambda bid, ent: "goodwe")
+    p = home.cycle(1)
+    assert home.reader._battery_sign_detected["b1"] is False
+    assert home.reader._battery_sign_inverted["b1"] is False
+    assert p.batteries["b1"].power_w == -1500.0
+    after = _Home("pair_first", store=home.reader.export_sign_state())
+    monkeypatch.setattr(after.reader, "_battery_brand", lambda bid, ent: "goodwe")
+    p = after.cycle(1)
+    assert after.reader._battery_sign_inverted["b1"] is False
+    assert p.batteries["b1"].power_w == -1500.0
+
+
+def test_kept_values_in_a_damaged_store_are_ignored():
+    r = SensorReader(MagicMock(), {})
+    r.restore_sign_state({"battery_counters": "own", "battery_sign_kept": [1, 2]})
+    r.restore_sign_state({"battery_counters": "own",
+                          "battery_sign_kept": {"b1": "yes", 5: True}})
+    assert r._battery_sign_kept == set()
+    assert "battery_sign_kept" not in r.export_sign_state()
 
 
 def test_reset_and_a_fresh_store_are_marked():
@@ -440,6 +490,10 @@ def test_reset_and_a_fresh_store_are_marked():
     r.reset_sign_state()
     assert r.export_sign_state()["battery_counters"] == "own"
     assert "battery_counters_pending" not in r.export_sign_state()
+    kept = _Home("pair_first", store=dict(OLD_B1))
+    kept.cycle(1)
+    kept.reader.reset_sign_state()
+    assert "battery_sign_kept" not in kept.reader.export_sign_state()
     assert SensorReader(MagicMock(), {}).export_sign_state()["battery_counters"] == "own"
     fresh = _Home("pair_first", store={})
     assert fresh.reader.export_sign_state()["battery_counters"] == "own"

@@ -963,7 +963,8 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ("Discharge power", cfg.battery_power_from),
                     ("Charge energy", charge),
                     ("Discharge energy", discharge),
-                    *_unowned({charge, discharge}),
+                    # with no battery power sensor at all, only the first
+                    *(_unowned({charge, discharge}) if n_units else []),
                 ])
         if cfg.has_ev:
             _add("EV", [
