@@ -155,6 +155,12 @@ class EnergyDashboardConfig:
     battery_power_list: List[str] = field(default_factory=list)
     battery_charge_energy_list: List[str] = field(default_factory=list)
     battery_discharge_energy_list: List[str] = field(default_factory=list)
+    #: (#1193) Each battery's own (charge, discharge) energy counters, by its
+    #: ``battery_units`` entry. The two lists above follow the dashboard's
+    #: battery order and skip a battery with no counter, so entry N of them
+    #: is not battery bN. Read through ``unit_energy_counters``.
+    battery_unit_counters: Dict[str, Tuple[Optional[str], Optional[str]]] = field(
+        default_factory=dict)
     grid_import_energy_list: List[str] = field(default_factory=list)
     grid_export_energy_list: List[str] = field(default_factory=list)
     grid_power_list: List[str] = field(default_factory=list)
@@ -281,6 +287,25 @@ def battery_units(ed_config: Any) -> List[str]:
     if isinstance(pairs, (list, tuple)):
         units += [to for _from, to in pairs]
     return units
+
+
+def unit_energy_counters(
+    ed_config: Any, unit: Optional[str],
+) -> Optional[Tuple[Optional[str], Optional[str]]]:
+    """This battery's own ``(charge, discharge)`` energy counters (#1193).
+
+    ``unit`` is the battery's ``battery_units`` entry. The parser records the
+    counters of the dashboard source that gave the battery its power sensor,
+    so a battery is never judged by another battery's counters. ``None`` when
+    nothing was recorded for it; ``(None, None)`` when its source had none.
+    """
+    counters = getattr(ed_config, "battery_unit_counters", None)
+    if not unit or not isinstance(counters, dict):
+        return None
+    pair = counters.get(unit)
+    if isinstance(pair, (list, tuple)) and len(pair) == 2:
+        return pair[0] or None, pair[1] or None
+    return None
 
 
 def _parse_prefs(
@@ -706,6 +731,15 @@ def _extract_battery_config(source: Dict[str, Any], config: EnergyDashboardConfi
         if not config.battery_power:
             config.battery_power = power
 
+    # (#1193) The battery keeps its own counters, by the entry that names it
+    # in ``battery_units``: the combined sensor, or the pair's charge sensor.
+    # The same sensor listed twice is one battery; its first counters stay.
+    unit = power or (pc.get("stat_rate_to") if isinstance(pc, dict)
+                     and pc.get("stat_rate_from") else None)
+    if unit:
+        config.battery_unit_counters.setdefault(
+            unit, (charge_energy or None, discharge_energy or None))
+
     config.has_battery = bool(
         config.battery_discharge_energy_list
         or config.battery_charge_energy_list
@@ -748,6 +782,9 @@ def _derive_battery_power_if_unrepresented(hass, config) -> None:
     if found:
         config.battery_power = found
         config.battery_power_list.append(found)
+        # (#1193) found on the first battery's counter device: its counters
+        config.battery_unit_counters.setdefault(found, (
+            config.battery_charge_energy, config.battery_discharge_energy))
         config.derived_power["battery"] = found
         _LOGGER.info(
             "Derived battery power sensor %s from energy device "

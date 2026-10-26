@@ -70,6 +70,7 @@ from .coordinator.install_modules import has_managed_charger
 from .coordinator.battery_controls import captured_battery_control_slugs
 from .ha_energy_reader import (
     battery_units, read_energy_dashboard_config, EnergyDashboardConfig,
+    unit_energy_counters,
 )
 from .hardware_detection import (
     CHARGER_ENTITY_KEYS,
@@ -934,8 +935,18 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     n = len(cfg.battery_power_list) + k + 1
                     fields += [(f"Charge power ({n})", p_to),
                                (f"Discharge power ({n})", p_from)]
-                fields += [(f"Charge energy ({i+1})", e) for i, e in enumerate(cfg.battery_charge_energy_list)]
-                fields += [(f"Discharge energy ({i+1})", e) for i, e in enumerate(cfg.battery_discharge_energy_list)]
+                # (#1193) each battery's own counters under its number; the
+                # counter lists also hold a battery with no power sensor
+                owned: set = set()
+                for n, unit in enumerate(battery_units(cfg), start=1):
+                    charge, discharge = unit_energy_counters(cfg, unit) or (None, None)
+                    owned.update((charge, discharge))
+                    fields += [(f"Charge energy ({n})", charge),
+                               (f"Discharge energy ({n})", discharge)]
+                fields += [("Charge energy", e) for e in cfg.battery_charge_energy_list
+                           if e not in owned]
+                fields += [("Discharge energy", e) for e in cfg.battery_discharge_energy_list
+                           if e not in owned]
                 _add(f"Battery ({n_units} units)", fields)
             else:
                 _add("Battery", [

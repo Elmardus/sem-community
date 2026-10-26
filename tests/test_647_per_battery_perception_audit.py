@@ -11,7 +11,7 @@ And had it run, it summed the counters against the summed power, so one unit
 signed wrong plus one signed right cancels to ≈0 W and gets skipped as "idle".
 
 Fix: one ``CounterCorrelationAudit`` per battery id, each against its own
-``battery_charge_energy_list[idx]`` / ``battery_discharge_energy_list[idx]``.
+counters (``battery_unit_counters``, #1193 — not entry idx of the lists).
 """
 from __future__ import annotations
 
@@ -50,6 +50,11 @@ def _ed_two_units():
     ed.battery_discharge_energy_list = ["sensor.b1_discharge", "sensor.b2_discharge"]
     ed.battery_charge_energy = None
     ed.battery_discharge_energy = None
+    # (#1193) what the parser records: each battery's own counters
+    ed.battery_unit_counters = {
+        "sensor.b1_power": ("sensor.b1_charge", "sensor.b1_discharge"),
+        "sensor.b2_power": ("sensor.b2_charge", "sensor.b2_discharge"),
+    }
     return ed
 
 
@@ -188,12 +193,16 @@ class TestPerBatteryAuditActuallyRuns647:
         assert "b2" not in r._battery_sign_audits
 
     def test_missing_counter_for_a_unit_is_skipped_not_crashed(self):
-        """A ragged Energy Dashboard config (power list longer than the
-        counter lists) must not raise — index the lists defensively."""
+        """A battery with no counters of its own (power list longer than the
+        counter lists) must not raise and is not audited."""
         r = _reader()
         ed = _ed_two_units()
         ed.battery_charge_energy_list = ["sensor.b1_charge"]        # b2 missing
         ed.battery_discharge_energy_list = ["sensor.b1_discharge"]
+        ed.battery_unit_counters = {
+            "sensor.b1_power": ("sensor.b1_charge", "sensor.b1_discharge"),
+            "sensor.b2_power": (None, None),
+        }
         r._battery_sign_detected["b1"] = True
         r._battery_sign_detected["b2"] = True
         c = {"sensor.b1_charge": 10.0, "sensor.b1_discharge": 5.0}
