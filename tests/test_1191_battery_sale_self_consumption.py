@@ -263,6 +263,23 @@ class TestADarkMeter:
         assert _row(calc, GRID_EXPORT_BATTERY_CATEGORY) == pytest.approx(
             _kwh(4000.0, 2))
 
+    def test_a_skipped_cycles_read_keeps_its_part(self):
+        """(review 2) A cycle skipped for a gap still takes its live read,
+        and a dark meter can hold it: its battery part goes with it."""
+        from homeassistant.util import dt as dt_util
+        calc = _calc()
+        calc._last_update = dt_util.now() - timedelta(hours=1)    # a gap
+        calc.calculate_energy(
+            _read(solar=1000.0, home=500.0, battery=-4000.0, grid=4500.0),
+            FlowCalculator().calculate_power_flows(
+                _read(solar=1000.0, home=500.0, battery=-4000.0, grid=4500.0)))
+        assert _row(calc, "grid_export") == 0.0, "the gap cycle booked energy"
+        _cycle(calc, _read(solar=1000.0, home=500.0, battery=-4000.0, grid=0.0,
+                           grid_power_unavailable=True))
+        assert _row(calc, "grid_export") == pytest.approx(_kwh(4500.0))
+        assert _row(calc, GRID_EXPORT_BATTERY_CATEGORY) == pytest.approx(
+            _kwh(4000.0))
+
     def test_a_meter_dark_past_its_grace_books_nothing(self):
         calc = _calc()
         _cycle(calc, _read(solar=1000.0, home=500.0, battery=-4000.0, grid=4500.0))
@@ -339,22 +356,41 @@ class TestTheMeterCorrection:
         assert export < _kwh(4500.0, 61) * 0.95, "the meter was not adopted"
         assert battery / export == pytest.approx(4000.0 / 4500.0, rel=0.01)
 
-    def test_a_battery_counter_keeps_the_charge_split_whole(self):
-        """The same shape on the charge-origin rows (#770): a counter 10 %
-        ahead of the integrated charge left solar + grid below the charge."""
-        counter = {"sensor.bms_charged_energy": 500.0}
-        calc = _metered_calc(counter, "battery_charge")
-        charge = _read(solar=5000.0, home=500.0, battery=3000.0, grid=1500.0)
-        _cycle(calc, charge)
+    def test_an_afternoons_drift_leaves_the_mornings_sale(self):
+        """(review 2) A correction is split as what was added since the last
+        one: the meter agreed all morning, so a solar-only afternoon that it
+        reads 10 % low moves (almost) none of the sale."""
+        counter = {EXPORT_METER: 1000.0}
+        calc = _metered_calc(counter)
+        sale = _read(solar=1000.0, home=500.0, battery=-4000.0, grid=4500.0)
+        sun = _read(solar=5000.0, home=1000.0, grid=4000.0)
+        _cycle(calc, sale)
         for _ in range(60):
-            counter["sensor.bms_charged_energy"] += _kwh(3000.0) * 1.1
-            _cycle(calc, charge)
-        total = _row(calc, "battery_charge")
-        assert total > _kwh(3000.0, 61) * 1.05, "the counter was not adopted"
-        assert _row(calc, "battery_charge_solar") + _row(
-            calc, "battery_charge_grid") == pytest.approx(total, rel=0.001)
-        assert calc._yearly_accumulators[f"battery_charge_solar_{DAY.year}"] == \
-            pytest.approx(_row(calc, "battery_charge_solar"))
+            counter[EXPORT_METER] += _kwh(4500.0)
+            _cycle(calc, sale)
+        morning = _row(calc, GRID_EXPORT_BATTERY_CATEGORY)
+        for _ in range(120):
+            counter[EXPORT_METER] += _kwh(4000.0) * 0.9
+            _cycle(calc, sun)
+        export = _row(calc, "grid_export")
+        assert export < _kwh(4500.0, 61) + _kwh(4000.0, 120) * 0.95, \
+            "the meter was not adopted"
+        # only the first correction (just over the 0.05 kWh threshold) is
+        # spread over the whole day
+        assert _row(calc, GRID_EXPORT_BATTERY_CATEGORY) == pytest.approx(
+            morning, abs=0.05)
+
+    def test_a_counter_reset_starts_a_new_window(self):
+        counter = {EXPORT_METER: 1000.0}
+        calc = _metered_calc(counter)
+        sale = _read(solar=1000.0, home=500.0, battery=-4000.0, grid=4500.0)
+        _cycle(calc, sale)
+        counter[EXPORT_METER] = 5.0                     # the meter rebooted
+        _cycle(calc, sale)
+        mark = calc._meter_baselines["grid_export"]["beside_mark"]
+        assert mark["row"] == pytest.approx(_row(calc, "grid_export"))
+        assert mark["parts"][GRID_EXPORT_BATTERY_CATEGORY] == pytest.approx(
+            _row(calc, GRID_EXPORT_BATTERY_CATEGORY))
 
     def test_with_no_sale_the_correction_moves_nothing_else(self):
         counter = {EXPORT_METER: 1000.0}

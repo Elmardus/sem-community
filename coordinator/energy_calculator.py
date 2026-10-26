@@ -348,13 +348,9 @@ CO2_CORRECTION_CATEGORY = "co2_live_correction"
 #: (#1191) the battery's part of ``grid_export`` (a sale), booked beside it
 GRID_EXPORT_BATTERY_CATEGORY = "grid_export_battery"
 #: (#1191 review) rows booked beside a metered row, by that row: when the
-#: meter corrects the row, each keeps its share of it. The charge-origin split
-#: (#770) is the same shape: without it, solar + grid stopped summing to the
-#: charge once a battery counter corrected it.
-_ROWS_BESIDE = {
-    "grid_export": (GRID_EXPORT_BATTERY_CATEGORY,),
-    "battery_charge": ("battery_charge_solar", "battery_charge_grid"),
-}
+#: meter corrects the row, each keeps its share of what was added since the
+#: last correction
+_ROWS_BESIDE = {"grid_export": (GRID_EXPORT_BATTERY_CATEGORY,)}
 
 # (#1077) The value layer's cost categories: what solar used at home was
 # worth over exporting it, what exported kWh fetched before the fee, and the
@@ -827,6 +823,13 @@ class EnergyCalculator:
         # first, so a skipped cycle's live read still counts as one
         held_w = self._integral_watts(power, dt_util.utcnow())
         battery_flows = self._battery_flows(power_flows)
+        # (#1191 review) the battery's part of a live meter's export, kept for
+        # a dark meter's held export — taken here, before a skipped cycle
+        # returns, because its read can be held too
+        if "grid" in self._integral_live:
+            self._grid_live_battery_export_w = battery_export_part(
+                held_w["grid_export_power"],
+                getattr(battery_flows, "battery_to_grid", 0.0))
 
         # Calculate time delta
         if self._last_update is None:
@@ -973,8 +976,6 @@ class EnergyCalculator:
             battery_export_w = battery_export_part(
                 held_w["grid_export_power"],
                 getattr(battery_flows, "battery_to_grid", 0.0))
-            if "grid" in self._integral_live:
-                self._grid_live_battery_export_w = battery_export_w
         # Grid export
         if held_w["grid_export_power"] >= MIN_POWER_THRESHOLD:
             export_increment = (held_w["grid_export_power"] * interval_hours) / 1000
@@ -3357,10 +3358,17 @@ class EnergyCalculator:
         if reset:
             bl["base"] = {}
             bl.pop("anchor", None)
+            bl.pop("beside_mark", None)
         for entity_id, value in readings.items():
             bl["base"].setdefault(entity_id, value)
             bl["last"][entity_id] = value
         bl.setdefault("anchor", integrated)
+        # (#1191 review) where the beside rows stood when the anchor was set:
+        # the first correction is split as what came after it
+        if _ROWS_BESIDE.get(category) and not isinstance(bl.get("beside_mark"), dict):
+            bl["beside_mark"] = {"row": integrated, "parts": {
+                beside: self._daily_accumulators.get(f"{beside}_{today}", 0.0)
+                for beside in _ROWS_BESIDE[category]}}
 
         counter_daily = sum(
             value - bl["base"][entity_id] for entity_id, value in readings.items()
@@ -3400,14 +3408,25 @@ class EnergyCalculator:
             # max(0.0) — the delta can now be negative, and a longer period
             # must never be dragged below zero by one day's correction.
             accumulators[key] = max(0.0, accumulators.get(key, 0.0) + delta)
-        # (#1191 review) A row booked beside this one keeps its share of it:
-        # the flows give the split, the meter the size. Left as integrated,
-        # a meter 10 % ahead of a big sale put the gap on solar's export.
+        # (#1191 review) A row booked beside this one keeps its share: the
+        # flows give the split, the meter the size. Left as integrated, a
+        # meter 10 % ahead of a big sale put the gap on solar's export. The
+        # correction is split as what was added since the last one was —
+        # the morning's sale is not moved by an afternoon's drift.
+        mark = bl.get("beside_mark")
+        if not isinstance(mark, dict):
+            mark = {"row": 0.0, "parts": {}}
+        added = integrated - float(mark.get("row") or 0.0)
+        parts = {}
         for beside in _ROWS_BESIDE.get(category, ()):
             part = self._daily_accumulators.get(f"{beside}_{today}", 0.0)
-            if part <= 0 or integrated <= 0:
+            before = float((mark.get("parts") or {}).get(beside) or 0.0)
+            share = (min(1.0, max(0.0, (part - before) / added))
+                     if added > 0 else 0.0)
+            moved = max(-part, min(target - part, delta * share))
+            parts[beside] = part + moved
+            if not moved:
                 continue
-            moved = min(target, part * target / integrated) - part
             self._daily_accumulators[f"{beside}_{today}"] = part + moved
             for accumulators, key in (
                 (self._monthly_accumulators, f"{beside}_{month_key}"),
@@ -3415,6 +3434,8 @@ class EnergyCalculator:
                 (self._lifetime_accumulators, f"lifetime_{beside}"),
             ):
                 accumulators[key] = max(0.0, accumulators.get(key, 0.0) + moved)
+        if parts:
+            bl["beside_mark"] = {"row": target, "parts": parts}
 
         if cost_key and rate:
             # (#795) The drift happened across the day; price it at the
