@@ -66,6 +66,14 @@ def _read(*, solar=0.0, home=0.0, battery=0.0, grid=0.0, **flags) -> PowerReadin
     return p
 
 
+def _calls(rel: str, callee: str) -> list:
+    """Every call to ``callee`` (a name or an attribute) in one file."""
+    tree = ast.parse((REPO / rel).read_text(encoding="utf-8"))
+    return [n for n in ast.walk(tree) if isinstance(n, ast.Call) and (
+        getattr(n.func, "attr", None) == callee
+        or getattr(n.func, "id", None) == callee)]
+
+
 def _cycle(calc: EnergyCalculator, power: PowerReadings, flows=None) -> EnergyTotals:
     """One ``STEP_S`` cycle; the flows come from the real allocator unless
     the test hands its own in."""
@@ -458,12 +466,11 @@ class TestTheAssistant:
         assert sale.to_dict()[score] > old_rule.to_dict()[score]
 
     def test_the_cycle_hands_the_battery_part_over(self):
-        import inspect
-        from custom_components.solar_energy_management.coordinator.coordinator import (
-            SEMCoordinator,
-        )
-        src = inspect.getsource(SEMCoordinator)
-        assert "daily_battery_export_kwh=energy.daily_grid_export_battery" in src
+        values = [kw.value for call in _calls("coordinator/coordinator.py", "analyze")
+                  for kw in call.keywords if kw.arg == "daily_battery_export_kwh"]
+        assert len(values) == 1
+        assert isinstance(values[0], ast.Attribute)
+        assert values[0].attr == "daily_grid_export_battery"
 
 
 @pytest.mark.unit
@@ -517,13 +524,13 @@ class TestTheNightAudit:
         assert summary.exported_kwh == pytest.approx(4.5, abs=0.01)
 
     def test_the_cycle_hands_the_flows_over(self):
-        import inspect
-        from custom_components.solar_energy_management.coordinator.coordinator import (
-            SEMCoordinator,
-        )
-        src = inspect.getsource(SEMCoordinator)
-        assert ("self._record_demand_outcomes(dt_util.now(), power, power_flows)"
-                in src)
+        sites = _calls("coordinator/coordinator.py", "_record_demand_outcomes")
+        assert sites, "nothing calls the night recorder"
+        for call in sites:
+            flows = call.args[2] if len(call.args) > 2 else next(
+                (kw.value for kw in call.keywords if kw.arg == "power_flows"), None)
+            assert isinstance(flows, ast.Name) and flows.id == "power_flows", (
+                f"line {call.lineno}: the night audit gets no flows")
 
 
 @pytest.mark.unit
@@ -536,8 +543,16 @@ class TestDiagnostics:
         data.energy = EnergyTotals(daily_grid_export=2.25,
                                    daily_grid_export_battery=2.0)
         assert data.to_dict()["daily_grid_export_battery_kwh"] == 2.0
-        src = (REPO / "diagnostics.py").read_text(encoding="utf-8")
-        assert '"grid_export_battery_kwh": data.get("daily_grid_export_battery_kwh")' in src
+        tree = ast.parse((REPO / "diagnostics.py").read_text(encoding="utf-8"))
+        reads = [
+            value.args[0].value
+            for node in ast.walk(tree) if isinstance(node, ast.Dict)
+            for key, value in zip(node.keys, node.values, strict=True)
+            if isinstance(key, ast.Constant) and key.value == "grid_export_battery_kwh"
+            and isinstance(value, ast.Call) and value.args
+            and isinstance(value.args[0], ast.Constant)
+        ]
+        assert reads == ["daily_grid_export_battery_kwh"]
 
 
 # ── the guard ────────────────────────────────────────────────────────────
