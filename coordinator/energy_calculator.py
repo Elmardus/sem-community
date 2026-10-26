@@ -32,6 +32,7 @@ from .battery_provenance import (
 )
 
 from ..utils.log_gate import log_on_change
+from ..utils.helpers import battery_export_part, solar_export
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -344,6 +345,8 @@ def _stat_bucket_year_month(row: Dict[str, Any]) -> Optional[tuple[int, int]]:
 GRID_CO2_KG_PER_KWH = 0.128  # Swiss grid average — the fallback (#1088)
 #: (#1088) accumulator category of the live-intensity correction, in kg
 CO2_CORRECTION_CATEGORY = "co2_live_correction"
+#: (#1191) the battery's part of ``grid_export`` (a sale), booked beside it
+GRID_EXPORT_BATTERY_CATEGORY = "grid_export_battery"
 
 # (#1077) The value layer's cost categories: what solar used at home was
 # worth over exporting it, what exported kWh fetched before the fee, and the
@@ -949,10 +952,19 @@ class EnergyCalculator:
         energy.monthly_grid_import = self._get_monthly("grid_import", month_key)
         energy.yearly_grid_import = self._get_yearly("grid_import", year_key)
 
+        # (#1191) The battery's part of this cycle's export, booked beside it.
+        # Its flow comes from the same read its held watts came from (#1177).
+        battery_export_w = battery_export_part(
+            held_w["grid_export_power"],
+            getattr(battery_flows, "battery_to_grid", 0.0))
         # Grid export
         if held_w["grid_export_power"] >= MIN_POWER_THRESHOLD:
             export_increment = (held_w["grid_export_power"] * interval_hours) / 1000
             self._accumulate("grid_export", today, month_key, year_key, export_increment)
+            if battery_export_w > 0:
+                self._accumulate(
+                    GRID_EXPORT_BATTERY_CATEGORY, today, month_key, year_key,
+                    battery_export_w * interval_hours / 1000)
             self._accumulate_cost("cost_export", today, month_key, year_key, export_increment * self._export_rate)
             # (#871, arc #921) The same kWh counted again when the meter was
             # hostile — a separate key, not a sign on the export total, because
@@ -989,13 +1001,17 @@ class EnergyCalculator:
         # lifetime total), a restart keeps it (it is an accumulator), and a
         # cycle with no usable reading adds exactly 0 — the fixed value.
         if self._co2_live and self._grid_co2_kg is not None:
-            used_w = max(0.0, held_w["solar_power"] - held_w["grid_export_power"])
+            used_w = max(0.0, held_w["solar_power"] - solar_export(
+                held_w["grid_export_power"], battery_export_w))
             if used_w >= MIN_POWER_THRESHOLD:
                 used_kwh = used_w * interval_hours / 1000
                 self._accumulate(
                     CO2_CORRECTION_CATEGORY, today, month_key, year_key,
                     used_kwh * (self._grid_co2_kg - GRID_CO2_KG_PER_KWH))
         energy.daily_grid_export = self._get_daily("grid_export", today)
+        energy.daily_grid_export_battery = self._get_daily(GRID_EXPORT_BATTERY_CATEGORY, today)
+        energy.monthly_grid_export_battery = self._get_monthly(GRID_EXPORT_BATTERY_CATEGORY, month_key)
+        energy.yearly_grid_export_battery = self._get_yearly(GRID_EXPORT_BATTERY_CATEGORY, year_key)
         energy.daily_grid_export_negative = self._get_daily("grid_export_negative", today)
         energy.daily_grid_export_negative_cost = self._get_daily_cost("cost_export_negative", today)
         energy.monthly_grid_export_negative = self._get_monthly("grid_export_negative", month_key)
@@ -1192,6 +1208,9 @@ class EnergyCalculator:
         energy.daily_grid_export = self._get_daily("grid_export", today)
         energy.monthly_grid_export = self._get_monthly("grid_export", month_key)
         energy.yearly_grid_export = self._get_yearly("grid_export", year_key)
+        energy.daily_grid_export_battery = self._get_daily(GRID_EXPORT_BATTERY_CATEGORY, today)
+        energy.monthly_grid_export_battery = self._get_monthly(GRID_EXPORT_BATTERY_CATEGORY, month_key)
+        energy.yearly_grid_export_battery = self._get_yearly(GRID_EXPORT_BATTERY_CATEGORY, year_key)
         energy.daily_battery_charge = self._get_daily("battery_charge", today)
         energy.monthly_battery_charge = self._get_monthly("battery_charge", month_key)
         energy.yearly_battery_charge = self._get_yearly("battery_charge", year_key)
@@ -3617,12 +3636,17 @@ class EnergyCalculator:
         costs.daily_feed_in_fees = self._get_daily_cost(VALUE_FEED_IN_FEE, today)
         costs.yearly_feed_in_fees = self._get_yearly_cost(VALUE_FEED_IN_FEE, year_key)
 
-        # Environmental impact (CO2 avoided by self-consuming solar)
-        daily_self_consumed = max(0, energy.daily_solar - energy.daily_grid_export)
-        yearly_self_consumed = max(0, energy.yearly_solar - energy.yearly_grid_export)
+        # Environmental impact (CO2 avoided by self-consuming solar).
+        # (#1191) Only solar's part of the export was ever in the solar total;
+        # a battery sale is taken out of the export first.
+        daily_self_consumed = max(0, energy.daily_solar - solar_export(
+            energy.daily_grid_export, energy.daily_grid_export_battery))
+        yearly_self_consumed = max(0, energy.yearly_solar - solar_export(
+            energy.yearly_grid_export, energy.yearly_grid_export_battery))
         lifetime_solar = self._get_lifetime("solar")
         lifetime_export = self._get_lifetime("grid_export")
-        lifetime_self_consumed = max(0, lifetime_solar - lifetime_export)
+        lifetime_self_consumed = max(0, lifetime_solar - solar_export(
+            lifetime_export, self._get_lifetime(GRID_EXPORT_BATTERY_CATEGORY)))
 
         # (#1088) + the live-intensity correction (0 while the flag is off
         # and before it ever ran). Never below 0: CO2 avoided is a saving.
@@ -3738,12 +3762,14 @@ class EnergyCalculator:
             None if _share is None else round(_share * 100, 1)
         )
 
-        # Self consumption rate = (solar - export) / solar — direction-of-
-        # flow-agnostic; whatever solar didn't go to the grid was
-        # consumed locally (by home, battery, or EV). No flow attribution
-        # needed.
+        # Self consumption rate = (solar - solar's export) / solar; whatever
+        # solar didn't send to the grid was consumed locally (by home,
+        # battery, or EV). (#1191) The battery's part of the export (a sale)
+        # was never in today's solar: taken away with it, a sunless morning's
+        # sale read below 0 %, the clamp held 0 % and the health check fired.
         if energy.daily_solar > 0:
-            solar_used = energy.daily_solar - energy.daily_grid_export
+            solar_used = energy.daily_solar - solar_export(
+                energy.daily_grid_export, energy.daily_grid_export_battery)
             metrics.self_consumption_rate = round(
                 (solar_used / energy.daily_solar) * 100, 1
             )
@@ -4541,7 +4567,10 @@ class EnergyCalculator:
         daily_grid_import = self._daily_accumulators.get(f"grid_import_{today_str}", 0.0)
         daily_grid_export = self._daily_accumulators.get(f"grid_export_{today_str}", 0.0)
         daily_solar = self._daily_accumulators.get(f"solar_{today_str}", 0.0)
-        daily_self_consumed = max(0, daily_solar - daily_grid_export)
+        # (#1191) the same solar part of the export the rate and CO2 use
+        daily_self_consumed = max(0, daily_solar - solar_export(
+            daily_grid_export, self._daily_accumulators.get(
+                f"{GRID_EXPORT_BATTERY_CATEGORY}_{today_str}", 0.0)))
 
         # Use incremental cost accumulators (rate-weighted, accurate for dynamic tariffs)
         daily_cost = self._daily_cost_accumulators.get(f"cost_import_{today_str}", 0.0)

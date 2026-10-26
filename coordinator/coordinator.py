@@ -132,7 +132,7 @@ from ..analytics.consumption_predictor import ConsumptionPredictor
 from .ev_taper_detector import EVTaperDetector
 from .ev_soc_need import estimate_stop_step, soc_remaining_need
 from ..utils.log_gate import log_on_change
-from ..utils.helpers import solar_share_pct
+from ..utils.helpers import battery_export_part, solar_export, solar_share_pct
 from ..analytics.energy_assistant import EnergyAssistant
 
 _LOGGER = logging.getLogger(__name__)
@@ -5511,7 +5511,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # never recorded, so "fits" has never been checked against
             # reality. Taken here, after the cycle's decisions, so the gate
             # sampled is the one this cycle's actuation actually obeyed.
-            self._record_demand_outcomes(dt_util.now(), power)
+            self._record_demand_outcomes(dt_util.now(), power, power_flows)
             # (#800) The battery's night rides the same cycle: drain /
             # refill / clipping series for the #778 budget's learner.
             try:
@@ -7345,6 +7345,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 daily_ev_kwh=energy.daily_ev,
                 daily_grid_import_kwh=energy.daily_grid_import,
                 daily_grid_export_kwh=energy.daily_grid_export,
+                daily_battery_export_kwh=energy.daily_grid_export_battery,
                 daily_battery_charge_kwh=energy.daily_battery_charge,
                 daily_battery_discharge_kwh=energy.daily_battery_discharge,
                 solar_to_ev_kwh=ev_solar,
@@ -10795,7 +10796,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 continue
         return windows
 
-    def _record_demand_outcomes(self, now, power) -> None:
+    def _record_demand_outcomes(self, now, power, power_flows=None) -> None:
         """(#755 pillar 1) Write down what each planned demand actually DID.
 
         The plan has always recorded two of the three numbers that matter —
@@ -10841,15 +10842,18 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # The meter side of the same question, integrated over the SAME
         # window under the same gap guard — never a calendar-day sensor.
         try:
+            # ``grid_export_power`` is the canonical derived split
+            # (calculate_derived); re-deriving max(0, grid_power) here
+            # would open a second sign path — the exact mistake #129
+            # and the #588 sign work were about.
+            export_w = float(getattr(power, "grid_export_power", 0.0) or 0.0)
             rec.observe_totals(
                 now,
                 solar_w=float(getattr(power, "solar_power", 0.0) or 0.0),
-                # ``grid_export_power`` is the canonical derived split
-                # (calculate_derived); re-deriving max(0, grid_power) here
-                # would open a second sign path — the exact mistake #129
-                # and the #588 sign work were about.
-                export_w=float(
-                    getattr(power, "grid_export_power", 0.0) or 0.0))
+                # (#1191) solar's export: the plan's share is of solar, and a
+                # battery sale in the window was never part of it
+                export_w=solar_export(export_w, battery_export_part(
+                    export_w, getattr(power_flows, "battery_to_grid", 0.0))))
         except Exception:  # noqa: BLE001
             pass
 

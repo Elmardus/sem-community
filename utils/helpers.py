@@ -119,3 +119,25 @@ def solar_share_pct(solar: float, *others: float) -> Optional[float]:
     if total <= 0:
         return None
     return solar / total * 100.0
+
+
+def battery_export_part(export: float, battery_to_grid: float) -> float:
+    """(#1191) The battery's part of one read's export: what the flows sent
+    from the pack to the grid, never more than the export itself.
+
+    The allocator serves solar first, so export it left unassigned (a read
+    that does not add up) stays solar's — the rule before #1191.
+    """
+    return min(max(0.0, export or 0.0), max(0.0, battery_to_grid or 0.0))
+
+
+def solar_export(export: float, battery_part: float) -> float:
+    """(#1191) What of an export the sun made: the export less the battery's
+    part.
+
+    Self-consumption, CO2 avoided and "% of solar exported" take this away
+    from solar. A battery sale was never part of today's solar, so taking
+    the whole export away read a sunless morning's sale as solar sent out:
+    the rate went below 0 % and the health check fired.
+    """
+    return max(0.0, (export or 0.0) - max(0.0, battery_part or 0.0))
