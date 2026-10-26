@@ -165,8 +165,11 @@ EV_ACTIVE_CHARGE_FLOOR_W = 500.0
 #     the declared corpus is not proof of absence from a user's entity_ids, and
 #     the corroboration gate makes an idle pattern cost nothing.
 # Real DSMR declares ``current_power_usage``/``current_power_return``
-# (dsmr_reader) or per-phase keys (core dsmr); both now live in the lexicon,
-# which is where a name becomes evidence.
+# (dsmr_reader) and ``current_electricity_usage``/``current_electricity_delivery``
+# (core dsmr, #1189); both pairs live in the lexicon, which is where a name
+# becomes evidence. Core dsmr's entity_ids follow the user's language:
+# ``power_consumption`` is its English name only, and a Dutch or German meter
+# (``energieverbruik``, ``stromverbrauch``) is found by its key alone.
 IMPORT_PATTERNS: tuple[str, ...] = (
     "import_from_grid",       # growatt_server (declared)
     "pac_to_user",            # growatt_server TLX (declared)
@@ -4065,6 +4068,7 @@ class SensorReader:
         - Growatt: *_import_from_grid / *_export_to_grid
         - Growatt TLX: *_pac_to_user* / *_pac_to_grid*
         - DSMR/P1 (NL/BE): *_power_consumption / *_power_production
+          (English names; tier 1 finds core dsmr in any language, #1189)
         - E3DC: *_consumption_from_grid / *_export_to_grid
         - GivEnergy: *_import_power / *_export_power
         - Senec: *_grid_imported_power / *_grid_exported_power
