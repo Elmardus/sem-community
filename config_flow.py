@@ -926,6 +926,14 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ("Import energy", cfg.grid_import_energy),
                     ("Export energy", cfg.grid_export_energy),
                 ])
+
+        def _unowned(owned: set) -> list[tuple[str, str | None]]:
+            # (#1193) counters of a battery with no power sensor
+            return ([("Charge energy (no power sensor)", e)
+                     for e in cfg.battery_charge_energy_list if e not in owned]
+                    + [("Discharge energy (no power sensor)", e)
+                       for e in cfg.battery_discharge_energy_list if e not in owned])
+
         if cfg.has_battery:
             # (#1171) a battery is a combined sensor or a two-sensor pair
             n_units = len(battery_units(cfg))
@@ -943,18 +951,19 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     owned.update((charge, discharge))
                     fields += [(f"Charge energy ({n})", charge),
                                (f"Discharge energy ({n})", discharge)]
-                fields += [("Charge energy", e) for e in cfg.battery_charge_energy_list
-                           if e not in owned]
-                fields += [("Discharge energy", e) for e in cfg.battery_discharge_energy_list
-                           if e not in owned]
-                _add(f"Battery ({n_units} units)", fields)
+                _add(f"Battery ({n_units} units)", fields + _unowned(owned))
             else:
+                own = (unit_energy_counters(cfg, battery_units(cfg)[0])
+                       if n_units == 1 else None)
+                charge, discharge = own or (cfg.battery_charge_energy,
+                                            cfg.battery_discharge_energy)
                 _add("Battery", [
                     ("Power", cfg.battery_power),
                     ("Charge power", cfg.battery_power_to),
                     ("Discharge power", cfg.battery_power_from),
-                    ("Charge energy", cfg.battery_charge_energy),
-                    ("Discharge energy", cfg.battery_discharge_energy),
+                    ("Charge energy", charge),
+                    ("Discharge energy", discharge),
+                    *_unowned({charge, discharge}),
                 ])
         if cfg.has_ev:
             _add("EV", [

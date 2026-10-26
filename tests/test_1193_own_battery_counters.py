@@ -80,6 +80,13 @@ HOMES = {
     "energy_only_first": [OLD, SESSY],
     # every battery is combined: entry N of the lists IS bN's (unaffected)
     "two_combined": [SESSY, SESSY2],
+    # one battery, listed first: its counters ARE the first (unaffected)
+    "one_battery_first": [SESSY, OLD],
+    # the same Sessy marked "Inverted" in HA, after the old battery (#1194)
+    "inverted_after_old": [OLD, {
+        "type": "battery", "stat_energy_from": "sensor.sessy_discharged",
+        "stat_energy_to": "sensor.sessy_charged",
+        "power_config": {"stat_rate_inverted": "sensor.sessy_power"}}],
 }
 
 
@@ -235,23 +242,36 @@ def test_the_one_battery_home_is_judged_by_its_own_battery():
     assert p.battery_power == -1500.0
 
 
-def test_sems_own_battery_power_pick_keeps_the_first_counters():
-    """With SEM's own pick, the dashboard names no battery for the reading:
-    the first counters stay, as before."""
+def test_the_setup_saved_pick_is_the_same_battery():
+    """Setup saves the dashboard's battery sensor as ``battery_power_sensor``
+    (``to_dict``), so on most homes the one-battery read comes through that
+    pick. It is still the dashboard's battery and is judged by its own
+    counters (review: the first cut skipped every such home)."""
+    ed = _ed("energy_only_first")
+    assert ed.to_dict()["battery_power_sensor"] == "sensor.sessy_power"
+    home = _Home("energy_only_first", config=ed.to_dict())
+    p = home.cycle(8)
+    assert home.reader._battery_sign_inverted[FLEET] is False
+    assert p.battery_power == -1500.0
+
+
+def test_a_pick_the_dashboard_does_not_list_keeps_the_first_counters():
     home = _Home("energy_only_first",
-                 config={"battery_power_sensor": "sensor.sessy_power"})
+                 config={"battery_power_sensor": "sensor.inverter_battery_power"})
     assert home.reader._one_battery_own_counters(home.ed) is None
+    two = _Home("two_combined", config={"battery_power_sensor": "sensor.sessy_power"})
+    assert two.reader._one_battery_own_counters(two.ed) is None, (
+        "with two batteries the fleet value is their sum")
 
 
 # ── 3. The #647 audit asks the same counters ───────────────────────────────
 
-def _audit_cycles(home, n):
+def _audit_cycles(home, n, rising=("sensor.sessy_discharged",
+                                   "sensor.verto_charged", "sensor.old_charged")):
     for _ in range(n):
-        p = home.reader.read_power()
-        for e in ("sensor.sessy_discharged", "sensor.verto_charged",
-                  "sensor.old_charged"):
+        home.reader.read_power()
+        for e in rising:
             home.kwh[e] += 0.1
-    return p
 
 
 def test_a_right_lock_is_not_called_wrong_by_another_batterys_counters():
@@ -270,12 +290,24 @@ def test_a_wrong_lock_is_still_caught_on_its_own_counters():
     assert home.reader.battery_sign_contradiction_bids == ["b1"]
 
 
-def test_the_one_battery_audit_asks_its_own_battery():
+def test_the_one_battery_audit_is_not_fooled_by_the_old_battery():
+    """Only the old battery's charge counter moves. The old audit summed it
+    in and called the right lock wrong."""
     home = _Home("energy_only_first")
     home.reader._battery_sign_detected[FLEET] = True
     home.reader._battery_sign_inverted[FLEET] = False
-    _audit_cycles(home, 8)
+    _audit_cycles(home, 8, rising=("sensor.old_charged",))
     assert home.reader.battery_sign_contradiction_bids == []
+
+
+def test_the_one_battery_audit_catches_a_wrong_lock_on_its_own_counters():
+    """Both batteries' counters move. The old audit saw charge AND discharge
+    rise, sat every cycle out, and never caught the wrong lock."""
+    home = _Home("energy_only_first")
+    home.reader._battery_sign_detected[FLEET] = True
+    home.reader._battery_sign_inverted[FLEET] = True       # wrong
+    _audit_cycles(home, 8)
+    assert home.reader.battery_sign_contradiction_bids == [FLEET]
 
 
 # ── 4. A lock the old code saved on another battery's counters ─────────────
@@ -286,20 +318,35 @@ OLD_FLEET = {"battery_detected": {FLEET: True}, "battery_inverted": {FLEET: True
              "battery_basis": "sensor"}
 
 
-def test_a_lock_learned_on_the_pairs_counters_is_learned_again(caplog):
+def test_a_lock_learned_on_the_pairs_counters_is_judged_again(caplog):
     home = _Home("pair_first", store=dict(OLD_B1))
-    assert "battery_counters" not in home.reader.export_sign_state(), (
-        "an older store stays unmarked until it is checked")
+    assert home.reader.export_sign_state()["battery_counters_pending"] == ["b1"]
     with caplog.at_level(logging.INFO):
         p = home.cycle(1)
     r = home.reader
-    assert r._battery_sign_detected["b1"] is False, "dropped on the first read"
-    assert p.batteries["b1"].power_w == -1500.0, "and no longer negated"
+    assert r._battery_sign_detected["b1"] is False, "no longer a lock"
+    # the sign stays the start value: nothing reads differently yet
+    assert r._battery_sign_inverted["b1"] is True
+    assert p.batteries["b1"].power_w == 1500.0
     assert "sensor.verto_charged" in caplog.text and "#1193" in caplog.text
-    assert r.export_sign_state()["battery_counters"] == "own"
-    home.cycle(8)
+    assert "battery_counters_pending" not in r.export_sign_state()
+    p = home.cycle(8)
     assert r._battery_sign_detected["b1"] is True
     assert r._battery_sign_inverted["b1"] is False, "learned on its own counters"
+    assert p.batteries["b1"].power_w == -1500.0
+
+
+def test_a_right_lock_judged_again_keeps_its_sign_throughout():
+    """Most such locks were right. Sessy reads + while discharging and its
+    saved lock negates it: the check takes the lock away, and the reading
+    never changes while the sign is judged again."""
+    home = _Home("pair_first", store=dict(OLD_B1))
+    home.states["sensor.sessy_power"] = _w(1500)
+    for _ in range(8):
+        p = home.cycle(1)
+        assert p.batteries["b1"].power_w == -1500.0
+    assert home.reader._battery_sign_detected["b1"] is True
+    assert home.reader._battery_sign_inverted["b1"] is True
 
 
 def test_a_restart_before_the_first_read_still_checks_the_lock():
@@ -311,9 +358,17 @@ def test_a_restart_before_the_first_read_still_checks_the_lock():
 
 def test_the_one_battery_lock_learned_on_the_old_batterys_counters():
     home = _Home("energy_only_first", store=dict(OLD_FLEET))
-    p = home.cycle(1)
+    home.cycle(1)
     assert home.reader._battery_sign_detected[FLEET] is False
-    assert p.battery_power == -1500.0
+    home.cycle(8)
+    assert home.reader._battery_sign_inverted[FLEET] is False
+
+
+def test_the_setup_saved_pick_lock_is_checked_too():
+    ed = _ed("energy_only_first")
+    home = _Home("energy_only_first", config=ed.to_dict(), store=dict(OLD_FLEET))
+    home.cycle(1)
+    assert home.reader._battery_sign_detected[FLEET] is False
 
 
 @pytest.mark.parametrize("home_name,store", [
@@ -322,7 +377,7 @@ def test_the_one_battery_lock_learned_on_the_old_batterys_counters():
     # the store already judged each battery by its own counters
     ("pair_first", {**OLD_B1, "battery_counters": "own"}),
     # one battery, and the first counters are its own
-    ("two_combined", {**OLD_FLEET}),
+    ("one_battery_first", OLD_FLEET),
 ])
 def test_a_lock_learned_on_its_own_counters_stays(home_name, store):
     home = _Home(home_name, store=dict(store))
@@ -330,6 +385,44 @@ def test_a_lock_learned_on_its_own_counters_stays(home_name, store):
     home.cycle(1)
     assert home.reader._battery_sign_detected[bid] is True
     assert home.reader._battery_sign_inverted[bid] is True
+    assert "battery_counters_pending" not in home.reader.export_sign_state()
+
+
+def test_a_fleet_lock_waits_while_the_home_reads_per_battery():
+    """A home that once had one battery keeps its fleet lock; it is unused
+    while two batteries are read, so it waits for its check, and the b1 lock
+    judged again is not judged again after a restart."""
+    store = {"battery_detected": {FLEET: True, "b1": True},
+             "battery_inverted": {FLEET: True, "b1": True}, "battery_basis": "sensor"}
+    home = _Home("pair_first", store=store)
+    home.cycle(9)
+    r = home.reader
+    assert r._battery_sign_detected["b1"] is True
+    assert r._battery_sign_inverted["b1"] is False, "judged again, on its own"
+    saved = r.export_sign_state()
+    assert saved["battery_counters_pending"] == [FLEET]
+    again = _Home("pair_first", store=saved)
+    again.cycle(1)
+    assert again.reader._battery_sign_detected["b1"] is True
+    assert again.reader._battery_sign_inverted["b1"] is False
+    assert again.reader.export_sign_state()["battery_counters_pending"] == [FLEET]
+    # back to one battery, read with another battery's counters first: checked
+    one = _Home("energy_only_first", store=saved)
+    one.cycle(1)
+    assert one.reader._battery_sign_detected[FLEET] is False
+    assert "battery_counters_pending" not in one.reader.export_sign_state()
+
+
+def test_the_1194_move_runs_first_and_its_value_is_kept():
+    """A store from before #1194 and #1193, one Inverted battery listed after
+    a battery with no power sensor. #1194 turns the fleet lock over; the
+    check then takes the lock away and keeps that turned value."""
+    home = _Home("inverted_after_old", store={
+        "battery_detected": {FLEET: True}, "battery_inverted": {FLEET: False}})
+    assert home.ed.battery_power_inverted is True
+    home.cycle(1)
+    assert home.reader._battery_sign_detected[FLEET] is False
+    assert home.reader._battery_sign_inverted[FLEET] is True, "the #1194 value"
 
 
 def test_fix_battery_sign_on_keeps_every_lock():
@@ -339,13 +432,14 @@ def test_fix_battery_sign_on_keeps_every_lock():
                  store=dict(OLD_B1))
     home.cycle(1)
     assert home.reader._battery_sign_detected["b1"] is True
-    assert home.reader.export_sign_state()["battery_counters"] == "own"
+    assert "battery_counters_pending" not in home.reader.export_sign_state()
 
 
 def test_reset_and_a_fresh_store_are_marked():
     r = _Home("pair_first", store=dict(OLD_B1)).reader
     r.reset_sign_state()
     assert r.export_sign_state()["battery_counters"] == "own"
+    assert "battery_counters_pending" not in r.export_sign_state()
     assert SensorReader(MagicMock(), {}).export_sign_state()["battery_counters"] == "own"
     fresh = _Home("pair_first", store={})
     assert fresh.reader.export_sign_state()["battery_counters"] == "own"
@@ -380,8 +474,22 @@ async def test_the_setup_summary_numbers_counters_by_battery(monkeypatch):
     assert "Charge energy (2): `sensor.verto_charged`" in summary
     assert "Discharge energy (2): `sensor.verto_discharged`" in summary
     # the battery with no power sensor is listed, without a number
-    assert "Charge energy: `sensor.old_charged`" in summary
-    assert "Discharge energy: `sensor.old_discharged`" in summary
+    assert "Charge energy (no power sensor): `sensor.old_charged`" in summary
+    assert "Discharge energy (no power sensor): `sensor.old_discharged`" in summary
+
+
+@pytest.mark.asyncio
+async def test_the_one_battery_summary_shows_its_own_counters(monkeypatch):
+    from custom_components.solar_energy_management import config_flow as cf
+    monkeypatch.setattr(cf, "read_energy_dashboard_config",
+                        AsyncMock(return_value=_ed("energy_only_first")))
+    flow = cf.SolarEnergyManagementConfigFlow()
+    flow.hass = MagicMock()
+    summary = (await flow.async_step_user())["description_placeholders"]["summary"]
+    assert "Power: `sensor.sessy_power`" in summary
+    assert "Charge energy: `sensor.sessy_charged`" in summary
+    assert "Discharge energy: `sensor.sessy_discharged`" in summary
+    assert "Charge energy (no power sensor): `sensor.old_charged`" in summary
 
 
 @pytest.mark.asyncio
@@ -417,6 +525,8 @@ DECLARED_COUNTER_LIST_READERS = {
     ("ha_energy_reader.py", "_extract_battery_config"):
         "the parser that fills them",
     ("config_flow.py", "async_step_user"):
+        "holds _unowned below (the walk sees nested functions)",
+    ("config_flow.py", "_unowned"):
         "the setup summary lists counters no battery owns",
     ("coordinator/sensor_reader.py", "battery_sign_diagnostics"):
         "the sign payload lists every counter",
