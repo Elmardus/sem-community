@@ -138,6 +138,7 @@ class TestATapWhileTheMeterReadsNothingFlipsNoMeter:
         assert r._grid_source_key == f"combined:{METER}"     # the lock's, kept
         opts = r.user_flip_options({}, True)
         assert opts["grid_sign_user_flip_source"] == NO_GRID_SOURCE
+        assert r.grid_sign_diagnostics()["grid_read_source"] is None
         # …so the meter back on reads as it is
         assert _meter_reader(**opts).read_power().grid_power == 2000
 
@@ -151,6 +152,16 @@ class TestATapWhileTheMeterReadsNothingFlipsNoMeter:
         assert r._grid_source_key == f"combined:{METER}"     # kept, as before
         assert r.user_flip_options({}, True)[
             "grid_sign_user_flip_source"] == NO_GRID_SOURCE
+
+    def test_a_read_that_raises_keeps_the_last_source(self):
+        """Review 2: the saved lock's source must survive a failed read."""
+        r = _meter_reader()
+        r.read_power()
+        r._read_from_energy_dashboard = MagicMock(side_effect=RuntimeError("boom"))
+        with pytest.raises(RuntimeError):
+            r.read_power()
+        assert r._grid_source_key == f"combined:{METER}"
+        assert r._grid_read_source is None
 
     def test_a_tap_on_a_live_meter_is_bound_to_it(self):
         r = _meter_reader()

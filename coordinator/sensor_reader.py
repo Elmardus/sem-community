@@ -983,13 +983,16 @@ class SensorReader:
         # lock (#1103), as before; a tap is bound to this cycle's read only.
         last_source = self._grid_source_key
         self._grid_source_key = None
-        if self._energy_dashboard_config:
-            readings = self._read_from_energy_dashboard()
-        else:
-            readings = self._read_from_legacy_config()
-        self._grid_read_source = self._grid_source_key
-        if self._grid_source_key is None:
-            self._grid_source_key = last_source
+        self._grid_read_source = None
+        try:
+            if self._energy_dashboard_config:
+                readings = self._read_from_energy_dashboard()
+            else:
+                readings = self._read_from_legacy_config()
+            self._grid_read_source = self._grid_source_key
+        finally:
+            if self._grid_source_key is None:
+                self._grid_source_key = last_source
         self._check_restored_grid_lock()
         # (#902) A value no battery can produce is a dark read, not a number.
         self._gate_battery_power(readings)
@@ -1301,6 +1304,8 @@ class SensorReader:
                 self._user_flip_source()
                 if self._raw_config.get("grid_sign_user_flip", False) else None),
             "grid_source": self._grid_source_key,
+            # (#1192) what a tap now is bound to: none while the meter is dark
+            "grid_read_source": self._grid_read_source,
             "user_flip_applies": self.user_flip_applies(),
             "auto_detected": self._grid_sign_detected,
             "auto_inverted": self._grid_sign_inverted,
