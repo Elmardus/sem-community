@@ -234,6 +234,11 @@ read-only by design — SEM can't suppress it), but the cards will load.
 > applied to the new source; the sign diagnostics show `user_flip_applies:
 > false` and the log says so once. Tap again on the new source if it really is
 > inverted, or run `reset_sign_detection` to start clean.
+>
+> A tap made while SEM reads no grid meter (grid shows 0 W) changes nothing,
+> and it does not flip a meter SEM finds later (#1192): the diagnostics show
+> `user_flip_source: none`. Fix the missing meter first, then tap if the sign
+> is wrong.
 
 **Symptom:** SEM shows grid import when the house is actually exporting (or vice versa). The `sensor.sem_grid_power` sign is the opposite of the hardware power meter.
 

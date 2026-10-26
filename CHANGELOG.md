@@ -16,7 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ **The Home diagram shows the car's charge level at the EV node** (#1211). With one charger only; an estimate has a "~".
 - 🐛 **A battery marked "Inverted" in the Energy Dashboard now shows charging the right way from the start** (#1194). One that already reads right stays right.
 - 🐛 **Each battery keeps its own settings when you add or remove a battery** (#1195). A new battery no longer takes another battery's entities.
-- 🐛 **Each battery's charge direction is now learned from its own energy counters** (#1193). With a two-sensor battery listed first, another battery could show charging as discharging.
+- 🐛 **Each battery's charge direction is learned from its own energy counters** (#1193). A second battery could show charging as discharging.
+- 🐛 **A "Fix grid sign" tap with no grid meter no longer flips a meter found later** (#1192). Without an Energy Dashboard, the tap works again.
 
 # [2.2.0-beta.27] — 25.10.2026
 
