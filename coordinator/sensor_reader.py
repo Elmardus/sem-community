@@ -1545,10 +1545,9 @@ class SensorReader:
                     )
         # (#1194) A store without ``battery_basis`` was written while the
         # one-battery read still flipped an "Inverted" sensor, so its fleet
-        # lock may judge the flipped value (``_move_lock_learned_on_flip``).
-        self._battery_lock_on_flipped = bool(
-            state.get("battery_basis") != "sensor"
-            and self._battery_sign_detected.get(self._FLEET_BID))
+        # lock, or the user's flip, may judge the flipped value
+        # (``_move_lock_learned_on_flip``). ``{}`` is no store (or a reset).
+        self._battery_lock_on_flipped = bool(state) and "battery_basis" not in state
 
     def _manual_grid_pair(self):
         """(#1103) The manual import/export pair, minus SEM's own sensors.
@@ -1785,16 +1784,8 @@ class SensorReader:
             return
         self._battery_brand_seed_done[bid] = True
 
-        if not power_entity:
-            return
-        try:
-            # (#912, class 87) same owner lookup as the grid seed above.
-            platform = self._entity_owner(power_entity)[0]
-        except Exception as e:  # noqa: BLE001 — belt and braces: _entity_owner
-            # contains its own registry/source-map failures and answers None.
-            _LOGGER.debug("Battery-sign brand lookup failed for %s (%s): %s", bid, power_entity, e)
-            return
-        if not isinstance(platform, str) or platform not in PLATFORM_BATTERY_SIGN_INVERT:
+        platform = self._battery_brand(bid, power_entity)
+        if platform is None:
             return
 
         # SOFT default only — do NOT set detected=True, so the counter voter
@@ -1808,6 +1799,22 @@ class SensorReader:
             "negating (opposite convention)" if self._battery_sign_inverted[bid]
             else "no correction (SEM convention)",
         )
+
+    def _battery_brand(self, bid: str, power_entity: Optional[str]) -> Optional[str]:
+        """(#588) The integration of a battery power sensor when the brand
+        table knows it, else None. Also asked by the #1194 lock move."""
+        if not power_entity:
+            return None
+        try:
+            # (#912, class 87) same owner lookup as the grid seed above.
+            platform = self._entity_owner(power_entity)[0]
+        except Exception as e:  # noqa: BLE001 — belt and braces: _entity_owner
+            # contains its own registry/source-map failures and answers None.
+            _LOGGER.debug("Battery-sign brand lookup failed for %s (%s): %s", bid, power_entity, e)
+            return None
+        if not isinstance(platform, str) or platform not in PLATFORM_BATTERY_SIGN_INVERT:
+            return None
+        return platform
 
     def _accumulate_solar_sign(self, readings: PowerReadings) -> None:
         """Solar-anchored grid-sign detection (#461, authoritative primary).
@@ -2815,7 +2822,8 @@ class SensorReader:
                 charge_w, ed.battery_power_to,
             )
             readings.battery_power = charge_w - discharge_w
-        self._move_lock_learned_on_flip(ed, read_alone)
+        self._move_lock_learned_on_flip(ed, read_alone,
+                                        per_battery=per_battery_total is not None)
 
         # Battery SOC — precedence (#551): SEM's own explicit override
         # (battery_soc_sensor option) > multi-battery average (the fleet SOC
@@ -2932,32 +2940,64 @@ class SensorReader:
 
         return readings
 
-    def _move_lock_learned_on_flip(self, ed, read_alone: bool) -> None:
-        """(#1194) Move a fleet battery lock learned on the old flip, once.
+    def _move_lock_learned_on_flip(self, ed, read_alone: bool,
+                                   per_battery: bool = False) -> None:
+        """(#1194) Keep a one-battery home reading as it did before #1194, once.
 
-        Until #1194 the one-battery read flipped a sensor marked "Inverted",
-        so the sign check judged the flipped value and its lock says the
-        opposite of what the sensor itself needs. Now that sensor is read as
-        it is, so that lock is turned over: the battery reads the same as
-        before the update. Only that read was flipped. Each battery of a fleet,
-        SEM's own battery power pick and a two-sensor battery were always read
-        as they are, and their locks stay. Runs on the first Energy Dashboard
-        read after a restore, so the dashboard is known.
+        Until #1194 the one-battery read flipped a sensor marked "Inverted".
+        Now it reads it as it is, so what was saved against the flipped value
+        is changed to match, on the first Energy Dashboard read of an older
+        store. Each battery of a fleet, SEM's own battery power pick and a
+        two-sensor battery were always read as they are; their locks stay.
+
+        * A fleet lock judged the flipped value: it is turned over.
+        * No lock, but the user's one-tap flip is on: the flip corrected the
+          flipped read. The sign that read had (the brand seed, else none) is
+          locked on the sensor as it is, so the user sees what they saw.
+        * No lock and no flip: nothing to keep. The battery now reads right
+          from the start.
+
+        A fleet lock waits while the home reads per battery (that read does
+        not use it), so it is still moved if the home goes back to one.
         """
         if not getattr(self, "_battery_lock_on_flipped", False):
             return
-        self._battery_lock_on_flipped = False
-        if not (read_alone and ed.battery_power_inverted is True
-                and self._battery_sign_detected.get(self._FLEET_BID)):
+        locked = bool(self._battery_sign_detected.get(self._FLEET_BID))
+        if per_battery and locked:
             return
-        was = self._battery_sign_inverted.get(self._FLEET_BID, False)
-        self._battery_sign_inverted[self._FLEET_BID] = not was
+        self._battery_lock_on_flipped = False
+        if not (read_alone and ed.battery_power_inverted is True):
+            return
+        fleet = self._FLEET_BID
+        if locked:
+            was = self._battery_sign_inverted.get(fleet, False)
+            self._battery_sign_inverted[fleet] = not was
+            _LOGGER.info(
+                "Battery sign: %s is marked Inverted in the Energy Dashboard "
+                "and is now read as it is; the saved sign was learned on the "
+                "flipped value, so it is now %s. The battery reads as before. "
+                "(#1194)",
+                ed.battery_power, "no correction" if was else "negating",
+            )
+            return
+        if not bool((getattr(self, "_raw_config", None) or {}).get(
+                "battery_sign_user_flip", False)):
+            return
+        # The old read's sign before any lock: the brand seed, which the old
+        # sign check only asked with both energy counters set.
+        seeded = False
+        if ed.battery_charge_energy and ed.battery_discharge_energy:
+            platform = self._battery_brand(fleet, ed.battery_power)
+            seeded = bool(platform and PLATFORM_BATTERY_SIGN_INVERT[platform])
+        self._battery_sign_inverted[fleet] = not seeded
+        self._battery_sign_detected[fleet] = True
+        self._battery_brand_seed_done[fleet] = True
         _LOGGER.info(
-            "Battery sign: %s is marked Inverted in the Energy Dashboard and is "
-            "now read as it is; the saved sign was learned on the flipped value, "
-            "so it is now %s. The battery reads as before. (#1194)",
-            ed.battery_power,
-            "no correction" if was else "negating",
+            "Battery sign: %s is marked Inverted in the Energy Dashboard and "
+            "is now read as it is. Fix battery sign is on and was set against "
+            "the flipped value, so SEM keeps that reading: the sign is now "
+            "locked to %s. The battery reads as before. (#1194)",
+            ed.battery_power, "no correction" if seeded else "negating",
         )
 
     def _accept_battery_soc(self, readings: PowerReadings,

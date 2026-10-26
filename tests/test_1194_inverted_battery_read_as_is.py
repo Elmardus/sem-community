@@ -161,19 +161,24 @@ def test_the_moved_lock_is_saved_and_not_moved_again():
 def test_a_save_before_the_first_read_keeps_the_old_shape():
     """A restart before the first read must still move the lock next time."""
     reader = _reader([_inverted(1)], {1: 1200})
-    old = {"battery_detected": {FLEET: True}, "battery_inverted": {FLEET: True}}
-    reader.restore_sign_state(old)
-    assert "battery_basis" not in reader.export_sign_state()
-    reader.read_power()
-    assert reader.export_sign_state()["battery_basis"] == "sensor"
+    reader.restore_sign_state({"battery_detected": {FLEET: True},
+                               "battery_inverted": {FLEET: True}})
+    early = reader.export_sign_state()
+    assert "battery_basis" not in early
+
+    after_restart = _reader([_inverted(1)], {1: 1200})
+    after_restart.restore_sign_state(early)
+    assert after_restart.read_power().battery_power == pytest.approx(1200.0)
+    assert after_restart._battery_sign_inverted[FLEET] is False
+    assert after_restart.export_sign_state()["battery_basis"] == "sensor"
 
 
 def test_a_fresh_reader_saves_the_new_shape():
     assert SensorReader(MagicMock(), {}).export_sign_state()["battery_basis"] == "sensor"
 
 
-@pytest.mark.parametrize("case", ["new_shape", "standard", "override",
-                                  "per_battery", "reset"])
+@pytest.mark.parametrize("case", ["new_shape", "other_marker", "standard",
+                                  "override", "per_battery"])
 def test_locks_the_flip_never_touched_are_kept(case):
     """Only the one-battery fleet lock on an Inverted sensor judged a flipped
     value. Every other lock judged the sensor as it is and stays."""
@@ -181,6 +186,9 @@ def test_locks_the_flip_never_touched_are_kept(case):
     state = {"battery_detected": {FLEET: True}, "battery_inverted": {FLEET: True}}
     if case == "new_shape":
         state["battery_basis"] = "sensor"
+    elif case == "other_marker":
+        # a later store shape is not an old one
+        state["battery_basis"] = "v2"
     elif case == "standard":
         batteries = [_standard(1)]
     elif case == "override":
@@ -188,17 +196,94 @@ def test_locks_the_flip_never_touched_are_kept(case):
         options = {"battery_power_sensor": "sensor.batt9_power"}
         watts = {1: 1200, 9: 1200}
     elif case == "per_battery":
+        # each battery's lock judged its sensor as it is; the fleet lock from
+        # the one-battery days is not used while the home reads per battery
         batteries, watts = [_inverted(1), _standard(2)], {1: 1200, 2: 500}
-        state = {"battery_detected": {"b1": True, "b2": True},
-                 "battery_inverted": {"b1": True, "b2": False}}
+        state = {"battery_detected": {"b1": True, "b2": True, FLEET: True},
+                 "battery_inverted": {"b1": True, "b2": False, FLEET: True}}
     reader = _reader(batteries, watts, options)
     reader.restore_sign_state(state)
-    if case == "reset":
-        reader.reset_sign_state()
     before = dict(reader._battery_sign_inverted)
+    assert FLEET in before
     reader.read_power()
-    for bid, inv in before.items():
-        assert reader._battery_sign_inverted[bid] is inv, bid
+    reader.read_power()
+    assert reader._battery_sign_inverted == before
+    assert all(reader._battery_sign_detected[bid] for bid in before)
+
+
+def test_the_fleet_lock_waits_while_the_home_reads_per_battery():
+    """A home that went from one battery to two keeps its old fleet lock for
+    the day it goes back to one; the move happens then."""
+    reader = _reader([_inverted(1), _standard(2)], {1: 1200, 2: 500})
+    reader.restore_sign_state({"battery_detected": {FLEET: True},
+                               "battery_inverted": {FLEET: True}})
+    reader.read_power()
+    assert reader._battery_sign_inverted[FLEET] is True
+    assert "battery_basis" not in reader.export_sign_state()
+
+    reader.set_energy_dashboard_config(_ed([_inverted(1)]))
+    assert reader.read_power().battery_power == pytest.approx(
+        float(_old_value(1200, True)))
+    assert reader._battery_sign_inverted[FLEET] is False
+    assert reader.export_sign_state()["battery_basis"] == "sensor"
+
+
+def test_a_reset_leaves_nothing_to_move():
+    reader = _reader([_inverted(1)], {1: 1200}, {"battery_sign_user_flip": False})
+    reader.restore_sign_state({"battery_detected": {FLEET: True},
+                               "battery_inverted": {FLEET: True}})
+    reader.reset_sign_state()
+    assert reader.read_power().battery_power == pytest.approx(1200.0)
+    assert not reader._battery_sign_detected.get(FLEET)
+    assert not reader._battery_sign_inverted.get(FLEET)
+    assert reader.export_sign_state()["battery_basis"] == "sensor"
+
+
+# ── The one-tap flip, with no lock saved ───────────────────────────────────
+
+OLD_STORE_NO_LOCK = {"grid_detected": False, "grid_inverted": False,
+                     "battery_detected": {}, "battery_inverted": {}}
+
+
+@pytest.mark.parametrize("brand", [None, "goodwe", "huawei_solar"])
+@pytest.mark.parametrize("raw", [1200, -800])
+def test_a_flip_set_against_the_old_read_reads_the_same(brand, raw):
+    """The user's "Fix battery sign" corrected the flipped read. With no lock
+    to turn over, SEM locks the old read's sign (its brand seed, else none)
+    on the sensor as it is: the user sees what they saw, also after a
+    restart."""
+    seeded = brand == "goodwe"          # the table negates goodwe
+
+    def make():
+        r = _reader([_inverted(1)], {1: raw}, {"battery_sign_user_flip": True})
+        r._entity_owner = lambda eid: (brand, None)
+        return r
+
+    old = -(raw if seeded else -raw)    # flip, brand seed, then the user flip
+    reader = make()
+    reader.restore_sign_state(dict(OLD_STORE_NO_LOCK))
+    assert reader.read_power().battery_power == pytest.approx(float(old))
+    assert reader._battery_sign_detected[FLEET] is True
+    saved = reader.export_sign_state()
+    assert saved["battery_basis"] == "sensor"
+
+    again = make()
+    again.restore_sign_state(saved)
+    assert again.read_power().battery_power == pytest.approx(float(old))
+
+
+@pytest.mark.parametrize("case", ["no_flip", "no_store", "new_store"])
+def test_no_lock_is_made_without_an_old_flip(case):
+    """No flip set against the old read: nothing is kept, and the battery
+    reads right from the start. ``{}`` is no store (or a reset)."""
+    options = {"battery_sign_user_flip": case != "no_flip"}
+    state = {"no_flip": dict(OLD_STORE_NO_LOCK), "no_store": {},
+             "new_store": {**OLD_STORE_NO_LOCK, "battery_basis": "sensor"}}[case]
+    reader = _reader([_inverted(1)], {1: 1200}, options)
+    reader.restore_sign_state(state)
+    reader.read_power()
+    assert not reader._battery_sign_detected.get(FLEET)
+    assert not reader._battery_sign_inverted.get(FLEET)
 
 
 # ── Guard ──────────────────────────────────────────────────────────────────
