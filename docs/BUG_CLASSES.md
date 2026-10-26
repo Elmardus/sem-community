@@ -6393,5 +6393,5 @@ Refs #1192 #971 #1172 #690 #1215.
 **Closure:** the Sankey draws every `flow_<from>_to_<to>_energy` sensor: a child of its source total, and a middle node that leads to its target total. A battery-less home loses the new line with the other battery entities (#923).
 **Guard:** `tests/test_1190_sankey_every_flow.py` — reads the flow keys from `SENSOR_TYPES`, so a flow added later fails until the Sankey draws it; the label in every language; the prune for a home without a battery; the German name through the real translation step; no Cyrillic letter in any translation table. A flow end of two words (`heat_pump`) still matches. Four of its first five tests fail on the old template.
 **Sweep question:** when SEM publishes a new row, which hand-written lists in views should hold it too?
-**Left open:** the Energy Impact card computes its own CO2 figure from two flows instead of reading `sensor.sem_daily_co2_avoided` (a second copy of a formula, not this shape; filed separately).
-Refs #1190 #776 #1172 #923.
+**Left open:** the Energy Impact card computes its own CO2 figure from two flows instead of reading `sensor.sem_daily_co2_avoided` (a second copy of a formula, not this shape; #1221).
+Refs #1190 #776 #1172 #923 #1221.
