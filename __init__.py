@@ -6677,11 +6677,11 @@ async def _async_register_phase_services(
                 _LOGGER.debug("flip_grid_sign: diagnostics snapshot failed", exc_info=True)
 
         current = bool((target.options or {}).get("grid_sign_user_flip", False))
-        # (#1192) A saved flip that does not apply to the meter read now (one
-        # tapped with no meter, or on another, #971) is off for this meter: the
-        # tap flips this meter, as the log line asks, instead of only clearing it.
+        # (#1192) A saved flip about another meter (#971) is off for this one:
+        # the tap flips this meter, as the log line asks, instead of only
+        # clearing the old flip. A second tap with no meter turns it off.
         if current and reader is not None:
-            current = reader.user_flip_applies()
+            current = reader.user_flip_on_for_tap()
         new_flip = not current
         # (#971) the tap is bound to the grid source it corrects; the reader
         # knows which branch read the meter this cycle.

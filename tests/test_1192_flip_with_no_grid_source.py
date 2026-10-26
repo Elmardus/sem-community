@@ -125,6 +125,40 @@ class TestATapWithNoMeterFlipsNoMeter:
         assert r.user_flip_applies() is False
 
 
+class TestATapWhileTheMeterReadsNothingFlipsNoMeter:
+    """Review: the source a branch named last stays set while the meter is
+    dark, or once no branch reads it. A tap then reads 0 W as well."""
+
+    def test_a_tap_while_the_meter_is_dark(self):
+        r = _meter_reader()
+        r.read_power()
+        r.hass.states.get(METER).state = "unavailable"
+        p = r.read_power()
+        assert p.grid_power_unavailable is True
+        assert r._grid_source_key == f"combined:{METER}"     # the lock's, kept
+        opts = r.user_flip_options({}, True)
+        assert opts["grid_sign_user_flip_source"] == NO_GRID_SOURCE
+        # …so the meter back on reads as it is
+        assert _meter_reader(**opts).read_power().grid_power == 2000
+
+    def test_a_tap_once_no_branch_reads_the_grid(self):
+        r = _meter_reader()
+        r.read_power()
+        r._energy_dashboard_config = _make_energy_dashboard_config(
+            solar_power="sensor.solar", grid_import_power=None,
+            grid_import_energy=None, grid_export_energy=None, battery_power=None)
+        r.read_power()
+        assert r._grid_source_key == f"combined:{METER}"     # kept, as before
+        assert r.user_flip_options({}, True)[
+            "grid_sign_user_flip_source"] == NO_GRID_SOURCE
+
+    def test_a_tap_on_a_live_meter_is_bound_to_it(self):
+        r = _meter_reader()
+        r.read_power()
+        assert r.user_flip_options({}, True)[
+            "grid_sign_user_flip_source"] == f"combined:{METER}"
+
+
 class TestFlipsFromBeforeTheBindingAreKept:
     def test_a_store_without_the_key_still_corrects_the_meter(self):
         """#971's rule for a flip from before the binding is unchanged."""
@@ -159,6 +193,13 @@ class TestTheDiagnosticsSayIt:
         r = _meter_reader(grid_sign_user_flip=True); r.read_power()
         assert r.grid_sign_diagnostics()["user_flip_source"] is None
 
+    def test_a_flip_that_is_off_shows_no_source(self):
+        """Review: tap-off and reset save a None source with the flip off."""
+        r = _meter_reader(grid_sign_user_flip=False, grid_sign_user_flip_source=None)
+        r.read_power()
+        d = r.grid_sign_diagnostics()
+        assert d["user_flip_source"] is None and d["user_flip"] is False
+
     def test_the_log_names_no_meter_once(self, caplog):
         import logging
         r = _meter_reader(grid_sign_user_flip=True,
@@ -168,6 +209,15 @@ class TestTheDiagnosticsSayIt:
         hits = [m for m in caplog.messages if "one-tap user flip is bound" in m]
         assert len(hits) == 1, hits
         assert "bound to no grid sensor" in hits[0]
+
+    def test_no_log_while_no_meter_is_read(self, caplog):
+        """Nothing is read, so there is nothing the flip was kept off."""
+        import logging
+        r = _no_meter_reader(grid_sign_user_flip=True,
+                             grid_sign_user_flip_source=NO_GRID_SOURCE)
+        with caplog.at_level(logging.WARNING):
+            r.read_power()
+        assert not [m for m in caplog.messages if "user flip" in m]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -188,10 +238,15 @@ class TestTheReadWithoutADashboardNamesItsSource:
         assert opts["grid_sign_user_flip_source"] == f"manual:{IMP}|{EXP}"
         assert _legacy_reader(pair=True, **opts).read_power().grid_power == -2000
 
-    def test_a_flip_from_before_the_binding_applies_to_the_grid_sensor(self):
-        """#971's rule, which this read never reached."""
+    def test_a_flip_from_before_the_binding_stays_off(self):
+        """Review: this read has not applied such a flip since #971. Off for
+        weeks, it must not come back on its own (a user may have fixed the
+        sign with Invert grid power sign since)."""
         r = _legacy_reader(grid_sign_user_flip=True)
-        assert r.read_power().grid_power == -2000
+        assert r.read_power().grid_power == 2000
+        assert r.user_flip_applies() is False
+        r2 = _legacy_reader(grid_sign_user_flip=True, grid_sign_invert=True)
+        assert r2.read_power().grid_power == -2000              # once, not twice
 
     def test_a_flip_from_before_never_reaches_a_manual_pair(self):
         r = _legacy_reader(pair=True, grid_sign_user_flip=True)
@@ -211,8 +266,39 @@ class TestTheReadWithoutADashboardNamesItsSource:
                               "grid_source": None})
         assert r.read_power().grid_power == -2000
         assert r._grid_sign_detected is True and r._grid_sign_inverted is True
-        # and the next save names the source it read
-        assert r.export_sign_state()["grid_source"] == f"combined:{METER}"
+        # …and is saved as before, with no source (review: a legacy pair's
+        # lock must still be judged on the first dashboard read)
+        assert r.export_sign_state()["grid_source"] is None
+
+    def test_a_lock_from_a_dashboard_read_is_kept_in_the_store(self):
+        r = _legacy_reader()
+        r.restore_sign_state({"grid_detected": True, "grid_inverted": False,
+                              "grid_source": "combined:sensor.old_meter"})
+        r.read_power()
+        assert r.export_sign_state()["grid_source"] == "combined:sensor.old_meter"
+
+    def test_a_legacy_pair_lock_is_judged_on_the_dashboard_read(self):
+        """Review: legacy pair, a stale inverted lock, then a dashboard read
+        of the same pair. Saved with no source, it is judged: a pair is never
+        negated (#1103)."""
+        legacy = _legacy_reader(pair=True)
+        legacy.read_power()
+        legacy._grid_sign_detected = True
+        legacy._grid_sign_inverted = True
+        saved = legacy.export_sign_state()
+        ed = _make_energy_dashboard_config(
+            solar_power="sensor.solar", grid_import_power=None, battery_power=None)
+        states = {"sensor.solar": _state(5000),
+                  IMP: _state(0, device_class="power"),
+                  EXP: _state(2000, device_class="power"),
+                  "sensor.grid_import_total": _state(10, "kWh"),
+                  "sensor.grid_export_total": _state(20, "kWh")}
+        r = _make_reader_with_states(
+            MagicMock(), states, ed,
+            extra_config={"grid_import_power_entity": IMP,
+                          "grid_export_power_entity": EXP})
+        r.restore_sign_state(saved)
+        assert r.read_power().grid_power == 2000
 
     def test_the_check_still_runs_on_a_dashboard_read(self):
         """Unchanged (#1103): a lock saved on another source is learned again."""
@@ -336,6 +422,21 @@ class TestTheTapActsOnTheMeterReadNow:
         _, saved = await _press({}, r)
         assert saved["grid_sign_user_flip"] is True
         assert saved["grid_sign_user_flip_source"] == NO_GRID_SOURCE
+
+    async def test_a_second_tap_with_no_meter_turns_it_off(self):
+        """Review: each tap with no meter saved the flip on again."""
+        opts = {"grid_sign_user_flip": True,
+                "grid_sign_user_flip_source": NO_GRID_SOURCE}
+        r = _no_meter_reader(**opts); r.read_power()
+        result, saved = await _press(opts, r)
+        assert result["user_flip"] is False
+        assert saved["grid_sign_user_flip"] is False
+
+    async def test_a_flip_from_before_on_the_meter_is_turned_off(self):
+        opts = {"grid_sign_user_flip": True}
+        r = _meter_reader(**opts); r.read_power()
+        _, saved = await _press(opts, r)
+        assert saved["grid_sign_user_flip"] is False
 
     async def test_without_a_reader_the_tap_is_bound_to_no_meter(self):
         _, saved = await _press({}, None)
