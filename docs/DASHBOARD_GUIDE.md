@@ -688,6 +688,10 @@ vehicle SOC sensor, then the fleet sensor, then the taper estimate, which is
 marked "~". With more than one charger it shows no SOC: no single car is
 "the" EV, and the node must not borrow one charger's car for all of them.
 
+SEM models one car per charger, so if two cars share one charger the figure can
+belong to the other car (see
+[One vehicle per charger](KNOWN_LIMITATIONS.md#one-vehicle-per-charger)).
+
 #### sem-tab-header
 
 **SEM Tab Header** · *every tab*
