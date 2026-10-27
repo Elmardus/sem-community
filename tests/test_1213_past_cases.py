@@ -147,3 +147,48 @@ async def test_1051_a_wrong_solar_sensor_is_fixed_in_setup(hass):
     assert flow._data["solar_production_sensor"] == \
         "sensor.solis_s6_eh3p_total_dc_output_power"
     assert "grid_power_sensor" not in flow._data
+
+
+# ── review findings (round 3) ──────────────────────────────────────────────
+
+async def test_pressing_submit_on_the_grid_picker_pins_nothing(hass):
+    """The crawler's guess was prefilled and "Submit to skip" stored it."""
+    await _home(hass, "solaredge")
+    cfg = _counters_only_dashboard()
+    flow, shown = await _flow(hass, cfg)
+    assert shown["step_id"] == "pick_grid"
+    key = next(k for k in shown["data_schema"].schema
+               if str(k) == "grid_power_sensor")
+    assert key.description is None or "suggested_value" not in key.description
+    flow, done = await _flow(hass, cfg, then={})
+    assert not flow._data.get("grid_power_sensor")
+
+
+async def test_the_other_meter_is_named_with_its_watts(hass):
+    from custom_components.solar_energy_management.setup_check import ASK_GUESSED
+    await _home(hass, "solaredge")
+    cfg = _counters_only_dashboard(grid_import_power="sensor.solaredge_current_power")
+    cfg.derived_power = {"grid": "sensor.solaredge_current_power"}
+    flow, shown = await _flow(hass, cfg)
+    assert shown["step_id"] == "check_grid"
+    assert flow._check().ask == ASK_GUESSED
+    assert "sensor.solaredge_grid_power, 250 W" in \
+        shown["description_placeholders"]["why"]
+
+
+async def test_a_found_sensor_the_picker_cannot_offer_never_blocks_setup(hass):
+    """A dashboard sensor with no power class or unit is not in the picker's
+    list; the form sends it back from the closed section."""
+    hass.states.async_set("sensor.odd_pv", "900", {"unit_of_measurement": "W"})
+    cfg = _counters_only_dashboard(solar_power="sensor.odd_pv",
+                                   solar_power_list=["sensor.odd_pv"],
+                                   grid_import_power="sensor.odd_meter")
+    flow, shown = await _flow(hass, cfg)
+    schema = shown["data_schema"].schema
+    section_key = next(k for k in schema if str(k) == "own_sensors")
+    inner = schema[section_key].schema.schema
+    solar = next(k for k in inner if str(k) == "solar_production_sensor")
+    allowed = set(inner[solar].config["include_entities"]) \
+        if "include_entities" in inner[solar].config else None
+    suggested = (solar.description or {}).get("suggested_value")
+    assert suggested is None or allowed is None or suggested in allowed

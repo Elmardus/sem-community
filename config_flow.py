@@ -951,19 +951,17 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """(#1213) No grid power sensor found: offer a picker, never block."""
-        check = self._check()
         if user_input is not None:
             picked = (user_input.get("grid_power_sensor") or "").strip()
             updates = {"grid_power_sensor": picked} if picked else {}
             updates.update(self._own_sensor_picks(user_input))
             return await self._finish_dashboard_sources(updates)
-        hint = ({"suggested_value": check.other_grid}
-                if check.other_grid else {})
+        # No prefill: "press Submit to skip" must never pin a guess.
         p = await self._setup_placeholders()
         return self.async_show_form(
             step_id="pick_grid",
             data_schema=vol.Schema({
-                vol.Optional("grid_power_sensor", description=hint):
+                vol.Optional("grid_power_sensor"):
                     _power_sensor_selector(getattr(self, "hass", None)),
                 **self._own_sensors_section(grid=False),
             }),
@@ -1011,6 +1009,11 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _own_sensors_section(self, grid: bool = True) -> dict:
         """The pickers, closed: most people never open them."""
         found = self._found_sources()
+        hass = getattr(self, "hass", None)
+        # The picker rejects a value outside its list, and the form sends the
+        # prefill back: a found sensor the picker cannot offer would block a
+        # section the user never opened.
+        allowed = set(power_sensor_ids(hass)) if hass is not None else set()
         fields: dict = {}
         for key in ("solar_production_sensor", "grid_power_sensor",
                     "battery_power_sensor", "battery_soc_sensor"):
@@ -1020,7 +1023,9 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 continue
             if key == "battery_power_sensor" and not self._one_combined_battery():
                 continue
-            hint = {"suggested_value": found[key]} if found.get(key) else {}
+            keep = found.get(key) and (key == "battery_soc_sensor"
+                                       or not allowed or found[key] in allowed)
+            hint = {"suggested_value": found[key]} if keep else {}
             if key == "battery_soc_sensor":
                 pick = selector.EntitySelector(selector.EntitySelectorConfig(
                     domain="sensor", device_class="battery"))
@@ -1042,6 +1047,16 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 out[key] = value
         return out
 
+    @staticmethod
+    def _why(words, check) -> str:
+        if check.ask != ASK_GUESSED:
+            return ""
+        why = words["why_guessed"]
+        if check.other_grid:
+            # the "use the other meter" answer must name what it pins
+            why += f"\n→ {check.other_grid}, {fmt_w(check.other_grid_w)}"
+        return why
+
     async def _setup_placeholders(self) -> dict[str, str]:
         """Plain watts. No direction: a meter's sign is the brand's choice
         and SEM learns it only after install (see setup_check)."""
@@ -1058,7 +1073,7 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             "solar": fmt_w(check.solar_w) if check.solar_w is not None else none,
             "grid": fmt_w(check.grid_w) if check.grid_w is not None else none,
             "battery": battery,
-            "why": words["why_guessed"] if check.ask == ASK_GUESSED else "",
+            "why": self._why(words, check),
         }
 
     async def _finish_dashboard_sources(self, updates: dict[str, Any]) -> FlowResult:
