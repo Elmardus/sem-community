@@ -12757,7 +12757,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 val = getattr(ed, name, None)
                 if isinstance(val, str) and "." in val:
                     out.add(val)
-            for name in ("solar_power_list", "battery_power_list"):
+            for name in ("solar_power_list", "battery_power_list",
+                         "grid_power_list"):
                 for val in (getattr(ed, name, None) or []):
                     if isinstance(val, str) and "." in val:
                         out.add(val)
@@ -12766,6 +12767,19 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 for val in pair:
                     if isinstance(val, str) and "." in val:
                         out.add(val)
+            # (#1189 review) …and the grid on its two sensors: the dashboard's
+            # pair, or the pair SEM found itself and trusts. Left out, a DSMR
+            # meter SEM already reads was offered as two "Use" buttons, and
+            # one click on half the pair sets export to 0 W.
+            grid_pair = [getattr(ed, "grid_power_from", None),
+                         getattr(ed, "grid_power_to", None)]
+            disc = getattr(self._sensor_reader, "_split_grid_discovery", None)
+            if isinstance(disc, dict) and disc.get("confidence") in (
+                    "declared", "same-device"):
+                grid_pair += [disc.get("import"), disc.get("export")]
+            for val in grid_pair:
+                if isinstance(val, str) and "." in val:
+                    out.add(val)
         except Exception:  # noqa: BLE001
             pass
         return out

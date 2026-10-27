@@ -6,6 +6,7 @@ import math
 import re
 import time
 from collections import deque
+from collections.abc import Mapping
 from typing import Any, Dict, Optional, Tuple
 from dataclasses import dataclass, replace
 
@@ -3971,7 +3972,10 @@ class SensorReader:
         """
         if not disc.get("import"):
             return True
-        if new_confidence == "same-device":
+        # (#1189 review) A pair its integration declares on the counters' own
+        # device is as certain as a same-device name match — and the only
+        # answer a Dutch or German DSMR meter gives once it appears late.
+        if new_confidence in ("same-device", "declared"):
             return True
         for side in ("import", "export"):
             eid = disc.get(side)
@@ -4043,6 +4047,8 @@ class SensorReader:
                     continue
                 if _matches(entry, body["keys"], body["exact_only"]) is None:
                     continue
+                if not self._declared_row_readable(entry):
+                    continue
                 # A declared entity on the grid counter's own device outranks
                 # a declared entity elsewhere — same brand, two inverters.
                 same_device = bool(
@@ -4060,6 +4066,19 @@ class SensorReader:
         return (imp[1] if imp else None,
                 exp[1] if exp else None,
                 on_grid_device)
+
+    def _declared_row_readable(self, entry) -> bool:
+        """(#1189 review) A row SEM can never read is not a meter: a disabled
+        entity, or one HA only RESTORED because its integration did not set
+        it up (a disabled or failing config entry). Taken as declared, it
+        ends the search before the name tier can find the meter that works.
+        A row with no state yet still counts — at a cold start the registry
+        answers before the meter has loaded."""
+        if getattr(entry, "disabled_by", None) is not None:
+            return False
+        live = self.hass.states.get(entry.entity_id)
+        attrs = getattr(live, "attributes", None)
+        return not (isinstance(attrs, Mapping) and attrs.get("restored") is True)
 
     def _discover_split_grid_power(self, ed) -> tuple[Optional[str], Optional[str], Optional[str]]:
         """Discover separate import/export power sensors for setups without combined grid power.

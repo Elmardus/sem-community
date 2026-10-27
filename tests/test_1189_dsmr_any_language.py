@@ -34,8 +34,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 _SERIAL = "4530303331303033343236"   # DSMR: unique_id = f"{serial}_{key}"
 _METER = "dsmr_electricity_meter"     # the device of power AND counters
 
-# The names HA gives DSMR's two power sensors, per language — read from HA's
-# own translation files in ``test_the_names_are_has_own``.
+# The names HA gives DSMR's two power sensors, per language (HA 2025.1).
+# ``test_the_names_are_has_own`` checks the premise against HA's own files.
 _NAMES = {
     "en": ("Power consumption", "Power production"),
     "nl": ("Energieverbruik", "Energieproductie"),
@@ -95,6 +95,7 @@ def _entry(entity_id, translation_key, key=None):
     e.translation_key = translation_key
     e.unique_id = f"{_SERIAL}_{key or translation_key}"
     e.device_id = _METER
+    e.disabled_by = None
     return e
 
 
@@ -232,15 +233,127 @@ class TestTheRosterCarriesThePair:
         }
 
     def test_the_names_are_has_own(self):
-        """The names above are HA's, not ours: read from the installed core
-        integration's translation files, and its keys from its strings."""
+        """The premise, read from the installed core integration: the keys
+        are DSMR's own, and its Dutch and German names hold none of the
+        English words the name search looks for. Not the exact wording — a
+        translator may change that, and SEM does not care."""
         import homeassistant
         base = pathlib.Path(homeassistant.__file__).parent / "components" / "dsmr"
         strings = json.loads((base / "strings.json").read_text())["entity"]["sensor"]
         assert {"current_electricity_usage",
                 "current_electricity_delivery"} <= set(strings)
-        for lang, (use, prod) in _NAMES.items():
+        words = sr_mod.IMPORT_PATTERNS + sr_mod.EXPORT_PATTERNS
+        for lang in ("nl", "de"):
             tr = json.loads((base / "translations" / f"{lang}.json").read_text())
             sensors = tr["entity"]["sensor"]
-            assert sensors["current_electricity_usage"]["name"] == use, lang
-            assert sensors["current_electricity_delivery"]["name"] == prod, lang
+            for key in ("current_electricity_usage", "current_electricity_delivery"):
+                slug = _slug(sensors[key]["name"])
+                assert not any(w in slug for w in words), (lang, slug)
+        for use, prod in (_NAMES["nl"], _NAMES["de"]):
+            assert not any(w in _slug(n) for w in words for n in (use, prod))
+        assert any(w in _slug(_NAMES["en"][0]) for w in sr_mod.IMPORT_PATTERNS)
+
+class TestADeadRowIsNotAMeter:
+    """(review) The declared tier walked every registry row. A DSMR entry
+    that is disabled, or that HA only restored because its integration did
+    not set it up, ended the search — and the meter that works was never
+    looked for."""
+
+    def _with_working_meter(self, monkeypatch):
+        # The Dutch DSMR rows are dead; an English-named pair on the
+        # counters' own device is the meter that works.
+        meter = _Meter(monkeypatch, "nl", import_kw=1.2, export_kw=0.0)
+        meter.states["sensor.p1_power_consumption"] = _state(
+            800, device_class="power")
+        meter.states["sensor.p1_power_production"] = _state(
+            0, device_class="power")
+        return meter
+
+    def test_a_disabled_dsmr_row_is_skipped(self, monkeypatch):
+        meter = self._with_working_meter(monkeypatch)
+        for eid in (meter.imp, meter.exp):
+            meter.registry.entities[eid].disabled_by = "config_entry"
+            del meter.states[eid]          # a disabled entity has no state
+        power = meter.read()
+        assert meter.picks == ("sensor.p1_power_consumption",
+                               "sensor.p1_power_production", "same-device")
+        assert power.grid_power == pytest.approx(-800.0)
+
+    def test_a_restored_dsmr_row_is_skipped(self, monkeypatch):
+        meter = self._with_working_meter(monkeypatch)
+        for eid in (meter.imp, meter.exp):
+            meter.states[eid] = _state("unavailable", "kW", device_class="power")
+            meter.states[eid].attributes["restored"] = True
+        power = meter.read()
+        assert meter.picks[:2] == ("sensor.p1_power_consumption",
+                                   "sensor.p1_power_production")
+        assert power.grid_power == pytest.approx(-800.0)
+
+    def test_a_row_with_no_state_yet_still_counts(self, monkeypatch):
+        """Cold start: the meter has not loaded, the registry answers."""
+        meter = _Meter(monkeypatch, "de", import_kw=0.0, export_kw=0.0)
+        for eid in (meter.imp, meter.exp):
+            del meter.states[eid]
+        with patch.object(sr_mod.er, "async_get", return_value=meter.registry):
+            imp, exp, on_device = meter.reader._declared_split_grid_power(
+                meter.reader._energy_dashboard_config)
+        assert (imp, exp, on_device) == (meter.imp, meter.exp, True)
+
+
+class TestADeclaredPairReplacesAGuess:
+    """(review) A name guess held before the meter appeared was kept: the
+    adoption gate upgraded only on a same-device name match, and a Dutch
+    meter never gives one."""
+
+    def test_the_gate_takes_a_declared_pair(self, monkeypatch):
+        meter = _Meter(monkeypatch, "nl", import_kw=0.0, export_kw=0.0)
+        meter.states["sensor.heat_pump_power_consumption"] = _state(
+            400, device_class="power")
+        disc = {"import": "sensor.heat_pump_power_consumption",
+                "export": None, "confidence": "any-device"}
+        assert meter.reader._should_adopt_split_grid_picks(disc, "declared")
+        assert not meter.reader._should_adopt_split_grid_picks(
+            disc, "declared-elsewhere")
+
+
+class TestTheCardKnowsTheGridSensorsInUse:
+    """(review) The Config card hides a proposal for an entity SEM already
+    reads. The grid's two sensors were not on that list, so a DSMR meter
+    SEM reads got two "Use" buttons — and one click on half the pair sets
+    export to 0 W."""
+
+    def _used(self, ed, disc):
+        from types import SimpleNamespace
+
+        from custom_components.solar_energy_management.coordinator.coordinator import (
+            SEMCoordinator,
+        )
+        coord = SEMCoordinator.__new__(SEMCoordinator)
+        coord.config = {}
+        coord._sensor_reader = SimpleNamespace(
+            config=SimpleNamespace(), _energy_dashboard_config=ed,
+            _split_grid_discovery=disc)
+        return coord._configured_entity_ids()
+
+    def test_the_pair_sem_found_and_trusts(self):
+        from types import SimpleNamespace
+        disc = {"import": "sensor.electricity_meter_energieverbruik",
+                "export": "sensor.electricity_meter_energieproductie",
+                "confidence": "declared"}
+        used = self._used(SimpleNamespace(), disc)
+        assert {disc["import"], disc["export"]} <= used
+
+    def test_an_unproven_guess_is_not_in_use(self):
+        from types import SimpleNamespace
+        disc = {"import": "sensor.heat_pump_power_consumption",
+                "export": None, "confidence": "any-device"}
+        assert disc["import"] not in self._used(SimpleNamespace(), disc)
+
+    def test_the_dashboards_two_sensor_pair_and_list(self):
+        from types import SimpleNamespace
+        ed = SimpleNamespace(grid_power_from="sensor.grid_in",
+                             grid_power_to="sensor.grid_out",
+                             grid_power_list=["sensor.meter_a", "sensor.meter_b"])
+        used = self._used(ed, None)
+        assert {"sensor.grid_in", "sensor.grid_out",
+                "sensor.meter_a", "sensor.meter_b"} <= used
