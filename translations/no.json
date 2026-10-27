@@ -1979,6 +1979,10 @@
       "title": "Ingen effektsensor for {energy_entity}",
       "description": "Energi-dashbordet teller **{energy_entity}** i kWh, men SEM fant ingen effektsensor (W) for den. SEM leser derfor denne effekten som 0 W, og energiflytene og overskuddet blir feil. Rett det ved å legge effektsensoren til denne oppføringen i Energi-dashbordet. Eller åpne SEM-dashbordet, fanen ⚙ **Konfigurasjon**, og velg **Alle innstillinger** øverst. Sett deretter sensoren i delen **Sensorkilder**. Finnes det ingen effektsensor, kan du ignorere denne meldingen."
     },
+    "power_sensor_not_found_unit": {
+      "title": "Ingen effektsensor for {energy_entity}",
+      "description": "Energi-dashbordet teller **{energy_entity}** i kWh, men SEM fant ingen effektsensor (W) for den. SEM legger derfor bare sammen de andre sol- eller batterioppføringene, og energiflytene og overskuddet blir feil. Rett det ved å legge effektsensoren til denne oppføringen i Energi-dashbordet. Finnes det ingen effektsensor, kan du ignorere denne meldingen."
+    },
     "charger_device_gone": {
       "title": "Lader {name}: enheten mangler",
       "description": "Home Assistant har ikke lenger enheten bak laderen {name}. SEM kan ikke styre den. Fjern laderen i SEM, eller legg til enheten igjen."

@@ -1979,6 +1979,10 @@
       "title": "Žádný senzor výkonu pro {energy_entity}",
       "description": "Panel Energie počítá **{energy_entity}** v kWh, ale SEM pro něj nenašel žádný senzor výkonu (W). SEM proto čte tento výkon jako 0 W a toky energie i přebytek jsou špatně. Opravíte to přidáním senzoru výkonu k této položce v panelu Energie. Nebo otevřete dashboard SEM, kartu ⚙ **Konfigurace**, a nahoře zvolte **Všechna nastavení**. Pak nastavte senzor v sekci **Zdroje senzorů**. Pokud žádný senzor výkonu neexistuje, můžete toto upozornění ignorovat."
     },
+    "power_sensor_not_found_unit": {
+      "title": "Žádný senzor výkonu pro {energy_entity}",
+      "description": "Panel Energie počítá **{energy_entity}** v kWh, ale SEM pro něj nenašel žádný senzor výkonu (W). SEM proto sčítá jen ostatní položky solární výroby nebo baterií, takže toky energie i přebytek jsou špatně. Opravíte to přidáním senzoru výkonu k této položce v panelu Energie. Pokud žádný senzor výkonu neexistuje, můžete toto upozornění ignorovat."
+    },
     "charger_device_gone": {
       "title": "Nabíječka {name}: chybí zařízení",
       "description": "Home Assistant už nemá zařízení nabíječky {name}. SEM ji nemůže řídit. Odeberte nabíječku v SEM, nebo zařízení znovu přidejte."

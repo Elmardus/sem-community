@@ -1979,6 +1979,10 @@
       "title": "Nessun sensore di potenza per {energy_entity}",
       "description": "La dashboard Energia conta **{energy_entity}** in kWh, ma SEM non ha trovato alcun sensore di potenza (W) per esso. SEM legge questa potenza come 0 W, quindi i flussi di energia e il surplus sono sbagliati. Per correggere, aggiungi il sensore di potenza a questa voce nella dashboard Energia. Oppure apri la dashboard SEM, scheda ⚙ **Configurazione**, e scegli **Tutte le impostazioni** in alto. Poi imposta il sensore nella sezione **Sorgenti dei sensori**. Se non esiste un sensore di potenza, puoi ignorare questo avviso."
     },
+    "power_sensor_not_found_unit": {
+      "title": "Nessun sensore di potenza per {energy_entity}",
+      "description": "La dashboard Energia conta **{energy_entity}** in kWh, ma SEM non ha trovato alcun sensore di potenza (W) per esso. SEM somma solo le altre voci solari o della batteria, quindi i flussi di energia e il surplus sono sbagliati. Per correggere, aggiungi il sensore di potenza a questa voce nella dashboard Energia. Se non esiste un sensore di potenza, puoi ignorare questo avviso."
+    },
     "charger_device_gone": {
       "title": "Caricatore {name}: dispositivo mancante",
       "description": "Home Assistant non ha più il dispositivo del caricatore {name}. SEM non può comandarlo. Rimuovi il caricatore in SEM o aggiungi di nuovo il dispositivo."

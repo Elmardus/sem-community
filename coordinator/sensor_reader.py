@@ -30,7 +30,9 @@ from .units import (
     temperature_state_to_celsius,
 )
 
-from ..ha_energy_reader import battery_units, unit_energy_counters
+from ..ha_energy_reader import (
+    battery_units, unit_energy_counters, unsourced_counters,
+)
 from ..utils.log_gate import log_on_change
 from ..utils.own_entity import is_sem_entity
 from ..consts.core import (
@@ -709,10 +711,13 @@ class SensorReader:
         #: SEM reads from no power sensor: source → its kWh counter. None when
         #: the dashboard path did not run this cycle — no answer, not "found".
         self._unsourced_power: Optional[dict[str, str]] = None
+        #: (#1226) This cycle's sources of those whose other units read.
+        self._unsourced_beside: set[str] = set()
         #: (#1188) When each source was first seen with no sensor, once HA runs.
         self._unsourced_since: dict[str, float] = {}
-        #: (#1188) The counter each raised Repair names.
-        self._unsourced_raised: dict[str, str] = {}
+        #: (#1188) The counter each raised Repair names (#1226: and whether
+        #: other units of the source read — its text says so).
+        self._unsourced_raised: dict[str, tuple[str, bool]] = {}
         #: (#1188, class 84) The sources this reader has found once. Each
         #: source's first "found" clears what an options reload left: the
         #: Repair outlives the reader.
@@ -2579,6 +2584,8 @@ class SensorReader:
         # (#1188) Each source the dashboard counts but SEM reads from nothing.
         unsourced: dict[str, str] = {}
         self._unsourced_power = unsourced
+        # (#1226) …of those, the ones whose other units read
+        self._unsourced_beside = beside = set()
 
         # Solar power — sum all inverters if multiple configured.
         # v1.7.0 arch/multi-inverter-battery-primary: also populate
@@ -2618,6 +2625,17 @@ class SensorReader:
             readings.solar_power = self._read_solar_power(ed.solar_power)
         elif ed.solar_energy:
             unsourced["solar"] = ed.solar_energy
+        # (#1226) An inverter the derive found no power sensor for reads 0 W
+        # in the sum of the others. The Config card pick stands for all of
+        # solar only when no per-inverter sum is read, and only when it is
+        # not one inverter's own sensor: setup saves the dashboard's first.
+        missing = unsourced_counters(ed, "solar")
+        pick = self.config.solar_power_sensor
+        if missing and (per_inverter_total is not None or not pick
+                        or pick in ed.solar_power_list):
+            unsourced["solar"] = ", ".join(missing)
+            if ed.solar_power_list:
+                beside.add("solar")
 
         # v1.7.0 / #312: per-PV-string power. Gated on len ≥ 2 — single-
         # string setups get nothing here and downstream readers fall
@@ -3001,6 +3019,16 @@ class SensorReader:
         elif ed.battery_charge_energy or ed.battery_discharge_energy:
             unsourced["battery"] = (ed.battery_charge_energy
                                     or ed.battery_discharge_energy)
+        # (#1226) …and a battery the derive found nothing for, beside others
+        missing = unsourced_counters(ed, "battery")
+        pick = self.config.battery_power_sensor
+        own = battery_units(ed) + [
+            e for pair in (ed.battery_power_pairs or []) for e in pair]
+        if missing and (per_battery_total is not None or not pick
+                        or pick in own):
+            unsourced["battery"] = ", ".join(missing)
+            if own:
+                beside.add("battery")
         self._move_lock_learned_on_flip(ed, read_alone,
                                         per_battery=per_battery_total is not None)
         self._drop_locks_on_other_counters(
@@ -4553,6 +4581,7 @@ class SensorReader:
         unsourced = self._unsourced_power
         if unsourced is None:
             return
+        beside = getattr(self, "_unsourced_beside", None) or set()
         running = getattr(self.hass, "state", None) is CoreState.running
         now = time.monotonic()
         for source in _ri.POWER_SOURCES:
@@ -4572,15 +4601,18 @@ class SensorReader:
             since = self._unsourced_since.setdefault(source, now)
             if now - since < _ri.UNAVAILABLE_REPAIR_THRESHOLD_S:
                 continue
-            if (self._unsourced_raised.get(source) != counter
+            told = (counter, source in beside)
+            if (self._unsourced_raised.get(source) != told
                     and _ri.raise_power_sensor_not_found(
-                        self.hass, source, energy_entity=counter)):
-                self._unsourced_raised[source] = counter
+                        self.hass, source, energy_entity=counter,
+                        beside=source in beside)):
+                self._unsourced_raised[source] = told
                 _LOGGER.warning(
                     "No %s power sensor: the Energy Dashboard counts %s in kWh, "
-                    "but SEM found no power sensor for it, so %s power reads "
-                    "0 W. Add one in the Energy Dashboard or in SEM's Sensor "
-                    "sources. (#1188)", source, counter, source)
+                    "but SEM found no power sensor for it, so SEM reads it as "
+                    "0 W. Add one in the Energy Dashboard%s. (#1188, #1226)",
+                    source, counter,
+                    "" if source in beside else " or in SEM's Sensor sources")
 
     def _report_split_grid_confidence(self, disc: dict) -> None:
         """(#911) An ``any-device`` adoption is a GUESS — pattern-matched
