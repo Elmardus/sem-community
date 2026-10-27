@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 Service-controlled heat pumps now report their commanded SG-Ready state, so a renewal does not cancel a boost (#1231).
 - 🐛 **Solar made while Home Assistant was down now counts after a restart after dark** (#1187). Before, that day's solar was lost and home fell to 0.
 - 🐛 **A Repair now tells you when SEM finds no grid, solar or battery power sensor** (#1188). Before, that power read 0 W without notice.
 - 🐛 **A DSMR smart meter on a Dutch or German Home Assistant now shows grid power** (#1189). Before, grid power read 0 W.
