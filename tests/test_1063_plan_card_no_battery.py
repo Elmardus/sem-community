@@ -27,10 +27,12 @@ kWh overnight — the promised refill never came".
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+import pytest
 
 from custom_components.solar_energy_management.const import (
     DEFAULT_BATTERY_CAPACITY_KWH,
@@ -396,9 +398,7 @@ class TestPlanReadinessUsesBatteryPresence:
     """
 
     @staticmethod
-    def _tick_tries_a_stamp(presence, saved, *, unavailable=True,
-                           soc_read=None, detected=None):
-        tried = []
+    def _coordinator(presence, saved, *, soc_read=None, detected=None):
         fake = MagicMock()
         fake.config = {} if saved is None else {"battery_capacity_kwh": saved}
         fake.setup_presence = presence
@@ -416,15 +416,56 @@ class TestPlanReadinessUsesBatteryPresence:
         fake._energy_plan_demand_signature.return_value = ("sig",)
         type(fake).battery_capacity_kwh = property(
             lambda s: SEMCoordinator.battery_capacity_kwh.fget(s))
+        return fake
 
-        def _shadow(*a, **k):
-            tried.append(1)
-            return False
-        fake._shadow_energy_plan.side_effect = _shadow
+    @classmethod
+    def _tick_tries_a_stamp(cls, presence, saved, *, unavailable=True,
+                           soc_read=None, detected=None):
+        fake = cls._coordinator(presence, saved, soc_read=soc_read,
+                                detected=detected)
+        fake._shadow_energy_plan.return_value = False
         power = SimpleNamespace(battery_soc=0.0,
                                 battery_soc_unavailable=unavailable)
         SEMCoordinator._energy_plan_tick(fake, power, MagicMock())
-        return bool(tried)
+        return fake._shadow_energy_plan.called
+
+    @pytest.mark.parametrize("soc", [0.0, 63.0])
+    def test_real_battery_waits_for_soc_after_restart(self, monkeypatch, soc):
+        """A known battery stays present while its SOC sensor reads unknown."""
+        fake = self._coordinator(PRESENT, 15.0)
+        fake.config["battery_soc_sensor"] = "sensor.home_battery_soc"
+        fake._storage = None
+        fake._shadow_energy_plan.return_value = True
+        power = SimpleNamespace(battery_soc=0.0, battery_soc_unavailable=True)
+        energy = SimpleNamespace()
+        now = datetime.fromisoformat("2026-10-27T12:00:00+01:00")
+        monkeypatch.setattr(coord_mod.dt_util, "now", lambda: now)
+
+        # The reader uses 0.0 plus the unavailable flag for an unknown SOC.
+        # Repeat normal update cycles for the first minute after restart.
+        for _ in range(6):
+            SEMCoordinator._energy_plan_tick(fake, power, energy)
+            fake._shadow_energy_plan.assert_not_called()
+            assert fake._shadow_plan_date is None
+            assert fake._plan_ev_conn_sig is None
+            now += timedelta(seconds=10)
+
+        # The same coordinator retries when the first valid SOC arrives.
+        # Zero is a real reading too, not another unknown sample.
+        power.battery_soc = soc
+        power.battery_soc_unavailable = False
+        fake._sensor_reader._last_valid_soc = soc
+        SEMCoordinator._energy_plan_tick(fake, power, energy)
+        fake._shadow_energy_plan.assert_called_once_with(
+            fake._battery_charge_scheduler, energy, power,
+            replan_cause="initial")
+        assert fake._shadow_plan_date is not None
+        assert fake._plan_ev_conn_sig == ("sig",)
+
+        # An unchanged next cycle keeps the successful stamp.
+        now += timedelta(seconds=10)
+        SEMCoordinator._energy_plan_tick(fake, power, energy)
+        assert fake._shadow_energy_plan.call_count == 1
 
     def test_absent_battery_with_saved_size_can_plan(self):
         assert self._tick_tries_a_stamp(ABSENT, 15.0) is True

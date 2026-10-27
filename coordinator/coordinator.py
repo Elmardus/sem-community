@@ -11454,7 +11454,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # walked from nothing, takeover landed on the FIRST slot
                 # and every battery demand yielded a battery that was
                 # actually at 63 %. A silent sensor is not an empty
-                # battery (#638 finding #3) — wait for the reading; the
+                # battery (#638 finding #3) — wait for the reading.
                 # A saved capacity is not proof of a battery (#1063): the
                 # settings flow saves a default even on battery-less homes.
                 # Use the same presence check as battery_capacity_kwh so
