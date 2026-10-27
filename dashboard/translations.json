@@ -398,10 +398,12 @@
     "co2_today": "CO₂ dnes",
     "co2_yearly": "CO₂ ročně",
     "comfort_hint": "Přebytek předzásobí komfort po zelenou značku; za jantarovým limitem zařízení běží ze zdrojů povolených výše.",
+    "comfort_example": "Příklad: Udržovat na {keep}, navíc {extra}. Přebytek smí ohřát až na {max}.",
+    "comfort_both_limits": "Platí i Cíl solárního ohřevu v kartě Konfigurace. SEM se zastaví na nižší z obou hodnot.",
     "comfort_keep_at": "Udržovat na",
     "comfort_limit_label": "Spustit ihned za",
     "comfort_own_thermometer": "Vlastní teploměr zařízení",
-    "comfort_precool_by": "Předzásobit o",
+    "comfort_precool_by": "Navíc z přebytku",
     "comfort_section": "Komfort",
     "comfort_thermometer": "Teploměr",
     "commanded_current": "Požadovaný proud",
@@ -1994,7 +1996,8 @@
     "config_check_question": "Odpovídá to vašemu elektroměru nebo energetické aplikaci? Pokud je směr špatně, klepněte níže.",
     "config_check_grid_wrong": "Směr sítě je špatně",
     "config_check_battery_wrong": "Směr baterie je špatně",
-    "config_check_wrong_sensor": "Špatný senzor? Vyberte ho ve Všech nastaveních."
+    "config_check_wrong_sensor": "Špatný senzor? Vyberte ho ve Všech nastaveních.",
+    "cfg_in_use_hint": "Používá se: {entity}. Tento formulář ji jen přepisuje. Teplá voda a tepelné čerpadlo se nastavují v kartě Konfigurace."
   },
   "da": {
     "% of limit": "% af grænse",
@@ -2395,10 +2398,12 @@
     "co2_today": "CO₂ i dag",
     "co2_yearly": "CO₂ årligt",
     "comfort_hint": "Overskud lagrer komfort til det grønne mærke; forbi den gule grænse kører enheden på de kilder, du tillader ovenfor.",
+    "comfort_example": "Eksempel: Hold på {keep}, ekstra {extra}. Overskud må varme op til {max}.",
+    "comfort_both_limits": "Solopvarmningsmålet under fanen Konfiguration gælder også. SEM stopper ved den laveste af de to.",
     "comfort_keep_at": "Hold på",
     "comfort_limit_label": "Kør straks over",
     "comfort_own_thermometer": "Enhedens eget termometer",
-    "comfort_precool_by": "Forudkøl med",
+    "comfort_precool_by": "Ekstra fra overskud",
     "comfort_section": "Komfort",
     "comfort_thermometer": "Termometer",
     "commanded_current": "Anmodet strøm",
@@ -3991,7 +3996,8 @@
     "config_check_question": "Passer det med din måler eller energi-app? Er en retning forkert, så tryk nedenfor.",
     "config_check_grid_wrong": "Netretningen er forkert",
     "config_check_battery_wrong": "Batteriretningen er forkert",
-    "config_check_wrong_sensor": "En forkert sensor? Vælg den under Alle indstillinger."
+    "config_check_wrong_sensor": "En forkert sensor? Vælg den under Alle indstillinger.",
+    "cfg_in_use_hint": "I brug: {entity}. Denne formular tilsidesætter den kun. Varmt vand og varmepumpe indstilles under fanen Konfiguration."
   },
   "de": {
     "% of limit": "% des Limits",
@@ -4392,10 +4398,12 @@
     "co2_today": "CO₂ heute",
     "co2_yearly": "CO₂ jährlich",
     "comfort_hint": "Überschuss hält Komfort bis zur grünen Marke vor; jenseits der gelben Grenze läuft das Gerät aus den oben erlaubten Quellen.",
+    "comfort_example": "Beispiel: Halten auf {keep}, extra {extra}. Überschuss darf bis {max} aufheizen.",
+    "comfort_both_limits": "Das Solar-Heizziel im Tab Konfiguration gilt ebenfalls. SEM stoppt beim niedrigeren der beiden Werte.",
     "comfort_keep_at": "Halten auf",
     "comfort_limit_label": "Sofort ab",
     "comfort_own_thermometer": "Eigenes Thermometer des Geräts",
-    "comfort_precool_by": "Vorhalten um",
+    "comfort_precool_by": "Extra aus Überschuss",
     "comfort_section": "Komfort",
     "comfort_thermometer": "Thermometer",
     "commanded_current": "Befohlener Strom",
@@ -5988,7 +5996,8 @@
     "config_check_question": "Passt das zu deinem Zähler oder deiner Energie-App? Wenn eine Richtung falsch ist, tippe unten.",
     "config_check_grid_wrong": "Netz-Richtung ist falsch",
     "config_check_battery_wrong": "Batterie-Richtung ist falsch",
-    "config_check_wrong_sensor": "Ein falscher Sensor? Wähle ihn in Alle Einstellungen."
+    "config_check_wrong_sensor": "Ein falscher Sensor? Wähle ihn in Alle Einstellungen.",
+    "cfg_in_use_hint": "In Benutzung: {entity}. Dieses Formular überschreibt sie nur. Warmwasser und Wärmepumpe stellst du im Tab Konfiguration ein."
   },
   "en": {
     "% of limit": "% of limit",
@@ -6389,10 +6398,12 @@
     "co2_today": "CO₂ today",
     "co2_yearly": "CO₂ yearly",
     "comfort_hint": "Surplus banks comfort to the green mark; past the amber limit the unit runs from the sources you allow above.",
+    "comfort_example": "Example: Keep at {keep}, extra {extra}. Surplus may heat up to {max}.",
+    "comfort_both_limits": "The Solar Heating Target in the Configuration tab also applies. SEM stops at the lower of the two.",
     "comfort_keep_at": "Keep at",
     "comfort_limit_label": "Run now past",
     "comfort_own_thermometer": "device's own thermometer",
-    "comfort_precool_by": "Bank by",
+    "comfort_precool_by": "Extra from surplus",
     "comfort_section": "Comfort",
     "comfort_thermometer": "Thermometer",
     "commanded_current": "Commanded current",
@@ -7985,7 +7996,8 @@
     "config_check_question": "Does this match your meter or energy app? If a direction is wrong, tap below.",
     "config_check_grid_wrong": "Grid direction is wrong",
     "config_check_battery_wrong": "Battery direction is wrong",
-    "config_check_wrong_sensor": "A wrong sensor? Pick it in All settings."
+    "config_check_wrong_sensor": "A wrong sensor? Pick it in All settings.",
+    "cfg_in_use_hint": "In use: {entity}. This form only overrides it. Hot water and heat pump are set in the Configuration tab."
   },
   "es": {
     "% of limit": "% del límite",
@@ -8386,10 +8398,12 @@
     "co2_today": "CO₂ hoy",
     "co2_yearly": "CO₂ anual",
     "comfort_hint": "El excedente reserva confort hasta la marca verde; más allá del límite ámbar, el aparato usa las fuentes permitidas arriba.",
+    "comfort_example": "Ejemplo: Mantener en {keep}, extra {extra}. El excedente puede calentar hasta {max}.",
+    "comfort_both_limits": "También cuenta el objetivo de calentamiento solar de la pestaña Configuración. SEM se detiene en el menor de los dos.",
     "comfort_keep_at": "Mantener a",
     "comfort_limit_label": "Forzar más allá de",
     "comfort_own_thermometer": "Termómetro del propio aparato",
-    "comfort_precool_by": "Anticipar",
+    "comfort_precool_by": "Extra del excedente",
     "comfort_section": "Confort",
     "comfort_thermometer": "Termómetro",
     "commanded_current": "Corriente solicitada",
@@ -9982,7 +9996,8 @@
     "config_check_question": "¿Coincide con tu contador o tu app de energía? Si una dirección está mal, pulsa abajo.",
     "config_check_grid_wrong": "La dirección de la red está mal",
     "config_check_battery_wrong": "La dirección de la batería está mal",
-    "config_check_wrong_sensor": "¿Un sensor incorrecto? Elígelo en Todos los ajustes."
+    "config_check_wrong_sensor": "¿Un sensor incorrecto? Elígelo en Todos los ajustes.",
+    "cfg_in_use_hint": "En uso: {entity}. Este formulario solo la sustituye. El agua caliente y la bomba de calor se ajustan en la pestaña Configuración."
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -10383,10 +10398,12 @@
     "co2_today": "CO₂ tänään",
     "co2_yearly": "CO₂ vuosittain",
     "comfort_hint": "Ylijäämä varaa mukavuutta vihreään merkkiin asti; keltaisen rajan yli laite käy yllä sallituilla lähteillä.",
+    "comfort_example": "Esimerkki: Pidä {keep}, lisää {extra}. Ylijäämä saa lämmittää jopa {max}.",
+    "comfort_both_limits": "Myös Asetukset-välilehden aurinkolämmityksen tavoite on voimassa. SEM pysähtyy kahdesta pienempään.",
     "comfort_keep_at": "Pidä lämpötilassa",
     "comfort_limit_label": "Käynnistä heti yli",
     "comfort_own_thermometer": "Laitteen oma lämpömittari",
-    "comfort_precool_by": "Esivaraa",
+    "comfort_precool_by": "Lisää ylijäämästä",
     "comfort_section": "Mukavuus",
     "comfort_thermometer": "Lämpömittari",
     "commanded_current": "Pyydetty virta",
@@ -11979,7 +11996,8 @@
     "config_check_question": "Vastaako tämä mittariasi tai energiasovellustasi? Jos suunta on väärä, napauta alta.",
     "config_check_grid_wrong": "Verkon suunta on väärä",
     "config_check_battery_wrong": "Akun suunta on väärä",
-    "config_check_wrong_sensor": "Väärä anturi? Valitse se kohdassa Kaikki asetukset."
+    "config_check_wrong_sensor": "Väärä anturi? Valitse se kohdassa Kaikki asetukset.",
+    "cfg_in_use_hint": "Käytössä: {entity}. Tämä lomake vain ohittaa sen. Lämmin vesi ja lämpöpumppu asetetaan Asetukset-välilehdellä."
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -12380,10 +12398,12 @@
     "co2_today": "CO₂ aujourd'hui",
     "co2_yearly": "CO₂ annuel",
     "comfort_hint": "Le surplus anticipe le confort jusqu'au repère vert ; au-delà de la limite ambre, l'appareil utilise les sources autorisées ci-dessus.",
+    "comfort_example": "Exemple : Maintenir à {keep}, extra {extra}. Le surplus peut chauffer jusqu'à {max}.",
+    "comfort_both_limits": "L'objectif de chauffe solaire de l'onglet Configuration compte aussi. SEM s'arrête au plus bas des deux.",
     "comfort_keep_at": "Maintenir à",
     "comfort_limit_label": "Marche forcée au-delà de",
     "comfort_own_thermometer": "Thermomètre de l'appareil",
-    "comfort_precool_by": "Anticiper de",
+    "comfort_precool_by": "Extra grâce au surplus",
     "comfort_section": "Confort",
     "comfort_thermometer": "Thermomètre",
     "commanded_current": "Courant commandé",
@@ -13976,7 +13996,8 @@
     "config_check_question": "Cela correspond-il à votre compteur ou à votre application énergie ? Si un sens est faux, appuyez ci-dessous.",
     "config_check_grid_wrong": "Le sens du réseau est faux",
     "config_check_battery_wrong": "Le sens de la batterie est faux",
-    "config_check_wrong_sensor": "Un mauvais capteur ? Choisissez-le dans Tous les réglages."
+    "config_check_wrong_sensor": "Un mauvais capteur ? Choisissez-le dans Tous les réglages.",
+    "cfg_in_use_hint": "Utilisé : {entity}. Ce formulaire ne fait que la remplacer. L'eau chaude et la pompe à chaleur se règlent dans l'onglet Configuration."
   },
   "hu": {
     "% of limit": "% a határból",
@@ -14377,10 +14398,12 @@
     "co2_today": "CO₂ ma",
     "co2_yearly": "CO₂ évente",
     "comfort_hint": "A többlet a zöld jelig tárol komfortot; a borostyán határon túl a készülék a fent engedélyezett forrásokból megy.",
+    "comfort_example": "Példa: Tartás {keep}, extra {extra}. A többlet {max}-ig melegíthet.",
+    "comfort_both_limits": "A Konfiguráció lapon megadott napelemes fűtési célérték is érvényes. A SEM a kettő közül az alacsonyabbnál megáll.",
     "comfort_keep_at": "Tartás",
     "comfort_limit_label": "Azonnal indul e felett",
     "comfort_own_thermometer": "A készülék saját hőmérője",
-    "comfort_precool_by": "Előhűtés",
+    "comfort_precool_by": "Extra a többletből",
     "comfort_section": "Komfort",
     "comfort_thermometer": "Hőmérő",
     "commanded_current": "Kért áram",
@@ -15973,7 +15996,8 @@
     "config_check_question": "Egyezik ez a mérőddel vagy az energia appoddal? Ha egy irány hibás, koppints lent.",
     "config_check_grid_wrong": "A hálózat iránya hibás",
     "config_check_battery_wrong": "Az akkumulátor iránya hibás",
-    "config_check_wrong_sensor": "Hibás érzékelő? Válaszd ki az Összes beállításban."
+    "config_check_wrong_sensor": "Hibás érzékelő? Válaszd ki az Összes beállításban.",
+    "cfg_in_use_hint": "Használatban: {entity}. Ez az űrlap csak felülírja. A melegvizet és a hőszivattyút a Konfiguráció lapon állíthatod be."
   },
   "it": {
     "% of limit": "% del limite",
@@ -16374,10 +16398,12 @@
     "co2_today": "CO₂ oggi",
     "co2_yearly": "CO₂ annuale",
     "comfort_hint": "Il surplus accumula comfort fino al segno verde; oltre il limite ambra l'unità usa le fonti consentite sopra.",
+    "comfort_example": "Esempio: Mantieni a {keep}, extra {extra}. Il surplus può scaldare fino a {max}.",
+    "comfort_both_limits": "Vale anche l'obiettivo di riscaldamento solare nella scheda Configurazione. SEM si ferma al più basso dei due.",
     "comfort_keep_at": "Mantieni a",
     "comfort_limit_label": "Forza oltre",
     "comfort_own_thermometer": "Termometro del dispositivo",
-    "comfort_precool_by": "Anticipa di",
+    "comfort_precool_by": "Extra dal surplus",
     "comfort_section": "Comfort",
     "comfort_thermometer": "Termometro",
     "commanded_current": "Corrente richiesta",
@@ -17970,7 +17996,8 @@
     "config_check_question": "Corrisponde al tuo contatore o alla tua app energia? Se una direzione è sbagliata, tocca qui sotto.",
     "config_check_grid_wrong": "La direzione della rete è sbagliata",
     "config_check_battery_wrong": "La direzione della batteria è sbagliata",
-    "config_check_wrong_sensor": "Un sensore sbagliato? Sceglilo in Tutte le impostazioni."
+    "config_check_wrong_sensor": "Un sensore sbagliato? Sceglilo in Tutte le impostazioni.",
+    "cfg_in_use_hint": "In uso: {entity}. Questo modulo la sostituisce soltanto. Acqua calda e pompa di calore si impostano nella scheda Configurazione."
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -18371,10 +18398,12 @@
     "co2_today": "CO₂ vandaag",
     "co2_yearly": "CO₂ jaarlijks",
     "comfort_hint": "Overschot buffert comfort tot de groene markering; voorbij de oranje limiet draait het apparaat op de hierboven toegestane bronnen.",
+    "comfort_example": "Voorbeeld: Houd op {keep}, extra {extra}. Overschot mag opwarmen tot {max}.",
+    "comfort_both_limits": "De zonne-verwarmingsdoelwaarde op het tabblad Configuratie telt ook mee. SEM stopt bij de laagste van de twee.",
     "comfort_keep_at": "Houden op",
     "comfort_limit_label": "Direct draaien voorbij",
     "comfort_own_thermometer": "Eigen thermometer van het apparaat",
-    "comfort_precool_by": "Voorkoelen met",
+    "comfort_precool_by": "Extra uit overschot",
     "comfort_section": "Comfort",
     "comfort_thermometer": "Thermometer",
     "commanded_current": "Aangevraagde stroom",
@@ -19967,7 +19996,8 @@
     "config_check_question": "Klopt dit met je meter of energie-app? Is een richting verkeerd, tik dan hieronder.",
     "config_check_grid_wrong": "Netrichting is verkeerd",
     "config_check_battery_wrong": "Batterijrichting is verkeerd",
-    "config_check_wrong_sensor": "Een verkeerde sensor? Kies hem in Alle instellingen."
+    "config_check_wrong_sensor": "Een verkeerde sensor? Kies hem in Alle instellingen.",
+    "cfg_in_use_hint": "In gebruik: {entity}. Dit formulier overschrijft haar alleen. Warm water en warmtepomp stel je in op het tabblad Configuratie."
   },
   "no": {
     "% of limit": "% av grense",
@@ -20368,10 +20398,12 @@
     "co2_today": "CO₂ i dag",
     "co2_yearly": "CO₂ årlig",
     "comfort_hint": "Overskudd lagrer komfort til det grønne merket; forbi den gule grensen kjører enheten på kildene du tillater over.",
+    "comfort_example": "Eksempel: Hold på {keep}, ekstra {extra}. Overskudd kan varme opp til {max}.",
+    "comfort_both_limits": "Solvarmemålet i fanen Konfigurasjon gjelder også. SEM stopper ved den laveste av de to.",
     "comfort_keep_at": "Hold på",
     "comfort_limit_label": "Kjør straks over",
     "comfort_own_thermometer": "Enhetens eget termometer",
-    "comfort_precool_by": "Forhåndskjøl med",
+    "comfort_precool_by": "Ekstra fra overskudd",
     "comfort_section": "Komfort",
     "comfort_thermometer": "Termometer",
     "commanded_current": "Forespurt strøm",
@@ -21964,7 +21996,8 @@
     "config_check_question": "Stemmer dette med måleren eller energiappen din? Er en retning feil, trykk nedenfor.",
     "config_check_grid_wrong": "Nettretningen er feil",
     "config_check_battery_wrong": "Batteriretningen er feil",
-    "config_check_wrong_sensor": "En feil sensor? Velg den under Alle innstillinger."
+    "config_check_wrong_sensor": "En feil sensor? Velg den under Alle innstillinger.",
+    "cfg_in_use_hint": "I bruk: {entity}. Dette skjemaet overstyrer den bare. Varmtvann og varmepumpe stilles inn i fanen Konfigurasjon."
   },
   "pl": {
     "% of limit": "% limitu",
@@ -22365,10 +22398,12 @@
     "co2_today": "CO₂ dziś",
     "co2_yearly": "CO₂ rocznie",
     "comfort_hint": "Nadwyżka magazynuje komfort do zielonego znaku; powyżej bursztynowego limitu urządzenie korzysta ze źródeł dozwolonych powyżej.",
+    "comfort_example": "Przykład: Utrzymuj {keep}, dodatkowo {extra}. Nadwyżka może grzać do {max}.",
+    "comfort_both_limits": "Obowiązuje też cel ogrzewania solarnego z karty Konfiguracja. SEM zatrzymuje się na niższym z dwóch.",
     "comfort_keep_at": "Utrzymuj na",
     "comfort_limit_label": "Uruchom natychmiast powyżej",
     "comfort_own_thermometer": "Własny termometr urządzenia",
-    "comfort_precool_by": "Zmagazynuj o",
+    "comfort_precool_by": "Dodatkowo z nadwyżki",
     "comfort_section": "Komfort",
     "comfort_thermometer": "Termometr",
     "commanded_current": "Zadany prąd",
@@ -23961,7 +23996,8 @@
     "config_check_question": "Czy to zgadza się z licznikiem lub aplikacją energii? Jeśli kierunek jest zły, dotknij poniżej.",
     "config_check_grid_wrong": "Kierunek sieci jest zły",
     "config_check_battery_wrong": "Kierunek baterii jest zły",
-    "config_check_wrong_sensor": "Zły czujnik? Wybierz go w Wszystkie ustawienia."
+    "config_check_wrong_sensor": "Zły czujnik? Wybierz go w Wszystkie ustawienia.",
+    "cfg_in_use_hint": "W użyciu: {entity}. Ten formularz tylko ją zastępuje. Ciepłą wodę i pompę ciepła ustawiasz w karcie Konfiguracja."
   },
   "pt": {
     "% of limit": "% do limite",
@@ -24362,10 +24398,12 @@
     "co2_today": "CO₂ hoje",
     "co2_yearly": "CO₂ anual",
     "comfort_hint": "O excedente reserva conforto até à marca verde; além do limite âmbar, o aparelho usa as fontes permitidas acima.",
+    "comfort_example": "Exemplo: Manter em {keep}, extra {extra}. O excedente pode aquecer até {max}.",
+    "comfort_both_limits": "A meta de aquecimento solar do separador Configuração também conta. O SEM pára no menor dos dois.",
     "comfort_keep_at": "Manter em",
     "comfort_limit_label": "Forçar além de",
     "comfort_own_thermometer": "Termómetro do próprio aparelho",
-    "comfort_precool_by": "Antecipar em",
+    "comfort_precool_by": "Extra do excedente",
     "comfort_section": "Conforto",
     "comfort_thermometer": "Termómetro",
     "commanded_current": "Corrente solicitada",
@@ -25958,7 +25996,8 @@
     "config_check_question": "Corresponde ao seu contador ou app de energia? Se uma direção estiver errada, toque abaixo.",
     "config_check_grid_wrong": "A direção da rede está errada",
     "config_check_battery_wrong": "A direção da bateria está errada",
-    "config_check_wrong_sensor": "Um sensor errado? Escolha-o em Todas as definições."
+    "config_check_wrong_sensor": "Um sensor errado? Escolha-o em Todas as definições.",
+    "cfg_in_use_hint": "Em uso: {entity}. Este formulário apenas a substitui. A água quente e a bomba de calor definem-se no separador Configuração."
   },
   "ro": {
     "% of limit": "% din limită",
@@ -26359,10 +26398,12 @@
     "co2_today": "CO₂ azi",
     "co2_yearly": "CO₂ anual",
     "comfort_hint": "Surplusul stochează confort până la marcajul verde; peste limita chihlimbar, aparatul folosește sursele permise mai sus.",
+    "comfort_example": "Exemplu: Menține la {keep}, extra {extra}. Surplusul poate încălzi până la {max}.",
+    "comfort_both_limits": "Se aplică și ținta de încălzire solară din fila Configurare. SEM se oprește la cea mai mică dintre cele două.",
     "comfort_keep_at": "Menține la",
     "comfort_limit_label": "Pornește imediat peste",
     "comfort_own_thermometer": "Termometrul propriu al aparatului",
-    "comfort_precool_by": "Anticipează cu",
+    "comfort_precool_by": "Extra din surplus",
     "comfort_section": "Confort",
     "comfort_thermometer": "Termometru",
     "commanded_current": "Curent solicitat",
@@ -27955,7 +27996,8 @@
     "config_check_question": "Se potrivește cu contorul sau aplicația ta de energie? Dacă o direcție e greșită, atinge mai jos.",
     "config_check_grid_wrong": "Direcția rețelei e greșită",
     "config_check_battery_wrong": "Direcția bateriei e greșită",
-    "config_check_wrong_sensor": "Un senzor greșit? Alege-l în Toate setările."
+    "config_check_wrong_sensor": "Un senzor greșit? Alege-l în Toate setările.",
+    "cfg_in_use_hint": "În uz: {entity}. Acest formular doar o înlocuiește. Apa caldă și pompa de căldură se setează în fila Configurare."
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -28356,10 +28398,12 @@
     "co2_today": "CO₂ idag",
     "co2_yearly": "CO₂ årligen",
     "comfort_hint": "Överskott buffrar komfort till det gröna märket; förbi den bärnstensfärgade gränsen kör enheten på källorna du tillåter ovan.",
+    "comfort_example": "Exempel: Håll på {keep}, extra {extra}. Överskott får värma upp till {max}.",
+    "comfort_both_limits": "Solvärmemålet i fliken Konfiguration gäller också. SEM stannar vid det lägsta av de två.",
     "comfort_keep_at": "Håll på",
     "comfort_limit_label": "Kör direkt över",
     "comfort_own_thermometer": "Enhetens egen termometer",
-    "comfort_precool_by": "Förkyl med",
+    "comfort_precool_by": "Extra från överskott",
     "comfort_section": "Komfort",
     "comfort_thermometer": "Termometer",
     "commanded_current": "Begärd ström",
@@ -29952,7 +29996,8 @@
     "config_check_question": "Stämmer det med din mätare eller energiapp? Är en riktning fel, tryck nedan.",
     "config_check_grid_wrong": "Nätets riktning är fel",
     "config_check_battery_wrong": "Batteriets riktning är fel",
-    "config_check_wrong_sensor": "En fel sensor? Välj den under Alla inställningar."
+    "config_check_wrong_sensor": "En fel sensor? Välj den under Alla inställningar.",
+    "cfg_in_use_hint": "Används: {entity}. Det här formuläret åsidosätter den bara. Varmvatten och värmepump ställs in i fliken Konfiguration."
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -30353,10 +30398,12 @@
     "co2_today": "CO₂ 今日",
     "co2_yearly": "CO₂ 年度",
     "comfort_hint": "富余电力将舒适度储备至绿色标记；超过琥珀色限值后，设备将使用上方允许的电源运行。",
+    "comfort_example": "示例：保持 {keep}，额外 {extra}。盈余可加热至 {max}。",
+    "comfort_both_limits": "“配置”选项卡中的太阳能加热目标同样有效。SEM 在两者中较低的一个停止。",
     "comfort_keep_at": "保持在",
     "comfort_limit_label": "超过即运行",
     "comfort_own_thermometer": "设备自带温度计",
-    "comfort_precool_by": "预调",
+    "comfort_precool_by": "盈余额外加",
     "comfort_section": "舒适",
     "comfort_thermometer": "温度计",
     "commanded_current": "指令电流",
@@ -31949,6 +31996,7 @@
     "config_check_question": "这与你的电表或能源应用一致吗？如果方向不对，请点下面。",
     "config_check_grid_wrong": "电网方向不对",
     "config_check_battery_wrong": "电池方向不对",
-    "config_check_wrong_sensor": "传感器不对？在“所有设置”中选择。"
+    "config_check_wrong_sensor": "传感器不对？在“所有设置”中选择。",
+    "cfg_in_use_hint": "使用中：{entity}。此表单仅用于覆盖它。热水和热泵在“配置”选项卡中设置。"
   }
 }

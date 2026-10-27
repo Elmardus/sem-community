@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- ✨ **The Home diagram can hide the car's charge level** (#1219). Set `show_ev_soc: false` when two cars share one charger.
+- ✨ **Hot water settings are easier to read** (#1145). "Bank by" is now "Extra from surplus", with an example, and Configure device names the entity in use.
+- 🧹 **The options audit counts real duplicates only** (#1213). Heat pump pages, and a shared entity plus its per-battery override, are no longer counted twice.
 - 🐛 **Two grid Repairs and other texts are now in your language** (#1227). Before, they were partly English in 14 languages.
 - ✨ **Setup shows what SEM found as live watts, and asks one question when it is unsure of your grid meter** (#1213).
 - 🔧 **SEM no longer guesses a battery or solar sensor when several fit** (#1213). One battery module or one phase is not the whole battery.
@@ -26,7 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 **Self-consumption no longer drops to 0 % when the battery sells to the grid** (#1191). The sale no longer counts as solar export.
 - ✨ **The Home diagram shows the car's charge level at the EV node** (#1211). With one charger only; an estimate has a "~".
-- ✨ **The Home diagram can hide the car's charge level** (#1219). Set `show_ev_soc: false` when two cars share one charger.
 - 🐛 **A battery marked "Inverted" in the Energy Dashboard now shows charging the right way from the start** (#1194). One that already reads right stays right.
 - 🐛 **Each battery keeps its own settings when you add or remove a battery** (#1195). A new battery no longer takes another battery's entities.
 - 🐛 **Each battery's charge direction is learned from its own energy counters** (#1193). A second battery could show charging as discharging.
