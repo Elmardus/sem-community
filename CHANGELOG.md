@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Two grid Repairs and other texts are now in your language** (#1227). Before, they were partly English in 14 languages.
 - 🐛 **A device on its own tariff and meter keeps the kWh it used while Home Assistant was down** (#1228). Before, the house price took them.
 - 🐛 **Solar made while Home Assistant was down now counts after a restart after dark** (#1187). Before, that solar was lost and home fell to 0.
 - 🐛 **A Repair now tells you when SEM finds no grid, solar or battery power sensor** (#1188). Before, that power read 0 W without notice.
