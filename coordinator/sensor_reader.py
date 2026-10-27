@@ -6,6 +6,7 @@ import math
 import re
 import time
 from collections import deque
+from collections.abc import Mapping
 from typing import Any, Dict, Optional, Tuple
 from dataclasses import dataclass, replace
 
@@ -29,7 +30,7 @@ from .units import (
     temperature_state_to_celsius,
 )
 
-from ..ha_energy_reader import battery_units
+from ..ha_energy_reader import battery_units, unit_energy_counters
 from ..utils.log_gate import log_on_change
 from ..utils.own_entity import is_sem_entity
 from ..consts.core import (
@@ -165,8 +166,11 @@ EV_ACTIVE_CHARGE_FLOOR_W = 500.0
 #     the declared corpus is not proof of absence from a user's entity_ids, and
 #     the corroboration gate makes an idle pattern cost nothing.
 # Real DSMR declares ``current_power_usage``/``current_power_return``
-# (dsmr_reader) or per-phase keys (core dsmr); both now live in the lexicon,
-# which is where a name becomes evidence.
+# (dsmr_reader) and ``current_electricity_usage``/``current_electricity_delivery``
+# (core dsmr, #1189); both pairs live in the lexicon, which is where a name
+# becomes evidence. Core dsmr's entity_ids follow the user's language:
+# ``power_consumption`` is its English name only, and a Dutch or German meter
+# (``energieverbruik``, ``stromverbrauch``) is found by its key alone.
 IMPORT_PATTERNS: tuple[str, ...] = (
     "import_from_grid",       # growatt_server (declared)
     "pac_to_user",            # growatt_server TLX (declared)
@@ -313,6 +317,11 @@ GRID_PROOF_MAX_S: float = 7200.0
 #: a value a caller can pass deliberately rather than a missing argument.
 _UNSET = object()
 
+#: (#1192) The source a "Fix grid sign" tap is bound to when SEM read no
+#: grid meter. It applies to no meter, so never to one SEM finds later. A
+#: flip with no source saved at all is from before the binding (#971).
+NO_GRID_SOURCE = "none"
+
 
 def _fresh_grid_proof() -> dict:
     """A corroboration window with nothing in it yet."""
@@ -429,10 +438,26 @@ class SensorReader:
         #: (#971) Which branch produced this cycle's grid_power — the key a
         #: one-tap user flip is bound to. ``None`` until the first read.
         self._grid_source_key = None
+        #: (#1192) The source this cycle read with a live value, or None: what
+        #: a "Fix grid sign" tap is bound to. A tap while the grid reads 0 W
+        #: because nothing (or only a dark meter) was read flips no meter.
+        self._grid_read_source = None
         #: (#1103) The source a restored grid lock was learned on; checked
         #: once, on the first read. ``_UNSET``: nothing to check (no lock,
         #: or a store from before the lock carried its source).
         self._restored_grid_source = _UNSET
+        #: (#1194) A restored fleet battery lock from a store written while
+        #: the one-battery read still flipped an "Inverted" sensor. Moved
+        #: once, on the first Energy Dashboard read.
+        self._battery_lock_on_flipped = False
+        #: (#1193) Restored battery locks, by bid, learned while each battery
+        #: was judged by entry N of the counter lists and not checked yet.
+        #: Each is checked once, on an Energy Dashboard read that uses it.
+        self._battery_locks_to_check: set = set()
+        #: (#1193) Bids whose lock was judged again: their sign is a kept
+        #: start value until the sign check locks again. Saved, so a restart
+        #: in between keeps it.
+        self._battery_sign_kept: set = set()
         self._flip_ignored_logged = False
         # #461: accumulated sign-of-correlation evidence. The old ±1 vote
         # locked after three *consecutive* instantaneous matches — and a
@@ -517,15 +542,15 @@ class SensorReader:
         # Battery sign autodetect — #404: per-battery state.
         # Multi-battery installs (≥ 2 ``battery_power_list`` entries) run
         # the detection independently per battery using each one's own
-        # ``battery_charge_energy_list[i]`` / ``discharge_energy_list[i]``
-        # counters, so a dual-brand fleet (e.g., Sessy + Huawei) with
+        # counters (``unit_energy_counters``, #1193 — not entry i of the
+        # counter lists), so a dual-brand fleet (e.g., Sessy + Huawei) with
         # opposite sign conventions ends up canonical for both. Each
         # dict is keyed by the stable per-battery slug (``b1``, ``b2`` …)
         # assigned in the read-power loop below.
         #
         # Single-battery / combined-sensor installs fall back to the
-        # legacy fleet-level detection using the ``ed.battery_*_energy``
-        # (singular) counters. Both code paths share the same voting +
+        # legacy fleet-level detection using the one battery's own counters,
+        # else the ``ed.battery_*_energy`` (singular) ones. Both code paths share the same voting +
         # threshold heuristic — only the input scope differs.
         self._battery_sign_inverted: Dict[str, bool] = {}
         self._battery_sign_detected: Dict[str, bool] = {}
@@ -680,6 +705,18 @@ class SensorReader:
         #: guess Repair a previous lifetime left, whatever tier proved it.
         self._split_proof_reconciled: bool = False
         self._uses_split_grid: bool = False
+        #: (#1188) This cycle's sources the Energy Dashboard counts in kWh and
+        #: SEM reads from no power sensor: source → its kWh counter. None when
+        #: the dashboard path did not run this cycle — no answer, not "found".
+        self._unsourced_power: Optional[dict[str, str]] = None
+        #: (#1188) When each source was first seen with no sensor, once HA runs.
+        self._unsourced_since: dict[str, float] = {}
+        #: (#1188) The counter each raised Repair names.
+        self._unsourced_raised: dict[str, str] = {}
+        #: (#1188, class 84) The sources this reader has found once. Each
+        #: source's first "found" clears what an options reload left: the
+        #: Repair outlives the reader.
+        self._unsourced_reconciled: set[str] = set()
         # Warn-once guard for the discovery-*exception* path (#259); distinct from the
         # dict "warned" key (which guards "no sensor found"). Reset on cache invalidate.
         self._split_grid_discovery_warned: bool = False
@@ -955,12 +992,24 @@ class SensorReader:
         self._battery_power_missing = False   # (#758) per-cycle
         self._input_reads = {}                # (#818) per-cycle
         self._input_dark = {}                 # (#818) per-cycle
+        self._unsourced_power = None          # (#1188) per-cycle
         # (#1022) the previous cycle's dark solar verdict has just ended
         self._accrue_solar_downtime(time.monotonic())
-        if self._energy_dashboard_config:
-            readings = self._read_from_energy_dashboard()
-        else:
-            readings = self._read_from_legacy_config()
+        # (#1192) Which source THIS cycle read: each branch that reads the
+        # grid names it. When none does, the last name is kept for the saved
+        # lock (#1103), as before; a tap is bound to this cycle's read only.
+        last_source = self._grid_source_key
+        self._grid_source_key = None
+        self._grid_read_source = None
+        try:
+            if self._energy_dashboard_config:
+                readings = self._read_from_energy_dashboard()
+            else:
+                readings = self._read_from_legacy_config()
+            self._grid_read_source = self._grid_source_key
+        finally:
+            if self._grid_source_key is None:
+                self._grid_source_key = last_source
         self._check_restored_grid_lock()
         # (#902) A value no battery can produce is a dark read, not a number.
         self._gate_battery_power(readings)
@@ -991,6 +1040,8 @@ class SensorReader:
         # every split-grid install.
         readings.grid_power_unavailable = self._all_dark_any(
             "grid", "grid_import", "grid_export")
+        if readings.grid_power_unavailable:
+            self._grid_read_source = None   # (#1192) a dark meter read nothing
         readings.battery_power_all_unavailable = self._all_dark("battery")
 
         # #661 — forget audits for pairs that are no longer being netted, so a
@@ -1083,14 +1134,10 @@ class SensorReader:
                 bp = readings.batteries.get(bid)
                 if bp is None:
                     continue
-                charge_entity = (
-                    ed.battery_charge_energy_list[idx]
-                    if idx < len(ed.battery_charge_energy_list) else None
-                )
-                discharge_entity = (
-                    ed.battery_discharge_energy_list[idx]
-                    if idx < len(ed.battery_discharge_energy_list) else None
-                )
+                # (#1193) this battery's own counters, never entry idx of the
+                # counter lists: those hold the two-sensor batteries too.
+                charge_entity, discharge_entity = (
+                    unit_energy_counters(ed, entity) or (None, None))
                 needs_negate = self._detect_battery_sign_for(
                     bid, bp.power_w, charge_entity, discharge_entity,
                     power_entity=entity,
@@ -1199,9 +1246,13 @@ class SensorReader:
         it always blames the grid, so left unguarded it silently undid the
         user's setting every ~3 min (@hrdilshan: "it automatically changes
         back").
+
+        (#1192) Only a flip that applies to the meter read now counts: one
+        tapped against no meter, or another meter (#971), decided nothing
+        about this one.
         """
         return bool(self._raw_config.get("grid_sign_invert", False)
-                    or self._raw_config.get("grid_sign_user_flip", False))
+                    or self.user_flip_applies())
 
     def grid_sign_diagnostics(self) -> dict:
         """Build a #461 grid-sign support payload.
@@ -1264,8 +1315,14 @@ class SensorReader:
             "user_flip": bool(self._raw_config.get("grid_sign_user_flip", False)),
             # (#971) the tap is bound to a source; both halves are shown so a
             # flip that no longer applies is visible, never silent.
-            "user_flip_source": self._raw_config.get("grid_sign_user_flip_source"),
+            # (#1192) as it is read: NO_GRID_SOURCE for a tap with no meter,
+            # None for a flip from before the binding
+            "user_flip_source": (
+                self._user_flip_source()
+                if self._raw_config.get("grid_sign_user_flip", False) else None),
             "grid_source": self._grid_source_key,
+            # (#1192) what a tap now is bound to: none while the meter is dark
+            "grid_read_source": self._grid_read_source,
             "user_flip_applies": self.user_flip_applies(),
             "auto_detected": self._grid_sign_detected,
             "auto_inverted": self._grid_sign_inverted,
@@ -1318,10 +1375,21 @@ class SensorReader:
             except Exception:  # noqa: BLE001 — diagnostics must never raise
                 battery_platform = None
 
+        # (#1193) the counters each battery is judged by
+        units = battery_units(ed) if ed is not None else []
         per_bid = {}
         for bid in set(self._battery_sign_inverted) | set(self._battery_sign_detected):
             mag = self._battery_sign_total_mag.get(bid, 0.0)
             ev = self._battery_sign_evidence.get(bid, 0.0)
+            if ed is None:
+                counters = None
+            elif bid == self._FLEET_BID:
+                counters = (self._one_battery_own_counters(ed)
+                            or (ed.battery_charge_energy, ed.battery_discharge_energy))
+            else:
+                n = int(bid[1:]) if bid[1:].isdigit() else 0
+                counters = (unit_energy_counters(ed, units[n - 1])
+                            if 0 < n <= len(units) else None)
             per_bid[bid] = {
                 "detected": self._battery_sign_detected.get(bid, False),
                 "inverted": self._battery_sign_inverted.get(bid, False),
@@ -1330,6 +1398,7 @@ class SensorReader:
                 "samples": self._battery_sign_samples.get(bid, 0),
                 "confidence": round(abs(ev) / mag if mag > 0 else 0.0, 3),
                 "brand_seed_done": self._battery_brand_seed_done.get(bid, False),
+                "counters": list(counters) if counters else None,
             }
 
         return {
@@ -1492,12 +1561,28 @@ class SensorReader:
             "grid_inverted": self._grid_sign_inverted,
             # (#1103) which source the lock is about — see restore. Before
             # this run's first source is known, keep the one restored.
-            "grid_source": (self._grid_source_key
-                            if self._grid_source_key is not None
+            # (#1192) the read without a dashboard names its source for the
+            # user flip only; its lock is saved as before, with none.
+            "grid_source": (self._lock_source()
+                            if self._lock_source() is not None
                             or self._restored_grid_source is _UNSET
                             else self._restored_grid_source),
             "battery_detected": dict(self._battery_sign_detected),
             "battery_inverted": dict(self._battery_sign_inverted),
+            # (#1194) the battery locks judge each sensor as it reads. Left
+            # out while a lock from an older store waits to be moved, so a
+            # restart before the first read still moves it.
+            **({} if getattr(self, "_battery_lock_on_flipped", False)
+               else {"battery_basis": "sensor"}),
+            # (#1193) each lock judged by its own battery's counters, but for
+            # the restored ones not checked yet (a restart keeps them waiting).
+            "battery_counters": "own",
+            **({"battery_counters_pending": sorted(self._battery_locks_to_check)}
+               if getattr(self, "_battery_locks_to_check", None) else {}),
+            **({"battery_sign_kept": kept} if (kept := {
+                b: self._battery_sign_inverted.get(b, False)
+                for b in sorted(getattr(self, "_battery_sign_kept", ()))
+                if not self._battery_sign_detected.get(b)}) else {}),
         }
 
     def restore_sign_state(self, state) -> None:
@@ -1534,6 +1619,31 @@ class SensorReader:
                         bid,
                         "negating" if bi[bid] else "no correction",
                     )
+        # (#1194) A store without ``battery_basis`` was written while the
+        # one-battery read still flipped an "Inverted" sensor, so its fleet
+        # lock, or the user's flip, may judge the flipped value
+        # (``_move_lock_learned_on_flip``). ``{}`` is no store (or a reset).
+        self._battery_lock_on_flipped = bool(state) and "battery_basis" not in state
+        # (#1193) A store without ``battery_counters`` judged each battery by
+        # entry N of the counter lists: every lock it holds is checked
+        # (``_drop_locks_on_other_counters``). A newer store names the ones
+        # still waiting for their check.
+        locked = {b for b, det in self._battery_sign_detected.items() if det}
+        if "battery_counters" not in state:
+            self._battery_locks_to_check = locked
+        else:
+            pending = state.get("battery_counters_pending")
+            self._battery_locks_to_check = locked & {
+                b for b in (pending if isinstance(pending, list) else [])
+                if isinstance(b, str)}
+        # (#1193) a lock judged again keeps its sign as the start value
+        kept = state.get("battery_sign_kept")
+        for bid, inverted in (kept.items() if isinstance(kept, dict) else ()):
+            if (isinstance(bid, str) and isinstance(inverted, bool)
+                    and not self._battery_sign_detected.get(bid)):
+                self._battery_sign_inverted[bid] = inverted
+                self._battery_brand_seed_done[bid] = True
+                self._battery_sign_kept.add(bid)
 
     def _manual_grid_pair(self):
         """(#1103) The manual import/export pair, minus SEM's own sensors.
@@ -1565,6 +1675,12 @@ class SensorReader:
                 entity_id)
         return None
 
+    def _lock_source(self) -> Optional[str]:
+        """(#1192) The source a grid lock is saved with and checked against:
+        the dashboard read's. The read without one keeps its lock with no
+        source, as before it named its source for the user flip."""
+        return self._grid_source_key if self._energy_dashboard_config else None
+
     def _check_restored_grid_lock(self) -> None:
         """(#1103) A restored grid sign lock is about ONE source. If the grid
         is now read from another — the Grid power pick that the reload just
@@ -1573,8 +1689,10 @@ class SensorReader:
         convention read import as export. Drop it then, once, so the new
         source is judged. Same binding as the one-tap flip (#971)."""
         recorded = self._restored_grid_source
-        if recorded is _UNSET or self._grid_source_key is None:
-            return          # nothing to check, or nothing read yet
+        if recorded is _UNSET or self._lock_source() is None:
+            # nothing to check, or nothing read yet — or (#1192) the read
+            # without a dashboard, whose lock waits for a dashboard read
+            return
         self._restored_grid_source = _UNSET
         if recorded == self._grid_source_key:
             return
@@ -1632,6 +1750,9 @@ class SensorReader:
         self._grid_export_baseline = None
         self._battery_sign_inverted.clear()
         self._battery_sign_detected.clear()
+        self._battery_lock_on_flipped = False   # (#1194) nothing left to move
+        self._battery_locks_to_check = set()   # (#1193) nothing left to check
+        self._battery_sign_kept = set()
         self._battery_sign_evidence.clear()
         self._battery_sign_total_mag.clear()
         self._battery_sign_samples.clear()
@@ -1769,16 +1890,8 @@ class SensorReader:
             return
         self._battery_brand_seed_done[bid] = True
 
-        if not power_entity:
-            return
-        try:
-            # (#912, class 87) same owner lookup as the grid seed above.
-            platform = self._entity_owner(power_entity)[0]
-        except Exception as e:  # noqa: BLE001 — belt and braces: _entity_owner
-            # contains its own registry/source-map failures and answers None.
-            _LOGGER.debug("Battery-sign brand lookup failed for %s (%s): %s", bid, power_entity, e)
-            return
-        if not isinstance(platform, str) or platform not in PLATFORM_BATTERY_SIGN_INVERT:
+        platform = self._battery_brand(bid, power_entity)
+        if platform is None:
             return
 
         # SOFT default only — do NOT set detected=True, so the counter voter
@@ -1792,6 +1905,22 @@ class SensorReader:
             "negating (opposite convention)" if self._battery_sign_inverted[bid]
             else "no correction (SEM convention)",
         )
+
+    def _battery_brand(self, bid: str, power_entity: Optional[str]) -> Optional[str]:
+        """(#588) The integration of a battery power sensor when the brand
+        table knows it, else None. Also asked by the #1194 lock move."""
+        if not power_entity:
+            return None
+        try:
+            # (#912, class 87) same owner lookup as the grid seed above.
+            platform = self._entity_owner(power_entity)[0]
+        except Exception as e:  # noqa: BLE001 — belt and braces: _entity_owner
+            # contains its own registry/source-map failures and answers None.
+            _LOGGER.debug("Battery-sign brand lookup failed for %s (%s): %s", bid, power_entity, e)
+            return None
+        if not isinstance(platform, str) or platform not in PLATFORM_BATTERY_SIGN_INVERT:
+            return None
+        return platform
 
     def _accumulate_solar_sign(self, readings: PowerReadings) -> None:
         """Solar-anchored grid-sign detection (#461, authoritative primary).
@@ -1934,32 +2063,68 @@ class SensorReader:
         never to a declared pair — that is the case found live on .175. When a
         flip is present but does not apply, it is said once in the log and
         always in the diagnostics (``user_flip_applies``).
+
+        (#1192) A flip tapped while SEM read no grid meter is bound to
+        ``NO_GRID_SOURCE`` and applies to no meter. Builds since #971 saved
+        such a tap with a None source, which read as a flip from before the
+        binding and flipped the next meter SEM found; a None that is SAVED is
+        that tap, only a missing key is a flip from before.
         """
         if not bool(self._raw_config.get("grid_sign_user_flip", False)):
             return False
-        recorded = self._raw_config.get("grid_sign_user_flip_source") or None
+        recorded = self._user_flip_source()
         current = self._grid_source_key
-        if recorded is not None:
-            applies = (current == recorded)
-        else:
+        if recorded is None:
+            # (#1192) …on the dashboard read only: the read without one named
+            # no source, so it has not applied such a flip since #971, and a
+            # flip off for weeks must not come back on its own.
             kind = (current or "").split(":", 1)[0]
-            applies = kind in self._AUTO_GRID_SOURCES
-        if not applies and not self._flip_ignored_logged:
+            applies = (bool(self._energy_dashboard_config)
+                       and kind in self._AUTO_GRID_SOURCES)
+        else:
+            applies = current is not None and current == recorded
+        if not applies and current is not None and not self._flip_ignored_logged:
             self._flip_ignored_logged = True
             _LOGGER.warning(
                 "grid sign: the one-tap user flip is bound to %s and the grid is "
                 "now read from %s — not applying it (#971). Tap 'Fix grid sign' "
                 "again on the new source if it is inverted, or reset_sign_detection.",
-                recorded or "an auto-detected source", current,
+                ("no grid sensor" if recorded == NO_GRID_SOURCE
+                 else recorded or "an auto-detected source"),
+                current,
             )
         return applies
 
+    def user_flip_on_for_tap(self) -> bool:
+        """(#1192) Is the saved flip on for what a tap now would flip? Yes
+        when it applies to this meter, or when it is bound to just what a tap
+        now would bind (a tap with no meter, tapped again with no meter), so
+        a second tap turns it off. A flip about another meter is off here:
+        the tap flips this meter, as the log line asks."""
+        if not bool(self._raw_config.get("grid_sign_user_flip", False)):
+            return False
+        return (self.user_flip_applies()
+                or self._user_flip_source() == self._tap_source())
+
+    def _tap_source(self) -> str:
+        """(#1192) The source a tap now is bound to."""
+        return self._grid_read_source or NO_GRID_SOURCE
+
+    def _user_flip_source(self) -> Optional[str]:
+        """(#1192) The source the saved flip is bound to: a source key,
+        ``NO_GRID_SOURCE``, or None for a flip from before the binding
+        (#971), whose store has no source key at all."""
+        if "grid_sign_user_flip_source" not in self._raw_config:
+            return None
+        return self._raw_config.get("grid_sign_user_flip_source") or NO_GRID_SOURCE
+
     def user_flip_options(self, options: dict, new_flip: bool) -> dict:
         """(#971) The options dict the flip service persists: the flip, and —
-        when turning it ON — the grid source it was tapped against. Turning it
-        off drops the binding. The ONE production caller is the service."""
+        when turning it ON — the grid source it was tapped against (#1192:
+        ``NO_GRID_SOURCE`` when SEM read none). Turning it off drops the
+        binding. The ONE production caller is the service."""
         out = {**(options or {}), "grid_sign_user_flip": bool(new_flip)}
-        out["grid_sign_user_flip_source"] = self._grid_source_key if new_flip else None
+        out["grid_sign_user_flip_source"] = self._tap_source() if new_flip else None
         return out
 
     def _detect_grid_sign(self, readings: PowerReadings) -> bool:
@@ -2143,8 +2308,9 @@ class SensorReader:
             # the grid-path fix. Default False = pre-#476 behaviour.
             return self._battery_sign_inverted.get(self._FLEET_BID, False)
 
-        charge_entity = ed.battery_charge_energy
-        discharge_entity = ed.battery_discharge_energy
+        charge_entity, discharge_entity = (
+            self._one_battery_own_counters(ed)
+            or (ed.battery_charge_energy, ed.battery_discharge_energy))
         return self._detect_battery_sign_for(
             self._FLEET_BID,
             readings.battery_power,
@@ -2152,6 +2318,27 @@ class SensorReader:
             discharge_entity,
             power_entity=getattr(ed, "battery_power", None),
         )
+
+    def _one_battery_own_counters(
+        self, ed,
+    ) -> Optional[Tuple[Optional[str], Optional[str]]]:
+        """(#1193) The counters of the one battery the fleet read comes from.
+
+        The fleet value is SEM's battery power pick, else the one battery's
+        sensor, so it is judged by that battery's own counters. The first
+        counters in the dashboard can be those of a battery with no power
+        sensor. ``None`` when the fleet value is no battery the dashboard
+        knows: a pick it does not list, no battery sensor, or several.
+        """
+        units = battery_units(ed)
+        if len(units) > 1:
+            return None          # the fleet value is the sum of the batteries
+        pick = getattr(self.config, "battery_power_sensor", None)
+        if pick:
+            # Setup saves the dashboard's own sensor as this pick, so a pick
+            # the dashboard knows is that battery (#1193 review).
+            return unit_energy_counters(ed, pick)
+        return unit_energy_counters(ed, units[0]) if units else None
 
     def _detect_battery_sign_for(
         self,
@@ -2389,6 +2576,9 @@ class SensorReader:
         """Read power values from Energy Dashboard configured sensors."""
         ed = self._energy_dashboard_config
         readings = PowerReadings()
+        # (#1188) Each source the dashboard counts but SEM reads from nothing.
+        unsourced: dict[str, str] = {}
+        self._unsourced_power = unsourced
 
         # Solar power — sum all inverters if multiple configured.
         # v1.7.0 arch/multi-inverter-battery-primary: also populate
@@ -2426,6 +2616,8 @@ class SensorReader:
             )
         elif ed.solar_power:
             readings.solar_power = self._read_solar_power(ed.solar_power)
+        elif ed.solar_energy:
+            unsourced["solar"] = ed.solar_energy
 
         # v1.7.0 / #312: per-PV-string power. Gated on len ≥ 2 — single-
         # string setups get nothing here and downstream readers fall
@@ -2604,6 +2796,10 @@ class SensorReader:
                         "import=%s (held), export=%s",
                         disc["import"], exp,
                     )
+            if not disc["import"] and not disc["export"]:
+                # (#1188) Nothing at all. Half a pair or a name guess has its
+                # own Repair (split_grid_rejected / split_grid_guessed).
+                unsourced["grid"] = ed.grid_import_energy
             if disc["import"]:
                 import_w = self._read_sensor(disc["import"], "grid_import")
                 export_w = self._read_sensor(disc["export"], "grid_export") if disc["export"] else 0.0
@@ -2656,6 +2852,9 @@ class SensorReader:
                         "No grid power sensor found (no combined and no split import/export). "
                         "Grid power will be 0. Check Energy Dashboard grid configuration."
                     )
+        elif ed.grid_export_energy:
+            # (#1188) An export counter alone: no branch reads the grid.
+            unsourced["grid"] = ed.grid_export_energy
 
         # (#933) The grid was read by an explicit path — SEM's own pair (the
         # guess Repair's own remedy, which reloads the entry), a declared
@@ -2765,12 +2964,11 @@ class SensorReader:
         # ``battery_power_sensor`` override (#597) applies only when there is no
         # such breakdown to sum — e.g. a Huawei install whose ED exposes battery
         # ENERGY only (``batt:pwr=none``). Read via ``_read_sensor(..., "battery")``
-        # (same call the ED combined path uses); the ED ``battery_power_inverted``
-        # flag is intentionally NOT applied to the override — that flag describes
-        # HA's ED dialog sensor, whereas the SEM override is assumed already in SEM
-        # convention (and if it isn't, the battery-sign detector self-corrects and
-        # the manual flip service is the escape hatch). Mirrors the SOC override
+        # (same call the ED combined path uses). Every battery power sensor is
+        # read as it is, and the battery-sign detector learns its sign (#1194);
+        # the manual flip service is the escape hatch. Mirrors the SOC override
         # precedence below.
+        read_alone = False
         if per_battery_total is not None:
             readings.battery_power = per_battery_total
         elif self.config.battery_power_sensor:
@@ -2778,13 +2976,12 @@ class SensorReader:
                 self.config.battery_power_sensor, "battery"
             )
         elif ed.battery_power:
-            raw_batt = self._read_sensor(ed.battery_power, "battery")
-            # #551 — the user chose "Inverted" in HA's battery dialog
-            # (power_config.stat_rate_inverted): flip on read so the rest of
-            # the pipeline sees the declared convention.
-            if ed.battery_power_inverted:
-                raw_batt = -raw_batt
-            readings.battery_power = raw_batt
+            # (#1194) As it is, like each battery of a fleet and like the grid.
+            # HA's battery sign is + while discharging; a sensor the user
+            # marked "Inverted" in HA's battery dialog reads + while charging,
+            # which is SEM's sign already. #551 flipped it here, the wrong way.
+            readings.battery_power = self._read_sensor(ed.battery_power, "battery")
+            read_alone = True
         elif ed.battery_power_from and ed.battery_power_to:
             # #551 — "Two sensors" battery power_config (e.g. Fronius Verto):
             # separate charge/discharge sensors, NO combined entity exists.
@@ -2801,6 +2998,13 @@ class SensorReader:
                 charge_w, ed.battery_power_to,
             )
             readings.battery_power = charge_w - discharge_w
+        elif ed.battery_charge_energy or ed.battery_discharge_energy:
+            unsourced["battery"] = (ed.battery_charge_energy
+                                    or ed.battery_discharge_energy)
+        self._move_lock_learned_on_flip(ed, read_alone,
+                                        per_battery=per_battery_total is not None)
+        self._drop_locks_on_other_counters(
+            ed, per_battery=per_battery_total is not None)
 
         # Battery SOC — precedence (#551): SEM's own explicit override
         # (battery_soc_sensor option) > multi-battery average (the fleet SOC
@@ -2916,6 +3120,134 @@ class SensorReader:
         self._read_inverter_temperature(readings)
 
         return readings
+
+    def _drop_locks_on_other_counters(self, ed, per_battery: bool) -> None:
+        """(#1193) Judge again a saved battery lock learned on another battery.
+
+        Until #1193 battery bN was judged by entry N of the counter lists, and
+        the one-battery read by the first counters in the dashboard. Those
+        lists hold every battery with a counter, in dashboard order, so on a
+        home with a two-sensor battery, or a battery with no power sensor,
+        listed first, a lock could be learned on another battery's counters.
+
+        Each restored lock is checked once, on the first Energy Dashboard read
+        that uses it (``b<N>`` while the home reads per battery, the fleet
+        lock while it reads one battery; the other kind waits, as the #1194
+        move does). A lock whose old counters were the battery's own stays.
+        Any other is no longer a lock: the sign check judges it again on the
+        battery's own counters. Its sign stays the start value, so nothing
+        reads differently before new evidence, also across a restart
+        (``battery_sign_kept``); most of these locks were right, since
+        batteries of one home mostly charge together. Runs after the #1194
+        move, so a value that move turns over is the one kept. While "Fix
+        battery sign" is on, the locks wait: the user set that against what
+        SEM showed, and a new lock under it could undo it.
+        """
+        pending = getattr(self, "_battery_locks_to_check", None)
+        if not pending:
+            return
+        if bool((getattr(self, "_raw_config", None) or {}).get(
+                "battery_sign_user_flip", False)):
+            return          # checked on the first read with the flip off
+        if per_battery:
+            charge_list = list(getattr(ed, "battery_charge_energy_list", None) or [])
+            discharge_list = list(
+                getattr(ed, "battery_discharge_energy_list", None) or [])
+            checks = [
+                (f"b{idx + 1}", entity,
+                 (charge_list[idx] if idx < len(charge_list) else None,
+                  discharge_list[idx] if idx < len(discharge_list) else None),
+                 unit_energy_counters(ed, entity) or (None, None))
+                for idx, entity in enumerate(
+                    getattr(ed, "battery_power_list", None) or [])]
+        else:
+            first = (ed.battery_charge_energy, ed.battery_discharge_energy)
+            checks = [(self._FLEET_BID,
+                       getattr(self.config, "battery_power_sensor", None)
+                       or ed.battery_power or ed.battery_power_to, first,
+                       self._one_battery_own_counters(ed) or first)]
+        for bid, entity, old, now in checks:
+            if bid not in pending:
+                continue
+            pending.discard(bid)
+            if not self._battery_sign_detected.get(bid) or old == now:
+                continue
+            self._battery_sign_detected[bid] = False
+            self._battery_sign_evidence[bid] = 0.0
+            self._battery_sign_total_mag[bid] = 0.0
+            self._battery_sign_samples[bid] = 0
+            self._battery_charge_baseline[bid] = None
+            self._battery_discharge_baseline[bid] = None
+            # the kept sign is the start value; a brand seed must not move it
+            self._battery_brand_seed_done[bid] = True
+            self._battery_sign_kept.add(bid)
+            self._battery_sign_audits.pop(bid, None)
+            _LOGGER.info(
+                "Battery sign: the saved sign of %s was learned on the energy "
+                "counters %s / %s, which are not its own (%s / %s). SEM keeps "
+                "it for now and judges it again on its own counters. (#1193)",
+                entity, old[0], old[1], now[0], now[1],
+            )
+
+    def _move_lock_learned_on_flip(self, ed, read_alone: bool,
+                                   per_battery: bool = False) -> None:
+        """(#1194) Keep a one-battery home reading as it did before #1194, once.
+
+        Until #1194 the one-battery read flipped a sensor marked "Inverted".
+        Now it reads it as it is, so what was saved against the flipped value
+        is changed to match, on the first Energy Dashboard read of an older
+        store. Each battery of a fleet, SEM's own battery power pick and a
+        two-sensor battery were always read as they are; their locks stay.
+
+        * A fleet lock judged the flipped value: it is turned over.
+        * No lock, but the user's one-tap flip is on: the flip corrected the
+          flipped read. The sign that read had (the brand seed, else none) is
+          locked on the sensor as it is, so the user sees what they saw.
+        * No lock and no flip: nothing to keep. The battery now reads right
+          from the start.
+
+        A fleet lock waits while the home reads per battery (that read does
+        not use it), so it is still moved if the home goes back to one.
+        """
+        if not getattr(self, "_battery_lock_on_flipped", False):
+            return
+        locked = bool(self._battery_sign_detected.get(self._FLEET_BID))
+        if per_battery and locked:
+            return
+        self._battery_lock_on_flipped = False
+        if not (read_alone and ed.battery_power_inverted is True):
+            return
+        fleet = self._FLEET_BID
+        if locked:
+            was = self._battery_sign_inverted.get(fleet, False)
+            self._battery_sign_inverted[fleet] = not was
+            _LOGGER.info(
+                "Battery sign: %s is marked Inverted in the Energy Dashboard "
+                "and is now read as it is; the saved sign was learned on the "
+                "flipped value, so it is now %s. The battery reads as before. "
+                "(#1194)",
+                ed.battery_power, "no correction" if was else "negating",
+            )
+            return
+        if not bool((getattr(self, "_raw_config", None) or {}).get(
+                "battery_sign_user_flip", False)):
+            return
+        # The old read's sign before any lock: the brand seed, which the old
+        # sign check only asked with both energy counters set.
+        seeded = False
+        if ed.battery_charge_energy and ed.battery_discharge_energy:
+            platform = self._battery_brand(fleet, ed.battery_power)
+            seeded = bool(platform and PLATFORM_BATTERY_SIGN_INVERT[platform])
+        self._battery_sign_inverted[fleet] = not seeded
+        self._battery_sign_detected[fleet] = True
+        self._battery_brand_seed_done[fleet] = True
+        _LOGGER.info(
+            "Battery sign: %s is marked Inverted in the Energy Dashboard and "
+            "is now read as it is. Fix battery sign is on and was set against "
+            "the flipped value, so SEM keeps that reading: the sign is now "
+            "locked to %s. The battery reads as before. (#1194)",
+            ed.battery_power, "no correction" if seeded else "negating",
+        )
 
     def _accept_battery_soc(self, readings: PowerReadings,
                             soc_val: Optional[float]) -> None:
@@ -3509,9 +3841,12 @@ class SensorReader:
 
         * **single / combined battery** — the ``__fleet__`` lock is set, so the
           summed counters are audited against the summed power, as in #589.
+          With one battery read from its own sensor, its own counters (#1193).
         * **per-battery mode** — ``__fleet__`` is never locked; each combined
           unit locks its OWN ``b<N>`` sign. So each unit is audited against its
-          own ``battery_charge_energy_list[idx]`` / ``…discharge…[idx]`` pair.
+          own counters (``unit_energy_counters``, #1193). Entry idx of the
+          counter lists can be another battery's: they hold the two-sensor
+          batteries too, in dashboard order.
           Summing here would have been worse than useless: one unit signed
           wrong and one signed right cancel to ≈0 W and get skipped as "idle".
 
@@ -3523,14 +3858,19 @@ class SensorReader:
         so the voter's ``_battery_charge_baseline`` is never disturbed.
         """
         if self._battery_sign_detected.get(self._FLEET_BID):
-            charge_entities = (
-                list(getattr(ed, "battery_charge_energy_list", None) or [])
-                or ([ed.battery_charge_energy] if getattr(ed, "battery_charge_energy", None) else [])
-            )
-            discharge_entities = (
-                list(getattr(ed, "battery_discharge_energy_list", None) or [])
-                or ([ed.battery_discharge_energy] if getattr(ed, "battery_discharge_energy", None) else [])
-            )
+            own = self._one_battery_own_counters(ed)       # (#1193)
+            if own is not None:
+                charge_entities = [own[0]] if own[0] else []
+                discharge_entities = [own[1]] if own[1] else []
+            else:
+                charge_entities = (
+                    list(getattr(ed, "battery_charge_energy_list", None) or [])
+                    or ([ed.battery_charge_energy] if getattr(ed, "battery_charge_energy", None) else [])
+                )
+                discharge_entities = (
+                    list(getattr(ed, "battery_discharge_energy_list", None) or [])
+                    or ([ed.battery_discharge_energy] if getattr(ed, "battery_discharge_energy", None) else [])
+                )
             self._run_battery_sign_audit(
                 self._FLEET_BID, battery_power, charge_entities, discharge_entities,
             )
@@ -3539,20 +3879,18 @@ class SensorReader:
         # Per-battery mode: audit each combined unit against its own counters.
         if readings is None:
             return
-        charge_list = list(getattr(ed, "battery_charge_energy_list", None) or [])
-        discharge_list = list(getattr(ed, "battery_discharge_energy_list", None) or [])
-        for idx in range(len(getattr(ed, "battery_power_list", None) or [])):
+        for idx, entity in enumerate(getattr(ed, "battery_power_list", None) or []):
             bid = f"b{idx + 1}"
             if not self._battery_sign_detected.get(bid):
                 continue
             bp = readings.batteries.get(bid)
             if bp is None:
                 continue
-            if idx >= len(charge_list) or idx >= len(discharge_list):
+            # (#1193) its own counters, as the sign check above used
+            charge, discharge = unit_energy_counters(ed, entity) or (None, None)
+            if not charge or not discharge:
                 continue
-            self._run_battery_sign_audit(
-                bid, bp.power_w, [charge_list[idx]], [discharge_list[idx]],
-            )
+            self._run_battery_sign_audit(bid, bp.power_w, [charge], [discharge])
 
     def _run_battery_sign_audit(
         self, bid: str, power_w: float, charge_entities: list, discharge_entities: list,
@@ -3662,7 +4000,10 @@ class SensorReader:
         """
         if not disc.get("import"):
             return True
-        if new_confidence == "same-device":
+        # (#1189 review) A pair its integration declares on the counters' own
+        # device is as certain as a same-device name match — and the only
+        # answer a Dutch or German DSMR meter gives once it appears late.
+        if new_confidence in ("same-device", "declared"):
             return True
         for side in ("import", "export"):
             eid = disc.get(side)
@@ -3734,6 +4075,8 @@ class SensorReader:
                     continue
                 if _matches(entry, body["keys"], body["exact_only"]) is None:
                     continue
+                if not self._declared_row_readable(entry):
+                    continue
                 # A declared entity on the grid counter's own device outranks
                 # a declared entity elsewhere — same brand, two inverters.
                 same_device = bool(
@@ -3752,6 +4095,19 @@ class SensorReader:
                 exp[1] if exp else None,
                 on_grid_device)
 
+    def _declared_row_readable(self, entry) -> bool:
+        """(#1189 review) A row SEM can never read is not a meter: a disabled
+        entity, or one HA only RESTORED because its integration did not set
+        it up (a disabled or failing config entry). Taken as declared, it
+        ends the search before the name tier can find the meter that works.
+        A row with no state yet still counts — at a cold start the registry
+        answers before the meter has loaded."""
+        if getattr(entry, "disabled_by", None) is not None:
+            return False
+        live = self.hass.states.get(entry.entity_id)
+        attrs = getattr(live, "attributes", None)
+        return not (isinstance(attrs, Mapping) and attrs.get("restored") is True)
+
     def _discover_split_grid_power(self, ed) -> tuple[Optional[str], Optional[str], Optional[str]]:
         """Discover separate import/export power sensors for setups without combined grid power.
 
@@ -3759,6 +4115,7 @@ class SensorReader:
         - Growatt: *_import_from_grid / *_export_to_grid
         - Growatt TLX: *_pac_to_user* / *_pac_to_grid*
         - DSMR/P1 (NL/BE): *_power_consumption / *_power_production
+          (English names; tier 1 finds core dsmr in any language, #1189)
         - E3DC: *_consumption_from_grid / *_export_to_grid
         - GivEnergy: *_import_power / *_export_power
         - Senec: *_grid_imported_power / *_grid_exported_power
@@ -4181,6 +4538,50 @@ class SensorReader:
             disc.get("import"), disc.get("export"),
         )
 
+    def report_unsourced_power(self, *, waiting: bool) -> None:
+        """(#1188) A source the Energy Dashboard counts in kWh that SEM reads
+        from no power sensor reads 0 W. The flows, the Sankey and the surplus
+        then go wrong, and one log line was all that said why.
+
+        Called once per cycle, after the read. A source with no sensor gets
+        a Repair once HA runs, the dashboard's own retry is over
+        (``waiting``) and ``UNAVAILABLE_REPAIR_THRESHOLD_S`` has passed — a
+        meter that loads late is not missing (class 86). The Repair clears
+        the cycle a sensor is found or the dashboard stops counting the
+        source. A cycle the dashboard path did not run changes nothing.
+        """
+        unsourced = self._unsourced_power
+        if unsourced is None:
+            return
+        running = getattr(self.hass, "state", None) is CoreState.running
+        now = time.monotonic()
+        for source in _ri.POWER_SOURCES:
+            counter = unsourced.get(source)
+            if counter is None:
+                self._unsourced_since.pop(source, None)
+                # Each source's first "found" of this reader clears once — a
+                # source still missing on the first cycle may be found later.
+                if (self._unsourced_raised.pop(source, None) is not None
+                        or source not in self._unsourced_reconciled):
+                    self._unsourced_reconciled.add(source)
+                    _ri.clear_power_sensor_not_found(self.hass, source)
+                continue
+            if not running or waiting:
+                self._unsourced_since.pop(source, None)   # not ready: wait again
+                continue
+            since = self._unsourced_since.setdefault(source, now)
+            if now - since < _ri.UNAVAILABLE_REPAIR_THRESHOLD_S:
+                continue
+            if (self._unsourced_raised.get(source) != counter
+                    and _ri.raise_power_sensor_not_found(
+                        self.hass, source, energy_entity=counter)):
+                self._unsourced_raised[source] = counter
+                _LOGGER.warning(
+                    "No %s power sensor: the Energy Dashboard counts %s in kWh, "
+                    "but SEM found no power sensor for it, so %s power reads "
+                    "0 W. Add one in the Energy Dashboard or in SEM's Sensor "
+                    "sources. (#1188)", source, counter, source)
+
     def _report_split_grid_confidence(self, disc: dict) -> None:
         """(#911) An ``any-device`` adoption is a GUESS — pattern-matched
         entity names with no device evidence — and a guess presented as a
@@ -4361,12 +4762,17 @@ class SensorReader:
         # both sides positive, and the convention is fixed BY DECLARATION so
         # no sign detection is needed (the solar voter computes the same
         # sign and therefore never flips it).
+        #
+        # (#1192) Each branch names its source, as on the dashboard path: the
+        # "Fix grid sign" tap is bound to it (#971), and with no name every tap
+        # here was a tap with no meter and was never applied.
         manual_import, manual_export = self._manual_grid_pair()
         grid_override = self._not_own_pick(self.config.grid_power_sensor)
         if manual_import and manual_export:
             import_w = self._read_sensor(manual_import, "grid_import")
             export_w = self._read_sensor(manual_export, "grid_export")
             readings.grid_power = export_w - import_w
+            self._grid_source_key = f"manual:{manual_import}|{manual_export}"
             self._grid_sign_detected = True
             self._audit_split_pair(
                 "grid", "Grid (manual import/export override)",
@@ -4385,8 +4791,10 @@ class SensorReader:
                     manual_import, manual_export)
             if grid_override:
                 readings.grid_power = self._read_sensor(grid_override, "grid")
+                self._grid_source_key = f"combined:{grid_override}"
         elif grid_override:
             readings.grid_power = self._read_sensor(grid_override, "grid")
+            self._grid_source_key = f"combined:{grid_override}"
 
         # Battery power
         if self.config.battery_power_sensor:

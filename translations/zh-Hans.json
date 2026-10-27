@@ -1975,6 +1975,10 @@
       "title": "SEM 未能找到您的电网功率电表",
       "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **配置**, and pick **全部设置** at the top. Then set **电网功率** in section **传感器来源**. If your meter has one sensor for import and one for export, set **电网购电传感器** and **电网馈电传感器** in section **电价与费率** instead."
     },
+    "power_sensor_not_found": {
+      "title": "{energy_entity} 没有功率传感器",
+      "description": "能源看板以 kWh 统计 **{energy_entity}**，但 SEM 没有找到它的功率传感器 (W)。因此 SEM 把这项功率读为 0 W，能量流和余电都不正确。修复方法：在能源看板的这一项中添加功率传感器。或者打开 SEM 仪表板，⚙ **配置** 标签页，在顶部选择 **全部设置**。然后在 **传感器来源** 部分设置该传感器。如果没有功率传感器，可以忽略此通知。"
+    },
     "charger_device_gone": {
       "title": "充电桩 {name}：设备已不存在",
       "description": "Home Assistant 中已找不到充电桩 {name} 的设备。SEM 无法控制它。请在 SEM 中移除该充电桩，或重新添加设备。"

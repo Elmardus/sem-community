@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 # [Unreleased]
 
 - 🐛 Fix energy planning on homes without a battery when settings contain a default battery capacity (#1207).
+- 🐛 **Solar made while Home Assistant was down now counts after a restart after dark** (#1187). Before, that day's solar was lost and home fell to 0.
+- 🐛 **A Repair now tells you when SEM finds no grid, solar or battery power sensor** (#1188). Before, that power read 0 W without notice.
+- 🐛 **A DSMR smart meter on a Dutch or German Home Assistant now shows grid power** (#1189). Before, grid power read 0 W.
+- 🐛 **The Energy tab Sankey shows a Battery → Grid line when the battery sells** (#1190). Build the dashboard again to see it.
+
+# [2.2.0-beta.28] — 26.10.2026
+
+- 🐛 **Self-consumption no longer drops to 0 % when the battery sells to the grid** (#1191). The sale no longer counts as solar export.
+- ✨ **The Home diagram shows the car's charge level at the EV node** (#1211). With one charger only; an estimate has a "~".
+- 🐛 **A battery marked "Inverted" in the Energy Dashboard now shows charging the right way from the start** (#1194). One that already reads right stays right.
+- 🐛 **Each battery keeps its own settings when you add or remove a battery** (#1195). A new battery no longer takes another battery's entities.
+- 🐛 **Each battery's charge direction is learned from its own energy counters** (#1193). A second battery could show charging as discharging.
+- 🐛 **A "Fix grid sign" tap with no grid meter no longer flips a meter found later** (#1192). Without an Energy Dashboard, the tap works again.
 
 # [2.2.0-beta.27] — 25.10.2026
 

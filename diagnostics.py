@@ -357,10 +357,16 @@ async def async_get_config_entry_diagnostics(
         battery_pairs = [
             list(p) for p in (getattr(ed_config, "battery_power_pairs", []) or [])
             if isinstance(p, (list, tuple))]
+        unit_counters = getattr(ed_config, "battery_unit_counters", None)
         per_source_lists = {
             "solar_power_list": list(getattr(ed_config, "solar_power_list", []) or []),
             "battery_power_list": list(getattr(ed_config, "battery_power_list", []) or []),
             "battery_power_pairs": battery_pairs,
+            # (#1193) each battery's own (charge, discharge) counters
+            "battery_unit_counters": {
+                unit: list(pair) for unit, pair in unit_counters.items()
+                if isinstance(pair, (list, tuple))
+            } if isinstance(unit_counters, dict) else {},
             "grid_power_list": list(getattr(ed_config, "grid_power_list", []) or []),
         }
         per_source_readings = {
@@ -575,6 +581,8 @@ async def async_get_config_entry_diagnostics(
                 "battery_reserve_soc": full_cfg.get("battery_reserve_soc"),
                 "battery_modes": full_cfg.get("battery_modes"),
                 "battery_reserve_socs": full_cfg.get("battery_reserve_socs"),
+                # (#1195) which battery each slot of those lists belongs to
+                "battery_slot_units": full_cfg.get("battery_slot_units"),
                 # (#1071) which of the two stores above drives the batteries
                 "battery_control_slugs": (
                     list(coordinator.battery_control_slugs)
@@ -724,6 +732,9 @@ async def async_get_config_entry_diagnostics(
             "ev_kwh": data.get("daily_ev_energy"),
             "grid_import_kwh": data.get("daily_grid_import_energy"),
             "grid_export_kwh": data.get("daily_grid_export_energy"),
+            # (#1191) the part of the export the battery sold; the rest is
+            # the solar export the self-consumption rate takes away
+            "grid_export_battery_kwh": data.get("daily_grid_export_battery_kwh"),
             "battery_charge_kwh": data.get("daily_battery_charge_energy"),
             "battery_discharge_kwh": data.get("daily_battery_discharge_energy"),
             # (#628 visibility) per-category counter-backing today: how many

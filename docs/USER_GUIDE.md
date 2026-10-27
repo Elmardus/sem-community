@@ -661,6 +661,8 @@ The discharge *rate* is not per-battery: **`number.sem_battery_max_discharge_pow
 
 Each battery can have its own discharge limit entity. With two or more batteries, Config tab → Battery shows one field per battery. Leave a field empty and SEM uses the shared entity above it. When batteries share one entity, the lowest limit wins, unless one of them sells.
 
+Add or remove a battery in the Energy Dashboard and each battery keeps its own fields, mode and reserve. A new battery starts with empty fields, so it uses the shared entities until you fill them in.
+
 **Zero-config Huawei:** If you have a Huawei inverter, SEM auto-detects the discharge limit entity and uses it to enforce force-discharge at no extra config.
 
 **Other brands:** set `battery_force_discharge_control_entity` in the options flow to a number entity on your inverter (e.g. Growatt's max discharge power, SolaX's force-discharge current).

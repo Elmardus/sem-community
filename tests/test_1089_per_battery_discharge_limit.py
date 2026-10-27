@@ -18,7 +18,6 @@ Pinned here:
 """
 from __future__ import annotations
 
-import ast
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -271,16 +270,12 @@ class TestEveryPerBatteryListHasARow:
 
     @staticmethod
     def _overlaid_list_keys() -> set[str]:
-        src = (ROOT / "coordinator" / "coordinator.py").read_text()
-        fn = next(n for n in ast.walk(ast.parse(src))
-                  if isinstance(n, ast.FunctionDef) and n.name == "_per_battery_config")
-        keys = set()
-        for node in ast.walk(fn):
-            if (isinstance(node, ast.Tuple) and len(node.elts) >= 2
-                    and isinstance(node.elts[0], ast.Constant)
-                    and str(node.elts[0].value).endswith("_entities")):
-                keys.add(node.elts[0].value)
-        return keys
+        # (#1195) ``_per_battery_config`` overlays the lists this constant
+        # names (test_1195 checks it names no list of its own).
+        from custom_components.solar_energy_management.coordinator.battery_controls import (
+            PER_BATTERY_ENTITY_LISTS,
+        )
+        return {key for key, _ in PER_BATTERY_ENTITY_LISTS}
 
     @staticmethod
     def _card_rows() -> set[str]:

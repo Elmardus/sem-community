@@ -23,6 +23,9 @@ Issues filed today:
   * ``no_recorder`` — recorder integration not available, so
     ``async_seed_from_history`` cannot bootstrap EV / forecast
     history. Filed at setup, cleared if recorder appears later.
+  * ``power_sensor_not_found_<source>`` — the Energy Dashboard counts the
+    grid, solar or battery in kWh and SEM found no power sensor for it
+    (#1188). Cleared the cycle a sensor is found.
 
 The legacy log-channel feedback ("the solar_energy_management
 component should handle unavailability gracefully instead of
@@ -244,6 +247,8 @@ _DOCS_ANCHORS = {
     "split_grid_guessed": "sem-guessed-your-grid-power-meters",
     # (#947) the guess was checked against the counters and failed
     "split_grid_rejected": "sem-could-not-find-your-grid-power-meters",
+    # (#1188) the dashboard counts a source in kWh; SEM found no power sensor
+    "power_sensor_not_found": "sem-found-no-power-sensor",
     # (#935) files from an install that came before this one
     "previous_install_leftovers": "files-from-a-previous-sem-install",
     "sensor_stale": "a-sensor-stopped-updating-stale",
@@ -443,6 +448,52 @@ def clear_split_grid_guessed(hass: HomeAssistant) -> None:
             ir.async_delete_issue(hass, DOMAIN, issue_id)
         except Exception as e:  # noqa: BLE001
             _LOGGER.debug("issue_registry.delete (%s) failed: %s", issue_id, e)
+
+
+#: (#1188) The sources SEM reads from the Energy Dashboard. Each has its own
+#: "no power sensor" Repair, so a home that misses two sees two.
+POWER_SOURCES: tuple[str, ...] = ("grid", "solar", "battery")
+
+
+def _power_not_found_issue_id(source: str) -> str:
+    return f"power_sensor_not_found_{source}"
+
+
+def raise_power_sensor_not_found(hass: HomeAssistant, source: str, *,
+                                 energy_entity) -> bool:
+    """(#1188) The Energy Dashboard counts this source in kWh, and SEM found
+    no power sensor for it, so the source reads 0 W. Until now one log line
+    said so. Non-persistent: the reader asks again after every start.
+
+    True when the Repair was filed, so the caller tries again when not."""
+    try:
+        ir.async_create_issue(
+            hass,
+            domain=DOMAIN,
+            issue_id=_power_not_found_issue_id(source),
+            is_fixable=False,
+            is_persistent=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="power_sensor_not_found",
+            learn_more_url=next_step_url("docs", "power_sensor_not_found",
+                                         **_versions(hass)),
+            translation_placeholders={
+                "energy_entity": str(energy_entity or "—"),
+            },
+        )
+    except Exception as e:  # noqa: BLE001
+        _LOGGER.debug("issue_registry.create (power_sensor_not_found_%s) "
+                      "failed: %s", source, e)
+        return False
+    return True
+
+
+def clear_power_sensor_not_found(hass: HomeAssistant, source: str) -> None:
+    try:
+        ir.async_delete_issue(hass, DOMAIN, _power_not_found_issue_id(source))
+    except Exception as e:  # noqa: BLE001
+        _LOGGER.debug("issue_registry.delete (power_sensor_not_found_%s) "
+                      "failed: %s", source, e)
 
 
 def raise_soc_zones_out_of_order(hass: HomeAssistant, *, priority, buffer,

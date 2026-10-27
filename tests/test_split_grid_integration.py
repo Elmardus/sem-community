@@ -1089,8 +1089,9 @@ class TestBatteryPowerConfigPipeline:
         assert power.battery_soc == 40
 
     def test_inverted_battery_power_config(self):
-        """power_config.stat_rate_inverted: sensor reports +=discharge;
-        the reader flips it to SEM convention on read."""
+        """power_config.stat_rate_inverted: HA's battery sign is + while
+        discharging, so an Inverted sensor reads + while charging — SEM's
+        sign. Read as it is (#1194; #551 flipped it the wrong way)."""
         hass = MagicMock()
         ed = _make_energy_dashboard_config(
             solar_power="sensor.pv",
@@ -1101,13 +1102,13 @@ class TestBatteryPowerConfigPipeline:
         states = {
             "sensor.pv": _state(4000),
             "sensor.grid": _state(0),
-            "sensor.batt_inverted": _state(1200),  # raw: +1200 = discharge
+            "sensor.batt_inverted": _state(1200),  # raw: +1200 = charge
         }
         reader = _make_reader_with_states(hass, states, ed)
         power = reader.read_power()
         power.calculate_derived()
 
-        assert power.battery_power == -1200  # flipped → discharge
+        assert power.battery_power == 1200  # as it is → charge
 
     def test_battery_power_sensor_override_on_ed_path(self):
         """#597 — the SEM ``battery_power_sensor`` override must be honoured on

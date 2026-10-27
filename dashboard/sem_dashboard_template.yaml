@@ -143,6 +143,7 @@ views:
                     children:
                       - sensor.sem_flow_battery_to_home_energy
                       - sensor.sem_flow_battery_to_ev_energy
+                      - sensor.sem_flow_battery_to_grid_energy
               - entities:
                   - entity_id: sensor.sem_flow_solar_to_home_energy
                     color: "#ff9800"
@@ -189,6 +190,11 @@ views:
                     name: Bat>EV
                     children:
                       - sensor.sem_daily_ev_energy
+                  - entity_id: sensor.sem_flow_battery_to_grid_energy
+                    color: "#4db6ac"
+                    name: Bat>Grid
+                    children:
+                      - sensor.sem_daily_grid_export_energy
               - entities:
                   - entity_id: sensor.sem_daily_home_energy
                     color: "#5BC8D8"

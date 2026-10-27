@@ -2928,14 +2928,9 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 }
                 value = grid_status_map.get(value, value.capitalize() if isinstance(value, str) else value)
 
-            # Calculate self-consumption if not provided
-            elif self.entity_description.key == "self_consumption_rate" and value is None:
-                solar = self.coordinator.data.get("solar_production_total", 0)
-                grid_export = max(0, -self.coordinator.data.get("grid_power", 0))
-                if solar > 0:
-                    value = round((solar - grid_export) / solar * 100, 1)
-                else:
-                    value = 0
+            # (#1191) No second formula for ``self_consumption_rate`` here:
+            # the cycle always publishes it. A live-watt copy took the whole
+            # export (a battery sale too) away from solar.
 
             # Convert ISO timestamp strings to datetime for TIMESTAMP sensors
             if (isinstance(value, str)
