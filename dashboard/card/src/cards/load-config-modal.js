@@ -98,8 +98,10 @@ const FIELD_STYLE =
  * @param {object} values  from controlToFormValues()
  * @param {(key:string)=>string} t  translate fn
  * @param {boolean} hasManual  show the "Remove mapping" button (manual mapping set)
+ * @param {string} inUse  (#1145) the entity SEM already drives from the Configuration
+ *   tab; named above the empty form so it does not read as "nothing set"
  */
-export function buildLoadConfigModalHTML({ deviceName, values, t, hasManual = false, behindRelay = null }) {
+export function buildLoadConfigModalHTML({ deviceName, values, t, hasManual = false, behindRelay = null, inUse = '' }) {
     const v = values;
     const isService = v.type === 'service';
     const opt = (val, label) =>
@@ -107,6 +109,7 @@ export function buildLoadConfigModalHTML({ deviceName, values, t, hasManual = fa
     return `
         <div style="background:var(--card-background-color,#1e1e2e);border-radius:12px;padding:24px;min-width:320px;max-width:90vw;color:var(--primary-text-color,#e0e0e0)">
             <div style="font-weight:700;margin-bottom:16px">${t('configure_device')}: ${escapeHtml(deviceName)}</div>
+            ${inUse ? `<div class="cfg-in-use" style="font-size:13px;opacity:0.8;margin-bottom:12px">${escapeHtml(t('cfg_in_use_hint').replace(/\{entity\}/g, inUse))}</div>` : ''}
             <label style="font-size:13px;opacity:0.7">${t('control_type')}</label>
             <select id="cfg-type" style="${FIELD_STYLE}">
                 ${opt('switch', t('mode_switch'))}

@@ -1169,6 +1169,12 @@ class SEMLoadPriorityCard extends SEMLitBase {
         const readC = device.comfort ? device.comfort.reading_c : null;
         const read = readC == null ? null
             : (unit === '°F' ? readC * 9 / 5 + 32 : readC);
+        // (#1145) a worked example, hot water only: the issue was a user who
+        // could not tell what the extra degrees do
+        const showExample = /^hot_water/.test(String(device.id || '')) && target > 0;
+        const exampleText = this._t('comfort_example')
+            .replace('{keep}', target + unit).replace('{extra}', offset + unit)
+            .replace('{max}', (target + offset) + unit);
         const num = (key, val, step) => html`
             <input type="number" step="${step}" style="width:56px"
                    .value="${val ? String(val) : ''}" placeholder="\u2014"
@@ -1236,7 +1242,10 @@ class SEMLoadPriorityCard extends SEMLitBase {
                 <span class="ge-ctl">${num('comfort_limit', limit, 0.5)}
                     <span class="ge-unit">${unit}</span></span>
             </div>
-            <div class="ge-hint">${this._t('comfort_hint')}</div>`;
+            <div class="ge-hint">${this._t('comfort_hint')}</div>
+            ${showExample ? html`
+            <div class="ge-hint">${exampleText}</div>
+            <div class="ge-hint">${this._t('comfort_both_limits')}</div>` : nothing}`;
     }
 
     /** (#914) The anti-cycle range the backend publishes off consts/bounds.py
@@ -1646,6 +1655,9 @@ class SEMLoadPriorityCard extends SEMLitBase {
         overlay.innerHTML = buildLoadConfigModalHTML({
             deviceName, values, t: (k) => this._t(k), hasManual,
             behindRelay: isLoad ? !!dev.behindRelay : null,
+            // (#1145) a device set up in the Configuration tab has no manual
+            // mapping, so the form would open empty; say what is in use
+            inUse: !hasManual && !values.entity ? (dev?.controlEntity || '') : '',
         });
         this.renderRoot.appendChild(overlay);
 
