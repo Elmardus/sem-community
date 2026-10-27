@@ -2029,6 +2029,10 @@
       "title": "Kein Leistungssensor für {energy_entity}",
       "description": "Das Energie-Dashboard zählt **{energy_entity}** in kWh, aber SEM hat dafür keinen Leistungssensor (W) gefunden. SEM liest diese Leistung als 0 W, daher sind die Energieflüsse und der Überschuss falsch. Füge dazu den Leistungssensor zu diesem Eintrag im Energie-Dashboard hinzu. Oder öffne das SEM-Dashboard, Tab ⚙ **Konfiguration**, und wähle oben **Alle Einstellungen**. Setze dann den Sensor im Abschnitt **Sensorquellen**. Gibt es keinen Leistungssensor, kannst du diesen Hinweis ignorieren."
     },
+    "power_sensor_not_found_unit": {
+      "title": "Kein Leistungssensor für {energy_entity}",
+      "description": "Das Energie-Dashboard zählt **{energy_entity}** in kWh, aber SEM hat dafür keinen Leistungssensor (W) gefunden. SEM addiert nur die anderen Solar- oder Batterieeinträge, daher sind die Energieflüsse und der Überschuss falsch. Füge dazu den Leistungssensor zu diesem Eintrag im Energie-Dashboard hinzu. Gibt es keinen Leistungssensor, kannst du diesen Hinweis ignorieren."
+    },
     "charger_device_gone": {
       "title": "Ladegerät {name}: Gerät fehlt",
       "description": "Home Assistant kennt das Gerät hinter dem Ladegerät {name} nicht mehr. SEM kann es nicht steuern. Entferne das Ladegerät in SEM oder füge das Gerät wieder hinzu."

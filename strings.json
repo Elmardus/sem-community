@@ -2029,6 +2029,10 @@
       "title": "No power sensor for {energy_entity}",
       "description": "The Energy Dashboard counts **{energy_entity}** in kWh, but SEM found no power sensor (W) for it. SEM reads this power as 0 W, so the energy flows and the surplus are wrong. To fix it, add the power sensor to this entry in the Energy Dashboard. Or open the SEM dashboard, tab ⚙ **Configuration**, and pick **All settings** at the top. Then set the sensor in section **Sensor sources**. If there is no power sensor, you can ignore this notice."
     },
+    "power_sensor_not_found_unit": {
+      "title": "No power sensor for {energy_entity}",
+      "description": "The Energy Dashboard counts **{energy_entity}** in kWh, but SEM found no power sensor (W) for it. SEM adds up only the other solar or battery entries, so the energy flows and the surplus are wrong. To fix it, add the power sensor to this entry in the Energy Dashboard. If there is no power sensor, you can ignore this notice."
+    },
     "charger_device_gone": {
       "title": "Charger {name}: its device is gone",
       "description": "Home Assistant no longer has the device behind the charger {name}. SEM cannot drive it. Remove the charger in SEM, or add the device back."

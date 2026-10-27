@@ -2029,6 +2029,10 @@
       "title": "Ei tehoanturia kohteelle {energy_entity}",
       "description": "Energia-paneeli laskee **{energy_entity}** kWh:na, mutta SEM ei löytänyt sille tehoanturia (W). SEM lukee siksi tämän tehon 0 W:ksi, joten energiavirrat ja ylijäämä ovat väärin. Korjaa se lisäämällä tehoanturi tähän kohtaan Energia-paneelissa. Tai avaa SEM-hallintapaneeli, välilehti ⚙ **Asetukset**, ja valitse ylhäältä **Kaikki asetukset**. Aseta sitten anturi osiossa **Anturilähteet**. Jos tehoanturia ei ole, voit ohittaa tämän ilmoituksen."
     },
+    "power_sensor_not_found_unit": {
+      "title": "Ei tehoanturia kohteelle {energy_entity}",
+      "description": "Energia-paneeli laskee **{energy_entity}** kWh:na, mutta SEM ei löytänyt sille tehoanturia (W). SEM laskee siksi yhteen vain muut aurinko- tai akkukohdat, joten energiavirrat ja ylijäämä ovat väärin. Korjaa se lisäämällä tehoanturi tähän kohtaan Energia-paneelissa. Jos tehoanturia ei ole, voit ohittaa tämän ilmoituksen."
+    },
     "charger_device_gone": {
       "title": "Laturi {name}: laite puuttuu",
       "description": "Home Assistantissa ei enää ole laturin {name} laitetta. SEM ei voi ohjata sitä. Poista laturi SEMistä tai lisää laite uudelleen."

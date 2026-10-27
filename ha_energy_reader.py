@@ -180,6 +180,25 @@ class EnergyDashboardConfig:
     # power from auto-recovered power.
     derived_power: Dict[str, str] = field(default_factory=dict)
 
+    #: (#1226) Each dashboard source with kWh counters and no power sensor,
+    #: in dashboard order: a solar source by its counter, a battery source
+    #: by its (charge, discharge) counters. The derive looks for a power
+    #: sensor for every one of them. It looked only when the FIRST source
+    #: had none, so a second inverter or battery read 0 W.
+    solar_energy_only: List[str] = field(default_factory=list)
+    battery_energy_only: List[Tuple[Optional[str], Optional[str]]] = field(
+        default_factory=list)
+    #: (#1226) Each linked solar power sensor → its own source's counter.
+    solar_unit_counters: Dict[str, str] = field(default_factory=dict)
+    #: (#1226) Every power sensor the derive found → the counter it was
+    #: found from. ``derived_power`` names one per source type, and only
+    #: when it is the one the scalar field holds.
+    derived_units: Dict[str, str] = field(default_factory=dict)
+    #: (#1226) The counters of the sources still read from no power sensor
+    #: after the derive, by "solar" / "battery". The reader files the
+    #: ``power_sensor_not_found`` Repair for them (#1188).
+    unsourced_counters: Dict[str, List[str]] = field(default_factory=dict)
+
     def is_minimally_configured(self) -> bool:
         """Check if Energy Dashboard has minimum required configuration.
 
@@ -214,6 +233,9 @@ class EnergyDashboardConfig:
         return bool(
             (self.solar_energy and not self.solar_power)
             or (battery_energy and not battery_power_resolved)
+            # (#1226) a second inverter or battery still read from nothing
+            or unsourced_counters(self, "solar")
+            or unsourced_counters(self, "battery")
         )
 
     def get_missing_components(self) -> List[str]:
@@ -271,6 +293,17 @@ def energy_counters(ed_config: Any, category: str) -> List[str]:
     return [single] if isinstance(single, str) and single else []
 
 
+def unsourced_counters(ed_config: Any, kind: str) -> List[str]:
+    """(#1226) The counters of the ``kind`` sources ("solar" / "battery")
+    that the derive found no power sensor for, in dashboard order. Each of
+    them reads 0 W, also beside other units that do read."""
+    found = getattr(ed_config, "unsourced_counters", None)
+    listed = found.get(kind) if isinstance(found, dict) else None
+    if not isinstance(listed, (list, tuple)):
+        return []
+    return [c for c in dict.fromkeys(listed) if isinstance(c, str) and c]
+
+
 def battery_units(ed_config: Any) -> List[str]:
     """One entity per battery, in the order of its slug ``b1``, ``b2`` … (#1171).
 
@@ -287,6 +320,80 @@ def battery_units(ed_config: Any) -> List[str]:
     if isinstance(pairs, (list, tuple)):
         units += [to for _from, to in pairs]
     return units
+
+
+def yield_found_units_to_picks(ed_config: Any, *, solar_pick: Any = None,
+                               battery_pick: Any = None) -> None:
+    """(#1226) A Config card pick that stands for all of solar (or the
+    battery) beats the power sensors SEM found beside what a build before
+    #1226 read.
+
+    A pick stands for the whole source when it is none of that source's own
+    unit sensors and the build before read at most one unit: then its
+    reader read the pick (#623 sums two or more first). The units found
+    since are taken out of the lists, here, before the reader and the
+    per-battery entities read them, so both see the same batteries. What
+    the build before read stays, so a one-unit home is read as before: a
+    found string sensor beside a linked inverter must not beat a total the
+    user chose, and a battery found alone keeps its SOC.
+    """
+    if ed_config is None:
+        return
+    found = getattr(ed_config, "derived_units", None)
+    if not isinstance(found, dict) or not found:
+        return
+    if isinstance(solar_pick, str) and solar_pick:
+        units = list(ed_config.solar_power_list)
+        before = [u for u in units if u not in found] or [
+            u for u in units if found.get(u) == ed_config.solar_energy][:1]
+        if (solar_pick not in units and len(before) <= 1
+                and len(before) < len(units)):
+            ed_config.solar_power_list[:] = before
+            for unit in set(units) - set(before):
+                found.pop(unit, None)
+            if ed_config.solar_power not in before:
+                ed_config.solar_power = before[0] if before else None
+                ed_config.derived_power.pop("solar", None)
+            ed_config.unsourced_counters.pop("solar", None)
+    if isinstance(battery_pick, str) and battery_pick:
+        units = battery_units(ed_config)
+        own = units + [e for pair in ed_config.battery_power_pairs for e in pair]
+        before = battery_units_before_derive(ed_config)
+        if (battery_pick not in own and len(before) <= 1
+                and len(before) < len(units)):
+            dropped = [u for u in ed_config.battery_power_list
+                       if u in found and u not in before]
+            ed_config.battery_power_list[:] = [
+                u for u in ed_config.battery_power_list if u not in dropped]
+            for unit in dropped:
+                ed_config.battery_unit_counters.pop(unit, None)
+                found.pop(unit, None)
+            if ed_config.battery_power in dropped:
+                ed_config.battery_power = (ed_config.battery_power_list[0]
+                                           if ed_config.battery_power_list else None)
+                ed_config.derived_power.pop("battery", None)
+            ed_config.unsourced_counters.pop("battery", None)
+
+
+def battery_units_before_derive(ed_config: Any) -> List[str]:
+    """(#1226) ``battery_units`` as a build before #1226 had it.
+
+    That build took a power sensor SEM found itself only when no battery
+    had a power sensor of its own, and then only the first battery's. The
+    battery slots saved by it follow this order, so a first slot record is
+    taken by it: a battery found now beside others starts unset, and a
+    two-sensor battery it pushed back keeps its own slot.
+    """
+    units = battery_units(ed_config)
+    derived = getattr(ed_config, "derived_units", None)
+    if not isinstance(derived, dict) or not derived:
+        return units
+    own = [u for u in units if u not in derived]
+    if own:
+        return own
+    first = (getattr(ed_config, "battery_charge_energy", None)
+             or getattr(ed_config, "battery_discharge_energy", None))
+    return [u for u in units if derived.get(u) == first][:1]
 
 
 def unit_energy_counters(
@@ -555,6 +662,10 @@ def _extract_solar_config(source: Dict[str, Any], config: EnergyDashboardConfig)
         config.solar_power_list.append(power)
         if not config.solar_power:
             config.solar_power = power
+        if energy:
+            config.solar_unit_counters.setdefault(power, energy)   # (#1226)
+    elif energy:
+        config.solar_energy_only.append(energy)      # (#1226)
 
     config.has_solar = bool(config.solar_energy_list or config.solar_power_list)
 
@@ -739,6 +850,10 @@ def _extract_battery_config(source: Dict[str, Any], config: EnergyDashboardConfi
     if unit:
         config.battery_unit_counters.setdefault(
             unit, (charge_energy or None, discharge_energy or None))
+    elif charge_energy or discharge_energy:
+        # (#1226) no power at all: the derive looks for one on its device
+        config.battery_energy_only.append(
+            (charge_energy or None, discharge_energy or None))
 
     config.has_battery = bool(
         config.battery_discharge_energy_list
@@ -758,8 +873,8 @@ def _extract_battery_config(source: Dict[str, Any], config: EnergyDashboardConfi
 
 
 def _derive_battery_power_if_unrepresented(hass, config) -> None:
-    """Derive a combined battery power sensor ONLY when the battery has no
-    power representation at all (#761).
+    """Derive a combined power sensor for each battery source that has no
+    power representation at all (#761, #1226).
 
     A two-sensor ``power_config`` (#551) leaves ``battery_power`` unset BY
     DESIGN — the reader computes net = to − from from the pair. The
@@ -768,28 +883,97 @@ def _derive_battery_power_if_unrepresented(hass, config) -> None:
     one physical battery, enumerated as units b1+b2 with identical values
     and summed — battery read 2× while charging and home followed
     (jappish84, #761; every two-sensor install since the derive shipped).
-    A pair — or an inverted single (#551) — IS the power representation.
+    A pair — or an inverted single (#551) — IS the power representation,
+    and a source with one is never asked (``battery_energy_only``).
+
+    (#1226) Each source is asked on its own. The derive used to run only
+    when NO battery had power, so a second battery with counters alone
+    read 0 W beside the first, and no Repair said so.
     """
-    if (config.battery_power or config.battery_power_pairs
-            or config.battery_power_from):
-        return
-    battery_energy = config.battery_charge_energy or config.battery_discharge_energy
-    if not battery_energy:
-        return
-    found = _find_power_sensor_on_device(
-        hass, battery_energy, _POWER_DERIVE_RULES["battery"],
-    )
-    if found:
-        config.battery_power = found
+    read = list(config.battery_power_list)
+    read += [e for pair in config.battery_power_pairs for e in pair]
+    read += [c for pair in config.battery_unit_counters.values() for c in pair]
+    links = [((unit,), counters)
+             for unit, counters in config.battery_unit_counters.items()]
+    links += [(pair, config.battery_unit_counters.get(pair[1]) or ())
+              for pair in config.battery_power_pairs]
+    for (charge, discharge), found in _derive_unit_power(
+            hass, "battery", config.battery_energy_only, read, links):
+        if not found:
+            config.unsourced_counters.setdefault("battery", []).append(
+                charge or discharge)
+            continue
+        # The first battery's field, only when no battery has its own sensor
+        # (as before #1226): setup saves it as the battery pick (``to_dict``).
+        if not config.battery_power and not config.battery_power_pairs:
+            config.battery_power = found
+            config.derived_power["battery"] = found
         config.battery_power_list.append(found)
-        # (#1193) found on the first battery's counter device: its counters
-        config.battery_unit_counters.setdefault(found, (
-            config.battery_charge_energy, config.battery_discharge_energy))
-        config.derived_power["battery"] = found
+        config.derived_units[found] = charge or discharge
+        # (#1193) found on this battery's counter device: its counters
+        config.battery_unit_counters.setdefault(found, (charge, discharge))
         _LOGGER.info(
-            "Derived battery power sensor %s from energy device "
-            "(no stat_rate in Energy Dashboard)", found,
+            "Derived battery power sensor %s from energy device of %s "
+            "(no stat_rate in Energy Dashboard)", found, charge or discharge,
         )
+
+
+def _derive_unit_power(
+    hass, kind: str, sources: List[Tuple[Optional[str], ...]],
+    read: List[Optional[str]], links: Any = (),
+) -> List[Tuple[Tuple[Optional[str], ...], Optional[str]]]:
+    """(#1226) Look for a power sensor for each ``kind`` source in
+    ``sources`` (its kWh counters; it has no power sensor), in dashboard
+    order. ``read`` holds the power sensors and counters of the units of
+    this kind that SEM already reads.
+
+    A source whose counter sits on a device one of those units uses is
+    left alone: that device's power sensor may hold this source too (an
+    inverter's string counters, a fleet sensor beside a pack's own), and a
+    second sensor from it would count the same watts twice. It is not
+    called missing either. Returns ``(counters, found)`` for each source
+    asked; ``found`` is None when its device has no power sensor.
+
+    ``links`` pairs each linked unit's power sensors with its own counters.
+    A link that is not on its own counter's device (a template, a site
+    meter's total) may hold the other sources too, and nothing says which:
+    then no source of this kind is asked, and none is called missing. Two
+    sensors for the same watts read high, and a high surplus starts loads
+    on grid power.
+    """
+    def _devices(entities) -> set:
+        return {d for d in (_registry_device_id(hass, e)
+                            for e in entities if e) if d}
+
+    if sources:
+        for powers, counters in links:
+            if not _devices(powers) or not _devices(powers) <= _devices(counters):
+                _LOGGER.info(
+                    "SEM cannot tell what %s measures (not on the device of "
+                    "%s), so it looks for no %s power sensor for %s (#1226)",
+                    ", ".join(p for p in powers if p),
+                    ", ".join(c for c in counters if c) or "no counter",
+                    kind, ", ".join(c for src in sources for c in src if c))
+                return []
+    used = _devices(read)
+    asked: List[Tuple[Tuple[Optional[str], ...], Optional[str]]] = []
+    for counters in sources:
+        counter = next((c for c in counters if c), None)
+        if counter is None:
+            continue
+        own = _devices(counters)
+        if own & used:
+            _LOGGER.debug(
+                "%s counter %s is on a device SEM already reads power from; "
+                "no second power sensor is taken from it (#1226)",
+                kind, counter)
+            continue
+        found = _find_power_sensor_on_device(
+            hass, counter, _POWER_DERIVE_RULES[kind])
+        if found:
+            used |= own
+        asked.append((counters, found))
+    return asked
 
 
 #: (#1051) Words that make an Energy Dashboard device the EV — matched as
@@ -889,6 +1073,18 @@ def _declared_power_entry(hass: HomeAssistant, entry) -> bool:
     return dc == "power"
 
 
+def _registered_as_power(entry) -> bool:
+    """(#1226) A sensor with no state yet is judged by the registry's own
+    record, as ``_declared_power_entry`` does (#1172). On a cold start SEM
+    often sets up before the inverter's integration has loaded. A second
+    battery found only once its integration had loaded moved the battery
+    list between starts, and with it each battery's saved settings."""
+    dc = getattr(entry, "device_class", None) or getattr(
+        entry, "original_device_class", None)
+    unit = getattr(entry, "unit_of_measurement", None)
+    return dc == "power" or (isinstance(unit, str) and is_power_unit(unit))
+
+
 def _find_power_sensor_on_device(
     hass: HomeAssistant, energy_entity: str, rule: Dict[str, Any],
 ) -> Optional[str]:
@@ -934,14 +1130,15 @@ def _find_power_sensor_on_device(
                 continue
             if not any(kw in eid_lower for kw in rule["include"]):
                 continue
-            # Must look like a live power sensor.
+            # Must look like a power sensor. #641 — asking units.py instead
+            # of re-listing the suffixes, so a MW/GW-labelled sensor is
+            # recognised as power here too.
             state = hass.states.get(eid)
-            if not state:
-                continue
-            dc = state.attributes.get("device_class")
-            # #641 — asking units.py instead of re-listing the suffixes, so a
-            # MW/GW-labelled sensor is recognised as power here too.
-            if dc != "power" and not is_power_unit(state):
+            if state is not None:
+                dc = state.attributes.get("device_class")
+                if dc != "power" and not is_power_unit(state):
+                    continue
+            elif not _registered_as_power(entry):
                 continue
             candidates.append(eid)
 
@@ -1063,7 +1260,9 @@ def _derive_missing_power_sensors(
     (HA 2025.12+). Those are configured manually and are frequently absent —
     the standard SolaX solax-modbus setup wires only energy sensors. Without
     power links SEM reads 0 for everything. When a source has an energy sensor
-    but no power sensor, derive the power sensor from the same device.
+    but no power sensor, derive the power sensor from the same device. (#1226)
+    Each solar and battery source is asked on its own; one with nothing found
+    is kept in ``unsourced_counters`` for its Repair.
 
     Sign conventions are intentionally NOT handled here — the runtime
     ``SensorReader._detect_grid_sign`` / ``_detect_battery_sign`` auto-detection
@@ -1072,19 +1271,26 @@ def _derive_missing_power_sensors(
     if hass is None:
         return
 
-    # Solar: pv_power_total etc.
-    if not config.solar_power and config.solar_energy:
-        found = _find_power_sensor_on_device(
-            hass, config.solar_energy, _POWER_DERIVE_RULES["solar"],
-        )
-        if found:
+    # Solar: pv_power_total etc. — (#1226) for every inverter whose source
+    # has a counter and no power sensor, not only when the first has none.
+    powered = [c for c in config.solar_energy_list
+               if c not in config.solar_energy_only]
+    for (counter,), found in _derive_unit_power(
+            hass, "solar", [(c,) for c in config.solar_energy_only],
+            list(config.solar_power_list) + powered,
+            [((p,), (c,)) for p, c in config.solar_unit_counters.items()]):
+        if not found:
+            config.unsourced_counters.setdefault("solar", []).append(counter)
+            continue
+        if not config.solar_power:
             config.solar_power = found
-            config.solar_power_list.append(found)
             config.derived_power["solar"] = found
-            _LOGGER.info(
-                "Derived solar power sensor %s from energy device "
-                "(no stat_rate in Energy Dashboard)", found,
-            )
+        config.solar_power_list.append(found)
+        config.derived_units[found] = counter
+        _LOGGER.info(
+            "Derived solar power sensor %s from energy device of %s "
+            "(no stat_rate in Energy Dashboard)", found, counter,
+        )
 
     # Grid: combined meter power (measured_power etc.). Sign auto-detected later.
     if not config.grid_import_power and config.grid_import_energy:
