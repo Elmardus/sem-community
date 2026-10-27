@@ -373,6 +373,14 @@ at all — vendor cloud APIs such as FusionSolar's northbound API typically do
 not — then leaving both empty is the correct answer, and SEM saying it is
 blind on grid is the honest reading, not a fault to work around.
 
+## SEM found no power sensor
+
+**Symptom:** a Repair says *No power sensor for* a kWh counter of your grid, solar or battery. That source reads 0 W on every SEM card, and the energy flows and the surplus are wrong.
+
+**Cause (#1188):** the Energy Dashboard entry counts energy (kWh) but has no power sensor (W), and SEM found none on the counter's own device. For the grid, SEM also looked for an import and export pair. SEM reads power, not kWh, to steer, so it reads 0 W. Before, only the HA log said `No grid power sensor found`. SEM waits 5 minutes after Home Assistant has started, so a meter that loads late does not raise it.
+
+**Fix:** add the power sensor to that entry in the Energy Dashboard (*Settings → Dashboards → Energy*). Or set it on SEM's ⚙ **Configuration** tab: pick **All settings**, then **Sensor sources** → **Grid power**, **Solar power sensor** or **Battery power sensor**. The Repair clears on the next read.
+
 ## The battery platform is pinned to generic
 
 **Symptom:** a Repair says the battery platform is set to *generic* although a

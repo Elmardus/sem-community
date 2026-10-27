@@ -705,6 +705,17 @@ class SensorReader:
         #: guess Repair a previous lifetime left, whatever tier proved it.
         self._split_proof_reconciled: bool = False
         self._uses_split_grid: bool = False
+        #: (#1188) This cycle's sources the Energy Dashboard counts in kWh and
+        #: SEM reads from no power sensor: source → its kWh counter. None when
+        #: the dashboard path did not run this cycle — no answer, not "found".
+        self._unsourced_power: Optional[dict[str, str]] = None
+        #: (#1188) When each source was first seen with no sensor, once HA runs.
+        self._unsourced_since: dict[str, float] = {}
+        #: (#1188) The counter each raised Repair names.
+        self._unsourced_raised: dict[str, str] = {}
+        #: (#1188, class 84) A fresh reader's first answer clears what an
+        #: options reload left: the Repair outlives the reader.
+        self._unsourced_reconciled: bool = False
         # Warn-once guard for the discovery-*exception* path (#259); distinct from the
         # dict "warned" key (which guards "no sensor found"). Reset on cache invalidate.
         self._split_grid_discovery_warned: bool = False
@@ -980,6 +991,7 @@ class SensorReader:
         self._battery_power_missing = False   # (#758) per-cycle
         self._input_reads = {}                # (#818) per-cycle
         self._input_dark = {}                 # (#818) per-cycle
+        self._unsourced_power = None          # (#1188) per-cycle
         # (#1022) the previous cycle's dark solar verdict has just ended
         self._accrue_solar_downtime(time.monotonic())
         # (#1192) Which source THIS cycle read: each branch that reads the
@@ -2563,6 +2575,9 @@ class SensorReader:
         """Read power values from Energy Dashboard configured sensors."""
         ed = self._energy_dashboard_config
         readings = PowerReadings()
+        # (#1188) Each source the dashboard counts but SEM reads from nothing.
+        unsourced: dict[str, str] = {}
+        self._unsourced_power = unsourced
 
         # Solar power — sum all inverters if multiple configured.
         # v1.7.0 arch/multi-inverter-battery-primary: also populate
@@ -2600,6 +2615,8 @@ class SensorReader:
             )
         elif ed.solar_power:
             readings.solar_power = self._read_solar_power(ed.solar_power)
+        elif ed.solar_energy:
+            unsourced["solar"] = ed.solar_energy
 
         # v1.7.0 / #312: per-PV-string power. Gated on len ≥ 2 — single-
         # string setups get nothing here and downstream readers fall
@@ -2778,6 +2795,10 @@ class SensorReader:
                         "import=%s (held), export=%s",
                         disc["import"], exp,
                     )
+            if not disc["import"] and not disc["export"]:
+                # (#1188) Nothing at all. Half a pair or a name guess has its
+                # own Repair (split_grid_rejected / split_grid_guessed).
+                unsourced["grid"] = ed.grid_import_energy
             if disc["import"]:
                 import_w = self._read_sensor(disc["import"], "grid_import")
                 export_w = self._read_sensor(disc["export"], "grid_export") if disc["export"] else 0.0
@@ -2973,6 +2994,9 @@ class SensorReader:
                 charge_w, ed.battery_power_to,
             )
             readings.battery_power = charge_w - discharge_w
+        elif ed.battery_charge_energy or ed.battery_discharge_energy:
+            unsourced["battery"] = (ed.battery_charge_energy
+                                    or ed.battery_discharge_energy)
         self._move_lock_learned_on_flip(ed, read_alone,
                                         per_battery=per_battery_total is not None)
         self._drop_locks_on_other_counters(
@@ -4509,6 +4533,48 @@ class SensorReader:
             "counters. (#947)",
             disc.get("import"), disc.get("export"),
         )
+
+    def report_unsourced_power(self, *, waiting: bool) -> None:
+        """(#1188) A source the Energy Dashboard counts in kWh that SEM reads
+        from no power sensor reads 0 W. The flows, the Sankey and the surplus
+        then go wrong, and one log line was all that said why.
+
+        Called once per cycle, after the read. A source with no sensor gets
+        a Repair once HA runs, the dashboard's own retry is over
+        (``waiting``) and ``UNAVAILABLE_REPAIR_THRESHOLD_S`` has passed — a
+        meter that loads late is not missing (class 86). The Repair clears
+        the cycle a sensor is found or the dashboard stops counting the
+        source. A cycle the dashboard path did not run changes nothing.
+        """
+        unsourced = self._unsourced_power
+        if unsourced is None:
+            return
+        running = getattr(self.hass, "state", None) is CoreState.running
+        now = time.monotonic()
+        for source in _ri.POWER_SOURCES:
+            counter = unsourced.get(source)
+            if counter is None:
+                self._unsourced_since.pop(source, None)
+                if (self._unsourced_raised.pop(source, None) is not None
+                        or not self._unsourced_reconciled):
+                    _ri.clear_power_sensor_not_found(self.hass, source)
+                continue
+            if not running or waiting:
+                self._unsourced_since.pop(source, None)   # not ready: wait again
+                continue
+            since = self._unsourced_since.setdefault(source, now)
+            if now - since < _ri.UNAVAILABLE_REPAIR_THRESHOLD_S:
+                continue
+            if self._unsourced_raised.get(source) != counter:
+                self._unsourced_raised[source] = counter
+                _LOGGER.warning(
+                    "No %s power sensor: the Energy Dashboard counts %s in kWh, "
+                    "but SEM found no power sensor for it, so %s power reads "
+                    "0 W. Add one in the Energy Dashboard or in SEM's Sensor "
+                    "sources. (#1188)", source, counter, source)
+                _ri.raise_power_sensor_not_found(
+                    self.hass, source, energy_entity=counter)
+        self._unsourced_reconciled = True
 
     def _report_split_grid_confidence(self, disc: dict) -> None:
         """(#911) An ``any-device`` adoption is a GUESS — pattern-matched

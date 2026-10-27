@@ -1975,6 +1975,10 @@
       "title": "SEM nie mógł znaleźć Twoich liczników mocy sieci",
       "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguracja**, and pick **Wszystkie ustawienia** at the top. Then set **Moc sieci** in section **Źródła czujników**. If your meter has one sensor for import and one for export, set **Czujnik importu z sieci** and **Czujnik eksportu do sieci** in section **Taryfa i ceny** instead."
     },
+    "power_sensor_not_found": {
+      "title": "Brak czujnika mocy dla {energy_entity}",
+      "description": "Pulpit Energia liczy **{energy_entity}** w kWh, ale SEM nie znalazł dla niego czujnika mocy (W). SEM odczytuje więc tę moc jako 0 W, a przepływy energii i nadwyżka są błędne. Aby to naprawić, dodaj czujnik mocy do tego wpisu w pulpicie Energia. Albo otwórz pulpit SEM, kartę ⚙ **Konfiguracja**, i wybierz u góry **Wszystkie ustawienia**. Następnie ustaw czujnik w sekcji **Źródła czujników**."
+    },
     "charger_device_gone": {
       "title": "Ładowarka {name}: brak urządzenia",
       "description": "Home Assistant nie ma już urządzenia ładowarki {name}. SEM nie może nią sterować. Usuń ładowarkę w SEM albo dodaj urządzenie ponownie."

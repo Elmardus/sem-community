@@ -3948,6 +3948,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 self._sweep_orphan_repairs()
             except Exception:  # noqa: BLE001 — a Repair never costs a cycle
                 _LOGGER.debug("orphan repair sweep failed", exc_info=True)
+            # (#1188) A source the Energy Dashboard counts but SEM reads from
+            # no sensor is told as a Repair, not only in the log.
+            try:
+                self._sensor_reader.report_unsourced_power(
+                    waiting=self._ed_resolve_pending)
+            except Exception:  # noqa: BLE001 — a Repair never costs a cycle
+                _LOGGER.debug("missing power sensor report failed", exc_info=True)
 
             # (#638) One plug answer for the whole cycle. Runs on the
             # cycle's own reading, before any consumer — the state machine,

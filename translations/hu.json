@@ -1975,6 +1975,10 @@
       "title": "A SEM nem találta meg a hálózati teljesítménymérőket",
       "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguráció**, and pick **Minden beállítás** at the top. Then set **Hálózati teljesítmény** in section **Szenzorforrások**. If your meter has one sensor for import and one for export, set **Hálózati import szenzor** and **Hálózati export szenzor** in section **Tarifa és árazás** instead."
     },
+    "power_sensor_not_found": {
+      "title": "Nincs teljesítményszenzor ehhez: {energy_entity}",
+      "description": "Az Energia irányítópult kWh-ban számolja ezt: **{energy_entity}**, de a SEM nem talált hozzá teljesítményszenzort (W). A SEM ezért ezt a teljesítményt 0 W-nak olvassa, így az energiaáramlások és a többlet hibásak. A javításhoz add hozzá a teljesítményszenzort ehhez a bejegyzéshez az Energia irányítópulton. Vagy nyisd meg a SEM irányítópultot, a ⚙ **Konfiguráció** fület, és válaszd fent a **Minden beállítás** lehetőséget. Ezután állítsd be a szenzort a **Szenzorforrások** szakaszban."
+    },
     "charger_device_gone": {
       "title": "{name} töltő: az eszköz hiányzik",
       "description": "A Home Assistant már nem ismeri a(z) {name} töltő eszközét. A SEM nem tudja vezérelni. Távolítsd el a töltőt a SEM-ben, vagy add hozzá újra az eszközt."

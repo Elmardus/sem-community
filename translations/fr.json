@@ -1975,6 +1975,10 @@
       "title": "SEM n'a pas pu trouver vos compteurs de puissance réseau",
       "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Configuration**, and pick **Tous les réglages** at the top. Then set **Puissance réseau** in section **Sources des capteurs**. If your meter has one sensor for import and one for export, set **Capteur d'import réseau** and **Capteur d'export réseau** in section **Tarif & prix** instead."
     },
+    "power_sensor_not_found": {
+      "title": "Aucun capteur de puissance pour {energy_entity}",
+      "description": "Le tableau de bord Énergie compte **{energy_entity}** en kWh, mais SEM n'a trouvé aucun capteur de puissance (W) pour lui. SEM lit donc cette puissance comme 0 W, et les flux d'énergie et le surplus sont faux. Pour corriger, ajoutez le capteur de puissance à cette entrée du tableau de bord Énergie. Ou ouvrez le tableau de bord SEM, onglet ⚙ **Configuration**, et choisissez **Tous les réglages** en haut. Puis réglez le capteur dans la section **Sources des capteurs**."
+    },
     "charger_device_gone": {
       "title": "Borne {name} : appareil introuvable",
       "description": "Home Assistant ne connaît plus l'appareil de la borne {name}. SEM ne peut pas la piloter. Supprimez la borne dans SEM ou ajoutez de nouveau l'appareil."

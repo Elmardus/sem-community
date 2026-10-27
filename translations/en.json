@@ -1975,6 +1975,10 @@
       "title": "SEM could not find your grid power meters",
       "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Configuration**, and pick **All settings** at the top. Then set **Grid power** in section **Sensor sources**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
     },
+    "power_sensor_not_found": {
+      "title": "No power sensor for {energy_entity}",
+      "description": "The Energy Dashboard counts **{energy_entity}** in kWh, but SEM found no power sensor (W) for it. SEM reads this power as 0 W, so the energy flows and the surplus are wrong. To fix it, add the power sensor to this entry in the Energy Dashboard. Or open the SEM dashboard, tab ⚙ **Configuration**, and pick **All settings** at the top. Then set the sensor in section **Sensor sources**."
+    },
     "charger_device_gone": {
       "title": "Charger {name}: its device is gone",
       "description": "Home Assistant no longer has the device behind the charger {name}. SEM cannot drive it. Remove the charger in SEM, or add the device back."

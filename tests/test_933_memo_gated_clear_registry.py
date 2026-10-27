@@ -103,6 +103,10 @@ DECLARED: dict[str, str] = {
         "which reloads), a declared pair, a combined sensor — clears the "
         "guess Repair once per reader (_split_guess_reconciled, #933); the "
         "startup sweep never runs on a reload",
+    "coordinator/sensor_reader.py::SensorReader.report_unsourced_power":
+        "a fresh reader's first dashboard answer clears every source it finds "
+        "a sensor for, once (_unsourced_reconciled, #1188); the Repair is "
+        "non-persistent, so a restart drops it anyway",
     "coordinator/sensor_reader.py::SensorReader._read_sensor":
         "the first live read of each reader lifetime clears once "
         "(_sensor_repair_reconciled, #933)",

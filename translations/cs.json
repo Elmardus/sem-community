@@ -1975,6 +1975,10 @@
       "title": "SEM nemohl najít vaše elektroměry sítě",
       "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfigurace**, and pick **Všechna nastavení** at the top. Then set **Výkon sítě** in section **Zdroje senzorů**. If your meter has one sensor for import and one for export, set **Senzor importu ze sítě** and **Senzor exportu do sítě** in section **Tarif a ceny** instead."
     },
+    "power_sensor_not_found": {
+      "title": "Žádný senzor výkonu pro {energy_entity}",
+      "description": "Panel Energie počítá **{energy_entity}** v kWh, ale SEM pro něj nenašel žádný senzor výkonu (W). SEM proto čte tento výkon jako 0 W a toky energie i přebytek jsou špatně. Opravíte to přidáním senzoru výkonu k této položce v panelu Energie. Nebo otevřete dashboard SEM, kartu ⚙ **Konfigurace**, a nahoře zvolte **Všechna nastavení**. Pak nastavte senzor v sekci **Zdroje senzorů**."
+    },
     "charger_device_gone": {
       "title": "Nabíječka {name}: chybí zařízení",
       "description": "Home Assistant už nemá zařízení nabíječky {name}. SEM ji nemůže řídit. Odeberte nabíječku v SEM, nebo zařízení znovu přidejte."

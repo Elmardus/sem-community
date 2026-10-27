@@ -1975,6 +1975,10 @@
       "title": "SEM fant ikke nettmålerne dine",
       "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfigurasjon**, and pick **Alle innstillinger** at the top. Then set **Netteffekt** in section **Sensorkilder**. If your meter has one sensor for import and one for export, set **Nettimport-sensor** and **Netteksport-sensor** in section **Tariff og priser** instead."
     },
+    "power_sensor_not_found": {
+      "title": "Ingen effektsensor for {energy_entity}",
+      "description": "Energi-dashbordet teller **{energy_entity}** i kWh, men SEM fant ingen effektsensor (W) for den. SEM leser derfor denne effekten som 0 W, og energiflytene og overskuddet blir feil. Rett det ved å legge effektsensoren til denne oppføringen i Energi-dashbordet. Eller åpne SEM-dashbordet, fanen ⚙ **Konfigurasjon**, og velg **Alle innstillinger** øverst. Sett deretter sensoren i delen **Sensorkilder**."
+    },
     "charger_device_gone": {
       "title": "Lader {name}: enheten mangler",
       "description": "Home Assistant har ikke lenger enheten bak laderen {name}. SEM kan ikke styre den. Fjern laderen i SEM, eller legg til enheten igjen."
