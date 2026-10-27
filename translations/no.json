@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM fant anlegget ditt",
-        "description": "Dette er verdiene akkurat nå:\n\n- Sol: {solar}\n- Nett: {grid}\n- Batteri: {battery}\n- Huset bruker: {home}\n\nDe kommer fra de samme sensorene som Energi-dashbordet ditt. Trykk **Send**.",
+        "description": "Dette er verdiene akkurat nå:\n\n- Sol: {solar}\n- Nett: {grid}\n- Batteri: {battery}\n\nDe kommer fra de samme sensorene som Energi-dashbordet ditt. Trykk **Send**.",
         "sections": {
           "own_sensors": {
             "name": "Velg sensorer selv",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "kjøper",
-        "sending": "sender ut",
-        "charging": "lader",
-        "discharging": "lader ut",
         "none": "ikke funnet",
-        "why_guessed": "Energi-dashbordet ditt har ingen sensor for netteffekt, så SEM gjettet en.",
-        "why_home_negative": "Med disse tallene ville huset bruke mindre enn ingenting, så et fortegn er feil."
+        "why_guessed": "Energi-dashbordet ditt har ingen sensor for netteffekt, så SEM gjettet en."
       }
     }
   }

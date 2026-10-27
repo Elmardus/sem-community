@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM a găsit sistemul tău",
-        "description": "Acestea sunt valorile acum:\n\n- Solar: {solar}\n- Rețea: {grid}\n- Baterie: {battery}\n- Casa consumă: {home}\n\nVin de la aceiași senzori ca panoul tău Energie. Apasă **Trimite**.",
+        "description": "Acestea sunt valorile acum:\n\n- Solar: {solar}\n- Rețea: {grid}\n- Baterie: {battery}\n\nVin de la aceiași senzori ca panoul tău Energie. Apasă **Trimite**.",
         "sections": {
           "own_sensors": {
             "name": "Aleg singur senzorii",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "cumpărare",
-        "sending": "injectare",
-        "charging": "se încarcă",
-        "discharging": "se descarcă",
         "none": "negăsit",
-        "why_guessed": "Panoul tău Energie nu are senzor de putere a rețelei, așa că SEM a ghicit unul.",
-        "why_home_negative": "Cu aceste valori casa ar consuma mai puțin decât nimic, deci un semn este greșit."
+        "why_guessed": "Panoul tău Energie nu are senzor de putere a rețelei, așa că SEM a ghicit unul."
       }
     }
   }

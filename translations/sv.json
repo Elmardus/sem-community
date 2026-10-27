@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM hittade din anläggning",
-        "description": "Det här är värdena just nu:\n\n- Sol: {solar}\n- Nät: {grid}\n- Batteri: {battery}\n- Huset använder: {home}\n\nDe kommer från samma sensorer som din Energi-instrumentpanel. Tryck **Skicka**.",
+        "description": "Det här är värdena just nu:\n\n- Sol: {solar}\n- Nät: {grid}\n- Batteri: {battery}\n\nDe kommer från samma sensorer som din Energi-instrumentpanel. Tryck **Skicka**.",
         "sections": {
           "own_sensors": {
             "name": "Välj sensorer själv",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "köper",
-        "sending": "skickar ut",
-        "charging": "laddar",
-        "discharging": "laddar ur",
         "none": "hittades inte",
-        "why_guessed": "Din Energi-instrumentpanel har ingen sensor för näteffekt, så SEM gissade en.",
-        "why_home_negative": "Med de här värdena skulle huset använda mindre än ingenting, så ett tecken är fel."
+        "why_guessed": "Din Energi-instrumentpanel har ingen sensor för näteffekt, så SEM gissade en."
       }
     }
   }

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM löysi järjestelmäsi",
-        "description": "Nämä ovat arvot juuri nyt:\n\n- Aurinko: {solar}\n- Verkko: {grid}\n- Akku: {battery}\n- Talo kuluttaa: {home}\n\nNe tulevat samoista antureista kuin Energia-kojelautasi. Paina **Lähetä**.",
+        "description": "Nämä ovat arvot juuri nyt:\n\n- Aurinko: {solar}\n- Verkko: {grid}\n- Akku: {battery}\n\nNe tulevat samoista antureista kuin Energia-kojelautasi. Paina **Lähetä**.",
         "sections": {
           "own_sensors": {
             "name": "Valitse anturit itse",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "osto",
-        "sending": "syöttö",
-        "charging": "latautuu",
-        "discharging": "purkautuu",
         "none": "ei löytynyt",
-        "why_guessed": "Energia-kojelaudallasi ei ole verkkotehon anturia, joten SEM arvasi yhden.",
-        "why_home_negative": "Näillä arvoilla talo kuluttaisi vähemmän kuin ei mitään, joten yksi etumerkki on väärin."
+        "why_guessed": "Energia-kojelaudallasi ei ole verkkotehon anturia, joten SEM arvasi yhden."
       }
     }
   }

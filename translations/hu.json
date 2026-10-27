@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "A SEM megtalálta a rendszeredet",
-        "description": "Ezek az értékek most:\n\n- Napelem: {solar}\n- Hálózat: {grid}\n- Akkumulátor: {battery}\n- A ház fogyaszt: {home}\n\nUgyanazokból az érzékelőkből jönnek, mint az Energia irányítópultod. Nyomd meg a **Küldés** gombot.",
+        "description": "Ezek az értékek most:\n\n- Napelem: {solar}\n- Hálózat: {grid}\n- Akkumulátor: {battery}\n\nUgyanazokból az érzékelőkből jönnek, mint az Energia irányítópultod. Nyomd meg a **Küldés** gombot.",
         "sections": {
           "own_sensors": {
             "name": "Érzékelők kiválasztása magam",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "vételezés",
-        "sending": "betáplálás",
-        "charging": "töltődik",
-        "discharging": "merül",
         "none": "nem található",
-        "why_guessed": "Az Energia irányítópultodon nincs hálózati teljesítmény érzékelő, ezért a SEM kitalált egyet.",
-        "why_home_negative": "Ezekkel az értékekkel a ház kevesebbet fogyasztana a semminél, tehát egy előjel hibás."
+        "why_guessed": "Az Energia irányítópultodon nincs hálózati teljesítmény érzékelő, ezért a SEM kitalált egyet."
       }
     }
   }

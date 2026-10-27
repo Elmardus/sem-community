@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM znalazł Twoją instalację",
-        "description": "Oto wartości w tej chwili:\n\n- Słońce: {solar}\n- Sieć: {grid}\n- Bateria: {battery}\n- Dom zużywa: {home}\n\nPochodzą z tych samych czujników co Twój panel Energia. Naciśnij **Zatwierdź**.",
+        "description": "Oto wartości w tej chwili:\n\n- Słońce: {solar}\n- Sieć: {grid}\n- Bateria: {battery}\n\nPochodzą z tych samych czujników co Twój panel Energia. Naciśnij **Zatwierdź**.",
         "sections": {
           "own_sensors": {
             "name": "Wybierz czujniki samodzielnie",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "pobór",
-        "sending": "oddawanie",
-        "charging": "ładuje",
-        "discharging": "rozładowuje",
         "none": "nie znaleziono",
-        "why_guessed": "Twój panel Energia nie ma czujnika mocy sieci, więc SEM zgadł jeden.",
-        "why_home_negative": "Przy tych wartościach dom zużywałby mniej niż nic, więc jeden znak jest błędny."
+        "why_guessed": "Twój panel Energia nie ma czujnika mocy sieci, więc SEM zgadł jeden."
       }
     }
   }

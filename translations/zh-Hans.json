@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM 找到了你的系统",
-        "description": "这是当前的数值：\n\n- 光伏：{solar}\n- 电网：{grid}\n- 电池：{battery}\n- 家庭用电：{home}\n\n它们来自与你的能源仪表板相同的传感器。请按 **提交**。",
+        "description": "这是当前的数值：\n\n- 光伏：{solar}\n- 电网：{grid}\n- 电池：{battery}\n\n它们来自与你的能源仪表板相同的传感器。请按 **提交**。",
         "sections": {
           "own_sensors": {
             "name": "自己选择传感器",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "买电",
-        "sending": "送电",
-        "charging": "充电",
-        "discharging": "放电",
         "none": "未找到",
-        "why_guessed": "你的能源仪表板没有电网功率传感器，所以 SEM 猜了一个。",
-        "why_home_negative": "按这些数值，你的家用电会小于零，所以有一个正负号是错的。"
+        "why_guessed": "你的能源仪表板没有电网功率传感器，所以 SEM 猜了一个。"
       }
     }
   }

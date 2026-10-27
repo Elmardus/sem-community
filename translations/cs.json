@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM našel váš systém",
-        "description": "Toto jsou hodnoty právě teď:\n\n- Slunce: {solar}\n- Síť: {grid}\n- Baterie: {battery}\n- Dům spotřebovává: {home}\n\nPocházejí ze stejných senzorů jako váš panel Energie. Stiskněte **Odeslat**.",
+        "description": "Toto jsou hodnoty právě teď:\n\n- Slunce: {solar}\n- Síť: {grid}\n- Baterie: {battery}\n\nPocházejí ze stejných senzorů jako váš panel Energie. Stiskněte **Odeslat**.",
         "sections": {
           "own_sensors": {
             "name": "Vybrat senzory sám",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "odběr",
-        "sending": "dodávka",
-        "charging": "nabíjí",
-        "discharging": "vybíjí",
         "none": "nenalezeno",
-        "why_guessed": "Váš panel Energie nemá senzor výkonu sítě, takže SEM jeden odhadl.",
-        "why_home_negative": "S těmito hodnotami by dům spotřeboval méně než nic, takže jedno znaménko je špatně."
+        "why_guessed": "Váš panel Energie nemá senzor výkonu sítě, takže SEM jeden odhadl."
       }
     }
   }

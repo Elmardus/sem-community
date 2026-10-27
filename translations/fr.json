@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM a trouvé votre installation",
-        "description": "Voici les valeurs en ce moment :\n\n- Solaire : {solar}\n- Réseau : {grid}\n- Batterie : {battery}\n- La maison consomme : {home}\n\nElles viennent des mêmes capteurs que votre tableau de bord Énergie. Appuyez sur **Valider**.",
+        "description": "Voici les valeurs en ce moment :\n\n- Solaire : {solar}\n- Réseau : {grid}\n- Batterie : {battery}\n\nElles viennent des mêmes capteurs que votre tableau de bord Énergie. Appuyez sur **Valider**.",
         "sections": {
           "own_sensors": {
             "name": "Choisir les capteurs moi-même",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "achat",
-        "sending": "injection",
-        "charging": "en charge",
-        "discharging": "en décharge",
         "none": "non trouvé",
-        "why_guessed": "Votre tableau de bord Énergie n'a pas de capteur de puissance réseau, SEM en a donc deviné un.",
-        "why_home_negative": "Avec ces valeurs, votre maison consommerait moins que rien : un signe est donc faux."
+        "why_guessed": "Votre tableau de bord Énergie n'a pas de capteur de puissance réseau, SEM en a donc deviné un."
       }
     }
   }

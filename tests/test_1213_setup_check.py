@@ -20,7 +20,7 @@ from custom_components.solar_energy_management.ha_energy_reader import (
     EnergyDashboardConfig,
 )
 from custom_components.solar_energy_management.setup_check import (
-    ASK_GUESSED, ASK_HOME_NEGATIVE, ASK_MISSING, SetupCheck, answer_updates,
+    ASK_GUESSED, ASK_MISSING, SetupCheck, answer_updates,
     build_setup_check, fmt_w,
 )
 
@@ -63,7 +63,6 @@ def test_all_from_the_dashboard_asks_nothing():
     assert check.ask is None
     assert check.grid_from == "dashboard"
     assert check.battery_w == pytest.approx(1450)          # kW read as W
-    assert check.home_w == pytest.approx(4152 + 310 + 1450)
     assert check.soc == 64
 
 
@@ -72,7 +71,6 @@ def test_a_guessed_grid_meter_is_asked_about():
     cfg.derived_power = {"grid": "sensor.meter"}
     check = build_setup_check(_Hass(HOME), cfg)
     assert check.ask == ASK_GUESSED
-    assert check.home_w is None          # its sign is not known, so no sum
 
 
 def test_no_grid_power_opens_the_picker():
@@ -80,10 +78,13 @@ def test_no_grid_power_opens_the_picker():
     assert check.ask == ASK_MISSING
 
 
-def test_a_home_below_zero_is_asked_about():
-    values = dict(HOME, **{"sensor.meter": (-6000, "W")})
-    check = build_setup_check(_Hass(values), _cfg())
-    assert check.ask == ASK_HOME_NEGATIVE
+def test_a_meter_that_reads_plus_while_sending_is_not_questioned():
+    """Huawei's meter reads + while sending. At night with an idle battery
+    a + reading must not make setup doubt a correct install: setup claims
+    no direction, so it has nothing to doubt."""
+    values = {"sensor.pv": (0, "W"), "sensor.meter": (-800, "W"),
+              "sensor.batt": (0, "W"), "sensor.soc": (40, "%")}
+    assert build_setup_check(_Hass(values), _cfg()).ask is None
 
 
 def test_a_dashboard_pair_is_read_as_bought_minus_sent():
@@ -140,13 +141,6 @@ def test_other_and_unknown():
     assert answer_updates(_guessed(800), "unknown") == {}
 
 
-def test_a_dashboard_meter_is_not_pinned_by_an_answer():
-    check = SetupCheck(grid_entity="sensor.meter", grid_w=-7000,
-                       grid_from="dashboard", ask=ASK_HOME_NEGATIVE)
-    assert answer_updates(check, "buying") == {}
-    assert answer_updates(check, "sending") == {"grid_sign_invert": True}
-
-
 def test_watts_read_as_a_person_reads_them():
     assert fmt_w(4152.4) == "4 152 W"
     assert fmt_w(-310) == "310 W"
@@ -187,8 +181,8 @@ async def test_the_common_case_is_one_screen_and_one_click():
     flow, patches = _flow(HOME, _cfg())
     shown = await _run(flow, patches)
     assert shown["step_id"] == "user"
-    assert shown["description_placeholders"]["grid"] == "buying 310 W"
-    assert shown["description_placeholders"]["battery"] == "giving 1 450 W, 64 %"
+    assert shown["description_placeholders"]["grid"] == "310 W"
+    assert shown["description_placeholders"]["battery"] == "1\u202f450 W, 64 %"
     flow, patches = _flow(HOME, _cfg())
     done = await _run(flow, patches, first_input={})
     assert done["step_id"] == "hardware"

@@ -72,8 +72,7 @@ from .ha_energy_reader import (
     battery_units, read_energy_dashboard_config, EnergyDashboardConfig,
 )
 from .setup_check import (
-    ASK_GUESSED, ASK_HOME_NEGATIVE, ASK_MISSING, QUIET_W, answer_updates,
-    build_setup_check, fmt_w,
+    ASK_GUESSED, ASK_MISSING, answer_updates, build_setup_check, fmt_w,
 )
 from .hardware_detection import (
     CHARGER_ENTITY_KEYS,
@@ -347,11 +346,8 @@ def _charger_entities(charger: Any) -> set[str]:
 
 
 _SETUP_WORDS_EN = {
-    "buying": "buying", "sending": "sending",
-    "charging": "charging", "discharging": "giving",
     "none": "not found",
     "why_guessed": "Your Energy dashboard has no grid power sensor, so SEM guessed one.",
-    "why_home_negative": "With these numbers your home would use less than nothing, so one sign is wrong.",
 }
 
 
@@ -918,7 +914,7 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(self._own_sensors_section()),
             description_placeholders={
                 "solar": p["solar"], "grid": p["grid"], "battery": p["battery"],
-                "home": p["home"], "why": p["why"]},
+                "why": p["why"]},
             errors=errors,
         )
 
@@ -945,7 +941,7 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }),
             description_placeholders={
                 "solar": p["solar"], "grid": p["grid"], "battery": p["battery"],
-                "home": p["home"], "why": p["why"]},
+                "why": p["why"]},
         )
 
     async def async_step_pick_grid(
@@ -970,7 +966,7 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }),
             description_placeholders={
                 "solar": p["solar"], "grid": p["grid"], "battery": p["battery"],
-                "home": p["home"], "why": p["why"]},
+                "why": p["why"]},
         )
 
     def _build_setup_check(self):
@@ -1044,31 +1040,22 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return out
 
     async def _setup_placeholders(self) -> dict[str, str]:
+        """Plain watts. No direction: a meter's sign is the brand's choice
+        and SEM learns it only after install (see setup_check)."""
         check = self._check()
         words = await _setup_words(self.hass)
-        if check.grid_w is None:
-            grid = words["none"]
-        elif check.grid_from == "dashboard" and not check.grid_is_quiet:
-            grid = f"{words['buying' if check.grid_w > 0 else 'sending']} {fmt_w(check.grid_w)}"
-        else:
-            grid = fmt_w(check.grid_w)
-        if check.battery_w is None and check.soc is None:
-            battery = words["none"]
-        else:
-            battery = ""
-            if check.battery_w is not None:
-                battery = (fmt_w(check.battery_w) if abs(check.battery_w) < QUIET_W
-                           else f"{words['discharging' if check.battery_w > 0 else 'charging']} {fmt_w(check.battery_w)}")
+        none = words["none"]
+        battery = none
+        if check.battery_w is not None or check.soc is not None:
+            parts = [fmt_w(check.battery_w)] if check.battery_w is not None else []
             if check.soc is not None:
-                battery = f"{battery}, {round(check.soc)} %" if battery else f"{round(check.soc)} %"
-        why = {ASK_GUESSED: words["why_guessed"],
-               ASK_HOME_NEGATIVE: words["why_home_negative"]}.get(check.ask, "")
+                parts.append(f"{round(check.soc)} %")
+            battery = ", ".join(parts)
         return {
-            "solar": fmt_w(check.solar_w) if check.solar_w is not None else words["none"],
-            "grid": grid,
+            "solar": fmt_w(check.solar_w) if check.solar_w is not None else none,
+            "grid": fmt_w(check.grid_w) if check.grid_w is not None else none,
             "battery": battery,
-            "home": fmt_w(check.home_w) if check.home_w is not None else "?",
-            "why": why,
+            "why": words["why_guessed"] if check.ask == ASK_GUESSED else "",
         }
 
     async def _finish_dashboard_sources(self, updates: dict[str, Any]) -> FlowResult:

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM hat deine Anlage gefunden",
-        "description": "Das sind die Werte gerade jetzt:\n\n- Solar: {solar}\n- Netz: {grid}\n- Batterie: {battery}\n- Haus verbraucht: {home}\n\nSie kommen von denselben Sensoren wie dein Energie-Dashboard. Drücke **Senden**.",
+        "description": "Das sind die Werte gerade jetzt:\n\n- Solar: {solar}\n- Netz: {grid}\n- Batterie: {battery}\n\nSie kommen von denselben Sensoren wie dein Energie-Dashboard. Drücke **Senden**.",
         "sections": {
           "own_sensors": {
             "name": "Sensoren selbst wählen",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "Bezug",
-        "sending": "Einspeisung",
-        "charging": "lädt",
-        "discharging": "entlädt",
         "none": "nicht gefunden",
-        "why_guessed": "Dein Energie-Dashboard hat keinen Sensor für die Netzleistung, also hat SEM einen geraten.",
-        "why_home_negative": "Mit diesen Werten würde dein Haus weniger als nichts verbrauchen, also ist ein Vorzeichen falsch."
+        "why_guessed": "Dein Energie-Dashboard hat keinen Sensor für die Netzleistung, also hat SEM einen geraten."
       }
     }
   }

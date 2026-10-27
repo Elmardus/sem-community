@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM heeft je systeem gevonden",
-        "description": "Dit zijn de waarden nu:\n\n- Zon: {solar}\n- Net: {grid}\n- Batterij: {battery}\n- Huis verbruikt: {home}\n\nZe komen van dezelfde sensoren als je Energie-dashboard. Druk op **Verzenden**.",
+        "description": "Dit zijn de waarden nu:\n\n- Zon: {solar}\n- Net: {grid}\n- Batterij: {battery}\n\nZe komen van dezelfde sensoren als je Energie-dashboard. Druk op **Verzenden**.",
         "sections": {
           "own_sensors": {
             "name": "Zelf sensoren kiezen",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "afname",
-        "sending": "teruglevering",
-        "charging": "laadt",
-        "discharging": "ontlaadt",
         "none": "niet gevonden",
-        "why_guessed": "Je Energie-dashboard heeft geen sensor voor het netvermogen, dus SEM heeft er een geraden.",
-        "why_home_negative": "Met deze waarden zou je huis minder dan niets verbruiken, dus één teken is verkeerd."
+        "why_guessed": "Je Energie-dashboard heeft geen sensor voor het netvermogen, dus SEM heeft er een geraden."
       }
     }
   }

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM ha trovato il tuo impianto",
-        "description": "Questi sono i valori in questo momento:\n\n- Solare: {solar}\n- Rete: {grid}\n- Batteria: {battery}\n- La casa consuma: {home}\n\nVengono dagli stessi sensori della tua dashboard Energia. Premi **Invia**.",
+        "description": "Questi sono i valori in questo momento:\n\n- Solare: {solar}\n- Rete: {grid}\n- Batteria: {battery}\n\nVengono dagli stessi sensori della tua dashboard Energia. Premi **Invia**.",
         "sections": {
           "own_sensors": {
             "name": "Scegli i sensori da solo",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "prelievo",
-        "sending": "immissione",
-        "charging": "in carica",
-        "discharging": "in scarica",
         "none": "non trovato",
-        "why_guessed": "La tua dashboard Energia non ha un sensore di potenza di rete, quindi SEM ne ha indovinato uno.",
-        "why_home_negative": "Con questi valori la casa consumerebbe meno di niente, quindi un segno è sbagliato."
+        "why_guessed": "La tua dashboard Energia non ha un sensore di potenza di rete, quindi SEM ne ha indovinato uno."
       }
     }
   }

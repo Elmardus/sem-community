@@ -101,7 +101,7 @@ class TestSolarEnergyManagementConfigFlow:
         assert result["step_id"] == "user"
         # (#1213) watts, not sensor names
         assert set(result["description_placeholders"]) == {
-            "solar", "grid", "battery", "home", "why"}
+            "solar", "grid", "battery", "why"}
 
     @pytest.mark.asyncio
     async def test_discovery_no_longer_stands_down_on_a_bare_dashboard(self, mock_hass):

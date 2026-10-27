@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "SEM found your system",
-        "description": "These are the values right now:\n\n- Solar: {solar}\n- Grid: {grid}\n- Battery: {battery}\n- Home uses: {home}\n\nThey come from the same sensors as your Energy dashboard. Press **Submit**.",
+        "description": "These are the values right now:\n\n- Solar: {solar}\n- Grid: {grid}\n- Battery: {battery}\n\nThey come from the same sensors as your Energy dashboard. Press **Submit**.",
         "sections": {
           "own_sensors": {
             "name": "Choose sensors myself",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "buying",
-        "sending": "sending",
-        "charging": "charging",
-        "discharging": "giving",
         "none": "not found",
-        "why_guessed": "Your Energy dashboard has no grid power sensor, so SEM guessed one.",
-        "why_home_negative": "With these numbers your home would use less than nothing, so one sign is wrong."
+        "why_guessed": "Your Energy dashboard has no grid power sensor, so SEM guessed one."
       }
     }
   }

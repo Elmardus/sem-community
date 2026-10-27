@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "O SEM encontrou o seu sistema",
-        "description": "Estes são os valores agora:\n\n- Solar: {solar}\n- Rede: {grid}\n- Bateria: {battery}\n- A casa consome: {home}\n\nVêm dos mesmos sensores do seu painel de Energia. Prima **Submeter**.",
+        "description": "Estes são os valores agora:\n\n- Solar: {solar}\n- Rede: {grid}\n- Bateria: {battery}\n\nVêm dos mesmos sensores do seu painel de Energia. Prima **Submeter**.",
         "sections": {
           "own_sensors": {
             "name": "Escolher os sensores eu mesmo",
@@ -2126,13 +2126,8 @@
     },
     "setup_words": {
       "options": {
-        "buying": "compra",
-        "sending": "injeção",
-        "charging": "a carregar",
-        "discharging": "a descarregar",
         "none": "não encontrado",
-        "why_guessed": "O seu painel de Energia não tem sensor de potência da rede, por isso o SEM adivinhou um.",
-        "why_home_negative": "Com estes valores a casa consumiria menos que nada, por isso um sinal está errado."
+        "why_guessed": "O seu painel de Energia não tem sensor de potência da rede, por isso o SEM adivinhou um."
       }
     }
   }

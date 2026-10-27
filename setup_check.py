@@ -3,8 +3,13 @@ question it asks when it is not sure about the grid meter.
 
 A new user decides here whether SEM is for them. They know whether the house
 is buying power or sending it out; they do not know entity IDs. So the
-check shows watts, and asks about the grid only when SEM guessed it, found
-none, or the numbers cannot add up.
+check shows watts, and asks about the grid only when SEM guessed it or found
+none.
+
+No direction is claimed here. A meter's sign is the brand's choice, not
+HA's: some read + while buying, others + while sending, and
+SEM learns which from the energy counters only after install. So setup shows
+plain watts, and the question takes its sign from the user's answer.
 """
 from __future__ import annotations
 
@@ -16,23 +21,18 @@ from .coordinator.units import power_state_to_watts
 # Below this a meter's sign says nothing: a house at rest reads a few watts
 # either way.
 QUIET_W = 50.0
-# A home value this far below 0 means one sign is wrong.
-NEGATIVE_HOME_W = -100.0
-
 ASK_GUESSED = "guessed"
 ASK_MISSING = "missing"
-ASK_HOME_NEGATIVE = "home_negative"
 
 
 @dataclass
 class SetupCheck:
     solar_w: Optional[float] = None
     grid_entity: Optional[str] = None
-    grid_w: Optional[float] = None        # as the sensor reads it, no sign fix
+    grid_w: Optional[float] = None        # as the sensor reads it; sign unknown
     grid_from: str = "missing"            # dashboard | guessed | missing
-    battery_w: Optional[float] = None     # + while discharging (HA's sign)
+    battery_w: Optional[float] = None     # sum as read; sign unknown
     soc: Optional[float] = None
-    home_w: Optional[float] = None
     other_grid: Optional[str] = None
     other_grid_w: Optional[float] = None
     ask: Optional[str] = None
@@ -82,7 +82,7 @@ def build_setup_check(hass, cfg: Any,
         solar = [cfg.solar_power]
     check.solar_w = _sum(_watts(hass, e) for e in solar)
 
-    # Grid, in HA's sign: + while buying.
+    # Grid as the sensor reads it.
     if getattr(cfg, "grid_import_power", None):
         check.grid_entity = cfg.grid_import_power
         check.grid_w = _watts(hass, cfg.grid_import_power)
@@ -94,24 +94,17 @@ def build_setup_check(hass, cfg: Any,
             check.grid_w = bought - sent
         check.grid_from = "dashboard"
 
-    # Battery, in HA's sign: + while discharging.
+    # Battery as read. Only its size is shown, so the sign does not matter.
     parts = []
     for e in (getattr(cfg, "battery_power_list", None) or
               ([cfg.battery_power] if getattr(cfg, "battery_power", None) else [])):
-        w = _watts(hass, e)
-        if w is not None and getattr(cfg, "battery_power_inverted", False):
-            w = -w
-        parts.append(w)
+        parts.append(_watts(hass, e))
     for p_from, p_to in (getattr(cfg, "battery_power_pairs", None) or []):
         out_w, in_w = _watts(hass, p_from), _watts(hass, p_to)
         if out_w is not None and in_w is not None:
             parts.append(out_w - in_w)
     check.battery_w = _sum(parts)
     check.soc = _percent(hass, getattr(cfg, "battery_soc", None))
-
-    if check.grid_from == "dashboard" and check.solar_w is not None \
-            and check.grid_w is not None:
-        check.home_w = check.solar_w + check.grid_w + (check.battery_w or 0.0)
 
     hit = (proposals or {}).get("grid_import_power_sensor") or {}
     other = hit.get("entity")
@@ -123,9 +116,6 @@ def build_setup_check(hass, cfg: Any,
         check.ask = ASK_MISSING
     elif check.grid_from == "guessed":
         check.ask = ASK_GUESSED
-    elif check.home_w is not None and check.home_w < NEGATIVE_HOME_W \
-            and check.grid_entity:
-        check.ask = ASK_HOME_NEGATIVE
     return check
 
 
@@ -141,7 +131,8 @@ def answer_updates(check: SetupCheck, answer: Optional[str]) -> Dict[str, Any]:
         out["grid_power_sensor"] = check.grid_entity
     if answer != "keep" and not check.grid_is_quiet:
         # SEM's sign is − while buying. A meter that reads + while the user
-        # says "buying" must be turned around.
+        # says "buying" must be turned around; the user's answer is the
+        # truth, whatever convention the brand chose.
         if (answer == "buying") == (check.grid_w > 0):
             out["grid_sign_invert"] = True
     return out
