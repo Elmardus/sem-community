@@ -50,13 +50,15 @@ EV charger setup is optional. SEM works as a monitoring and battery management s
 
 The wizard has 2 steps.
 
-### Step 2a: Confirm sensors (Observer Mode)
+### Step 2a: SEM found your system
 
-SEM displays a summary of the sensors it found in your Energy Dashboard — solar power, grid power, and battery power. Review them to confirm they look correct.
+SEM shows the solar, grid and battery power it found in your Energy Dashboard, in watts.
 
-If you want SEM to monitor only and not control any hardware, enable **Observer Mode**. You can change this later.
+- They match your inverter or app: press **Submit**.
+- One is wrong: open **Choose sensors myself**, pick the right sensor, press **Submit**.
+- SEM may ask one question about your grid meter ("buying or sending right now?"). Answer it, or choose **I don't know**. Nothing breaks if you skip it.
 
-Click **Submit**.
+SEM starts in watch-only mode: it commands no hardware. Turn that off later on the **Configuration** tab. Details: [Setup Guide](SETUP_GUIDE.md).
 
 ### Step 2b: Hardware
 

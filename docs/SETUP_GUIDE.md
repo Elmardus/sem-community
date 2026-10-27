@@ -200,37 +200,59 @@ The config flow has three steps. You can change any setting later via the
 
 ### Step 1: SEM found your system
 
-![Step 1 — Energy Dashboard detection](screenshots/setup-flow/01-step1-energy-dashboard.png)
+![Step 1 — SEM found your system](screenshots/setup-flow/01-step1-energy-dashboard.png)
 
-SEM reads your Energy Dashboard and shows what it finds as live values:
-solar, grid (buying or sending), battery (charging or giving, and its
-charge), and what your home uses. When they look right, press **Submit**.
+SEM reads your Energy Dashboard and shows what it finds, as live watts:
+solar, grid and battery (with its charge).
 
-If a value looks wrong, open **Choose sensors myself** and pick another
-sensor. Only a sensor you change is saved; the rest keep following your
-Energy Dashboard.
+**What to do:**
 
-**One question (#1213).** When SEM is not sure about your grid meter, it
-asks once: *what is your house doing right now?* Answer **Buying from the
-grid**, **Sending to the grid**, **Use the other meter**, or **I don't
-know**. SEM asks when:
+1. Look at the three numbers. Do they match your inverter or energy app?
+2. If yes, press **Submit**. That is all.
+3. If one is wrong, open **Choose sensors myself**, pick the right sensor
+   for that line, then press **Submit**. Only a sensor you change is saved.
+   The others keep following your Energy Dashboard.
 
-- the Energy Dashboard has no grid power sensor and SEM guessed one, or
-- with these numbers your home would use less than nothing, so a sign is wrong.
+You do not need to know a sensor name to pass this step. Nothing here
+changes your hardware.
 
-"I don't know" is fine: SEM then learns the direction from your energy
-counters over the next days. When SEM finds no grid power sensor at all, it
-shows a picker instead; you may skip it and set it later.
+#### When SEM asks one more question
 
-A new install always starts in **observer mode**: SEM reads your system,
-builds the dashboard and shows the decisions it *would* make, without
-sending a single command to your hardware. Turn it off on the
-**Configuration** tab (`switch.sem_observer_mode`) when those decisions
-match what you want.
+Most homes see only the screen above. In two cases SEM shows one more
+screen before **Hardware**. You can always get through it: choose **I don't
+know**, or leave the picker empty. SEM then starts anyway and learns the grid
+direction from your energy counters over the next days.
 
-> **Tip:** After setup, the **Configuration** tab → **Sensor sources** shows
-> the same live values, with one tap to turn a wrong grid or battery
-> direction around.
+**"SEM guessed your grid meter."** Your Energy Dashboard has no grid power
+sensor, so SEM picked one. Look at your house right now and answer:
+
+| Answer | Choose it when |
+|---|---|
+| **Buying from the grid** | your house takes power from the grid |
+| **Sending to the grid** | your house gives power to the grid |
+| **This is my grid meter** | shown instead of the two above when the meter reads almost 0 W, so it cannot tell |
+| **Use the other meter** | shown only when SEM found a second meter. The screen names it and shows its watts |
+| **I don't know** | you cannot tell. Nothing is changed |
+
+Your answer, not the brand of your meter, decides the direction. If you say
+*Buying* and the meter shows a plus number, SEM turns the sign around.
+
+**"SEM found no grid power sensor."** A picker is shown, empty. Choose your
+grid power sensor (the one in W or kW, not a kWh counter), or press
+**Submit** to skip it. You can set it later (below).
+
+#### Watch-only mode
+
+A new install starts in **observer mode**: SEM reads your system, builds the
+dashboard and shows the decisions it *would* make, without sending a single
+command to your hardware. It is no longer a switch on this screen. Turn it
+off on the **Configuration** tab (`switch.sem_observer_mode`) when those
+decisions match what you want.
+
+> **Fixing it later:** open the SEM dashboard, tab **Configuration**, section
+> **Sensor sources**. It shows the same live values, with **Grid direction is
+> wrong** and **Battery direction is wrong** buttons that turn a direction
+> around in one tap. A wrong sensor is picked under **All settings**.
 
 ### Step 2: EV Charger (optional)
 
