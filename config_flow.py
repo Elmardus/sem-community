@@ -924,8 +924,11 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """(#1213) One question: is the house buying or sending right now?"""
         check = self._check()
         if user_input is not None:
-            updates = answer_updates(check, user_input.get("grid_answer"))
-            updates.update(self._own_sensor_picks(user_input))
+            picks = self._own_sensor_picks(user_input)
+            updates = answer_updates(
+                check, user_input.get("grid_answer"),
+                picked_grid=picks.get("grid_power_sensor"))
+            updates.update(picks)
             return await self._finish_dashboard_sources(updates)
         p = await self._setup_placeholders()
         return self.async_show_form(

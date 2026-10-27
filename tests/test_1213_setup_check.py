@@ -125,13 +125,24 @@ def _guessed(w):
 def test_buying_or_sending_sets_the_sign(w, answer, invert):
     out = answer_updates(_guessed(w), answer)
     assert out.get("grid_sign_invert", False) is invert
-    assert out["grid_power_sensor"] == "sensor.meter"   # a confirmed guess is kept
+    # a confirmed guess pins nothing: it keeps following the Energy dashboard
+    assert "grid_power_sensor" not in out
+
+
+def test_a_sign_answer_is_dropped_when_the_user_picks_another_grid_sensor():
+    """The answer was about the meter shown. A different pick in the same
+    submit must not be turned around by it."""
+    check = _guessed(1240)
+    assert answer_updates(check, "buying") == {"grid_sign_invert": True}
+    assert answer_updates(check, "buying", picked_grid="sensor.other") == {}
+    assert answer_updates(check, "buying", picked_grid="sensor.meter") == {
+        "grid_sign_invert": True}
 
 
 def test_a_quiet_meter_cannot_tell_the_sign():
     check = _guessed(12)
     assert check.answers() == ("keep", "other", "unknown")
-    assert answer_updates(check, "keep") == {"grid_power_sensor": "sensor.meter"}
+    assert answer_updates(check, "keep") == {}
     assert "grid_sign_invert" not in answer_updates(check, "buying")
 
 
@@ -202,7 +213,7 @@ async def test_the_question_carries_its_answer_into_the_install():
     done = await _run(flow, patches, then={"grid_answer": "buying"})
     assert done["step_id"] == "hardware"
     assert flow._data["grid_sign_invert"] is True
-    assert flow._data["grid_power_sensor"] == "sensor.meter"
+    assert "grid_power_sensor" not in flow._data
 
 
 @pytest.mark.asyncio

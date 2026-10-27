@@ -119,23 +119,30 @@ def build_setup_check(hass, cfg: Any,
     return check
 
 
-def answer_updates(check: SetupCheck, answer: Optional[str]) -> Dict[str, Any]:
+def answer_updates(check: SetupCheck, answer: Optional[str],
+                   picked_grid: Optional[str] = None) -> Dict[str, Any]:
     """Config keys that carry the user's answer. "unknown" changes nothing:
-    SEM goes on learning the sign from the energy counters."""
+    SEM goes on learning the sign from the energy counters.
+
+    A guessed meter is read already (the dashboard path uses it), so
+    confirming it pins nothing: it keeps following the Energy Dashboard. Only
+    "use the other meter" names a sensor. The sign answer is about the meter
+    the user was shown, so it is dropped when they pick another one.
+    """
     if answer == "other" and check.other_grid:
         return {"grid_power_sensor": check.other_grid}
-    if answer not in ("buying", "sending", "keep") or not check.grid_entity:
+    if answer not in ("buying", "sending") or not check.grid_entity:
         return {}
-    out: Dict[str, Any] = {}
-    if check.grid_from == "guessed":
-        out["grid_power_sensor"] = check.grid_entity
-    if answer != "keep" and not check.grid_is_quiet:
-        # SEM's sign is − while buying. A meter that reads + while the user
-        # says "buying" must be turned around; the user's answer is the
-        # truth, whatever convention the brand chose.
-        if (answer == "buying") == (check.grid_w > 0):
-            out["grid_sign_invert"] = True
-    return out
+    if picked_grid and picked_grid != check.grid_entity:
+        return {}
+    if check.grid_is_quiet:
+        return {}
+    # SEM's sign is − while buying. A meter that reads + while the user says
+    # "buying" must be turned around; the user's answer is the truth,
+    # whatever convention the brand chose.
+    if (answer == "buying") == (check.grid_w > 0):
+        return {"grid_sign_invert": True}
+    return {}
 
 
 def fmt_w(w: Optional[float]) -> str:
