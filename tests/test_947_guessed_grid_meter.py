@@ -301,6 +301,7 @@ class TestDeclaredBeatsGuessed:
         e.translation_key = translation_key
         e.unique_id = unique_id or ""
         e.device_id = device_id
+        e.disabled_by = None     # a real registry row's default
         return e
 
     def test_a_declared_pair_steers_on_the_first_read(self, monkeypatch):
@@ -378,6 +379,7 @@ class TestTheReviewFindings:
         e.translation_key = translation_key
         e.unique_id = ""
         e.device_id = device_id
+        e.disabled_by = None
         return e
 
     def test_a_declared_meter_on_another_device_still_has_to_prove_itself(self, monkeypatch):

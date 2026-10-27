@@ -62,10 +62,14 @@ from ..const import (
 )
 from ..utils.time_manager import TimeManager
 from ..ha_energy_reader import (
-    read_energy_dashboard_config_outcome, EnergyDashboardConfig, energy_counters,
+    read_energy_dashboard_config_outcome, EnergyDashboardConfig, battery_units,
+    energy_counters,
 )
 from .install_modules import Module, Presence, module_reload_due, module_verdict, presence_of
-from .battery_controls import has_per_battery_controls  # (#1071)
+from .battery_controls import (  # (#1071, #1195)
+    PER_BATTERY_ENTITY_LISTS, PER_BATTERY_SETTING_LISTS, align_battery_slots,
+    has_per_battery_controls,
+)
 from ..consts.battery_modes import (
     DEFAULT_BATTERY_MODE, DEFAULT_BATTERY_RESERVE_SOC, reserve_soc_of,
 )
@@ -128,7 +132,7 @@ from ..analytics.consumption_predictor import ConsumptionPredictor
 from .ev_taper_detector import EVTaperDetector
 from .ev_soc_need import estimate_stop_step, soc_remaining_need
 from ..utils.log_gate import log_on_change
-from ..utils.helpers import solar_share_pct
+from ..utils.helpers import battery_export_part, solar_export, solar_share_pct
 from ..analytics.energy_assistant import EnergyAssistant
 
 _LOGGER = logging.getLogger(__name__)
@@ -2707,6 +2711,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             if dashboard_config and dashboard_config.is_minimally_configured():
                 self._energy_dashboard_config = dashboard_config
                 self._sensor_reader.set_energy_dashboard_config(dashboard_config)
+                # (#1195) each battery's saved settings follow it to the
+                # number this read gives it
+                self._align_battery_slots(dashboard_config)
                 _info(
                     f"Using Energy Dashboard sensors: "
                     f"solar={dashboard_config.solar_power}, "
@@ -2834,6 +2841,22 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
 
         self._check_module_growth()
         return self._energy_dashboard_config is not None
+
+    def _align_battery_slots(self, dashboard_config) -> None:
+        """(#1195) Put the per-battery lists in the order of the batteries
+        just read (``battery_controls.align_battery_slots``). A loaded entry
+        reloads when its battery list changed; at setup nothing is built."""
+        entry = self.config_entry
+        if entry is None:
+            return
+        try:
+            from homeassistant.config_entries import ConfigEntryState
+            align_battery_slots(
+                self.hass, entry, self, battery_units(dashboard_config),
+                running=getattr(entry, "state", None) is ConfigEntryState.LOADED)
+        except Exception:  # noqa: BLE001 — a settings move never costs the read
+            _LOGGER.warning("keeping battery settings with their batteries "
+                            "failed (#1195)", exc_info=True)
 
     async def _retry_energy_dashboard_resolution(self) -> None:
         """Re-derive Energy Dashboard power sensors after a cold start (#274).
@@ -3827,6 +3850,22 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # (protects against stale limit left by previous run)
             from .actuate_battery import restore_discharge_limit_on_startup
             await restore_discharge_limit_on_startup(self.hass, self.config)
+            # (#1195) …and the limit of a battery taken out of the Energy
+            # Dashboard while SEM was off. Its slot went at setup; the list
+            # kept it before, and this restore lifted it. Each on its own: a
+            # battery SEM no longer runs may not answer, and that must not
+            # cost the start.
+            for entity in getattr(self, "_dropped_battery_limit_entities", None) or []:
+                try:
+                    await restore_discharge_limit_on_startup(self.hass, {
+                        **self.config, "battery_discharge_control_entity": "",
+                        "battery_discharge_control_entities": [entity]})
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning(
+                        "Could not lift the discharge limit of a battery no "
+                        "longer in the Energy Dashboard (%s): %s (#1195)",
+                        entity, err)
+            self._dropped_battery_limit_entities = []
 
         # Run deployment health check once after startup
         if self._initial_update_done and not getattr(self, '_health_checked', False):
@@ -3909,6 +3948,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 self._sweep_orphan_repairs()
             except Exception:  # noqa: BLE001 — a Repair never costs a cycle
                 _LOGGER.debug("orphan repair sweep failed", exc_info=True)
+            # (#1188) A source the Energy Dashboard counts but SEM reads from
+            # no sensor is told as a Repair, not only in the log.
+            try:
+                self._sensor_reader.report_unsourced_power(
+                    waiting=self._ed_resolve_pending)
+            except Exception:  # noqa: BLE001 — a Repair never costs a cycle
+                _LOGGER.debug("missing power sensor report failed", exc_info=True)
 
             # (#638) One plug answer for the whole cycle. Runs on the
             # cycle's own reading, before any consumer — the state machine,
@@ -5472,7 +5518,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # never recorded, so "fits" has never been checked against
             # reality. Taken here, after the cycle's decisions, so the gate
             # sampled is the one this cycle's actuation actually obeyed.
-            self._record_demand_outcomes(dt_util.now(), power)
+            self._record_demand_outcomes(dt_util.now(), power, power_flows)
             # (#800) The battery's night rides the same cycle: drain /
             # refill / clipping series for the #778 budget's learner.
             try:
@@ -7306,6 +7352,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 daily_ev_kwh=energy.daily_ev,
                 daily_grid_import_kwh=energy.daily_grid_import,
                 daily_grid_export_kwh=energy.daily_grid_export,
+                daily_battery_export_kwh=energy.daily_grid_export_battery,
                 daily_battery_charge_kwh=energy.daily_battery_charge,
                 daily_battery_discharge_kwh=energy.daily_battery_discharge,
                 solar_to_ev_kwh=ev_solar,
@@ -7836,14 +7883,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # battery is removed, or empty on a cold boot while two run — and a
         # Sessy b2 that loses its strategy select is built as the
         # inverter's battery (#531).
+        # (#1195) Slot ``idx`` is this battery's: ``align_battery_slots``
+        # keeps the lists in the order of the batteries read now.
         if count > 1:
-            for list_key, single_key in (
-                ("battery_force_discharge_entities", "battery_force_discharge_control_entity"),
-                ("battery_discharge_control_entities", "battery_discharge_control_entity"),
-                ("battery_strategy_entities", "battery_strategy_control_entity"),
-                # (#1166) each pack's own end-of-charge level (read only)
-                ("battery_charge_end_soc_entities", "battery_charge_end_soc_entity"),
-            ):
+            for list_key, single_key in PER_BATTERY_ENTITY_LISTS:
                 lst = cfg.get(list_key)
                 if isinstance(lst, list) and idx < len(lst) and lst[idx]:
                     overrides[single_key] = lst[idx]
@@ -7851,11 +7894,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # per-battery controls (#1071) — with the one global control the
         # scalar keys stand as they are, for every battery.
         if has_per_battery_controls(self, count):
-            for list_key, single_key, shown_default in (
-                ("battery_modes", "battery_mode", DEFAULT_BATTERY_MODE),
-                ("battery_reserve_socs", "battery_reserve_soc",
-                 DEFAULT_BATTERY_RESERVE_SOC),
-            ):
+            shown_defaults = {"battery_mode": DEFAULT_BATTERY_MODE,
+                              "battery_reserve_soc": DEFAULT_BATTERY_RESERVE_SOC}
+            for list_key, single_key in PER_BATTERY_SETTING_LISTS:
+                shown_default = shown_defaults[single_key]
                 lst = cfg.get(list_key)
                 if isinstance(lst, list) and idx < len(lst) and lst[idx] not in (None, ""):
                     overrides[single_key] = lst[idx]
@@ -9659,6 +9701,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # synthetic "primary" from the first cycles stays in the cache once
         # b1/b2 exist, and its frozen write ledger is no battery's answer.
         self._live_battery_ids = frozenset(bid for bid, _ in battery_items)
+        # (#1195) The batteries changed while SEM runs: their settings moved
+        # to their new places and the entry reloads. Until it does, the
+        # cached adapters hold the old places' entities and this cycle's
+        # readings may be in the old order — so nothing is written. Asked
+        # again before the commands: the scheduler above awaits.
+        if getattr(self, "_battery_reload_pending", False) is True:
+            return
         # (#1131) A manual charge or sale that has done its job hands the
         # battery back to Auto before this cycle decides — on a level that is
         # a reading this cycle (not held, not the never-read 0.0).
@@ -9863,6 +9912,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 inputs_degraded=_degraded,
             )
 
+        if getattr(self, "_battery_reload_pending", False) is True:
+            return          # (#1195) see above: an adapter may await
         _writers = await actuate_batteries(
             _cycle_rows, _send, observer=self._observer_mode,
             inputs_degraded=_degraded)
@@ -10752,7 +10803,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 continue
         return windows
 
-    def _record_demand_outcomes(self, now, power) -> None:
+    def _record_demand_outcomes(self, now, power, power_flows=None) -> None:
         """(#755 pillar 1) Write down what each planned demand actually DID.
 
         The plan has always recorded two of the three numbers that matter —
@@ -10798,15 +10849,18 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # The meter side of the same question, integrated over the SAME
         # window under the same gap guard — never a calendar-day sensor.
         try:
+            # ``grid_export_power`` is the canonical derived split
+            # (calculate_derived); re-deriving max(0, grid_power) here
+            # would open a second sign path — the exact mistake #129
+            # and the #588 sign work were about.
+            export_w = float(getattr(power, "grid_export_power", 0.0) or 0.0)
             rec.observe_totals(
                 now,
                 solar_w=float(getattr(power, "solar_power", 0.0) or 0.0),
-                # ``grid_export_power`` is the canonical derived split
-                # (calculate_derived); re-deriving max(0, grid_power) here
-                # would open a second sign path — the exact mistake #129
-                # and the #588 sign work were about.
-                export_w=float(
-                    getattr(power, "grid_export_power", 0.0) or 0.0))
+                # (#1191) solar's export: the plan's share is of solar, and a
+                # battery sale in the window was never part of it
+                export_w=solar_export(export_w, battery_export_part(
+                    export_w, getattr(power_flows, "battery_to_grid", 0.0))))
         except Exception:  # noqa: BLE001
             pass
 
@@ -12710,7 +12764,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 val = getattr(ed, name, None)
                 if isinstance(val, str) and "." in val:
                     out.add(val)
-            for name in ("solar_power_list", "battery_power_list"):
+            for name in ("solar_power_list", "battery_power_list",
+                         "grid_power_list"):
                 for val in (getattr(ed, name, None) or []):
                     if isinstance(val, str) and "." in val:
                         out.add(val)
@@ -12719,6 +12774,23 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 for val in pair:
                     if isinstance(val, str) and "." in val:
                         out.add(val)
+            # (#1189 review) …and the grid on its two sensors: the dashboard's
+            # pair, or the pair SEM found itself and trusts. Left out, a DSMR
+            # meter SEM already reads was offered as two "Use" buttons, and
+            # one click on half the pair sets export to 0 W.
+            grid_pair = [getattr(ed, "grid_power_from", None),
+                         getattr(ed, "grid_power_to", None)]
+            disc = getattr(self._sensor_reader, "_split_grid_discovery", None)
+            proof = getattr(self._sensor_reader, "_split_grid_proof", None)
+            if isinstance(disc, dict):
+                held = (disc.get("import"), disc.get("export"))
+                proven = (isinstance(proof, dict) and proof.get("verdict") is True
+                          and tuple(proof.get("pair") or ()) == held)
+                if proven or disc.get("confidence") in ("declared", "same-device"):
+                    grid_pair += list(held)
+            for val in grid_pair:
+                if isinstance(val, str) and "." in val:
+                    out.add(val)
         except Exception:  # noqa: BLE001
             pass
         return out

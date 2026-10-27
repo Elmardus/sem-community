@@ -96,12 +96,6 @@ The per-mode detail lives in the same card: **Charge target** (Min / Max kWh),
 
 ## The control surface (per charger)
 
-When a vehicle SOC sensor is configured, every numeric change corrects the
-energy-based stopping estimate, including 0.5-percentage-point and smaller
-steps. Between changes, measured charging energy advances the estimate;
-polls that repeat the same SOC do not reset it. A changed reading below the
-target can therefore reopen the remaining need after an estimate-based stop.
-
 | Entity | Role |
 |---|---|
 | `select.sem_charger_<id>_charge_mode` | The mode — the single intent input |

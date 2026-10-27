@@ -661,6 +661,8 @@ The discharge *rate* is not per-battery: **`number.sem_battery_max_discharge_pow
 
 Each battery can have its own discharge limit entity. With two or more batteries, Config tab → Battery shows one field per battery. Leave a field empty and SEM uses the shared entity above it. When batteries share one entity, the lowest limit wins, unless one of them sells.
 
+Add or remove a battery in the Energy Dashboard and each battery keeps its own fields, mode and reserve. A new battery starts with empty fields, so it uses the shared entities until you fill them in.
+
 **Zero-config Huawei:** If you have a Huawei inverter, SEM auto-detects the discharge limit entity and uses it to enforce force-discharge at no extra config.
 
 **Other brands:** set `battery_force_discharge_control_entity` in the options flow to a number entity on your inverter (e.g. Growatt's max discharge power, SolaX's force-discharge current).
@@ -1134,6 +1136,12 @@ effective_soc = max(sensor, anchor + delivered_since_anchor_kwh × 0.92 ÷ capac
 - You'll see a mobile notification on both the early stop and any resume, and a small info line
   under the SOC gauge on the EV card (e.g. "Car: 55% (28 min ago) · est. now ~59%") — the gauge
   itself always shows the raw sensor value.
+
+When a vehicle SOC sensor is configured, every numeric change corrects the
+energy-based stopping estimate, including 0.5-percentage-point and smaller
+steps. Between changes, measured charging energy advances the estimate;
+polls that repeat the same SOC do not reset it. A changed reading below the
+target can therefore reopen the remaining need after an estimate-based stop.
 
 #### Charger efficiency
 

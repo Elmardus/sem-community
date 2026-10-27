@@ -1975,6 +1975,10 @@
       "title": "SEM ei löytänyt verkkomittareitasi",
       "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Asetukset**, and pick **Kaikki asetukset** at the top. Then set **Verkon teho** in section **Anturilähteet**. If your meter has one sensor for import and one for export, set **Verkon tuontianturi** and **Verkon vientianturi** in section **Tariffi ja hinnoittelu** instead."
     },
+    "power_sensor_not_found": {
+      "title": "Ei tehoanturia kohteelle {energy_entity}",
+      "description": "Energia-paneeli laskee **{energy_entity}** kWh:na, mutta SEM ei löytänyt sille tehoanturia (W). SEM lukee siksi tämän tehon 0 W:ksi, joten energiavirrat ja ylijäämä ovat väärin. Korjaa se lisäämällä tehoanturi tähän kohtaan Energia-paneelissa. Tai avaa SEM-hallintapaneeli, välilehti ⚙ **Asetukset**, ja valitse ylhäältä **Kaikki asetukset**. Aseta sitten anturi osiossa **Anturilähteet**. Jos tehoanturia ei ole, voit ohittaa tämän ilmoituksen."
+    },
     "charger_device_gone": {
       "title": "Laturi {name}: laite puuttuu",
       "description": "Home Assistantissa ei enää ole laturin {name} laitetta. SEM ei voi ohjata sitä. Poista laturi SEMistä tai lisää laite uudelleen."

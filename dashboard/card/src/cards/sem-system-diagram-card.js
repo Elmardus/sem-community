@@ -30,6 +30,7 @@ import {
 import { nightArcPos } from '../util/night-arc.js';
 import { formatTemperatureLabel } from '../util/temperature.js';
 import { allOut, socDisplay } from '../util/missing-value.js';
+import { chargerIdsFrom, evNodeSoc, evNodeSocLabel, socFromState } from '../util/ev-node-soc.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
 
@@ -156,6 +157,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
             grid_export_power: e.grid?.production,
             ev_power: e.ev?.entity || e.individual?.[0]?.entity,
             battery_soc: e.battery?.state_of_charge,
+            ev_soc: e.ev?.state_of_charge,
             battery_temperature: e.battery?.temperature,
             home_consumption_power: e.home?.entity,
             charging_state: e.inverter?.entity,
@@ -333,6 +335,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
         if (this._showEv) {
             key += '|' + (hass?.states['binary_sensor.sem_ev_connected']?.state || '');
             key += '|' + (hass?.states['binary_sensor.sem_ev_charging']?.state || '');
+            key += '|' + this._evSocLabel(hass);
         }
         const sun = hass?.states['sun.sun'];
         key += '|' + (sun?.attributes?.elevation ?? '')
@@ -381,6 +384,30 @@ class SEMSystemDiagramCard extends SEMLitBase {
     _valStr(suffix) {
         const eid = this._eid(suffix);
         return eid ? this._stateStr(eid) : '';
+    }
+
+    // The EV node's state of charge (util/ev-node-soc.js). Entities mode reads
+    // the user's own `ev.state_of_charge`; otherwise the SEM charger sensors,
+    // and only while exactly one charger is set up (one car can be meant).
+    _evSocLabel(hass) {
+        const states = hass?.states;
+        if (!states) return '';
+        if (this._mode === 'entities') {
+            const eid = this._eid('ev_soc');
+            return eid ? evNodeSocLabel({ soc: socFromState(states[eid]) }) : '';
+        }
+        return evNodeSocLabel(evNodeSoc(states, this._prefix, this._evChargerIds(states)));
+    }
+
+    // Charger discovery walks every entity, so it runs only when their number
+    // (or the prefix) changes — the same trade the EV card makes.
+    _evChargerIds(states) {
+        const sig = `${this._prefix}|${Object.keys(states).length}`;
+        if (sig !== this._evIdsSig) {
+            this._evIdsSig = sig;
+            this._evIds = chargerIdsFrom(Object.keys(states), this._prefix);
+        }
+        return this._evIds;
     }
 
     // #727 — the display unit HA attached to a suffix's entity ('' if none).
@@ -746,6 +773,11 @@ class SEMSystemDiagramCard extends SEMLitBase {
             evStateText = this._t('connected') || 'Verbunden';
             evStateFill = 'rgba(141,200,146,0.6)';
         }
+        // The car's state of charge, when one car can honestly be meant
+        // (util/ev-node-soc.js): "Connected · 64%", or just "64%" while it is
+        // not plugged in. Nothing while it is unknown. Drawn bold and fully
+        // opaque after the faded status, so it reads like the battery's level.
+        const evSocText = this._showEv ? this._evSocLabel(this._hass) : '';
 
         // Daily kWh chips
         const todayLbl = this._t('today');
@@ -1119,7 +1151,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
                           font-weight="800" fill="#8DC892">${dispEv}</text>
                     <text x="${L.E.cx}" y="${L.E.labelY + fv * 1.0 + fl}"
                           text-anchor="middle" font-family="${F}" font-size="${fl}"
-                          fill="${evStateFill}" opacity="0.6">${evStateText}</text>
+                          fill="${evStateFill}" fill-opacity="0.6">${evStateText}${evSocText ? svg`${evStateText ? ' · ' : ''}<tspan fill="#8DC892" fill-opacity="1" font-weight="800">${evSocText}</tspan>` : nothing}</text>
                     <text x="${L.E.cx}" y="${L.E.labelY + fv * 1.0 + fl + fs + 2}" class="clickable"
                           @click=${() => this._showMoreInfo('daily_ev_energy')}
                           text-anchor="middle" font-family="${F}" font-size="${fs + 1}"

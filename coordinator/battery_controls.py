@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from homeassistant.helpers import entity_registry as er
@@ -33,6 +34,27 @@ from homeassistant.helpers import entity_registry as er
 from ..ha_energy_reader import battery_units
 
 _LOGGER = logging.getLogger(__name__)
+
+#: (#523, #1195) The per-battery lists: slot N of each is battery bN's, and
+#: ``_per_battery_config`` lays slot N over the key beside it. The entity
+#: lists first (shown only while more than one battery runs, #1089), then
+#: mode and reserve (shown by the per-battery controls, #1071).
+PER_BATTERY_ENTITY_LISTS: tuple[tuple[str, str], ...] = (
+    ("battery_force_discharge_entities", "battery_force_discharge_control_entity"),
+    ("battery_discharge_control_entities", "battery_discharge_control_entity"),
+    ("battery_strategy_entities", "battery_strategy_control_entity"),
+    # (#1166) each pack's own end-of-charge level (read only)
+    ("battery_charge_end_soc_entities", "battery_charge_end_soc_entity"),
+)
+PER_BATTERY_SETTING_LISTS: tuple[tuple[str, str], ...] = (
+    ("battery_modes", "battery_mode"),
+    ("battery_reserve_socs", "battery_reserve_soc"),
+)
+PER_BATTERY_LIST_KEYS: tuple[str, ...] = tuple(
+    key for key, _ in PER_BATTERY_ENTITY_LISTS + PER_BATTERY_SETTING_LISTS)
+#: (#1195) Which battery each slot of those lists belongs to: its entry in
+#: ``battery_units`` (the combined power sensor, or a pair's charge sensor).
+BATTERY_SLOT_UNITS_KEY = "battery_slot_units"
 
 _BATTERY_SLUG_RE = re.compile(r"^sensor\.sem_battery_(b\d+)_power$")
 # (#1171) the same sensor by its unique id (a renamed entity keeps it), and
@@ -175,4 +197,122 @@ def adopt_shared_battery_settings(hass: Any, entry: Any, coordinator: Any,
         "need the per-battery ones.",
         ", ".join(slugs), mode or "auto",
         "default" if reserve is None else reserve, shared)
+    return True
+
+
+def _strip_unset_tail(slots: list) -> list:
+    """A slot past the end of a list is unset, the same as ``None``."""
+    out = list(slots)
+    while out and out[-1] is None:
+        out.pop()
+    return out
+
+
+def realign_battery_slots(saved: Any, units: Any) -> tuple[dict, bool] | None:
+    """(#1195) The per-battery lists put in the order of ``units``.
+
+    Slot N of each list is battery bN's, and bN is the N-th entry of
+    ``battery_units``: combined sensors first, then two-sensor pairs, each in
+    Energy Dashboard order. A battery added or removed there moves the
+    batteries after it, so a slot kept by its number went to another
+    battery: a combined battery added to a home of two pairs became b1 and
+    took the first pair's discharge entity.
+
+    ``battery_slot_units`` says which battery each slot is for. Each battery
+    takes its own slot back at its new number; a new battery starts unset; a
+    removed battery's slots go. With no record yet the slots are taken as
+    they stand, and a slot past the last battery is no battery's: left from
+    an older, longer list, it drove the next battery added.
+
+    Returns ``(changes, moved)`` — the option keys to write, and whether the
+    battery list is another than the one recorded — or None when the lists
+    already are in this order. Pure. An empty ``units`` (no battery read
+    yet) changes nothing.
+    """
+    if not isinstance(units, (list, tuple)) or not units:
+        return None
+    if not all(isinstance(u, str) and u for u in units):
+        return None     # a gap would move every later battery: no answer
+    units = list(units)
+    record = saved.get(BATTERY_SLOT_UNITS_KEY)
+    if not (isinstance(record, list) and all(isinstance(u, str) for u in record)):
+        record = None
+    if record == units:
+        return None
+    if record is None:
+        old_slot_of = list(range(len(units)))
+    else:
+        unclaimed = list(range(len(record)))
+        old_slot_of = []
+        for unit in units:
+            j = next((k for k in unclaimed if record[k] == unit), None)
+            if j is not None:
+                unclaimed.remove(j)
+            old_slot_of.append(j)
+    changes: dict = {BATTERY_SLOT_UNITS_KEY: list(units)}
+    for key in PER_BATTERY_LIST_KEYS:
+        old = saved.get(key)
+        if not isinstance(old, list):
+            continue
+        new = _strip_unset_tail([
+            old[j] if j is not None and j < len(old) else None
+            for j in old_slot_of])
+        if new != _strip_unset_tail(old):
+            changes[key] = new
+    return changes, record is not None
+
+
+def align_battery_slots(hass: Any, entry: Any, coordinator: Any, units: Any,
+                        *, running: bool) -> bool:
+    """(#1195) Keep each battery's saved settings with that battery.
+
+    Runs on every Energy Dashboard read: at setup, before the controls are
+    captured and before the first command, and when the user edits the
+    dashboard (#923). ``running`` says the platforms are built. Each
+    battery's adapter holds its control entities from when it was built, and
+    each select and number its slot number, so a battery list that changed
+    while SEM runs reloads the entry once. A first record alone moves no
+    slot and does not reload. Until the reload the battery pipeline sends
+    nothing (``_battery_reload_pending``). True when the options were
+    written.
+    """
+    options = getattr(entry, "options", None)
+    data = getattr(entry, "data", None)
+    if not isinstance(options, Mapping):
+        return False
+    merged = {**(data if isinstance(data, Mapping) else {}), **options}
+    plan = realign_battery_slots(merged, units)
+    if plan is None:
+        return False
+    changes, moved = plan
+    new_options = {**options, **changes}
+    if isinstance(getattr(coordinator, "config", None), dict):
+        coordinator.config.update(changes)
+    if running and not moved:
+        # the options listener must not reload for a record alone
+        coordinator._skip_options_reload = dict(new_options)
+    limits = "battery_discharge_control_entities"
+    old_limits, new_limits = merged.get(limits), changes.get(limits, merged.get(limits))
+    if not running and isinstance(old_limits, list):
+        # a removed battery's cap is lifted at start (the unload lifts it
+        # when SEM runs): ``restore_discharge_limit_on_startup``
+        kept = new_limits if isinstance(new_limits, list) else []
+        dropped = [e for e in old_limits if isinstance(e, str) and e and e not in kept]
+        if dropped:
+            coordinator._dropped_battery_limit_entities = dropped
+    written = hass.config_entries.async_update_entry(entry, options=new_options)
+    if running and moved and written:
+        # until the reload, the battery pipeline sends nothing: the adapters
+        # still hold the old places' entities
+        coordinator._battery_reload_pending = True
+    if moved:
+        old_units = merged.get(BATTERY_SLOT_UNITS_KEY) or []
+        new_units = [u for u in changes[BATTERY_SLOT_UNITS_KEY] if u not in old_units]
+        _LOGGER.warning(
+            "The batteries in the Energy Dashboard changed (%s → %s). Each "
+            "battery keeps its own SEM settings at its new number%s%s.",
+            ", ".join(old_units), ", ".join(changes[BATTERY_SLOT_UNITS_KEY]),
+            "; new, starting on Auto with no entities of their own: "
+            + ", ".join(new_units) if new_units else "",
+            "; reloading to rebuild the battery controls" if running else "")
     return True

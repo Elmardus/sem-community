@@ -682,6 +682,12 @@ The illustrated energy diagram — drawn solar panels, house, battery, grid
 pole, and EV charger with animated spark flows along each path, a time-based
 sun arc, and clickable nodes. Responsive down to phone width.
 
+The EV node shows the car's state of charge beside its status ("Connected ·
+64%", or just "64%" while the car is not plugged in). It reads the charger's
+vehicle SOC sensor, then the fleet sensor, then the taper estimate, which is
+marked "~". With more than one charger it shows no SOC: no single car is
+"the" EV, and the node must not borrow one charger's car for all of them.
+
 #### sem-tab-header
 
 **SEM Tab Header** · *every tab*
@@ -769,6 +775,7 @@ entities:
   ev:
     entity: sensor.wallbox_charging_power   # invert: true to flip sign
     daily_energy: sensor.ev_today
+    state_of_charge: sensor.car_battery_level   # diagram card only; %
   home:
     entity: sensor.home_consumption         # optional — derived from the balance when omitted
     daily_energy: sensor.home_today

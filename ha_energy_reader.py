@@ -107,15 +107,17 @@ class EnergyDashboardConfig:
     solar_power: Optional[str] = None
     grid_import_power: Optional[str] = None
     grid_export_power: Optional[str] = None
-    battery_power: Optional[str] = None  # Combined: positive=charge, negative=discharge
+    # Combined. HA's sign is + while discharging; SEM reads it as it is and
+    # learns its sign (#1194).
+    battery_power: Optional[str] = None
     ev_power: Optional[str] = None
 
     # #551 — battery ``power_config`` alternatives (HA ≥2026.x battery dialog).
     # Two-sensor mode has NO single combined entity: HA stores
     # ``power_config: {stat_rate_from, stat_rate_to}`` (from=discharge,
     # to=charge) and battery_power stays None — the reader computes
-    # net = to − from. ``stat_rate_inverted`` flags a combined sensor whose
-    # sign must be flipped on read.
+    # net = to − from. ``stat_rate_inverted`` is a combined sensor with the
+    # other sign: + while charging, which is SEM's sign (#1194).
     battery_power_from: Optional[str] = None  # discharge power sensor
     battery_power_to: Optional[str] = None    # charge power sensor
     # #553 — grid two-sensor power_config (from=import, to=export). Consumed
@@ -123,6 +125,10 @@ class EnergyDashboardConfig:
     # (grid_power = export − import, sign fixed by declaration).
     grid_power_from: Optional[str] = None
     grid_power_to: Optional[str] = None
+    #: (#1194) Some combined battery sensor is marked "Inverted". Read as it
+    #: is like any other; the flag only changes what an older store saved
+    #: while the one-battery read still flipped it (one flag: only that
+    #: read was). See ``SensorReader._move_lock_learned_on_flip``.
     battery_power_inverted: bool = False
     # #553 — ALL two-sensor pairs (multi-battery installs may configure more
     # than one battery in Two-sensor mode). Each entry: (from, to). The
@@ -149,6 +155,12 @@ class EnergyDashboardConfig:
     battery_power_list: List[str] = field(default_factory=list)
     battery_charge_energy_list: List[str] = field(default_factory=list)
     battery_discharge_energy_list: List[str] = field(default_factory=list)
+    #: (#1193) Each battery's own (charge, discharge) energy counters, by its
+    #: ``battery_units`` entry. The two lists above follow the dashboard's
+    #: battery order and skip a battery with no counter, so entry N of them
+    #: is not battery bN. Read through ``unit_energy_counters``.
+    battery_unit_counters: Dict[str, Tuple[Optional[str], Optional[str]]] = field(
+        default_factory=dict)
     grid_import_energy_list: List[str] = field(default_factory=list)
     grid_export_energy_list: List[str] = field(default_factory=list)
     grid_power_list: List[str] = field(default_factory=list)
@@ -275,6 +287,25 @@ def battery_units(ed_config: Any) -> List[str]:
     if isinstance(pairs, (list, tuple)):
         units += [to for _from, to in pairs]
     return units
+
+
+def unit_energy_counters(
+    ed_config: Any, unit: Optional[str],
+) -> Optional[Tuple[Optional[str], Optional[str]]]:
+    """This battery's own ``(charge, discharge)`` energy counters (#1193).
+
+    ``unit`` is the battery's ``battery_units`` entry. The parser records the
+    counters of the dashboard source that gave the battery its power sensor,
+    so a battery is never judged by another battery's counters. ``None`` when
+    nothing was recorded for it; ``(None, None)`` when its source had none.
+    """
+    counters = getattr(ed_config, "battery_unit_counters", None)
+    if not unit or not isinstance(counters, dict):
+        return None
+    pair = counters.get(unit)
+    if isinstance(pair, (list, tuple)) and len(pair) == 2:
+        return pair[0] or None, pair[1] or None
+    return None
 
 
 def _parse_prefs(
@@ -644,10 +675,12 @@ def _extract_battery_config(source: Dict[str, Any], config: EnergyDashboardConfi
     Battery uses:
     - stat_energy_from: discharge energy
     - stat_energy_to: charge energy
-    - stat_rate/stat_power: combined power (positive=charge, negative=discharge in HA 2025.12)
+    - stat_rate/stat_power: combined power (HA: positive=discharge, negative=charge)
     - power_config (#551, HA ≥2026.x): {stat_rate} | {stat_rate_inverted} |
       {stat_rate_from, stat_rate_to} — the "Standard / Inverted / Two sensors"
       choices in HA's battery dialog. Two-sensor mode has NO combined entity.
+      For Inverted, HA's top-level stat_rate is its own ``<sensor>_inverted``
+      (the user's sensor × −1); SEM reads the user's sensor (#1194).
     - stat_soc (#551): the user's explicit battery state-of-charge sensor.
     """
     discharge_energy = source.get("stat_energy_from")
@@ -698,6 +731,15 @@ def _extract_battery_config(source: Dict[str, Any], config: EnergyDashboardConfi
         if not config.battery_power:
             config.battery_power = power
 
+    # (#1193) The battery keeps its own counters, by the entry that names it
+    # in ``battery_units``: the combined sensor, or the pair's charge sensor.
+    # The same sensor listed twice is one battery; its first counters stay.
+    unit = power or (pc.get("stat_rate_to") if isinstance(pc, dict)
+                     and pc.get("stat_rate_from") else None)
+    if unit:
+        config.battery_unit_counters.setdefault(
+            unit, (charge_energy or None, discharge_energy or None))
+
     config.has_battery = bool(
         config.battery_discharge_energy_list
         or config.battery_charge_energy_list
@@ -740,6 +782,9 @@ def _derive_battery_power_if_unrepresented(hass, config) -> None:
     if found:
         config.battery_power = found
         config.battery_power_list.append(found)
+        # (#1193) found on the first battery's counter device: its counters
+        config.battery_unit_counters.setdefault(found, (
+            config.battery_charge_energy, config.battery_discharge_energy))
         config.derived_power["battery"] = found
         _LOGGER.info(
             "Derived battery power sensor %s from energy device "

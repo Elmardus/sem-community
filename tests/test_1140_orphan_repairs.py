@@ -86,6 +86,10 @@ KEYED = {
         "clear_orphan_hot_water_repairs, once per coordinator (#454)",
     "raise_hot_water_temperature_sensor_unavailable":
         "clear_orphan_hot_water_repairs, once per coordinator (#454)",
+    "raise_power_sensor_not_found":
+        "keyed on the fixed source (grid/solar/battery); each is cleared the "
+        "cycle the dashboard read finds its sensor or stops counting it "
+        "(#1188), and a restart drops the non-persistent Repair",
     "raise_heat_pump_contact_values_missing":
         "keyed on the fixed slot (relay1/relay2), and both slots are cleared "
         "every cycle their contact is complete or gone (#801)",

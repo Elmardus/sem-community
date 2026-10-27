@@ -234,6 +234,11 @@ read-only by design — SEM can't suppress it), but the cards will load.
 > applied to the new source; the sign diagnostics show `user_flip_applies:
 > false` and the log says so once. Tap again on the new source if it really is
 > inverted, or run `reset_sign_detection` to start clean.
+>
+> A tap made while SEM reads no grid meter (grid shows 0 W) changes nothing,
+> and it does not flip a meter SEM finds later (#1192): the diagnostics show
+> `user_flip_source: none`. Fix the missing meter first, then tap if the sign
+> is wrong.
 
 **Symptom:** SEM shows grid import when the house is actually exporting (or vice versa). The `sensor.sem_grid_power` sign is the opposite of the hardware power meter.
 
@@ -276,7 +281,7 @@ On a solar install a second voter runs first: solar production has no sign ambig
 
 **Symptom:** the Sankey shows the right Grid total, but no line goes into or out of the Grid node: no Grid → House, no Grid → Battery, no Solar → Grid.
 
-**Cause (#1172):** SEM reads 0 W from the grid. The totals come from your meter's kWh counters; the lines come from live power. When the grid entry in HA's Energy Dashboard has no power sensor, SEM looks for one on the meter's own device. It used to match English words in the entity id only, so a HomeWizard P1 meter (`sensor.p1_meter_power`, in Dutch `sensor.p1_meter_vermogen`) was missed. SEM now also asks the meter's integration what it calls the sensor (HomeWizard so far), and that does not change with your language. The HA log says `No grid power sensor found` when nothing matched.
+**Cause (#1172):** SEM reads 0 W from the grid. The totals come from your meter's kWh counters; the lines come from live power. When the grid entry in HA's Energy Dashboard has no power sensor, SEM looks for one on the meter's own device. It used to match English words in the entity id only, so a HomeWizard P1 meter (`sensor.p1_meter_power`, in Dutch `sensor.p1_meter_vermogen`) was missed. SEM now also asks the meter's integration what it calls the sensor (HomeWizard, and the DSMR meter's import and export pair since #1189), and that does not change with your language. The HA log says `No grid power sensor found` when nothing matched.
 
 **Fix:** add the meter's power sensor to the grid entry in the Energy Dashboard, or set **Sensor sources → Grid power** on SEM's ⚙ **Configuration** tab (**All settings**). The lines start from then on; earlier hours of that day stay without them.
 
@@ -368,6 +373,16 @@ at all — vendor cloud APIs such as FusionSolar's northbound API typically do
 not — then leaving both empty is the correct answer, and SEM saying it is
 blind on grid is the honest reading, not a fault to work around.
 
+## SEM found no power sensor
+
+**Symptom:** a Repair says *No power sensor for* a kWh counter of your grid, solar or battery. That source reads 0 W on every SEM card, and the energy flows and the surplus are wrong.
+
+**Cause (#1188):** the Energy Dashboard entry counts energy (kWh) but has no power sensor (W), and SEM found none on the counter's own device. For the grid, SEM also looked for an import and export pair. SEM reads power, not kWh, to steer, so it reads 0 W. Before, only the HA log said `No grid power sensor found`. SEM waits 5 minutes after Home Assistant has started, so a meter that loads late does not raise it.
+
+**Fix:** add the power sensor to that entry in the Energy Dashboard (*Settings → Dashboards → Energy*). Or set it on SEM's ⚙ **Configuration** tab: pick **All settings**, then **Sensor sources** → **Grid power**, **Solar power sensor** or **Battery power sensor**. A grid meter with one sensor for import and one for export goes in **Tariff & pricing** → **Grid import sensor** and **Grid export sensor**. The Repair clears on the next read.
+
+If the device has no power sensor at all (some cloud integrations publish only kWh), you can ignore the Repair. SEM then reads that power as 0 W.
+
 ## The battery platform is pinned to generic
 
 **Symptom:** a Repair says the battery platform is set to *generic* although a
@@ -391,6 +406,8 @@ cycle.
 **Symptom:** SEM shows battery charging when it's actually discharging (or vice versa). The `sensor.sem_battery_power` sign is opposite of what the hardware reports.
 
 **How SEM detects battery direction:** SEM compares the battery power sensor's sign against the charge/discharge energy counters from the Energy Dashboard. If the discharge counter is growing while battery power is positive, SEM knows positive means discharge (opposite of SEM convention) and auto-corrects.
+
+**Did you mark the battery "Inverted" in the Energy Dashboard?** Then it shows charging the right way from the start, with one or more batteries. A battery that showed the right way before an update still does.
 
 **Requirements:**
 - HA Energy Dashboard must be configured with battery charge AND discharge energy sensors

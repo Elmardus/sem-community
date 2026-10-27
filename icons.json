@@ -112,6 +112,9 @@
       "flow_battery_to_ev_power": {
         "default": "mdi:car-battery"
       },
+      "flow_battery_to_grid_power": {
+        "default": "mdi:transmission-tower-export"
+      },
       "flow_grid_to_home_power": {
         "default": "mdi:home-import-outline"
       },
@@ -147,6 +150,9 @@
       },
       "flow_battery_to_ev_energy": {
         "default": "mdi:car-battery"
+      },
+      "flow_battery_to_grid_energy": {
+        "default": "mdi:transmission-tower-export"
       },
       "self_consumption_rate": {
         "default": "mdi:home-percent"

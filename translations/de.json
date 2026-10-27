@@ -1975,6 +1975,10 @@
       "title": "SEM konnte deine Netzleistungs-Zähler nicht finden",
       "description": "SEM hat keinen Netzleistungs-Sensor, und die nach Namen geratenen Sensoren sind nicht dein Netzzähler: **{import_entity}** für den Bezug, **{export_entity}** für die Einspeisung. Sie passen nicht zu deinen Netz-Energiezählern, oder einer der beiden fehlt. SEM zeigt lieber keine Netzleistung als eine falsche. So wählst du deinen Zähler: Öffne das SEM-Dashboard, Tab ⚙ **Konfiguration**, und wähle oben **Alle Einstellungen**. Setze dann **Netzleistung** im Abschnitt **Sensorquellen**. Hat dein Zähler je einen Sensor für Bezug und Einspeisung, setze stattdessen **Netz-Bezug-Sensor** und **Netz-Einspeise-Sensor** im Abschnitt **Tarif & Preise**."
     },
+    "power_sensor_not_found": {
+      "title": "Kein Leistungssensor für {energy_entity}",
+      "description": "Das Energie-Dashboard zählt **{energy_entity}** in kWh, aber SEM hat dafür keinen Leistungssensor (W) gefunden. SEM liest diese Leistung als 0 W, daher sind die Energieflüsse und der Überschuss falsch. Füge dazu den Leistungssensor zu diesem Eintrag im Energie-Dashboard hinzu. Oder öffne das SEM-Dashboard, Tab ⚙ **Konfiguration**, und wähle oben **Alle Einstellungen**. Setze dann den Sensor im Abschnitt **Sensorquellen**. Gibt es keinen Leistungssensor, kannst du diesen Hinweis ignorieren."
+    },
     "charger_device_gone": {
       "title": "Ladegerät {name}: Gerät fehlt",
       "description": "Home Assistant kennt das Gerät hinter dem Ladegerät {name} nicht mehr. SEM kann es nicht steuern. Entferne das Ladegerät in SEM oder füge das Gerät wieder hinzu."

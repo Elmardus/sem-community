@@ -30,7 +30,7 @@ from typing import Any, Dict, Final
 SCHEMA: Final = 1
 
 
-ROSTER_META: Final[Dict[str, Any]] = {'generated_at': '2026-10-23T20:24:56Z', 'sources': {'core_analytics': 'https://analytics.home-assistant.io/data.json', 'core_index': 'https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/generated/integrations.json', 'custom_installs': 'https://analytics.home-assistant.io/custom_integrations.json', 'hacs': 'https://data-v2.hacs.xyz/integration/data.json', 'website': 'https://www.home-assistant.io/integrations.json'}, 'install_floor': 50, 'candidates': 1365, 'kept': 198, 'with_roles': 64, 'roles_mined': 185}
+ROSTER_META: Final[Dict[str, Any]] = {'generated_at': '2026-10-26T22:10:41Z', 'sources': {'core_analytics': 'https://analytics.home-assistant.io/data.json', 'core_index': 'https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/generated/integrations.json', 'custom_installs': 'https://analytics.home-assistant.io/custom_integrations.json', 'hacs': 'https://data-v2.hacs.xyz/integration/data.json', 'website': 'https://www.home-assistant.io/integrations.json'}, 'install_floor': 50, 'candidates': 1365, 'kept': 198, 'with_roles': 65, 'roles_mined': 187}
 
 #: domain -> what the ecosystem says this integration is.
 ROSTER: Final[Dict[str, Dict[str, Any]]] = {
@@ -58,7 +58,7 @@ ROSTER: Final[Dict[str, Dict[str, Any]]] = {
     'dessmonitor': {'name': 'DessMonitor Solar System Integration', 'repo': 'andreas-glaser/ha-dessmonitor', 'origin': 'hacs', 'installs': 260, 'kind': 'energy', 'kind_from': 'keyword'},
     'dewarmte': {'name': 'DeWarmte', 'repo': 'ronald-willems/dewarmte-homeassistant', 'origin': 'hacs', 'installs': 52, 'kind': 'other', 'kind_from': 'keyword'},
     'discovergy': {'name': 'inexogy', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 762, 'kind': 'other', 'kind_from': 'keyword'},
-    'dsmr': {'name': 'DSMR Smart Meter', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 5745, 'kind': 'energy', 'kind_from': 'keyword'},
+    'dsmr': {'name': 'DSMR Smart Meter', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 5745, 'kind': 'energy', 'kind_from': 'vocabulary'},
     'dynamic_energy_cost': {'name': 'Dynamic Energy Cost', 'repo': 'martinarva/dynamic_energy_cost', 'origin': 'hacs', 'installs': 1195, 'kind': 'other', 'kind_from': 'keyword'},
     'easee': {'name': 'Easee EV Charger', 'repo': 'nordicopen/easee_hass', 'origin': 'hacs', 'installs': 3620, 'kind': 'charger', 'kind_from': 'vocabulary_name_only'},
     'ecotracker': {'name': 'Ecotracker', 'repo': 'stefanseeger/ecotracker', 'origin': 'hacs', 'installs': 392, 'kind': 'other', 'kind_from': 'keyword'},
@@ -258,6 +258,10 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
     'audiconnect': {
         'vehicle_range': {'platform': 'sensor', 'keys': ('hybrid_range', 'primary_engine_range', 'range', 'secondary_engine_range'), 'options': (), 'exact_only': ('range',)},
         'vehicle_soc': {'platform': 'sensor', 'keys': ('state_of_charge',), 'options': (), 'exact_only': ('state_of_charge',)},
+    },
+    'dsmr': {
+        'grid_export_power': {'platform': 'sensor', 'keys': ('current_electricity_delivery',), 'options': ()},
+        'grid_import_power': {'platform': 'sensor', 'keys': ('current_electricity_usage',), 'options': ()},
     },
     'ef_ble': {
         'battery_charge_limit': {'platform': 'number', 'keys': ('charging_grid_power_limit',), 'options': ()},
