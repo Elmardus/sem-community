@@ -2043,6 +2043,10 @@
     "charger_role_entity_gone": {
       "title": "Lader {name}: en entitet er borte",
       "description": "Laderen {name} bruker {entity}, som er borte eller deaktivert. Velg en annen entitet i laderinnstillingene, eller sjekk integrasjonen til enheten."
+    },
+    "external_write_seen": {
+      "title": "En annen part skriver til {name}",
+      "description": "Noe annet enn SEM endrer hele tiden **{name}**, og SEM og den parten angrer hverandres arbeid. Sett enheten til *Ja, SEM viker* i SEMs fane Konfigurasjon, og velg entiteten som viser når den andre parten har styringen."
     }
   },
   "selector": {

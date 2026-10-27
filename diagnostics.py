@@ -781,6 +781,8 @@ async def async_get_config_entry_diagnostics(
         "appliance_schedules": data.get("diag_appliance_schedules"),
         "load_management": load_info,
         "ev_stability": ev_stability,
+        "external_control": _safe(
+            lambda: coordinator._external_control.rows()) or [],
         "energy_dashboard": ed_info,
         "battery_sign": battery_sign_info,
         "split_grid_discovery": split_grid_info,

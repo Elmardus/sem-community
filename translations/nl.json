@@ -2043,6 +2043,10 @@
     "charger_role_entity_gone": {
       "title": "Lader {name}: een entiteit is weg",
       "description": "Lader {name} gebruikt {entity}, die weg of uitgeschakeld is. Kies een andere entiteit in de laderinstellingen of controleer de integratie van het apparaat."
+    },
+    "external_write_seen": {
+      "title": "Een andere partij schrijft naar {name}",
+      "description": "Iets anders dan SEM verandert steeds **{name}**, en SEM en die partij maken elkaars werk ongedaan. Zet dit apparaat in SEM's tabblad Configuratie op *Ja, SEM houdt zich in* en kies de entiteit die laat zien wanneer de andere partij de controle heeft."
     }
   },
   "selector": {

@@ -2043,6 +2043,10 @@
     "charger_role_entity_gone": {
       "title": "Charger {name}: an entity is gone",
       "description": "The charger {name} uses {entity}, which is gone or disabled. Pick another entity in the charger settings, or check the device's integration."
+    },
+    "external_write_seen": {
+      "title": "Another party writes to {name}",
+      "description": "Something other than SEM keeps changing **{name}**, and SEM and that party undo each other. In SEM's Configuration tab, set this device to *Yes, SEM yields* and pick the entity that shows when the other party is in control."
     }
   },
   "selector": {

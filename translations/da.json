@@ -2043,6 +2043,10 @@
     "charger_role_entity_gone": {
       "title": "Lader {name}: en entitet er væk",
       "description": "Laderen {name} bruger {entity}, som er væk eller slået fra. Vælg en anden entitet i laderens indstillinger, eller tjek enhedens integration."
+    },
+    "external_write_seen": {
+      "title": "En anden part skriver til {name}",
+      "description": "Noget andet end SEM ændrer hele tiden **{name}**, og SEM og den part fortryder hinandens arbejde. Sæt enheden til *Ja, SEM viger* på SEM's fane Konfiguration, og vælg den entitet, der viser, hvornår den anden part har styringen."
     }
   },
   "selector": {

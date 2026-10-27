@@ -222,6 +222,16 @@ reaches the supported-hardware list after someone confirms it on real hardware.
 
 > **Note:** Android notification channels, groups, and action buttons are only sent to `notify.mobile_app_*` services. Other services receive message + title only.
 
+### A device another party steers (#1079)
+
+A supplier, an aggregator or a grid operator may control your car charger or your battery too. When they and SEM both write to it, they undo each other. Per charger, and for the home battery, ⚙ **Configuration → All settings → Steered by another party** has three choices:
+
+- **No** (default): nothing changes.
+- **Yes, SEM yields**: while your **Steering indicator** is on, SEM writes nothing to that device. SEM never stops or starts it on its own. The device's real draw stays in the home's numbers, so the other devices plan around it. A charger's failsafe is the one thing SEM still keeps set. The indicator is any switch, binary sensor or select that shows the other party is in control. It must read *off* for 5 minutes before SEM takes the device back, and an indicator that is unknown or unavailable changes nothing, so a restart never counts as "steered".
+- **SEM drives, tell me**: SEM keeps control. A Repair appears when it sees writes it did not make.
+
+The diagnose service and the downloaded diagnostics list each such device: who steers it, since when, and whether SEM yields.
+
 ### Multi-Charger Setup
 
 SEM supports multiple EV chargers with priority-based surplus distribution:

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- ✨ **SEM can yield a charger or the battery to another party that steers it** (#1079). Off by default; set it under Steered by another party.
 - 🐛 **EV stop estimates now follow a car sensor that moves in half-point steps** (#1229). Before, the estimate drifted above the car's reading.
 - 🐛 **A heat pump set by service now shows the state SEM sent** (#1231). Before, a renewal could cancel a boost.
 - 🐛 **The plan now runs on a home with no battery** (#1207). Before, it waited for a battery sensor that is not there.

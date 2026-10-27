@@ -2043,6 +2043,10 @@
     "charger_role_entity_gone": {
       "title": "Ładowarka {name}: encja zniknęła",
       "description": "Ładowarka {name} używa {entity}, która zniknęła lub jest wyłączona. Wybierz inną encję w ustawieniach ładowarki albo sprawdź integrację urządzenia."
+    },
+    "external_write_seen": {
+      "title": "Ktoś inny zapisuje do {name}",
+      "description": "Coś innego niż SEM ciągle zmienia **{name}**, a SEM i ta strona wzajemnie cofają swoje zmiany. W zakładce Konfiguracja SEM ustaw to urządzenie na *Tak, SEM ustępuje* i wybierz encję pokazującą, kiedy kontrolę ma druga strona."
     }
   },
   "selector": {

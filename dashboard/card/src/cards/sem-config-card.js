@@ -1076,6 +1076,11 @@ class SEMConfigCard extends SEMLitBase {
                     ${this._renderPickerNested(idx, cid, 'vehicle_soc_entity', 'config_ev_vehicle_soc',
                         'sensor', null, opts, 'config_help_ev_vehicle_soc')}
                     ${this._renderTargetTypeSelectNested(idx, cid, charger, opts)}
+                    ${this._renderExtModeNested(idx, cid, charger, opts)}
+                    ${(charger.external_control_mode && charger.external_control_mode !== 'none')
+                        ? this._renderPickerNested(idx, cid, 'external_control_indicator', 'config_ext_ctrl_entity',
+                            ['binary_sensor', 'switch', 'input_boolean', 'select', 'input_select'], null, opts, 'config_help_ext_ctrl')
+                        : nothing}
                     ${''/* The charger's current RANGE (#536 floor, #746
                        ceiling). SEM auto-finds a fussy car's start current
                        (day AND night) and settles back to Min — no Start Amps
@@ -1550,6 +1555,11 @@ class SEMConfigCard extends SEMLitBase {
                     'battery_discharge_control_entities', 'config_batt_discharge_entity',
                     ['number'], i, n, opts, 'config_help_batt_discharge_entity_each'))}`;
             })()}
+            ${this._renderExtModeOption(opts)}
+            ${(opts.battery_external_control_mode && opts.battery_external_control_mode !== 'none')
+                ? this._renderPicker('battery_external_control_indicator', 'config_ext_ctrl_entity',
+                    ['binary_sensor', 'switch', 'input_boolean', 'select', 'input_select'], null, opts, 'config_help_ext_ctrl')
+                : nothing}
             ${/* (#1166) read only: where the inverter itself stops charging.
                   Force charge ends there when it is below 90 %. One per
                   battery when there are two or more; an empty row uses the
@@ -2100,6 +2110,64 @@ class SEMConfigCard extends SEMLitBase {
             this._chargerBusy = false;
             this.requestUpdate();
         }
+    }
+
+    // (#1079) "Steered by another party": none / yield / observe. One mode
+    // select and one indicator picker, for a charger (its own settings) and
+    // for the home battery (options). Everyday hides both; All settings
+    // shows them. A device left on "No" behaves exactly as before.
+    _extModeOptions() {
+        return [
+            ['none', 'config_ext_ctrl_mode_none'],
+            ['yield', 'config_ext_ctrl_mode_yield'],
+            ['observe', 'config_ext_ctrl_mode_observe'],
+        ];
+    }
+
+    _renderExtModeNested(chargerIndex, cid, charger, opts) {
+        if (!this._gateCharger('external_control_mode')) return nothing;
+        const cur = charger.external_control_mode || 'none';
+        const statusKey = `ev_chargers.${chargerIndex}.external_control_mode`;
+        const status = this._saveStatus[statusKey];
+        const onChange = (e) => this._saveChargerField(
+            chargerIndex, cid, 'external_control_mode', e.target.value, statusKey, opts,
+        );
+        return html`
+            <div class="stepper-cell">
+                <div class="ctrl-row">
+                    <span class="ctrl-label">${this._t('config_ext_ctrl_mode')}</span>
+                    <select class="sem-select" .value=${cur} @change=${onChange}>
+                        ${this._extModeOptions().map(([v, k]) => html`
+                            <option value=${v} ?selected=${cur === v}>${this._t(k)}</option>`)}
+                    </select>
+                </div>
+                ${status === 'saving' ? html`<div class="save-status">${this._t('config_saving')}…</div>` : nothing}
+                ${status === 'ok' ? html`<div class="save-status ok">✓</div>` : nothing}
+                ${this._showHelp ? html`<div class="setting-help-text">${this._t('config_help_ext_ctrl')}</div>` : nothing}
+            </div>
+        `;
+    }
+
+    _renderExtModeOption(opts) {
+        if (!this._gate('battery_external_control_mode')) return nothing;
+        const cur = opts.battery_external_control_mode || 'none';
+        const status = this._saveStatus.battery_external_control_mode;
+        const onChange = (e) => this._saveOption(
+            'battery_external_control_mode', e.target.value, 'battery_external_control_mode');
+        return html`
+            <div class="stepper-cell">
+                <div class="ctrl-row">
+                    <span class="ctrl-label">${this._t('config_ext_ctrl_mode')}</span>
+                    <select class="sem-select" .value=${cur} @change=${onChange}>
+                        ${this._extModeOptions().map(([v, k]) => html`
+                            <option value=${v} ?selected=${cur === v}>${this._t(k)}</option>`)}
+                    </select>
+                </div>
+                ${status === 'saving' ? html`<div class="save-status">${this._t('config_saving')}…</div>` : nothing}
+                ${status === 'ok' ? html`<div class="save-status ok">✓</div>` : nothing}
+                ${this._showHelp ? html`<div class="setting-help-text">${this._t('config_help_ext_ctrl')}</div>` : nothing}
+            </div>
+        `;
     }
 
     // EV target-type select bound to ev_chargers[index].ev_target_type.

@@ -23,6 +23,9 @@ Issues filed today:
   * ``no_recorder`` — recorder integration not available, so
     ``async_seed_from_history`` cannot bootstrap EV / forecast
     history. Filed at setup, cleared if recorder appears later.
+  * ``external_write_seen_<device>`` — a device whose external-control mode
+    is ``observe`` took a write SEM did not make (#1079). Cleared the cycle
+    the writes stop.
   * ``power_sensor_not_found_<source>`` — the Energy Dashboard counts the
     grid, solar or battery in kWh and SEM found no power sensor for it
     (#1188). Cleared the cycle a sensor is found.
@@ -247,6 +250,9 @@ _DOCS_ANCHORS = {
     "split_grid_guessed": "sem-guessed-your-grid-power-meters",
     # (#947) the guess was checked against the counters and failed
     "split_grid_rejected": "sem-could-not-find-your-grid-power-meters",
+    # (#1079) another party writes to a device SEM drives: the next step is
+    # the user's own external-control setting
+    "external_write_seen": "another-party-writes-to-a-device",
     # (#1188) the dashboard counts a source in kWh; SEM found no power sensor
     "power_sensor_not_found": "sem-found-no-power-sensor",
     # (#935) files from an install that came before this one
@@ -1902,3 +1908,37 @@ def clear_previous_install_leftovers(hass: HomeAssistant) -> None:
         ir.async_delete_issue(hass, DOMAIN, _PREVIOUS_INSTALL_ISSUE_ID)
     except Exception as e:  # noqa: BLE001
         _LOGGER.debug("issue_registry.delete failed for leftovers: %s", e)
+
+
+def _external_write_issue_id(device: str) -> str:
+    return f"external_write_seen_{device}"
+
+
+def raise_external_write_seen(hass: HomeAssistant, device: str, *,
+                              name: str) -> None:
+    """(#1079) A device set to ``observe`` took writes SEM did not make.
+    Non-persistent: SEM looks again after every start."""
+    try:
+        ir.async_create_issue(
+            hass,
+            domain=DOMAIN,
+            issue_id=_external_write_issue_id(device),
+            is_fixable=False,
+            is_persistent=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="external_write_seen",
+            learn_more_url=next_step_url("docs", "external_write_seen",
+                                         **_versions(hass)),
+            translation_placeholders={"name": str(name or device)},
+        )
+    except Exception as e:  # noqa: BLE001 — never fail the cycle over a repair
+        _LOGGER.debug("issue_registry.create (external_write_seen_%s) "
+                      "failed: %s", device, e)
+
+
+def clear_external_write_seen(hass: HomeAssistant, device: str) -> None:
+    try:
+        ir.async_delete_issue(hass, DOMAIN, _external_write_issue_id(device))
+    except Exception as e:  # noqa: BLE001
+        _LOGGER.debug("issue_registry.delete (external_write_seen_%s) "
+                      "failed: %s", device, e)
