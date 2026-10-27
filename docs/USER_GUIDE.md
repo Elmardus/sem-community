@@ -1665,6 +1665,12 @@ loads take the sun first. SEM never buys from the grid for it. It needs the
 **Export guard** switch on. Default 0: only a negative price stops export.
 More in [Tariff models](TARIFF_MODELS.md#stop-exporting-below-1090).
 
+While the meter is closed, the sun goes in this order: the battery first,
+then the car, then your other loads by their priority, and only what is
+left is cut at the inverter. A load starts on less spare sun than usual,
+because the usual margin that keeps a little export is dropped. SEM does
+not buy from the grid to start a load.
+
 Proven end to end on real hardware on 17.09.2026: with the price held negative
 and 2 kW of export on the meter, SEM's guard engaged after its delay, wrote the
 cut, the inverter's register read *Zero Power*, and on the price turning
