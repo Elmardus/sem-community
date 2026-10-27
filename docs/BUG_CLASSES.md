@@ -265,7 +265,9 @@ only-restored row (a dead DSMR entry hid the meter that works), a `declared` pai
 guess, and the Config card counts the grid pair SEM reads as in use (no "Use" buttons for it). An
 English DSMR with phase sensors on had its import read from phase L3; the key reads the total. **Still open:** P1 Monitor's keys are common words a
 heat pump also uses, so they need a one-brand rule (#1222); the crawler reads `ram_` in DSMR Reader's
-`telegram_timestamp` as an appliance and drops its pair (#1223).
+`telegram_timestamp` as an appliance and drops its pair (#1223); a SlimmeLezer (ESPHome) names its pair
+`power_consumed`/`power_produced`, which no word list holds (#1225); the card saves a split pair one
+half per click, and half a pair reads export as 0 W (#1224).
 **Missing-wiring sibling (#744, @Azlinon, 2026-08-11) — the derivation existed but was never called
 for LOADS.** The keyword gap above is one facet; the sharper one is a source where the whole
 derivation is *absent*. The Energy Dashboard's individual-device UI collects only the kWh energy
