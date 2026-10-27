@@ -252,8 +252,8 @@ reads 0 without the tier. **Sign:** a derived grid meter now gets the brand seed
 while the counters vote. HomeWizard is seeded for its P1 meter only (`PLATFORM_GRID_SIGN_MODELS`,
 device `model_id` `HWE-P1`): a kWh meter reads the way it was wired, so its counters still decide.
 The sign report names the meter the seed asked (`grid_seed_sensor`). **Still open:** other brands
-that name power by device class alone get the same tier only by adding their key; a home where
-nothing is found is told by one log line, no Repair (#1188).
+that name power by device class alone get the same tier only by adding their key. A home where
+nothing is found now gets a Repair, not only a log line (#1188, class 170).
 **Instance (#1189) — the split pair:** a Dutch or German DSMR meter (`sensor.electricity_meter_energieverbruik`,
 `…_stromverbrauch`) was found by the English words `power_consumption`/`power_production` only, so the
 grid read 0 W. **Closure:** the lexicon maps core dsmr's own keys `current_electricity_usage` /
@@ -6408,3 +6408,13 @@ Refs #1192 #971 #1172 #690 #1215.
 **Sweep question:** when SEM publishes a new row, which hand-written lists in views should hold it too?
 **Left open:** the Energy Impact card computes its own CO2 figure from two flows instead of reading `sensor.sem_daily_co2_avoided` (a second copy of a formula, not this shape; #1221).
 Refs #1190 #776 #1172 #923 #1221.
+
+### 170. A source SEM cannot find reads 0 W — and only the log says why — GUARDED
+**Symptom:** the Energy Dashboard's grid entry had kWh counters and no power sensor, and SEM found none on the meter. Grid read 0 W: no Grid lines in the Sankey, wrong flows, wrong surplus. One log line, `No grid power sensor found`, was the only trace (#1188, found while fixing #1172).
+**Root shape:** the dashboard proves the source exists (it counts its kWh), SEM finds no power sensor for it, and 0 W is read. 0 W looks like a reading, so nothing a user looks at points to the cause. #799's rule — a log line is not a surface — had reached the half-found grid pair (`split_grid_rejected`) and the name guess (`split_grid_guessed`), not the case where nothing was found.
+**Where it lives:** `coordinator/sensor_reader.py::_read_from_energy_dashboard`, the last branch of each source's read: grid (split search found nothing, or an export counter alone matched no branch), solar and battery (no power sensor, and the #274 retry in `coordinator.py::_retry_energy_dashboard_resolution` gives up with one log line). All three **fixed**. Checked: the legacy path has no counters, so nothing says a source exists; a charger with no power sensor is a config-flow field, not a search.
+**Closure:** the read records each source it counts but reads from nothing (`_unsourced_power`); `report_unsourced_power`, called by the cycle after the read, files `power_sensor_not_found_<source>` (one text, the counter as placeholder) once HA runs, the dashboard retry is over and `UNAVAILABLE_REPAIR_THRESHOLD_S` has passed (class 86). It clears the cycle a sensor or a Config card pick is found, or the dashboard stops counting the source. Each source's first "found" of a reader clears an options-reload leftover once, also when it is found only after the first cycle (class 84; the review caught a single flag that missed that). A cycle that did not read the dashboard changes nothing. A failed raise is tried again. Non-persistent; the text says a home with no power sensor at all may ignore it.
+**Guard:** `tests/test_1188_no_power_sensor_repair.py` — each source parametrized over `POWER_SOURCES`, the reporter's P1 home, start-up, the retry, a late meter, the picks, half a grid pair, clears, raised once, every other read path (declared pair, sum, manual pair, two inverters, two batteries, battery pair) left alone, the export counter alone, the reload leftover found late, a failed raise, the cycle's call site, the placeholder in all 17 files, and an AST check that every source in `POWER_SOURCES` is recorded by the read.
+**Sweep question:** for every input SEM reads as 0 W because it found nothing, who is told, and where?
+**Left open:** a second inverter or battery with kWh and no power sensor is never searched for, so SEM sums only the units it has (#1226); the two grid-guess Repairs are English in 14 languages, and the class 143 test misses it (#1227). Not filed: a split-grid scan that throws (#259) reads as "nothing found" here — the Repair's advice still fixes it, and the log says the scan failed.
+Refs #1188 #1172 #799 #947 #911 #274 #1226 #1227.
