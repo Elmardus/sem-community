@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A DSMR smart meter on a Dutch or German Home Assistant now shows grid power** (#1189). Before, grid power read 0 W.
 - 🐛 **The Energy tab Sankey shows a Battery → Grid line when the battery sells** (#1190). Build the dashboard again to see it.
 
 # [2.2.0-beta.28] — 26.10.2026
