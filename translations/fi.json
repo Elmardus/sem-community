@@ -37,7 +37,7 @@
       },
       "hardware": {
         "title": "Laitteisto",
-        "description": "One final value depends on your installation:\n\n• Home Battery Capacity — the usable kWh of your inverter battery.\n\nSEM also auto-detected your inverter's discharge control entity: {discharge_entity}\n\nLeave the dashboard option ON to have SEM build its Lovelace dashboard for you. **Note: this triggers a Home Assistant restart about 5 seconds after install completes.**\n\nEverything else uses safe defaults that you can tune later from the integration's options.",
+        "description": "Viimeinen vaihe! SEM tunnisti automaattisesti invertterisi purkuohjauksen entiteetin: {discharge_entity}\n\nJätä koontinäyttövalinta PÄÄLLE, niin SEM rakentaa Lovelace-koontinäyttönsä puolestasi. **Huomaa: tämä käynnistää Home Assistantin uudelleen noin 5 sekuntia asennuksen valmistumisen jälkeen.**\n\nKaikki muu — myös verkon huipputehon raja — käyttää turvallisia oletusarvoja, joita voit säätää heti asennuksen jälkeen: huipputehon rajan välilehden **Ohjaus** liukusäätimellä, kaiken muun SEM-koontinäytön välilehdellä **Asetukset** — mukaan lukien sähköauton laturit, lämpöpumppu, tariffi ja akkualueet.",
         "data": {
           "battery_capacity_kwh": "Kotiakun kapasiteetti (kWh)",
           "generate_dashboard_on_install": "Luo SEM-koontinäyttö nyt (käynnistää HA:n uudelleen)",
@@ -118,7 +118,7 @@
     "step": {
       "ev_charger": {
         "title": "Sähköauton laturi",
-        "description": "Vinkki: useimmat asetukset ovat nyt SEM-koontinäytöllä → Määritykset-välilehti (värikäs, reaaliaikainen). Tämä kulku jää käyttöön ilman koontinäyttöä.\n\nReview and update your EV charger entity mappings. The Vehicle SOC fields are only used if you provide a Vehicle Battery SOC sensor.",
+        "description": "Vinkki: useimmat asetukset ovat nyt SEM-koontinäytöllä → Määritykset-välilehti (värikäs, reaaliaikainen). Tämä kulku jää käyttöön ilman koontinäyttöä.\n\nTarkista ja päivitä sähköauton laturin entiteettien määritykset. Ajoneuvon SOC-kenttiä käytetään vain, jos annat ajoneuvon akun SOC-anturin.",
         "data": {
           "ev_connected_sensor": "Sähköauto yhdistetty",
           "ev_charging_sensor": "Sähköauton lataustila",
@@ -197,7 +197,7 @@
           "battery_discharge_protection_enabled": "Kun tämä on PÄÄLLÄ, SEM rajoittaa invertterin purkutehoa sähköauton yölatauksen aikana, jotta kotiakku syöttää vain taloa (ei autoa).",
           "battery_max_discharge_power": "Ehdoton yläraja akun purkuteholle, jota suojaustoiminto valvoo.",
           "electricity_import_rate": "Päivä- tai kiinteä tariffi (CHF/kWh, sis. alv). Käytetään kustannusseurantaan.",
-          "electricity_off_peak_rate": "Night tariff (CHF/kWh). Set equal to import rate if you don't have a dual tariff.",
+          "electricity_off_peak_rate": "Edullisemman ajan hinta (per kWh). Aseta samaksi kuin tuontihinta, jos sinulla ei ole kaksiaikatariffia.",
           "electricity_export_rate": "Verkkoyhtiön maksama syöttötariffi (CHF/kWh).",
           "demand_charge_rate": "Kuukausittainen tehomaksu huipputehon kilowattia kohti (CHF/kW/kk). Aseta arvoon 0, jos sopimuksessasi ei ole tehomaksua.",
           "observer_mode": "Kun tämä on PÄÄLLÄ, SEM seuraa ja laskee kaiken, mutta ei koskaan lähetä palvelukutsua laitteistolle. Käytä testi- tai staging-HA:ssa, joka jäljittelee tuotantoasennusta.",
@@ -259,8 +259,8 @@
           "dynamic_tariff_entity": "Dynaamisen hinnan entiteetti (tunnistetaan automaattisesti jos tyhjä)",
           "dynamic_forecast_entity": "Hintaennusteen entiteetti (valinnainen, tunnistetaan automaattisesti)",
           "dynamic_feedin_entity": "Syöttöhinnan entiteetti (valinnainen, dynaamiselle vientihinnalle)",
-          "grid_import_power_entity": "Grid import power sensor (optional, auto-detected from Energy Dashboard)",
-          "grid_export_power_entity": "Grid export power sensor (optional, auto-detected from Energy Dashboard)",
+          "grid_import_power_entity": "Verkon tuontitehon anturi (valinnainen, tunnistetaan automaattisesti)",
+          "grid_export_power_entity": "Verkon vientitehon anturi (valinnainen, tunnistetaan automaattisesti)",
           "tariff_classification_mode": "Hinnan luokittelutila",
           "solar_forecast_source": "Aurinkoennusteen lähde",
           "grid_co2_entity": "Sähköverkon CO₂-intensiteetin anturi (valinnainen)",
@@ -1836,7 +1836,7 @@
         "step": {
           "confirm": {
             "title": "Ilmoita tästä SEM:lle",
-            "description": "SEM:n 3 viimeisintä (tai useampi) virtakomentoa laturille **{name}** hylättiin: `{error}`. Laturi EI ole tällä hetkellä SEM:n ohjauksessa — se jatkaa viimeksi saamansa käskyn mukaan (myös täydellä teholla lataamista off-tilassa). Yleisimmät syyt: laturin ohjausentiteetti nimettiin uudelleen taustaintegraation päivityksessä, tai `ev_charger_service` osoittaa palveluun, jolla on eri parametriskeema. Tarkista laturin ohjausentiteetti tai palvelu SEM:n asetuksista. Tämä ongelma poistuu automaattisesti seuraavan onnistuneen komennon jälkeen.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEM:n 3 viimeisintä (tai useampi) virtakomentoa laturille **{name}** hylättiin: `{error}`. Laturi EI ole tällä hetkellä SEM:n ohjauksessa — se jatkaa viimeksi saamansa käskyn mukaan (myös täydellä teholla lataamista off-tilassa). Yleisimmät syyt: laturin ohjausentiteetti nimettiin uudelleen taustaintegraation päivityksessä, tai `ev_charger_service` osoittaa palveluun, jolla on eri parametriskeema. Tarkista laturin ohjausentiteetti tai palvelu SEM:n asetuksista. Tämä ongelma poistuu automaattisesti seuraavan onnistuneen komennon jälkeen.\n\nSEM arvelee, että tämä vika on sen oma. Jos voit, avaa vikaraportti ilmoituksen painikkeella — lomake on jo valmiiksi täytetty. Voit myös kopioida alla olevan kontekstin sähköpostiin tai foorumiviestiin. Tämä ikkuna ei lähetä mitään minnekään.\n\n```\n{context}\n```\n\nVahvista, niin ilmoitus suljetaan."
           }
         }
       }
@@ -1847,7 +1847,7 @@
         "step": {
           "confirm": {
             "title": "Ilmoita tästä SEM:lle",
-            "description": "SEM on käskenyt latauslaitteen **{name}** pysähtyä, mutta mikään määritetty mekanismi ei pysty todella avaamaan kontaktoria — auto ottaa yhä {power} W. Ainoa ohjaus, joka SEM:llä on tälle latauslaitteelle, on `{entity}`, ja sen minimi on yli 0 A, joten 0 A:n kirjoittaminen ei tee mitään (SEM ei koskaan kirjoita arvoa, jonka entiteetti hylkäisi). Jos sinulla on kotiakku, tämä teho tulee siitä — mihin tahansa vuorokaudenaikaan. Ratkaisu: määritä tälle latauslaitteelle SEM:n asetuksissa käynnistys/pysäytys-entiteetti (`ev_start_stop_entity`), lataustila-entiteetti tai pysäytyspalvelu. Ilmoitus poistuu heti, kun latauslaite lakkaa ottamasta tehoa.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEM on käskenyt latauslaitteen **{name}** pysähtyä, mutta mikään määritetty mekanismi ei pysty todella avaamaan kontaktoria — auto ottaa yhä {power} W. Ainoa ohjaus, joka SEM:llä on tälle latauslaitteelle, on `{entity}`, ja sen minimi on yli 0 A, joten 0 A:n kirjoittaminen ei tee mitään (SEM ei koskaan kirjoita arvoa, jonka entiteetti hylkäisi). Jos sinulla on kotiakku, tämä teho tulee siitä — mihin tahansa vuorokaudenaikaan. Ratkaisu: määritä tälle latauslaitteelle SEM:n asetuksissa käynnistys/pysäytys-entiteetti (`ev_start_stop_entity`), lataustila-entiteetti tai pysäytyspalvelu. Ilmoitus poistuu heti, kun latauslaite lakkaa ottamasta tehoa.\n\nSEM arvelee, että tämä vika on sen oma. Jos voit, avaa vikaraportti ilmoituksen painikkeella — lomake on jo valmiiksi täytetty. Voit myös kopioida alla olevan kontekstin sähköpostiin tai foorumiviestiin. Tämä ikkuna ei lähetä mitään minnekään.\n\n```\n{context}\n```\n\nVahvista, niin ilmoitus suljetaan."
           }
         }
       }
@@ -1886,7 +1886,7 @@
         "step": {
           "confirm": {
             "title": "Ilmoita tästä SEM:lle",
-            "description": "**{name}** on asetettu prosentuaaliseen lataustavoitteeseen, mutta ajoneuvo ei juuri nyt raportoi varaustasoaan, joten SEM ei voi pysähtyä *tarkalleen* kohtaan **{target}%**.\n\nSe ei silti lataa sokkona: viimeisimmästä tämän istunnon todellisesta lukemasta lähtien se laskee tosiasiassa toimitetun energian ja pysäyttää latauksen, kun mitattu summa saavuttaa tavoitteesi — ylitys on vain se, minkä auto on ottanut kyseisen lukeman jälkeen. Jos tässä istunnossa ei ole saapunut yhtään todellista lukemaa (tai SEM käynnistyi uudelleen kesken latauksen), vertailukohtaa ei ole ja lataus jatkuu, kunnes auto itse laskee tehoa lähellä täyttä.\n\nJotta raja osuisi kohdalleen, määritä tälle latausasemalle **todellinen ajoneuvon SOC-anturi** (Määritykset → EV → Ajoneuvon SOC-entiteetti). Koontinäytön akkuprosentti on SEM:n *arvioitu* varaustaso, joka jätetään tarkoituksella huomiotta kovassa rajassa (se voi ajautua). Tämä korjaus poistuu automaattisesti heti, kun todellinen SOC-lukema on taas saatavilla.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "**{name}** on asetettu prosentuaaliseen lataustavoitteeseen, mutta ajoneuvo ei juuri nyt raportoi varaustasoaan, joten SEM ei voi pysähtyä *tarkalleen* kohtaan **{target}%**.\n\nSe ei silti lataa sokkona: viimeisimmästä tämän istunnon todellisesta lukemasta lähtien se laskee tosiasiassa toimitetun energian ja pysäyttää latauksen, kun mitattu summa saavuttaa tavoitteesi — ylitys on vain se, minkä auto on ottanut kyseisen lukeman jälkeen. Jos tässä istunnossa ei ole saapunut yhtään todellista lukemaa (tai SEM käynnistyi uudelleen kesken latauksen), vertailukohtaa ei ole ja lataus jatkuu, kunnes auto itse laskee tehoa lähellä täyttä.\n\nJotta raja osuisi kohdalleen, määritä tälle latausasemalle **todellinen ajoneuvon SOC-anturi** (Määritykset → EV → Ajoneuvon SOC-entiteetti). Koontinäytön akkuprosentti on SEM:n *arvioitu* varaustaso, joka jätetään tarkoituksella huomiotta kovassa rajassa (se voi ajautua). Tämä korjaus poistuu automaattisesti heti, kun todellinen SOC-lukema on taas saatavilla.\n\nSEM arvelee, että tämä vika on sen oma. Jos voit, avaa vikaraportti ilmoituksen painikkeella — lomake on jo valmiiksi täytetty. Voit myös kopioida alla olevan kontekstin sähköpostiin tai foorumiviestiin. Tämä ikkuna ei lähetä mitään minnekään.\n\n```\n{context}\n```\n\nVahvista, niin ilmoitus suljetaan."
           }
         }
       }
@@ -1953,7 +1953,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM tarkistaa kahta arvattua verkkomittaria",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Asetukset**, and pick **Kaikki asetukset** at the top. Then set **Verkon teho** in section **Anturilähteet**. If your meter has one sensor for import and one for export, set **Verkon tuontianturi** and **Verkon vientianturi** in section **Tariffi ja hinnoittelu** instead."
+      "description": "SEM:llä ei ole verkon tehoanturia, joten se arvasi nimen perusteella: **{import_entity}** verkosta tuontiin ja **{export_entity}** verkkoon vientiin. SEM ei käytä niitä ennen kuin ne vastaavat verkon energialaskureitasi, joten verkon teho näyttää toistaiseksi 0. Näin valitset mittarisi: avaa SEM-koontinäyttö, välilehti ⚙ **Asetukset**, ja valitse ylhäältä **Kaikki asetukset**. Aseta sitten **Verkon teho** osiossa **Anturilähteet**. Jos mittarissasi on yksi anturi tuonnille ja toinen viennille, aseta sen sijaan **Verkon tuontianturi** ja **Verkon vientianturi** osiossa **Tariffi ja hinnoittelu**."
     },
     "battery_control_write_not_taken": {
       "title": "Akun ohjauskirjoitus ei jää voimaan: {entity_id}",
@@ -1973,7 +1973,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM ei löytänyt verkkomittareitasi",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Asetukset**, and pick **Kaikki asetukset** at the top. Then set **Verkon teho** in section **Anturilähteet**. If your meter has one sensor for import and one for export, set **Verkon tuontianturi** and **Verkon vientianturi** in section **Tariffi ja hinnoittelu** instead."
+      "description": "SEM:llä ei ole verkon tehoanturia, eivätkä sen nimen perusteella arvaamat anturit ole verkkomittarisi: **{import_entity}** tuonnille, **{export_entity}** viennille. Ne eivät vastaa verkon energialaskureitasi, tai toinen niistä puuttuu. SEM jättää verkon tehon mieluummin näyttämättä kuin näyttää väärän arvon. Näin valitset mittarisi: avaa SEM-koontinäyttö, välilehti ⚙ **Asetukset**, ja valitse ylhäältä **Kaikki asetukset**. Aseta sitten **Verkon teho** osiossa **Anturilähteet**. Jos mittarissasi on yksi anturi tuonnille ja toinen viennille, aseta sen sijaan **Verkon tuontianturi** ja **Verkon vientianturi** osiossa **Tariffi ja hinnoittelu**."
     },
     "power_sensor_not_found": {
       "title": "Ei tehoanturia kohteelle {energy_entity}",

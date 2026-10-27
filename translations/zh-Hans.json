@@ -1832,7 +1832,7 @@
         "step": {
           "confirm": {
             "title": "报告给 SEM",
-            "description": "SEM 最近向 **{name}** 发送的连续 3 次以上的电流指令均被拒绝，错误信息为：`{error}`。该充电桩目前【未受 SEM 控制】— 它将保持上一次的运行指令状态（包括在关闭模式下以全功率充电）。最常见的原因有：上游集成更新导致充电桩控制实体被重命名，或者 `ev_charger_service` 指向了参数架构发生变化的另一个服务。请在 SEM 配置中检查充电桩的控制实体或服务。一旦下一次成功下发指令，此问题将自动清除。\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEM 最近向 **{name}** 发送的连续 3 次以上的电流指令均被拒绝，错误信息为：`{error}`。该充电桩目前【未受 SEM 控制】— 它将保持上一次的运行指令状态（包括在关闭模式下以全功率充电）。最常见的原因有：上游集成更新导致充电桩控制实体被重命名，或者 `ev_charger_service` 指向了参数架构发生变化的另一个服务。请在 SEM 配置中检查充电桩的控制实体或服务。一旦下一次成功下发指令，此问题将自动清除。\n\nSEM 认为这是它自身的问题。如果可以，请用通知上的按钮提交错误报告——表单会自动填好。您也可以将下方的上下文复制到电子邮件或论坛帖子中。此对话框不会向任何地方发送任何内容。\n\n```\n{context}\n```\n\n确认即可关闭此通知。"
           }
         }
       }
@@ -1843,7 +1843,7 @@
         "step": {
           "confirm": {
             "title": "报告给 SEM",
-            "description": "SEM 已命令 **{name}** 停止充电，但没有任何已配置的机制能够真正断开接触器——车辆仍在消耗 {power} W。SEM 对该充电桩唯一的控制是 `{entity}`，而它的最小值大于 0 A，因此写入 0 A 不起任何作用（SEM 从不写入实体会拒绝的值）。如果你有家用电池，这部分电力就是从电池里出来的——无论白天还是夜里。解决方法：在 SEM 选项中为该充电桩配置启停实体（`ev_start_stop_entity`）、充电模式实体或停止服务。充电桩停止取电后，此提示会自动消失。\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEM 已命令 **{name}** 停止充电，但没有任何已配置的机制能够真正断开接触器——车辆仍在消耗 {power} W。SEM 对该充电桩唯一的控制是 `{entity}`，而它的最小值大于 0 A，因此写入 0 A 不起任何作用（SEM 从不写入实体会拒绝的值）。如果你有家用电池，这部分电力就是从电池里出来的——无论白天还是夜里。解决方法：在 SEM 选项中为该充电桩配置启停实体（`ev_start_stop_entity`）、充电模式实体或停止服务。充电桩停止取电后，此提示会自动消失。\n\nSEM 认为这是它自身的问题。如果可以，请用通知上的按钮提交错误报告——表单会自动填好。您也可以将下方的上下文复制到电子邮件或论坛帖子中。此对话框不会向任何地方发送任何内容。\n\n```\n{context}\n```\n\n确认即可关闭此通知。"
           }
         }
       }
@@ -1886,7 +1886,7 @@
         "step": {
           "confirm": {
             "title": "报告给 SEM",
-            "description": "**{name}** 设置了百分比充电目标，但您的车辆当前未上报电量，因此 SEM 无法*恰好*停在 **{target}%**。\n\n不过它并非盲充：SEM 会从本次会话最后一次真实读数开始累计实际输送的电量，并在这个实测总量达到目标时停止——超出的部分仅限于车辆自那次读数以来所取用的电量。如果本次会话根本没有收到任何真实读数（或者 SEM 在充电中途重启过），就没有可依据的基准，充电会一直持续到车辆自己在接近充满时降功率为止。\n\n若要让上限精确命中，请为该充电桩配置**真实的车辆 SOC 传感器**（配置 → 电动车 → 车辆 SOC 实体）。仪表板上的电池百分比是 SEM 的*估算* SOC，出于可能漂移的考虑，硬性上限会刻意忽略它。一旦重新获得真实的 SOC 读数，此修复项将自动消失。\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "**{name}** 设置了百分比充电目标，但您的车辆当前未上报电量，因此 SEM 无法*恰好*停在 **{target}%**。\n\n不过它并非盲充：SEM 会从本次会话最后一次真实读数开始累计实际输送的电量，并在这个实测总量达到目标时停止——超出的部分仅限于车辆自那次读数以来所取用的电量。如果本次会话根本没有收到任何真实读数（或者 SEM 在充电中途重启过），就没有可依据的基准，充电会一直持续到车辆自己在接近充满时降功率为止。\n\n若要让上限精确命中，请为该充电桩配置**真实的车辆 SOC 传感器**（配置 → 电动车 → 车辆 SOC 实体）。仪表板上的电池百分比是 SEM 的*估算* SOC，出于可能漂移的考虑，硬性上限会刻意忽略它。一旦重新获得真实的 SOC 读数，此修复项将自动消失。\n\nSEM 认为这是它自身的问题。如果可以，请用通知上的按钮提交错误报告——表单会自动填好。您也可以将下方的上下文复制到电子邮件或论坛帖子中。此对话框不会向任何地方发送任何内容。\n\n```\n{context}\n```\n\n确认即可关闭此通知。"
           }
         }
       }
@@ -1953,7 +1953,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM 正在核对两个猜测的电网电表",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **配置**, and pick **全部设置** at the top. Then set **电网功率** in section **传感器来源**. If your meter has one sensor for import and one for export, set **电网购电传感器** and **电网馈电传感器** in section **电价与费率** instead."
+      "description": "SEM 没有电网功率传感器，因此按名称进行了猜测：**{import_entity}** 用于电网购电，**{export_entity}** 用于电网馈电。在它们与您的电网电能计数器相符之前，SEM 不会使用它们，因此电网功率暂时显示为 0。选择电表的方法：打开 SEM 看板的 ⚙ **配置** 标签页，在顶部选择 **全部设置**。然后在 **传感器来源** 部分设置 **电网功率**。如果您的电表有一个购电传感器和一个馈电传感器，请改为在 **电价与费率** 部分设置 **电网购电传感器** 和 **电网馈电传感器**。"
     },
     "battery_control_write_not_taken": {
       "title": "电池控制写入未生效：{entity_id}",
@@ -1973,7 +1973,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM 未能找到您的电网功率电表",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **配置**, and pick **全部设置** at the top. Then set **电网功率** in section **传感器来源**. If your meter has one sensor for import and one for export, set **电网购电传感器** and **电网馈电传感器** in section **电价与费率** instead."
+      "description": "SEM 没有电网功率传感器，而按名称猜测的传感器不是您的电网电表：**{import_entity}** 用于购电，**{export_entity}** 用于馈电。它们与您的电网电能计数器不符，或者两者之一缺失。SEM 宁可不显示电网功率，也不显示错误的数值。选择电表的方法：打开 SEM 看板的 ⚙ **配置** 标签页，在顶部选择 **全部设置**。然后在 **传感器来源** 部分设置 **电网功率**。如果您的电表有一个购电传感器和一个馈电传感器，请改为在 **电价与费率** 部分设置 **电网购电传感器** 和 **电网馈电传感器**。"
     },
     "power_sensor_not_found": {
       "title": "{energy_entity} 没有功率传感器",

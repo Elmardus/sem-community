@@ -37,7 +37,7 @@
       },
       "hardware": {
         "title": "Hardver",
-        "description": "One final value depends on your installation:\n\n• Home Battery Capacity — the usable kWh of your inverter battery.\n\nSEM also auto-detected your inverter's discharge control entity: {discharge_entity}\n\nLeave the dashboard option ON to have SEM build its Lovelace dashboard for you. **Note: this triggers a Home Assistant restart about 5 seconds after install completes.**\n\nEverything else uses safe defaults that you can tune later from the integration's options.",
+        "description": "Utolsó lépés! A SEM automatikusan felismerte az inverter kisütés-vezérlő entitását: {discharge_entity}\n\nHagyja BEKAPCSOLVA az irányítópult opciót, hogy a SEM elkészítse Önnek a Lovelace irányítópultját. **Megjegyzés: ez a telepítés befejezése után kb. 5 másodperccel újraindítja a Home Assistantot.**\n\nMinden más — a hálózati csúcsteljesítmény-korlátot is beleértve — biztonságos alapértékeket használ, amelyeket közvetlenül a beállítás után módosíthat: a csúcskorlátot a **Vezérlés** fül csúszkájával, minden mást a SEM irányítópult **Konfiguráció** fülén — beleértve az EV töltőket, a hőszivattyút, a tarifát és az akkumulátorzónákat.",
         "data": {
           "battery_capacity_kwh": "Házi akkumulátor kapacitása (kWh)",
           "generate_dashboard_on_install": "SEM irányítópult létrehozása most (újraindítja a HA-t)",
@@ -118,7 +118,7 @@
     "step": {
       "ev_charger": {
         "title": "EV Töltő",
-        "description": "Tipp: a legtöbb beállítás már a SEM irányítópulton található → Konfiguráció fül (színes, élő). Ez a folyamat megmarad irányítópult nélküli telepítésekhez.\n\nReview and update your EV charger entity mappings. The Vehicle SOC fields are only used if you provide a Vehicle Battery SOC sensor.",
+        "description": "Tipp: a legtöbb beállítás már a SEM irányítópulton található → Konfiguráció fül (színes, élő). Ez a folyamat megmarad irányítópult nélküli telepítésekhez.\n\nEllenőrizze és frissítse az EV töltő entitás-hozzárendeléseit. A jármű SOC mezőit csak akkor használja a SEM, ha megad egy jármű akkumulátor SOC érzékelőt.",
         "data": {
           "ev_connected_sensor": "EV Csatlakoztatva",
           "ev_charging_sensor": "EV Töltési állapot",
@@ -197,7 +197,7 @@
           "battery_discharge_protection_enabled": "Bekapcsolva a SEM korlátozza az inverter kisütési határát az éjszakai EV-töltés alatt, így a házi akkumulátor csak a házat látja el (az EV-t nem).",
           "battery_max_discharge_power": "Az akkumulátor kisütésének kemény felső korlátja, amelyet a védelmi funkció érvényesít.",
           "electricity_import_rate": "Nappali / egységes tarifa (CHF/kWh, áfával). Költségkövetésre használatos.",
-          "electricity_off_peak_rate": "Night tariff (CHF/kWh). Set equal to import rate if you don't have a dual tariff.",
+          "electricity_off_peak_rate": "Völgyidőszaki díj (kWh-nként). Állítsa az importdíjjal egyenlőre, ha nincs kéttarifás szerződése.",
           "electricity_export_rate": "A szolgáltató által fizetett betáplálási ár (CHF/kWh).",
           "demand_charge_rate": "Havi teljesítménydíj a csúcs kW-jára vetítve (CHF/kW/hó). Állítsa 0-ra, ha a szerződése nem tartalmaz teljesítménydíjat.",
           "observer_mode": "Bekapcsolva a SEM mindent figyel és számol, de soha nem küld szolgáltatáshívást a hardvernek. Éles telepítést tükröző teszt/staging HA-n használja.",
@@ -259,8 +259,8 @@
           "dynamic_tariff_entity": "Dinamikus ár entitás (üresen automatikusan felismerve)",
           "dynamic_forecast_entity": "Árelőrejelzés entitás (opcionális, üresen automatikus felismerés)",
           "dynamic_feedin_entity": "Betáplálási ár entitás (opcionális, dinamikus betáplálási árhoz)",
-          "grid_import_power_entity": "Grid import power sensor (optional, auto-detected from Energy Dashboard)",
-          "grid_export_power_entity": "Grid export power sensor (optional, auto-detected from Energy Dashboard)",
+          "grid_import_power_entity": "Hálózati import teljesítmény szenzor (opcionális, automatikusan felismerve)",
+          "grid_export_power_entity": "Hálózati export teljesítmény szenzor (opcionális, automatikusan felismerve)",
           "tariff_classification_mode": "Ár-besorolási mód",
           "solar_forecast_source": "Napelemes előrejelzés forrása",
           "grid_co2_entity": "A hálózat CO₂-intenzitás érzékelője (opcionális)",
@@ -1836,7 +1836,7 @@
         "step": {
           "confirm": {
             "title": "Jelentés a SEM-nek",
-            "description": "A SEM legutóbbi 3 vagy több áramerősség-parancsát a következő elutasította: **{name}** — `{error}`. A töltő jelenleg NEM áll a SEM vezérlése alatt — továbbra is azt teszi, amit utoljára utasításba kapott (akár teljes teljesítménnyel tölt kikapcsolt módban is). A leggyakoribb okok: a töltő vezérlőentitását átnevezte egy integrációfrissítés, vagy az `ev_charger_service` olyan szolgáltatásra mutat, amelynek eltérő a paraméterséma. Ellenőrizze a töltő vezérlőentitását / szolgáltatását a SEM konfigurációjában. Ez a bejegyzés automatikusan eltűnik a következő sikeres parancs után.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "A SEM legutóbbi 3 vagy több áramerősség-parancsát a következő elutasította: **{name}** — `{error}`. A töltő jelenleg NEM áll a SEM vezérlése alatt — továbbra is azt teszi, amit utoljára utasításba kapott (akár teljes teljesítménnyel tölt kikapcsolt módban is). A leggyakoribb okok: a töltő vezérlőentitását átnevezte egy integrációfrissítés, vagy az `ev_charger_service` olyan szolgáltatásra mutat, amelynek eltérő a paraméterséma. Ellenőrizze a töltő vezérlőentitását / szolgáltatását a SEM konfigurációjában. Ez a bejegyzés automatikusan eltűnik a következő sikeres parancs után.\n\nA SEM úgy véli, hogy ez a hiba az övé. Ha teheti, nyisson hibajelentést az értesítés gombjával — az űrlap már ki van töltve. Ha inkább így szeretné, másolja az alábbi kontextust egy e-mailbe vagy fórumbejegyzésbe. Ez a párbeszédablak semmit nem küld el sehova.\n\n```\n{context}\n```\n\nAz értesítés a megerősítéssel bezárul."
           }
         }
       }
@@ -1847,7 +1847,7 @@
         "step": {
           "confirm": {
             "title": "Jelentés a SEM-nek",
-            "description": "A SEM leállítást parancsolt a(z) **{name}** töltőnek, de egyetlen beállított mechanizmus sem tudja ténylegesen bontani a kontaktort — az autó továbbra is {power} W-ot vesz fel. A SEM egyetlen vezérlője ehhez a töltőhöz a(z) `{entity}`, amelynek minimuma 0 A fölött van, így a 0 A kiírása nem csinál semmit (a SEM soha nem ír ki olyan értéket, amelyet az entitás elutasítana). Ha van házi akkumulátorod, ez a teljesítmény onnan jön — a nappal vagy az éjszaka bármely szakában. Megoldás: állíts be ehhez a töltőhöz a SEM beállításaiban egy start/stop entitást (`ev_start_stop_entity`), egy töltési mód entitást vagy egy leállító szolgáltatást. A figyelmeztetés eltűnik, amint a töltő már nem vesz fel teljesítményt.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "A SEM leállítást parancsolt a(z) **{name}** töltőnek, de egyetlen beállított mechanizmus sem tudja ténylegesen bontani a kontaktort — az autó továbbra is {power} W-ot vesz fel. A SEM egyetlen vezérlője ehhez a töltőhöz a(z) `{entity}`, amelynek minimuma 0 A fölött van, így a 0 A kiírása nem csinál semmit (a SEM soha nem ír ki olyan értéket, amelyet az entitás elutasítana). Ha van házi akkumulátorod, ez a teljesítmény onnan jön — a nappal vagy az éjszaka bármely szakában. Megoldás: állíts be ehhez a töltőhöz a SEM beállításaiban egy start/stop entitást (`ev_start_stop_entity`), egy töltési mód entitást vagy egy leállító szolgáltatást. A figyelmeztetés eltűnik, amint a töltő már nem vesz fel teljesítményt.\n\nA SEM úgy véli, hogy ez a hiba az övé. Ha teheti, nyisson hibajelentést az értesítés gombjával — az űrlap már ki van töltve. Ha inkább így szeretné, másolja az alábbi kontextust egy e-mailbe vagy fórumbejegyzésbe. Ez a párbeszédablak semmit nem küld el sehova.\n\n```\n{context}\n```\n\nAz értesítés a megerősítéssel bezárul."
           }
         }
       }
@@ -1886,7 +1886,7 @@
         "step": {
           "confirm": {
             "title": "Jelentés a SEM-nek",
-            "description": "A(z) **{name}** százalékos töltési célra van állítva, de a jármű jelenleg nem jelenti a töltöttségi szintjét, ezért a SEM nem tud *pontosan* **{target}%**-nál megállni.\n\nNem vakon tölt azonban: a munkamenet utolsó valós leolvasásától kezdve számolja a ténylegesen leadott energiát, és leáll, amint ez a mért összeg eléri a célt — a túllépés csak annyi, amennyit az autó az óta a leolvasás óta felvett. Ha ebben a munkamenetben egyáltalán nem érkezett valós leolvasás (vagy a SEM töltés közben újraindult), nincs mihez viszonyítani, és a töltés addig tart, amíg maga az autó nem csökkenti a teljesítményt, majdnem tele állapotban.\n\nA pontos korláthoz állítson be **valós jármű-SOC-érzékelőt** ehhez a töltőhöz (Konfiguráció → EV → Jármű SOC entitás). Az irányítópulton látható akkumulátorszázalék a SEM *becsült* SOC-értéke, amelyet a kemény korlátnál szándékosan figyelmen kívül hagy (elcsúszhat). Ez a javítás automatikusan eltűnik, amint ismét elérhető valós SOC-leolvasás.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "A(z) **{name}** százalékos töltési célra van állítva, de a jármű jelenleg nem jelenti a töltöttségi szintjét, ezért a SEM nem tud *pontosan* **{target}%**-nál megállni.\n\nNem vakon tölt azonban: a munkamenet utolsó valós leolvasásától kezdve számolja a ténylegesen leadott energiát, és leáll, amint ez a mért összeg eléri a célt — a túllépés csak annyi, amennyit az autó az óta a leolvasás óta felvett. Ha ebben a munkamenetben egyáltalán nem érkezett valós leolvasás (vagy a SEM töltés közben újraindult), nincs mihez viszonyítani, és a töltés addig tart, amíg maga az autó nem csökkenti a teljesítményt, majdnem tele állapotban.\n\nA pontos korláthoz állítson be **valós jármű-SOC-érzékelőt** ehhez a töltőhöz (Konfiguráció → EV → Jármű SOC entitás). Az irányítópulton látható akkumulátorszázalék a SEM *becsült* SOC-értéke, amelyet a kemény korlátnál szándékosan figyelmen kívül hagy (elcsúszhat). Ez a javítás automatikusan eltűnik, amint ismét elérhető valós SOC-leolvasás.\n\nA SEM úgy véli, hogy ez a hiba az övé. Ha teheti, nyisson hibajelentést az értesítés gombjával — az űrlap már ki van töltve. Ha inkább így szeretné, másolja az alábbi kontextust egy e-mailbe vagy fórumbejegyzésbe. Ez a párbeszédablak semmit nem küld el sehova.\n\n```\n{context}\n```\n\nAz értesítés a megerősítéssel bezárul."
           }
         }
       }
@@ -1949,11 +1949,11 @@
     },
     "battery_platform_pinned_generic": {
       "title": "Az akkumulátor-platform Generic-re van rögzítve egy {brand} telepítésen",
-      "description": "A SEM akkumulátor-platformja **Generic / egyéb**-re van állítva, de a(z) {brand} integráció be van töltve. Az opciós varázsló korábbi verziói csak Generic és Deye lehetőséget kínáltak, alapértelmezetten Genericet, ezért az az oldal egyszeri végiglépkedése egy {brand} telepítést leminősített az általános adapterre — nincs kényszerített töltés, nincs idempotens regiszterírás. Nyissa meg a **Settings → Integrations → SEM → Configure → Battery scheduler** menüt, és állítsa a **Battery charge platform** értékét **Auto-detect**-re. Ha a Generic szándékos választás (saját vezérlőentitásokkal rendelkező akkumulátor), állítsa be azt az entitást, és ez az üzenet eltűnik."
+      "description": "A SEM akkumulátor-platformja **Általános / egyéb** értékre van állítva, de a(z) {brand} integráció be van töltve. Az opciós varázsló korábbi verziói csak az Általános és a Deye lehetőséget kínálták, alapértelmezetten az Általánost, ezért az az oldal egyszeri végiglépkedése egy {brand} telepítést leminősített az általános adapterre — nincs kényszerített töltés, nincs idempotens regiszterírás. Nyissa meg a **Beállítások → Eszközök és szolgáltatások → SEM → Konfigurálás → Akkumulátor töltésütemező** menüt, és állítsa az **Akkumulátor töltési platform** értékét **Automatikus (ajánlott)** értékre. Ha az Általános szándékos választás (saját vezérlőentitásokkal rendelkező akkumulátor), állítsa be azt az entitást, és ez az üzenet eltűnik."
     },
     "split_grid_guessed": {
       "title": "A SEM két kitalált hálózati mérőt ellenőriz",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguráció**, and pick **Minden beállítás** at the top. Then set **Hálózati teljesítmény** in section **Szenzorforrások**. If your meter has one sensor for import and one for export, set **Hálózati import szenzor** and **Hálózati export szenzor** in section **Tarifa és árazás** instead."
+      "description": "A SEM-nek nincs hálózati teljesítmény szenzora, ezért név alapján tippelt: **{import_entity}** a hálózati importhoz és **{export_entity}** a hálózati exporthoz. A SEM addig nem használja őket, amíg nem egyeznek a hálózati energiaszámlálóival, ezért a hálózati teljesítmény egyelőre 0. A mérő kiválasztása: nyissa meg a SEM irányítópultot, a ⚙ **Konfiguráció** fület, és fent válassza a **Minden beállítás** lehetőséget. Ezután állítsa be a **Hálózati teljesítmény** mezőt a **Szenzorforrások** szakaszban. Ha a mérőjének egy szenzora van az importhoz és egy az exporthoz, inkább a **Hálózati import szenzor** és a **Hálózati export szenzor** mezőt állítsa be a **Tarifa és árazás** szakaszban."
     },
     "battery_control_write_not_taken": {
       "title": "Egy akkumulátor-vezérlési írás nem érvényesül: {entity_id}",
@@ -1961,7 +1961,7 @@
     },
     "soc_zones_out_of_order": {
       "title": "Az akkumulátor SOC-zónák sorrendje hibás",
-      "description": "Az akkumulátor-zónák így olvashatók: **Priority {priority}% · Buffer {buffer}% · Auto-start {auto_start}%**, de a SEM azt várja, hogy ebben a sorrendben emelkedjenek: a Priority az a tartalék, amit sosem költ el, a Buffer az, ahol az akkumulátoros rásegítés leáll, az Auto-start pedig az, ahol az akkumulátor elég teli ahhoz, hogy szabadon adjon.\n\nA SEM a **{used}** értékeket használja határként — ugyanaz a három szám, rendezve —, így egyetlen zóna sem marad ki, és semmi nem viselkedik kiszámíthatatlanul. Azért jelzi ezt, mert a begépelt elrendezés szinte biztosan nem az, amit szeretett volna.\n\nJavítsa a **Settings → Devices & Services → SEM → Configure → Battery** menüben, vagy a dashboard Configuration fülén. Bármilyen érték megengedett, amíg emelkedő sorrendben van; a széles zónák is rendben vannak — a 20 / 30 / 50 egy nagy akkumulátoron tökéletesen jó elrendezés."
+      "description": "Az akkumulátor-zónák így olvashatók: **Prioritás {priority}% · Puffer {buffer}% · Automatikus indítás {auto_start}%**, de a SEM azt várja, hogy ebben a sorrendben emelkedjenek: a Prioritás az a tartalék, amit sosem költ el, a Puffer az, ahol az akkumulátoros rásegítés leáll, az Automatikus indítás pedig az, ahol az akkumulátor elég teli ahhoz, hogy szabadon adjon.\n\nA SEM a **{used}** értékeket használja határként — ugyanaz a három szám, rendezve —, így egyetlen zóna sem marad ki, és semmi nem viselkedik kiszámíthatatlanul. Azért jelzi ezt, mert a begépelt elrendezés szinte biztosan nem az, amit szeretett volna.\n\nJavítsa a **Beállítások → Eszközök és szolgáltatások → SEM → Konfigurálás → Akkumulátor** menüben, vagy az irányítópult Konfiguráció fülén. Bármilyen érték megengedett, amíg emelkedő sorrendben van; a széles zónák is rendben vannak — a 20 / 30 / 50 egy nagy akkumulátoron tökéletesen jó elrendezés."
     },
     "previous_install_leftovers": {
       "title": "Egy korábbi SEM-telepítésből származó fájlok találhatók",
@@ -1969,11 +1969,11 @@
     },
     "heat_pump_contact_values_missing": {
       "title": "Az SG-Ready {contact} érintkező nem vezérelhető",
-      "description": "A(z) **{entity_id}** SG-Ready {contact} érintkezőként van beállítva, de ez egy text/number/select entitás, és a **{missing}** értéke nincs megadva — így a SEM-nek nincs mit írnia, és minden SG-Ready parancs meghiúsul ennél a hőszivattyúnál. Nyissa meg a **Settings → Integrations → SEM → Configure → Heat Pump** menüt (vagy a dashboard Configuration fülét), és töltse ki mind a BE, mind a KI értéket ehhez az érintkezőhöz, vagy állítsa be helyette egy switch entitásra."
+      "description": "A(z) **{entity_id}** SG-Ready {contact} érintkezőként van beállítva, de ez egy text/number/select entitás, és a **{missing}** értéke nincs megadva — így a SEM-nek nincs mit írnia, és minden SG-Ready parancs meghiúsul ennél a hőszivattyúnál. Nyissa meg a **Beállítások → Eszközök és szolgáltatások → SEM → Konfigurálás → Hőszivattyú** menüt (vagy az irányítópult Konfiguráció fülét), és töltse ki mind a BE, mind a KI értéket ehhez az érintkezőhöz, vagy állítsa be helyette egy switch entitásra."
     },
     "split_grid_rejected": {
       "title": "A SEM nem találta meg a hálózati teljesítménymérőket",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguráció**, and pick **Minden beállítás** at the top. Then set **Hálózati teljesítmény** in section **Szenzorforrások**. If your meter has one sensor for import and one for export, set **Hálózati import szenzor** and **Hálózati export szenzor** in section **Tarifa és árazás** instead."
+      "description": "A SEM-nek nincs hálózati teljesítmény szenzora, és a név alapján tippelt szenzorok nem az Ön hálózati mérői: **{import_entity}** az importhoz, **{export_entity}** az exporthoz. Nem egyeznek a hálózati energiaszámlálóival, vagy a kettő közül az egyik hiányzik. A SEM inkább nem mutat hálózati teljesítményt, mint hogy hibásat mutasson. A mérő kiválasztása: nyissa meg a SEM irányítópultot, a ⚙ **Konfiguráció** fület, és fent válassza a **Minden beállítás** lehetőséget. Ezután állítsa be a **Hálózati teljesítmény** mezőt a **Szenzorforrások** szakaszban. Ha a mérőjének egy szenzora van az importhoz és egy az exporthoz, inkább a **Hálózati import szenzor** és a **Hálózati export szenzor** mezőt állítsa be a **Tarifa és árazás** szakaszban."
     },
     "power_sensor_not_found": {
       "title": "Nincs teljesítményszenzor ehhez: {energy_entity}",
