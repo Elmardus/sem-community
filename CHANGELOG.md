@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 **EV stop estimates now follow a car sensor that moves in half-point steps** (#1229). Before, the estimate drifted above the car's reading.
 - 🐛 **A heat pump set by service now shows the state SEM sent** (#1231). Before, a renewal could cancel a boost.
+- 🐛 **The plan now runs on a home with no battery** (#1207). Before, a saved default battery size kept it waiting for a charge sensor that does not exist.
 - 🐛 **Solar made while Home Assistant was down now counts after a restart after dark** (#1187). Before, that day's solar was lost and home fell to 0.
 - ✨ **New switch: Discharge limit also caps charging** (#1078). Off by default. On, a car that is plugged in but not charging no longer blocks solar charging of that battery.
 - ✨ **The Home diagram can hide the car's charge level** (#1219). Set `show_ev_soc: false` when two cars share one charger.
