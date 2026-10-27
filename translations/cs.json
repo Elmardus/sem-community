@@ -2046,6 +2046,10 @@
     "charger_role_entity_gone": {
       "title": "Nabíječka {name}: entita zmizela",
       "description": "Nabíječka {name} používá {entity}, která zmizela nebo je vypnutá. Vyberte jinou entitu v nastavení nabíječky, nebo zkontrolujte integraci zařízení."
+    },
+    "external_write_seen": {
+      "title": "Třetí strana zapisuje do {name}",
+      "description": "Něco jiného než SEM neustále mění **{name}** a SEM a ta strana si navzájem ruší práci. Na kartě Konfigurace SEM nastavte toto zařízení na *Ano, SEM ustoupí* a vyberte entitu, která ukazuje, kdy má řízení druhá strana."
     }
   },
   "selector": {

@@ -278,6 +278,7 @@ async def actuate_battery(
     observer: bool = False,
     controller=None,
     inputs_degraded: bool = False,
+    yielded: bool = False,
 ) -> None:
     """Apply a per-battery decision through the adapter (see
     :func:`_dispatch_battery`), then, on a cycle that sends no forced
@@ -286,8 +287,10 @@ async def actuate_battery(
     Never in observer mode."""
     await _dispatch_battery(decision, adapter, observer=observer,
                             controller=controller,
-                            inputs_degraded=inputs_degraded)
-    if not observer and decision.intent is not BatteryIntent.FORCE_CHARGE:
+                            inputs_degraded=inputs_degraded,
+                            yielded=yielded)
+    if (not observer and not yielded
+            and decision.intent is not BatteryIntent.FORCE_CHARGE):
         await _settle_charge_target(adapter)
 
 
@@ -298,6 +301,7 @@ async def _dispatch_battery(
     observer: bool = False,
     controller=None,
     inputs_degraded: bool = False,
+    yielded: bool = False,
 ) -> None:
     """Apply a per-battery decision through the adapter.
 
@@ -319,6 +323,17 @@ async def _dispatch_battery(
     # stop, a held stop after no room, observer, another intent — asks for
     # none, so a pack SEM did not ask to charge is never read as full.
     _set(adapter, "_sem_charge_asked_w", 0.0)
+    if yielded:
+        # (#1079) Another party steers this battery and the user said SEM
+        # yields: no adapter method runs, so nothing is written. Observer
+        # mode, when on, still wins above — it withholds the same way.
+        if not observer:
+            log_on_change(
+                _LOGGER, f"yield:battery:{decision.battery_id}", logging.INFO,
+                "YIELD · %s is steered by another party, SEM withholds %s",
+                decision.battery_id, decision.intent.value,
+            )
+            return
     if observer:
         _set(adapter, "_limit_rise", None)   # (#1173) a wait is for real cycles
         _would_w = {

@@ -36,6 +36,15 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util import dt as dt_util
 
+from .external_control import (
+    MODE_NONE,
+    SUSPECT_STRIKES,
+    ExternalControlBook,
+    Spec,
+    friendly_name,
+    normalise_mode,
+)
+
 from ..consts.core import CAPABILITY_MISS_CONFIRM_READS, CAPABILITY_MISS_HOLD_S
 from ..consts.core import CONF_INTRADAY_FORECAST, DEFAULT_INTRADAY_FORECAST
 from ..consts.core import (CONF_CO2_LIVE_INTENSITY, CONF_GRID_CO2_ENTITY,
@@ -1209,6 +1218,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
 
         # Observer mode: read-only monitoring, no hardware control
         self._observer_mode = config.get("observer_mode", False)
+
+        # (#1079) Devices another party steers: who, since when, and whether
+        # SEM yields. Every device defaults to mode "none" = no change.
+        self._external_control = ExternalControlBook()
 
         # Vacation mode (#594): suppress comfort heating (heat pump boost +
         # hot water solar target) while away. Two activation sources OR'd
@@ -3532,6 +3545,86 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         if _push is not None:
             _push()
 
+    def _external_control_specs(self) -> Dict[str, Spec]:
+        """(#1079) What the user set per device: ``charger:<id>`` for each
+        charger (its own settings) and ``battery`` for the home battery."""
+        specs: Dict[str, Spec] = {}
+        for index, charger in enumerate(self.config.get("ev_chargers") or []):
+            if not isinstance(charger, dict):
+                continue
+            mode = normalise_mode(charger.get("external_control_mode"))
+            if mode == MODE_NONE:
+                continue
+            cid = charger.get("id") or f"ev_charger_{index}"
+            entity = str(charger.get("external_control_indicator") or "")
+            specs[f"charger:{cid}"] = Spec(
+                mode, entity, friendly_name(self.hass, entity))
+        mode = normalise_mode(self.config.get("battery_external_control_mode"))
+        if mode != MODE_NONE:
+            entity = str(self.config.get("battery_external_control_indicator") or "")
+            specs["battery"] = Spec(
+                mode, entity, friendly_name(self.hass, entity))
+        return specs
+
+    def _refresh_external_control(self) -> None:
+        """(#1079) One look at every device with an external-control mode.
+        Never raises: a bad setting must not stop a cycle."""
+        book = getattr(self, "_external_control", None)
+        if book is None:
+            return
+        from .repair_issues import (
+            clear_external_write_seen, raise_external_write_seen)
+        try:
+            specs = self._external_control_specs()
+            suspects: Dict[str, bool] = {}
+            if specs:
+                for key in specs:
+                    if key.startswith("charger:"):
+                        rec = (getattr(self, "_charger_reconcilers", None)
+                               or {}).get(key[len("charger:"):])
+                        suspects[key] = int(getattr(
+                            rec, "_stop_commanded_while_drawing", 0) or 0
+                        ) >= SUSPECT_STRIKES
+                    else:
+                        suspects[key] = any(
+                            int(getattr(a, "write_not_taken_strikes", 0) or 0)
+                            >= SUSPECT_STRIKES
+                            for _bid, a in self._live_battery_adapters())
+            book.update(self.hass, specs, time.monotonic(), dt_util.now(),
+                        suspects)
+            # Every device SEM knows, not only those with a mode: a device
+            # set back to none still gets its Repair cleared, and no memo is
+            # needed to remember what was raised.
+            known = ["battery"] + [
+                f"charger:{c.get('id') or f'ev_charger_{i}'}"
+                for i, c in enumerate(self.config.get("ev_chargers") or [])
+                if isinstance(c, dict)]
+            for key in known:
+                name = key.split(":", 1)[-1] if ":" in key else "battery"
+                if book.raising(key):
+                    raise_external_write_seen(self.hass, key, name=name)
+                else:
+                    clear_external_write_seen(self.hass, key)
+            # The seam's flag follows the book every cycle, both ways: a
+            # device set back to none, or a charger that is not acted on this
+            # cycle, never keeps a stale "yield".
+            for cid, dev in list((getattr(self, "_ev_devices", None)
+                                  or {}).items()):
+                try:
+                    dev.external_yield = (
+                        not self._observer_mode
+                        and book.yielding(f"charger:{cid}"))
+                except AttributeError:
+                    pass
+        except Exception:  # noqa: BLE001 — a bad setting never stops a cycle
+            _LOGGER.debug("external control refresh failed", exc_info=True)
+
+    def external_yielding(self, key: str) -> bool:
+        """(#1079) True while another party steers ``key`` and the user said
+        SEM yields. ``charger:<id>`` or ``battery``."""
+        book = getattr(self, "_external_control", None)
+        return bool(book is not None and book.yielding(key))
+
     def observer_withheld_commands(self) -> dict:
         """(#855, audit F7) THIS cycle's withheld hardware commands, keyed by
         device — the "exact service calls it withheld" half of the seam's
@@ -3892,6 +3985,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # (see switch.py) so a toggle takes effect immediately and even if this
         # entity_id ever changes; this per-cycle pull is the backstop.
         self._sync_observer_mode_from_switch()
+        self._refresh_external_control()
 
         # #589 3a (publish isolation) — once the core snapshot is built we
         # alias it here; a failure in the ~550-line analytics/diagnostic
@@ -4955,6 +5049,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                                 reconciler=reconciler,
                                 observer=self._observer_mode,
                                 controller=self._surplus_controller,
+                                yielded=self.external_yielding(f"charger:{cid}"),
                             )
                             # Add this charger's just-committed draw to the shared night
                             # peak budget so lower-priority chargers size against the
@@ -5123,6 +5218,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                         decision, adapter, view.power, reconciler=reconciler,
                         observer=self._observer_mode,
                         controller=self._surplus_controller,
+                        yielded=self.external_yielding(f"charger:{cid}"),
                     )
                     self._save_ev_session_state()
                 except (HomeAssistantError, ServiceValidationError) as e:
@@ -9914,6 +10010,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 controller=self._surplus_controller,
                 # (#818) same signal the charger side uses
                 inputs_degraded=_degraded,
+                # (#1079) another party steers the battery, SEM yields
+                yielded=self.external_yielding("battery"),
             )
 
         if getattr(self, "_battery_reload_pending", False) is True:

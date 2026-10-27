@@ -2046,6 +2046,10 @@
     "charger_role_entity_gone": {
       "title": "充电桩 {name}：实体已不存在",
       "description": "充电桩 {name} 使用的 {entity} 已不存在或已停用。请在充电桩设置中选择其他实体，或检查该设备的集成。"
+    },
+    "external_write_seen": {
+      "title": "第三方正在写入 {name}",
+      "description": "SEM 之外的某方不断更改 **{name}**，SEM 与该方互相抵消对方的操作。请在 SEM 的“配置”选项卡中将此设备设为*是，SEM 让出控制*，并选择能显示对方何时控制的实体。"
     }
   },
   "selector": {

@@ -2046,6 +2046,10 @@
     "charger_role_entity_gone": {
       "title": "Caricatore {name}: un'entità non c'è più",
       "description": "Il caricatore {name} usa {entity}, che non c'è più o è disattivata. Scegli un'altra entità nelle impostazioni del caricatore o controlla l'integrazione del dispositivo."
+    },
+    "external_write_seen": {
+      "title": "Un terzo scrive su {name}",
+      "description": "Qualcosa di diverso da SEM cambia di continuo **{name}**, e SEM e quel terzo si annullano a vicenda. Nella scheda Configurazione di SEM imposta questo dispositivo su *Sì, SEM cede* e scegli l'entità che mostra quando il terzo ha il controllo."
     }
   },
   "selector": {

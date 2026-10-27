@@ -2046,6 +2046,10 @@
     "charger_role_entity_gone": {
       "title": "{name} töltő: egy entitás eltűnt",
       "description": "A(z) {name} töltő a(z) {entity} entitást használja, amely eltűnt vagy ki van kapcsolva. Válassz másikat a töltő beállításaiban, vagy ellenőrizd az eszköz integrációját."
+    },
+    "external_write_seen": {
+      "title": "Egy másik fél ír ide: {name}",
+      "description": "A SEM-en kívül valami más folyton módosítja ezt: **{name}**, és a SEM meg az a fél visszavonja egymás munkáját. A SEM Konfiguráció lapján állítsa az eszközt *Igen, a SEM visszalép* értékre, és válassza ki az entitást, amely mutatja, mikor irányít a másik fél."
     }
   },
   "selector": {

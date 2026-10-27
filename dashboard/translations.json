@@ -1997,7 +1997,13 @@
     "config_check_grid_wrong": "Směr sítě je špatně",
     "config_check_battery_wrong": "Směr baterie je špatně",
     "config_check_wrong_sensor": "Špatný senzor? Vyberte ho ve Všech nastaveních.",
-    "cfg_in_use_hint": "Používá se: {entity}. Tento formulář ji jen přepisuje. Teplá voda a tepelné čerpadlo se nastavují v kartě Konfigurace."
+    "cfg_in_use_hint": "Používá se: {entity}. Tento formulář ji jen přepisuje. Teplá voda a tepelné čerpadlo se nastavují v kartě Konfigurace.",
+    "config_ext_ctrl_mode": "Řízeno třetí stranou",
+    "config_ext_ctrl_mode_none": "Ne",
+    "config_ext_ctrl_mode_yield": "Ano, SEM ustoupí",
+    "config_ext_ctrl_mode_observe": "SEM řídí, upozorni mě",
+    "config_ext_ctrl_entity": "Indikátor řízení",
+    "config_help_ext_ctrl": "Pro zařízení, které řídí i dodavatel nebo provozovatel sítě. Ano, SEM ustoupí: dokud je indikátor zapnutý, SEM do zařízení nic nezapisuje. SEM řídí, upozorni mě: SEM si ponechá řízení a zobrazí opravu, když vidí zápisy, které neprovedl. Indikátor je spínač, binární senzor nebo výběr, který ukazuje, že řízení má druhá strana."
   },
   "da": {
     "% of limit": "% af grænse",
@@ -3997,7 +4003,13 @@
     "config_check_grid_wrong": "Netretningen er forkert",
     "config_check_battery_wrong": "Batteriretningen er forkert",
     "config_check_wrong_sensor": "En forkert sensor? Vælg den under Alle indstillinger.",
-    "cfg_in_use_hint": "I brug: {entity}. Denne formular tilsidesætter den kun. Varmt vand og varmepumpe indstilles under fanen Konfiguration."
+    "cfg_in_use_hint": "I brug: {entity}. Denne formular tilsidesætter den kun. Varmt vand og varmepumpe indstilles under fanen Konfiguration.",
+    "config_ext_ctrl_mode": "Styret af en anden part",
+    "config_ext_ctrl_mode_none": "Nej",
+    "config_ext_ctrl_mode_yield": "Ja, SEM viger",
+    "config_ext_ctrl_mode_observe": "SEM styrer, giv mig besked",
+    "config_ext_ctrl_entity": "Styringsindikator",
+    "config_help_ext_ctrl": "Til en enhed, som en leverandør eller netoperatør også styrer. Ja, SEM viger: så længe indikatoren er tændt, skriver SEM intet til enheden. SEM styrer, giv mig besked: SEM beholder styringen og viser en reparation, når den ser skrivninger, den ikke selv har lavet. Indikatoren er en kontakt, binær sensor eller valgliste, der viser, at den anden part har styringen."
   },
   "de": {
     "% of limit": "% des Limits",
@@ -5997,7 +6009,13 @@
     "config_check_grid_wrong": "Netz-Richtung ist falsch",
     "config_check_battery_wrong": "Batterie-Richtung ist falsch",
     "config_check_wrong_sensor": "Ein falscher Sensor? Wähle ihn in Alle Einstellungen.",
-    "cfg_in_use_hint": "In Benutzung: {entity}. Dieses Formular überschreibt sie nur. Warmwasser und Wärmepumpe stellst du im Tab Konfiguration ein."
+    "cfg_in_use_hint": "In Benutzung: {entity}. Dieses Formular überschreibt sie nur. Warmwasser und Wärmepumpe stellst du im Tab Konfiguration ein.",
+    "config_ext_ctrl_mode": "Von Dritten gesteuert",
+    "config_ext_ctrl_mode_none": "Nein",
+    "config_ext_ctrl_mode_yield": "Ja, SEM hält sich zurück",
+    "config_ext_ctrl_mode_observe": "SEM steuert, melde es mir",
+    "config_ext_ctrl_entity": "Steuer-Anzeige",
+    "config_help_ext_ctrl": "Für ein Gerät, das auch ein Versorger oder Netzbetreiber steuert. Ja, SEM hält sich zurück: Solange die Anzeige an ist, schreibt SEM nichts an das Gerät. SEM steuert, melde es mir: SEM behält die Kontrolle und zeigt eine Reparatur, wenn es Schreibzugriffe sieht, die nicht von SEM stammen. Die Anzeige ist ein Schalter, Binärsensor oder eine Auswahl, die zeigt, dass der Dritte die Kontrolle hat."
   },
   "en": {
     "% of limit": "% of limit",
@@ -7997,7 +8015,13 @@
     "config_check_grid_wrong": "Grid direction is wrong",
     "config_check_battery_wrong": "Battery direction is wrong",
     "config_check_wrong_sensor": "A wrong sensor? Pick it in All settings.",
-    "cfg_in_use_hint": "In use: {entity}. This form only overrides it. Hot water and heat pump are set in the Configuration tab."
+    "cfg_in_use_hint": "In use: {entity}. This form only overrides it. Hot water and heat pump are set in the Configuration tab.",
+    "config_ext_ctrl_mode": "Steered by another party",
+    "config_ext_ctrl_mode_none": "No",
+    "config_ext_ctrl_mode_yield": "Yes, SEM yields",
+    "config_ext_ctrl_mode_observe": "SEM drives, tell me",
+    "config_ext_ctrl_entity": "Steering indicator",
+    "config_help_ext_ctrl": "For a device that a supplier or grid operator also controls. Yes, SEM yields: while the indicator is on, SEM writes nothing to the device. SEM drives, tell me: SEM keeps control and shows a Repair when it sees writes it did not make. The indicator is any switch, binary sensor or select that shows the other party is in control."
   },
   "es": {
     "% of limit": "% del límite",
@@ -9997,7 +10021,13 @@
     "config_check_grid_wrong": "La dirección de la red está mal",
     "config_check_battery_wrong": "La dirección de la batería está mal",
     "config_check_wrong_sensor": "¿Un sensor incorrecto? Elígelo en Todos los ajustes.",
-    "cfg_in_use_hint": "En uso: {entity}. Este formulario solo la sustituye. El agua caliente y la bomba de calor se ajustan en la pestaña Configuración."
+    "cfg_in_use_hint": "En uso: {entity}. Este formulario solo la sustituye. El agua caliente y la bomba de calor se ajustan en la pestaña Configuración.",
+    "config_ext_ctrl_mode": "Controlado por un tercero",
+    "config_ext_ctrl_mode_none": "No",
+    "config_ext_ctrl_mode_yield": "Sí, SEM cede",
+    "config_ext_ctrl_mode_observe": "SEM controla, avísame",
+    "config_ext_ctrl_entity": "Indicador de control",
+    "config_help_ext_ctrl": "Para un dispositivo que también controla una comercializadora o un operador de red. Sí, SEM cede: mientras el indicador esté activo, SEM no escribe nada en el dispositivo. SEM controla, avísame: SEM mantiene el control y muestra una reparación cuando ve escrituras que no son suyas. El indicador es un interruptor, sensor binario o selector que muestra que el tercero tiene el control."
   },
   "fi": {
     "% of limit": "% rajasta",
@@ -11997,7 +12027,13 @@
     "config_check_grid_wrong": "Verkon suunta on väärä",
     "config_check_battery_wrong": "Akun suunta on väärä",
     "config_check_wrong_sensor": "Väärä anturi? Valitse se kohdassa Kaikki asetukset.",
-    "cfg_in_use_hint": "Käytössä: {entity}. Tämä lomake vain ohittaa sen. Lämmin vesi ja lämpöpumppu asetetaan Asetukset-välilehdellä."
+    "cfg_in_use_hint": "Käytössä: {entity}. Tämä lomake vain ohittaa sen. Lämmin vesi ja lämpöpumppu asetetaan Asetukset-välilehdellä.",
+    "config_ext_ctrl_mode": "Kolmannen osapuolen ohjaama",
+    "config_ext_ctrl_mode_none": "Ei",
+    "config_ext_ctrl_mode_yield": "Kyllä, SEM väistyy",
+    "config_ext_ctrl_mode_observe": "SEM ohjaa, ilmoita minulle",
+    "config_ext_ctrl_entity": "Ohjauksen ilmaisin",
+    "config_help_ext_ctrl": "Laitteelle, jota myös sähköyhtiö tai verkkoyhtiö ohjaa. Kyllä, SEM väistyy: niin kauan kuin ilmaisin on päällä, SEM ei kirjoita laitteelle mitään. SEM ohjaa, ilmoita minulle: SEM pitää ohjauksen ja näyttää korjausilmoituksen, kun se näkee kirjoituksia, joita se ei tehnyt. Ilmaisin on kytkin, binäärianturi tai valinta, joka näyttää toisen osapuolen ohjaavan."
   },
   "fr": {
     "% of limit": "% de la limite",
@@ -13997,7 +14033,13 @@
     "config_check_grid_wrong": "Le sens du réseau est faux",
     "config_check_battery_wrong": "Le sens de la batterie est faux",
     "config_check_wrong_sensor": "Un mauvais capteur ? Choisissez-le dans Tous les réglages.",
-    "cfg_in_use_hint": "Utilisé : {entity}. Ce formulaire ne fait que la remplacer. L'eau chaude et la pompe à chaleur se règlent dans l'onglet Configuration."
+    "cfg_in_use_hint": "Utilisé : {entity}. Ce formulaire ne fait que la remplacer. L'eau chaude et la pompe à chaleur se règlent dans l'onglet Configuration.",
+    "config_ext_ctrl_mode": "Piloté par un tiers",
+    "config_ext_ctrl_mode_none": "Non",
+    "config_ext_ctrl_mode_yield": "Oui, SEM s'efface",
+    "config_ext_ctrl_mode_observe": "SEM pilote, prévenez-moi",
+    "config_ext_ctrl_entity": "Indicateur de pilotage",
+    "config_help_ext_ctrl": "Pour un appareil qu'un fournisseur ou un gestionnaire de réseau pilote aussi. Oui, SEM s'efface : tant que l'indicateur est actif, SEM n'écrit rien sur l'appareil. SEM pilote, prévenez-moi : SEM garde la main et affiche une réparation quand il voit des écritures qui ne viennent pas de lui. L'indicateur est un interrupteur, un capteur binaire ou une liste qui montre que le tiers a la main."
   },
   "hu": {
     "% of limit": "% a határból",
@@ -15997,7 +16039,13 @@
     "config_check_grid_wrong": "A hálózat iránya hibás",
     "config_check_battery_wrong": "Az akkumulátor iránya hibás",
     "config_check_wrong_sensor": "Hibás érzékelő? Válaszd ki az Összes beállításban.",
-    "cfg_in_use_hint": "Használatban: {entity}. Ez az űrlap csak felülírja. A melegvizet és a hőszivattyút a Konfiguráció lapon állíthatod be."
+    "cfg_in_use_hint": "Használatban: {entity}. Ez az űrlap csak felülírja. A melegvizet és a hőszivattyút a Konfiguráció lapon állíthatod be.",
+    "config_ext_ctrl_mode": "Harmadik fél irányítja",
+    "config_ext_ctrl_mode_none": "Nem",
+    "config_ext_ctrl_mode_yield": "Igen, a SEM visszalép",
+    "config_ext_ctrl_mode_observe": "A SEM irányít, szóljon",
+    "config_ext_ctrl_entity": "Irányítás jelzője",
+    "config_help_ext_ctrl": "Olyan eszközhöz, amelyet szolgáltató vagy hálózatüzemeltető is irányít. Igen, a SEM visszalép: amíg a jelző be van kapcsolva, a SEM nem ír semmit az eszközre. A SEM irányít, szóljon: a SEM megtartja az irányítást, és javítást jelez, ha olyan írást lát, amelyet nem ő végzett. A jelző kapcsoló, bináris érzékelő vagy választó, amely mutatja, hogy a másik fél irányít."
   },
   "it": {
     "% of limit": "% del limite",
@@ -17997,7 +18045,13 @@
     "config_check_grid_wrong": "La direzione della rete è sbagliata",
     "config_check_battery_wrong": "La direzione della batteria è sbagliata",
     "config_check_wrong_sensor": "Un sensore sbagliato? Sceglilo in Tutte le impostazioni.",
-    "cfg_in_use_hint": "In uso: {entity}. Questo modulo la sostituisce soltanto. Acqua calda e pompa di calore si impostano nella scheda Configurazione."
+    "cfg_in_use_hint": "In uso: {entity}. Questo modulo la sostituisce soltanto. Acqua calda e pompa di calore si impostano nella scheda Configurazione.",
+    "config_ext_ctrl_mode": "Gestito da terzi",
+    "config_ext_ctrl_mode_none": "No",
+    "config_ext_ctrl_mode_yield": "Sì, SEM cede",
+    "config_ext_ctrl_mode_observe": "SEM gestisce, avvisami",
+    "config_ext_ctrl_entity": "Indicatore di controllo",
+    "config_help_ext_ctrl": "Per un dispositivo che controlla anche un fornitore o un gestore di rete. Sì, SEM cede: finché l'indicatore è attivo, SEM non scrive nulla sul dispositivo. SEM gestisce, avvisami: SEM mantiene il controllo e mostra una riparazione quando vede scritture non sue. L'indicatore è un interruttore, un sensore binario o un selettore che mostra che il terzo ha il controllo."
   },
   "nl": {
     "% of limit": "% van limiet",
@@ -19997,7 +20051,13 @@
     "config_check_grid_wrong": "Netrichting is verkeerd",
     "config_check_battery_wrong": "Batterijrichting is verkeerd",
     "config_check_wrong_sensor": "Een verkeerde sensor? Kies hem in Alle instellingen.",
-    "cfg_in_use_hint": "In gebruik: {entity}. Dit formulier overschrijft haar alleen. Warm water en warmtepomp stel je in op het tabblad Configuratie."
+    "cfg_in_use_hint": "In gebruik: {entity}. Dit formulier overschrijft haar alleen. Warm water en warmtepomp stel je in op het tabblad Configuratie.",
+    "config_ext_ctrl_mode": "Door een andere partij gestuurd",
+    "config_ext_ctrl_mode_none": "Nee",
+    "config_ext_ctrl_mode_yield": "Ja, SEM houdt zich in",
+    "config_ext_ctrl_mode_observe": "SEM stuurt, meld het mij",
+    "config_ext_ctrl_entity": "Stuursignaal",
+    "config_help_ext_ctrl": "Voor een apparaat dat ook een leverancier of netbeheerder bestuurt. Ja, SEM houdt zich in: zolang het signaal aan is, schrijft SEM niets naar het apparaat. SEM stuurt, meld het mij: SEM houdt de controle en toont een Reparatie als het schrijfacties ziet die niet van SEM komen. Het signaal is een schakelaar, binaire sensor of keuzelijst die laat zien dat de andere partij de controle heeft."
   },
   "no": {
     "% of limit": "% av grense",
@@ -21997,7 +22057,13 @@
     "config_check_grid_wrong": "Nettretningen er feil",
     "config_check_battery_wrong": "Batteriretningen er feil",
     "config_check_wrong_sensor": "En feil sensor? Velg den under Alle innstillinger.",
-    "cfg_in_use_hint": "I bruk: {entity}. Dette skjemaet overstyrer den bare. Varmtvann og varmepumpe stilles inn i fanen Konfigurasjon."
+    "cfg_in_use_hint": "I bruk: {entity}. Dette skjemaet overstyrer den bare. Varmtvann og varmepumpe stilles inn i fanen Konfigurasjon.",
+    "config_ext_ctrl_mode": "Styrt av en annen part",
+    "config_ext_ctrl_mode_none": "Nei",
+    "config_ext_ctrl_mode_yield": "Ja, SEM viker",
+    "config_ext_ctrl_mode_observe": "SEM styrer, si fra",
+    "config_ext_ctrl_entity": "Styringsindikator",
+    "config_help_ext_ctrl": "For en enhet som en leverandør eller nettoperatør også styrer. Ja, SEM viker: så lenge indikatoren er på, skriver SEM ingenting til enheten. SEM styrer, si fra: SEM beholder styringen og viser en reparasjon når den ser skrivinger den ikke har gjort selv. Indikatoren er en bryter, binær sensor eller valgliste som viser at den andre parten har styringen."
   },
   "pl": {
     "% of limit": "% limitu",
@@ -23997,7 +24063,13 @@
     "config_check_grid_wrong": "Kierunek sieci jest zły",
     "config_check_battery_wrong": "Kierunek baterii jest zły",
     "config_check_wrong_sensor": "Zły czujnik? Wybierz go w Wszystkie ustawienia.",
-    "cfg_in_use_hint": "W użyciu: {entity}. Ten formularz tylko ją zastępuje. Ciepłą wodę i pompę ciepła ustawiasz w karcie Konfiguracja."
+    "cfg_in_use_hint": "W użyciu: {entity}. Ten formularz tylko ją zastępuje. Ciepłą wodę i pompę ciepła ustawiasz w karcie Konfiguracja.",
+    "config_ext_ctrl_mode": "Sterowane przez osobę trzecią",
+    "config_ext_ctrl_mode_none": "Nie",
+    "config_ext_ctrl_mode_yield": "Tak, SEM ustępuje",
+    "config_ext_ctrl_mode_observe": "SEM steruje, powiadom mnie",
+    "config_ext_ctrl_entity": "Wskaźnik sterowania",
+    "config_help_ext_ctrl": "Dla urządzenia, które steruje też dostawca lub operator sieci. Tak, SEM ustępuje: dopóki wskaźnik jest włączony, SEM nic nie zapisuje do urządzenia. SEM steruje, powiadom mnie: SEM zachowuje kontrolę i pokazuje naprawę, gdy widzi zapisy, których nie wykonał. Wskaźnik to przełącznik, czujnik binarny lub lista wyboru pokazująca, że kontrolę ma druga strona."
   },
   "pt": {
     "% of limit": "% do limite",
@@ -25997,7 +26069,13 @@
     "config_check_grid_wrong": "A direção da rede está errada",
     "config_check_battery_wrong": "A direção da bateria está errada",
     "config_check_wrong_sensor": "Um sensor errado? Escolha-o em Todas as definições.",
-    "cfg_in_use_hint": "Em uso: {entity}. Este formulário apenas a substitui. A água quente e a bomba de calor definem-se no separador Configuração."
+    "cfg_in_use_hint": "Em uso: {entity}. Este formulário apenas a substitui. A água quente e a bomba de calor definem-se no separador Configuração.",
+    "config_ext_ctrl_mode": "Controlado por terceiros",
+    "config_ext_ctrl_mode_none": "Não",
+    "config_ext_ctrl_mode_yield": "Sim, o SEM cede",
+    "config_ext_ctrl_mode_observe": "O SEM controla, avise-me",
+    "config_ext_ctrl_entity": "Indicador de controlo",
+    "config_help_ext_ctrl": "Para um dispositivo que também é controlado por um fornecedor ou operador de rede. Sim, o SEM cede: enquanto o indicador estiver ativo, o SEM não escreve nada no dispositivo. O SEM controla, avise-me: o SEM mantém o controlo e mostra uma reparação quando vê escritas que não são suas. O indicador é um interruptor, sensor binário ou seletor que mostra que o terceiro tem o controlo."
   },
   "ro": {
     "% of limit": "% din limită",
@@ -27997,7 +28075,13 @@
     "config_check_grid_wrong": "Direcția rețelei e greșită",
     "config_check_battery_wrong": "Direcția bateriei e greșită",
     "config_check_wrong_sensor": "Un senzor greșit? Alege-l în Toate setările.",
-    "cfg_in_use_hint": "În uz: {entity}. Acest formular doar o înlocuiește. Apa caldă și pompa de căldură se setează în fila Configurare."
+    "cfg_in_use_hint": "În uz: {entity}. Acest formular doar o înlocuiește. Apa caldă și pompa de căldură se setează în fila Configurare.",
+    "config_ext_ctrl_mode": "Controlat de o altă parte",
+    "config_ext_ctrl_mode_none": "Nu",
+    "config_ext_ctrl_mode_yield": "Da, SEM se retrage",
+    "config_ext_ctrl_mode_observe": "SEM controlează, anunță-mă",
+    "config_ext_ctrl_entity": "Indicator de control",
+    "config_help_ext_ctrl": "Pentru un dispozitiv pe care îl controlează și un furnizor sau un operator de rețea. Da, SEM se retrage: cât timp indicatorul este activ, SEM nu scrie nimic în dispozitiv. SEM controlează, anunță-mă: SEM păstrează controlul și arată o reparație când vede scrieri care nu sunt ale sale. Indicatorul este un comutator, un senzor binar sau o listă care arată că cealaltă parte are controlul."
   },
   "sv": {
     "% of limit": "% av gräns",
@@ -29997,7 +30081,13 @@
     "config_check_grid_wrong": "Nätets riktning är fel",
     "config_check_battery_wrong": "Batteriets riktning är fel",
     "config_check_wrong_sensor": "En fel sensor? Välj den under Alla inställningar.",
-    "cfg_in_use_hint": "Används: {entity}. Det här formuläret åsidosätter den bara. Varmvatten och värmepump ställs in i fliken Konfiguration."
+    "cfg_in_use_hint": "Används: {entity}. Det här formuläret åsidosätter den bara. Varmvatten och värmepump ställs in i fliken Konfiguration.",
+    "config_ext_ctrl_mode": "Styrs av en annan part",
+    "config_ext_ctrl_mode_none": "Nej",
+    "config_ext_ctrl_mode_yield": "Ja, SEM viker",
+    "config_ext_ctrl_mode_observe": "SEM styr, säg till",
+    "config_ext_ctrl_entity": "Styrindikator",
+    "config_help_ext_ctrl": "För en enhet som en leverantör eller nätoperatör också styr. Ja, SEM viker: så länge indikatorn är på skriver SEM ingenting till enheten. SEM styr, säg till: SEM behåller styrningen och visar en reparation när den ser skrivningar den inte gjort själv. Indikatorn är en strömbrytare, binär sensor eller lista som visar att den andra parten styr."
   },
   "zh": {
     "% of limit": "% 达限制",
@@ -31997,6 +32087,12 @@
     "config_check_grid_wrong": "电网方向不对",
     "config_check_battery_wrong": "电池方向不对",
     "config_check_wrong_sensor": "传感器不对？在“所有设置”中选择。",
-    "cfg_in_use_hint": "使用中：{entity}。此表单仅用于覆盖它。热水和热泵在“配置”选项卡中设置。"
+    "cfg_in_use_hint": "使用中：{entity}。此表单仅用于覆盖它。热水和热泵在“配置”选项卡中设置。",
+    "config_ext_ctrl_mode": "由第三方控制",
+    "config_ext_ctrl_mode_none": "否",
+    "config_ext_ctrl_mode_yield": "是，SEM 让出控制",
+    "config_ext_ctrl_mode_observe": "SEM 控制，并通知我",
+    "config_ext_ctrl_entity": "控制指示",
+    "config_help_ext_ctrl": "适用于供电商或电网运营商也在控制的设备。是，SEM 让出控制：指示开启期间，SEM 不向设备写入任何内容。SEM 控制，并通知我：SEM 保持控制，并在发现不是自己做出的写入时显示修复提示。指示可以是开关、二元传感器或选择项，用来表明对方正在控制。"
   }
 }

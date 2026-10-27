@@ -7255,6 +7255,13 @@ async def _async_register_phase_services(
                 payload["ev_actuation"] = _charger_actuation_diag(hass, coordinator)
             except Exception as exc:  # noqa: BLE001
                 payload["ev_actuation"] = {"error": str(exc)}
+            # (#1079) devices another party steers, and whether SEM yields
+            try:
+                _book = getattr(coordinator, "_external_control", None)
+                if _book is not None and _book.rows():
+                    payload["external_control"] = _book.rows()
+            except Exception as exc:  # noqa: BLE001
+                payload["external_control"] = {"error": str(exc)}
 
         if section in ("all", "battery_zones", "battery_scheduler"):
             # (#983) the battery half of the #548 actuation truth: what the

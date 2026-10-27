@@ -2046,6 +2046,10 @@
     "charger_role_entity_gone": {
       "title": "Cargador {name}: una entidad ya no existe",
       "description": "El cargador {name} usa {entity}, que ya no existe o está desactivada. Elige otra entidad en los ajustes del cargador o revisa la integración del dispositivo."
+    },
+    "external_write_seen": {
+      "title": "Un tercero escribe en {name}",
+      "description": "Algo distinto de SEM cambia **{name}** una y otra vez, y SEM y ese tercero se deshacen el trabajo. En la pestaña Configuración de SEM, pon este dispositivo en *Sí, SEM cede* y elige la entidad que muestra cuándo el tercero tiene el control."
     }
   },
   "selector": {
