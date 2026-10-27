@@ -254,3 +254,48 @@ def test_the_preselected_answer_writes_nothing():
     for w in (1240, -1240, 12):
         check = _guessed(w)
         assert answer_updates(check, check.answers()[0]) == {}, w
+
+
+# ── the docs the setup points to ───────────────────────────────────────────
+
+def _slug(heading: str) -> str:
+    import re
+    h = re.sub(r"[^\w\s-]", "", heading.strip().lower())
+    return re.sub(r"\s", "-", h)
+
+
+def _slugs(path: Path) -> set:
+    import re
+    return {_slug(m.group(1))
+            for m in re.finditer(r"^#{1,6}\s+(.+)$", path.read_text(encoding="utf-8"), re.M)}
+
+
+def test_every_setup_link_and_picture_in_the_docs_exists():
+    """The manifest's documentation link (HA's "?" in the setup dialog), the
+    Quick Start and the Setup Guide point at Step 1 by anchor, and Step 1
+    shows its screens as pictures. A renamed heading or a missing image
+    fails here."""
+    import re
+    docs = ROOT / "docs"
+    guide = docs / "SETUP_GUIDE.md"
+    targets = []
+    manifest = json.loads((ROOT / "manifest.json").read_text())["documentation"]
+    targets.append(manifest.split("/blob/develop/docs/")[1])
+    for doc in (docs / "QUICK_START.md", guide, docs / "TROUBLESHOOTING.md"):
+        for m in re.finditer(r"\]\((SETUP_GUIDE\.md)?(#[\w-]+|SETUP_GUIDE\.md#[\w-]+)\)",
+                             doc.read_text(encoding="utf-8")):
+            link = m.group(2)
+            if doc == guide and not link.startswith("#"):
+                continue
+            targets.append("SETUP_GUIDE.md" + link.replace("SETUP_GUIDE.md", ""))
+    assert len(targets) >= 6
+    slugs = _slugs(guide)
+    for t in targets:
+        anchor = t.split("#", 1)[1]
+        assert anchor in slugs, f"no heading for #{anchor}"
+    pics = re.findall(r"\]\((screenshots/setup-flow/[^)]+)\)",
+                      guide.read_text(encoding="utf-8"))
+    assert {"01a-step1-one-question.png", "01b-step1-pick-grid.png",
+            "04-sensor-sources-check.png"} <= {Path(p).name for p in pics}
+    for p in pics:
+        assert (docs / p).is_file(), p

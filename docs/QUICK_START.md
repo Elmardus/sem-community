@@ -58,7 +58,7 @@ SEM shows the solar, grid and battery power it found in your Energy Dashboard, i
 - One is wrong: open **Choose sensors myself**, pick the right sensor, press **Submit**.
 - SEM may ask one question about your grid meter ("buying or sending right now?"). Answer it, or choose **I don't know**. Nothing breaks if you skip it.
 
-SEM starts in watch-only mode: it commands no hardware. Turn that off later on the **Configuration** tab. Details: [Setup Guide](SETUP_GUIDE.md).
+SEM starts in watch-only mode: it commands no hardware. Turn that off later on the **Configuration** tab. Details and screenshots: [Step 1](SETUP_GUIDE.md#step-1-sem-found-your-system), [the grid question](SETUP_GUIDE.md#when-sem-asks-one-more-question), [watch-only mode](SETUP_GUIDE.md#watch-only-mode). Wrong sensor later: [Sensor source overrides](SETUP_GUIDE.md#sensor-source-overrides).
 
 ### Step 2b: Hardware
 

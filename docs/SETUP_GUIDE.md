@@ -21,6 +21,9 @@ For developer and architecture details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 1. [Prerequisites](#1-prerequisites)
 2. [Installation via HACS](#2-installation-via-hacs)
 3. [Config Flow](#3-config-flow)
+   - [Step 1: SEM found your system](#step-1-sem-found-your-system)
+   - [When SEM asks one more question](#when-sem-asks-one-more-question)
+   - [Watch-only mode](#watch-only-mode)
 4. [Verification](#4-verification)
 5. [Options Flow](#5-options-flow)
 6. [SOC Zone Strategy](#6-soc-zone-strategy)
@@ -226,20 +229,25 @@ direction from your energy counters over the next days.
 **"SEM guessed your grid meter."** Your Energy Dashboard has no grid power
 sensor, so SEM picked one. Look at your house right now and answer:
 
+![One question — is your house buying or sending?](screenshots/setup-flow/01a-step1-one-question.png)
+
 | Answer | Choose it when |
 |---|---|
 | **Buying from the grid** | your house takes power from the grid |
 | **Sending to the grid** | your house gives power to the grid |
 | **This is my grid meter** | shown instead of the two above when the meter reads almost 0 W, so it cannot tell |
 | **Use the other meter** | shown only when SEM found a second meter. The screen names it and shows its watts |
-| **I don't know** | you cannot tell. Nothing is changed |
+| **I don't know** | you cannot tell. Nothing is changed. **This is preselected**, so pressing **Submit** without choosing is safe |
 
 Your answer, not the brand of your meter, decides the direction. If you say
 *Buying* and the meter shows a plus number, SEM turns the sign around.
 
 **"SEM found no grid power sensor."** A picker is shown, empty. Choose your
 grid power sensor (the one in W or kW, not a kWh counter), or press
-**Submit** to skip it. You can set it later (below).
+**Submit** to skip it. You can set it later: see
+[Sensor source overrides](#sensor-source-overrides).
+
+![Pick your grid meter](screenshots/setup-flow/01b-step1-pick-grid.png)
 
 #### Watch-only mode
 
@@ -252,7 +260,7 @@ decisions match what you want.
 > **Fixing it later:** open the SEM dashboard, tab **Configuration**, section
 > **Sensor sources**. It shows the same live values, with **Grid direction is
 > wrong** and **Battery direction is wrong** buttons that turn a direction
-> around in one tap. A wrong sensor is picked under **All settings**.
+> around in one tap. See [Sensor source overrides](#sensor-source-overrides).
 
 ### Step 2: EV Charger (optional)
 
@@ -383,6 +391,14 @@ load — check **Settings > System > Logs** (filter for
 `solar_energy_management`).
 
 ### Sensor source overrides
+
+![Configuration tab, Sensor sources: what SEM reads right now](screenshots/setup-flow/04-sensor-sources-check.png)
+
+The top of **Sensor sources** shows what SEM reads right now, in watts: solar,
+grid, battery and what your home uses. Compare it with your meter or energy
+app. If the grid or battery direction is wrong, tap **Grid direction is
+wrong** or **Battery direction is wrong**. One tap turns it around. If the
+sensor itself is wrong, pick another one under **All settings** (below).
 
 SEM derives its grid, solar and battery power sources from HA's Energy
 Dashboard — that stays the primary path, and fixing a wrong mapping there
