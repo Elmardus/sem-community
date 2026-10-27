@@ -129,6 +129,7 @@ def _stub(hass, adapters, *, observer=False):
     stub._arbitrage_enabled = lambda n: False
     stub._energy_plan_actuation = False
     stub._cycle_fleet_state = None
+    stub.external_yielding = lambda key: False
     return stub
 
 

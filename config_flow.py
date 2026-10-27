@@ -1653,8 +1653,6 @@ OPTIONS_FLOW_OWNED_KEYS = frozenset({
     "ev_target_soc_max",
     "ev_total_energy_sensor",
     "export_limit_entity",
-    "grid_export_power_entity",
-    "grid_import_power_entity",
     "grid_import_surcharge",
     # (#1077) what a kWh is worth: tax, VAT, markup, the feed-in fee
     "tariff_value_preset", "import_price_basis", "import_markup",
@@ -1690,7 +1688,6 @@ OPTIONS_FLOW_OWNED_KEYS = frozenset({
     "minimum_solar_power",
     "mobile_notification_service",
     "name",
-    "observer_mode",
     "peak_limit_unlimited",
     # (#1021) the grid operator's relay and its limit
     "shed_signal_entity",
