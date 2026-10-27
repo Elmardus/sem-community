@@ -1630,6 +1630,9 @@
       },
       "simulation_tab": {
         "name": "Separador de simulação"
+      },
+      "battery_discharge_limit_caps_charge": {
+        "name": "O limite de descarga também limita o carregamento"
       }
     },
     "number": {

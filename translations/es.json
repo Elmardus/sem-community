@@ -1630,6 +1630,9 @@
       },
       "simulation_tab": {
         "name": "Pestaña de simulación"
+      },
+      "battery_discharge_limit_caps_charge": {
+        "name": "El límite de descarga también limita la carga"
       }
     },
     "number": {

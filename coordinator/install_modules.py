@@ -403,6 +403,7 @@ ENTITY_MODULES: Mapping[tuple[str, str], frozenset[Module]] = _table(
     )),
     _rows("switch", _BE, (
         "battery_may_assist_ev",
+        "battery_discharge_limit_caps_charge",   # (#1078)
         "ev_morning_window_enabled",    # arc #921 (#892): the pack AND the car
     )),
     _rows("sensor", _E, (

@@ -1630,6 +1630,9 @@
       },
       "simulation_tab": {
         "name": "Simulation tab"
+      },
+      "battery_discharge_limit_caps_charge": {
+        "name": "Discharge limit also caps charging"
       }
     },
     "number": {

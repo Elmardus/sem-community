@@ -1630,6 +1630,9 @@
       },
       "simulation_tab": {
         "name": "Simuleringsfane"
+      },
+      "battery_discharge_limit_caps_charge": {
+        "name": "Utladegrensen begrenser også lading"
       }
     },
     "number": {
