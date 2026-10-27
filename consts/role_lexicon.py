@@ -274,7 +274,11 @@ READ_ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
                 r"^grid_imported_power$", r"^from_grid_power$",
                 r"^consumption_from_grid", r"^pac_to_user",
                 # (#947 audit) declared by real meters, previously unmatched
-                r"^current_power_usage$",     # dsmr_reader — the actual DSMR pair
+                r"^current_power_usage$",     # dsmr_reader
+                # (#1189) core dsmr, the Dutch/Belgian smart meter. Its names
+                # follow the user's language (EN "Power consumption", NL
+                # "Energieverbruik", DE "Stromverbrauch"); this key does not.
+                r"^current_electricity_usage$",
                 r"^power_grid_import$",       # fronius
                 r"^power_from_grid$",         # mypv (AC-THOR)
                 r"^power_flow_from_grid$",    # tibber
@@ -287,7 +291,8 @@ READ_ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
         "any": (r"^grid_export_power$", r"^export_to_grid", r"^export_power$",
                 r"^grid_exported_power$", r"^to_grid_power$", r"^pac_to_grid",
                 # (#947 audit) declared by real meters, previously unmatched
-                r"^current_power_return$",    # dsmr_reader — the actual DSMR pair
+                r"^current_power_return$",    # dsmr_reader
+                r"^current_electricity_delivery$",  # (#1189) core dsmr
                 r"^power_grid_export$",       # fronius
                 r"^power_to_grid$",           # growatt_modbus
                 r"^power_flow_to_grid$",      # tibber

@@ -63,6 +63,14 @@
         "state_of_charge"
       ]
     },
+    "dsmr": {
+      "grid_export_power": [
+        "current_electricity_delivery"
+      ],
+      "grid_import_power": [
+        "current_electricity_usage"
+      ]
+    },
     "ef_ble": {
       "battery_charge_limit": [
         "charging_grid_power_limit"

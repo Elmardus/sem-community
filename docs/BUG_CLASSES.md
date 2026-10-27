@@ -253,8 +253,21 @@ while the counters vote. HomeWizard is seeded for its P1 meter only (`PLATFORM_G
 device `model_id` `HWE-P1`): a kWh meter reads the way it was wired, so its counters still decide.
 The sign report names the meter the seed asked (`grid_seed_sensor`). **Still open:** other brands
 that name power by device class alone get the same tier only by adding their key; a home where
-nothing is found is told by one log line, no Repair (#1188); the split-pair search has the same
-English-word gap for a Dutch/German DSMR meter, whose declared keys the lexicon does not map (#1189).
+nothing is found is told by one log line, no Repair (#1188).
+**Instance (#1189) — the split pair:** a Dutch or German DSMR meter (`sensor.electricity_meter_energieverbruik`,
+`…_stromverbrauch`) was found by the English words `power_consumption`/`power_production` only, so the
+grid read 0 W. **Closure:** the lexicon maps core dsmr's own keys `current_electricity_usage` /
+`current_electricity_delivery`; the rebuilt roster carries them, and the declared tier (asked first)
+finds the pair by unique_id / translation_key as `declared`. **Guard:** `tests/test_1189_dsmr_any_language.py`
+(EN/NL/DE names read from HA's own translation files, kW, a control that loses the meter without the
+key); the roles baseline holds the dsmr pair. **Review:** the declared tier now skips a disabled or
+only-restored row (a dead DSMR entry hid the meter that works), a `declared` pair replaces a held name
+guess, and the Config card counts the grid pair SEM reads as in use (no "Use" buttons for it). An
+English DSMR with phase sensors on had its import read from phase L3; the key reads the total. **Still open:** P1 Monitor's keys are common words a
+heat pump also uses, so they need a one-brand rule (#1222); the crawler reads `ram_` in DSMR Reader's
+`telegram_timestamp` as an appliance and drops its pair (#1223); a SlimmeLezer (ESPHome) names its pair
+`power_consumed`/`power_produced`, which no word list holds (#1225); the card saves a split pair one
+half per click, and half a pair reads export as 0 W (#1224).
 **Missing-wiring sibling (#744, @Azlinon, 2026-08-11) — the derivation existed but was never called
 for LOADS.** The keyword gap above is one facet; the sharper one is a source where the whole
 derivation is *absent*. The Energy Dashboard's individual-device UI collects only the kWh energy
@@ -280,7 +293,7 @@ channel; energy/reactive sensors excluded; a power-only 400 W load reads ON end-
 payload; and a brand-named *derived* sensor does NOT make a controlless load controllable). **Sweep
 question:** for every power/energy figure a surface derives from an Energy-Dashboard entity, is the
 companion power sensor *derived* when the ED has no `stat_rate`, or assumed present — and does that
-derivation leak into a *control* decision? Refs #250 #274 #597 #600 #744 #1172.
+derivation leak into a *control* decision? Refs #250 #274 #597 #600 #744 #1172 #1189.
 
 ### 11. Corrected value overwrites a raw display field (paired-figure basis mismatch) — GUARDED
 **Symptom:** two figures shown side by side on a card disagree in a way that reads as a

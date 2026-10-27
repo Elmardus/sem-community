@@ -6,6 +6,7 @@ import math
 import re
 import time
 from collections import deque
+from collections.abc import Mapping
 from typing import Any, Dict, Optional, Tuple
 from dataclasses import dataclass, replace
 
@@ -165,8 +166,11 @@ EV_ACTIVE_CHARGE_FLOOR_W = 500.0
 #     the declared corpus is not proof of absence from a user's entity_ids, and
 #     the corroboration gate makes an idle pattern cost nothing.
 # Real DSMR declares ``current_power_usage``/``current_power_return``
-# (dsmr_reader) or per-phase keys (core dsmr); both now live in the lexicon,
-# which is where a name becomes evidence.
+# (dsmr_reader) and ``current_electricity_usage``/``current_electricity_delivery``
+# (core dsmr, #1189); both pairs live in the lexicon, which is where a name
+# becomes evidence. Core dsmr's entity_ids follow the user's language:
+# ``power_consumption`` is its English name only, and a Dutch or German meter
+# (``energieverbruik``, ``stromverbrauch``) is found by its key alone.
 IMPORT_PATTERNS: tuple[str, ...] = (
     "import_from_grid",       # growatt_server (declared)
     "pac_to_user",            # growatt_server TLX (declared)
@@ -3968,7 +3972,10 @@ class SensorReader:
         """
         if not disc.get("import"):
             return True
-        if new_confidence == "same-device":
+        # (#1189 review) A pair its integration declares on the counters' own
+        # device is as certain as a same-device name match — and the only
+        # answer a Dutch or German DSMR meter gives once it appears late.
+        if new_confidence in ("same-device", "declared"):
             return True
         for side in ("import", "export"):
             eid = disc.get(side)
@@ -4040,6 +4047,8 @@ class SensorReader:
                     continue
                 if _matches(entry, body["keys"], body["exact_only"]) is None:
                     continue
+                if not self._declared_row_readable(entry):
+                    continue
                 # A declared entity on the grid counter's own device outranks
                 # a declared entity elsewhere — same brand, two inverters.
                 same_device = bool(
@@ -4058,6 +4067,19 @@ class SensorReader:
                 exp[1] if exp else None,
                 on_grid_device)
 
+    def _declared_row_readable(self, entry) -> bool:
+        """(#1189 review) A row SEM can never read is not a meter: a disabled
+        entity, or one HA only RESTORED because its integration did not set
+        it up (a disabled or failing config entry). Taken as declared, it
+        ends the search before the name tier can find the meter that works.
+        A row with no state yet still counts — at a cold start the registry
+        answers before the meter has loaded."""
+        if getattr(entry, "disabled_by", None) is not None:
+            return False
+        live = self.hass.states.get(entry.entity_id)
+        attrs = getattr(live, "attributes", None)
+        return not (isinstance(attrs, Mapping) and attrs.get("restored") is True)
+
     def _discover_split_grid_power(self, ed) -> tuple[Optional[str], Optional[str], Optional[str]]:
         """Discover separate import/export power sensors for setups without combined grid power.
 
@@ -4065,6 +4087,7 @@ class SensorReader:
         - Growatt: *_import_from_grid / *_export_to_grid
         - Growatt TLX: *_pac_to_user* / *_pac_to_grid*
         - DSMR/P1 (NL/BE): *_power_consumption / *_power_production
+          (English names; tier 1 finds core dsmr in any language, #1189)
         - E3DC: *_consumption_from_grid / *_export_to_grid
         - GivEnergy: *_import_power / *_export_power
         - Senec: *_grid_imported_power / *_grid_exported_power
