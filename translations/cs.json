@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Nastavení správy solární energie",
-        "description": "SEM zjistil následující senzory z vašeho ovládacího panelu Energie v Home Assistant:\n\n{summary}\n\nKliknutím na **Odeslat** pokračujte. Už jen jeden krok. Nabíječky EV, tepelné čerpadlo, tarif a všechna ostatní nastavení se konfigurují později na nové kartě **Konfigurace** na panelu SEM — teď je nemusíte řešit.",
-        "data": {
-          "observer_mode": "Testovací režim (pouze čtení — bez ovládání hardware)"
-        },
-        "data_description": {
-          "observer_mode": "Pro běžnou instalaci ponechte VYPNUTO. Zapněte pouze na testovacím/přípravném Home Assistantu, který zrcadlí produkční instanci, aby SEM nikdy neposílal příkazy do KEBA, měniče ani žádných spínačů."
+        "title": "SEM našel váš systém",
+        "description": "Toto jsou hodnoty právě teď:\n\n- Slunce: {solar}\n- Síť: {grid}\n- Baterie: {battery}\n- Dům spotřebovává: {home}\n\nPocházejí ze stejných senzorů jako váš panel Energie. Stiskněte **Odeslat**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Vybrat senzory sám",
+            "description": "Jen pokud některá hodnota výše vypadá špatně.",
+            "data": {
+              "solar_production_sensor": "Výkon FVE",
+              "grid_power_sensor": "Výkon sítě",
+              "battery_power_sensor": "Výkon baterie",
+              "battery_soc_sensor": "Nabití baterie %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Stav nabití v procentech — čtou ho čtyři zóny baterie SEM.",
           "grid_import_power_entity": "Jen pokud váš elektroměr nemá jediný senzor se znaménkem: strana odběru, vždy kladná. Vyplňte obě tyto položky, nebo žádnou.",
           "grid_export_power_entity": "Strana exportu, vždy kladná. SEM počítá export minus import, takže se žádný směr nemusí odhadovat."
+        }
+      },
+      "check_grid": {
+        "title": "Jedna otázka",
+        "description": "{why}\n\nVáš síťový elektroměr právě ukazuje **{grid}**. Slunce: {solar}. Baterie: {battery}.",
+        "data": {
+          "grid_answer": "Co teď dělá váš dům?"
+        },
+        "data_description": {
+          "grid_answer": "Podívejte se na elektroměr nebo do energetické aplikace. \"Nevím\" je v pořádku: SEM se to naučí během několika dní."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Vybrat senzory sám",
+            "description": "Jen pokud některá hodnota výše vypadá špatně.",
+            "data": {
+              "solar_production_sensor": "Výkon FVE",
+              "grid_power_sensor": "Výkon sítě",
+              "battery_power_sensor": "Výkon baterie",
+              "battery_soc_sensor": "Nabití baterie %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Vyberte síťový elektroměr",
+        "description": "SEM nenašel senzor výkonu sítě. Bez něj SEM neví, co nakupujete nebo dodáváte.\n\nVyberte ho níže, nebo stiskněte **Odeslat** a přeskočte. Můžete ho nastavit později na kartě Konfigurace.\n\nSlunce: {solar}. Baterie: {battery}.",
+        "data": {
+          "grid_power_sensor": "Výkon sítě"
+        },
+        "data_description": {
+          "grid_power_sensor": "Okamžitý výkon ve wattech, ne denní součet."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Vybrat senzory sám",
+            "description": "Jen pokud některá hodnota výše vypadá špatně.",
+            "data": {
+              "solar_production_sensor": "Výkon FVE",
+              "grid_power_sensor": "Výkon sítě",
+              "battery_power_sensor": "Výkon baterie",
+              "battery_soc_sensor": "Nabití baterie %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,26 @@
         "per_kwh": "Za kWh",
         "tiered": "Pásma podle kWh za rok",
         "fixed_monthly": "Pevně měsíčně"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Odebírám ze sítě",
+        "sending": "Dodávám do sítě",
+        "keep": "Toto je můj síťový elektroměr",
+        "other": "Použít druhý elektroměr",
+        "unknown": "Nevím"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "buying": "odběr",
+        "sending": "dodávka",
+        "charging": "nabíjí",
+        "discharging": "vybíjí",
+        "none": "nenalezeno",
+        "why_guessed": "Váš panel Energie nemá senzor výkonu sítě, takže SEM jeden odhadl.",
+        "why_home_negative": "S těmito hodnotami by dům spotřeboval méně než nic, takže jedno znaménko je špatně."
       }
     }
   }

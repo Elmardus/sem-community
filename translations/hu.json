@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Napenergia-kezelés beállítása",
-        "description": "SEM az alábbi szenzorokat észlelte a Home Assistant Energia irányítópultján:\n\n{summary}\n\nKattintson a **Küldés** gombra a folytatáshoz. Már csak egy lépés. Az EV-töltők, hőszivattyú, tarifa és minden más beállítás később az SEM irányítópult új **Konfiguráció** fülén állítható be — most nem kell ezekkel foglalkozni.",
-        "data": {
-          "observer_mode": "Teszt mód (csak olvasás — nem vezérli a hardvert)"
-        },
-        "data_description": {
-          "observer_mode": "Normál telepítésnél hagyja KIKAPCSOLVA. Csak olyan teszt/staging Home Assistanton kapcsolja BE, amely egy éles példányt tükröz, így a SEM soha nem küld parancsot a KEBA-nak, az inverternek vagy bármely kapcsolónak."
+        "title": "A SEM megtalálta a rendszeredet",
+        "description": "Ezek az értékek most:\n\n- Napelem: {solar}\n- Hálózat: {grid}\n- Akkumulátor: {battery}\n- A ház fogyaszt: {home}\n\nUgyanazokból az érzékelőkből jönnek, mint az Energia irányítópultod. Nyomd meg a **Küldés** gombot.",
+        "sections": {
+          "own_sensors": {
+            "name": "Érzékelők kiválasztása magam",
+            "description": "Csak ha egy fenti érték hibásnak tűnik.",
+            "data": {
+              "solar_production_sensor": "Napelem teljesítmény",
+              "grid_power_sensor": "Hálózati teljesítmény",
+              "battery_power_sensor": "Akkumulátor teljesítmény",
+              "battery_soc_sensor": "Akkumulátor töltöttség %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Töltöttségi állapot százalékban — a SEM négy akkumulátor-zónája ezt olvassa.",
           "grid_import_power_entity": "Csak akkor, ha a mérőjének nincs egyetlen előjeles szenzora: az import oldal, mindig pozitív. Vagy mindkettőt töltse ki, vagy egyiket se.",
           "grid_export_power_entity": "Az export oldal, mindig pozitív. A SEM az exportból kivonja az importot, így nem kell kitalálni az irányt."
+        }
+      },
+      "check_grid": {
+        "title": "Egy kérdés",
+        "description": "{why}\n\nA hálózati mérőd most ezt mutatja: **{grid}**. Napelem: {solar}. Akkumulátor: {battery}.",
+        "data": {
+          "grid_answer": "Mit csinál most a házad?"
+        },
+        "data_description": {
+          "grid_answer": "Nézd meg a mérődet vagy az energia appodat. A \"Nem tudom\" is jó: a SEM a következő napokban megtanulja."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Érzékelők kiválasztása magam",
+            "description": "Csak ha egy fenti érték hibásnak tűnik.",
+            "data": {
+              "solar_production_sensor": "Napelem teljesítmény",
+              "grid_power_sensor": "Hálózati teljesítmény",
+              "battery_power_sensor": "Akkumulátor teljesítmény",
+              "battery_soc_sensor": "Akkumulátor töltöttség %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Válaszd ki a hálózati mérőt",
+        "description": "A SEM nem talált hálózati teljesítmény érzékelőt. Nélküle a SEM nem tudja, mit veszel vagy adsz vissza.\n\nVálaszd ki lent, vagy nyomd meg a **Küldés** gombot a kihagyáshoz. Később a Konfiguráció fülön is beállíthatod.\n\nNapelem: {solar}. Akkumulátor: {battery}.",
+        "data": {
+          "grid_power_sensor": "Hálózati teljesítmény"
+        },
+        "data_description": {
+          "grid_power_sensor": "Pillanatnyi teljesítmény wattban, nem napi összeg."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Érzékelők kiválasztása magam",
+            "description": "Csak ha egy fenti érték hibásnak tűnik.",
+            "data": {
+              "solar_production_sensor": "Napelem teljesítmény",
+              "grid_power_sensor": "Hálózati teljesítmény",
+              "battery_power_sensor": "Akkumulátor teljesítmény",
+              "battery_soc_sensor": "Akkumulátor töltöttség %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,26 @@
         "per_kwh": "kWh-nként",
         "tiered": "Sávok éves kWh szerint",
         "fixed_monthly": "Fix havi"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Vételezek a hálózatból",
+        "sending": "Betáplálok a hálózatba",
+        "keep": "Ez az én hálózati mérőm",
+        "other": "A másik mérő használata",
+        "unknown": "Nem tudom"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "buying": "vételezés",
+        "sending": "betáplálás",
+        "charging": "töltődik",
+        "discharging": "merül",
+        "none": "nem található",
+        "why_guessed": "Az Energia irányítópultodon nincs hálózati teljesítmény érzékelő, ezért a SEM kitalált egyet.",
+        "why_home_negative": "Ezekkel az értékekkel a ház kevesebbet fogyasztana a semminél, tehát egy előjel hibás."
       }
     }
   }

@@ -11,7 +11,7 @@ from homeassistant.core import callback
 
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.data_entry_flow import FlowResult, section
 
 from .utils.own_entity import is_sem_entity  # (#1103)
 from .utils.device_names import (  # (#1053)
@@ -70,7 +70,10 @@ from .coordinator.install_modules import has_managed_charger
 from .coordinator.battery_controls import captured_battery_control_slugs
 from .ha_energy_reader import (
     battery_units, read_energy_dashboard_config, EnergyDashboardConfig,
-    unit_energy_counters,
+)
+from .setup_check import (
+    ASK_GUESSED, ASK_HOME_NEGATIVE, ASK_MISSING, QUIET_W, answer_updates,
+    build_setup_check, fmt_w,
 )
 from .hardware_detection import (
     CHARGER_ENTITY_KEYS,
@@ -341,6 +344,32 @@ _CHARGER_ENTITY_KEYS = CHARGER_ENTITY_KEYS
 def _charger_entities(charger: Any) -> set[str]:
     """The entities a charger config points at — its fingerprint."""
     return charger_entity_ids(charger)
+
+
+_SETUP_WORDS_EN = {
+    "buying": "buying", "sending": "sending",
+    "charging": "charging", "discharging": "giving",
+    "none": "not found",
+    "why_guessed": "Your Energy dashboard has no grid power sensor, so SEM guessed one.",
+    "why_home_negative": "With these numbers your home would use less than nothing, so one sign is wrong.",
+}
+
+
+async def _setup_words(hass) -> dict[str, str]:
+    """(#1213) The words inside the setup numbers, in the user's language.
+    Kept as selector options because a form description can only hold
+    placeholders, and HA translates selector options for us."""
+    words = dict(_SETUP_WORDS_EN)
+    try:
+        from homeassistant.helpers.translation import async_get_translations
+        got = await async_get_translations(
+            hass, hass.config.language, "selector", {DOMAIN})
+        pre = f"component.{DOMAIN}.selector.setup_words.options."
+        for key in words:
+            words[key] = got.get(pre + key) or words[key]
+    except Exception:  # noqa: BLE001 — English beats an empty screen
+        pass
+    return words
 
 
 def _power_sensor_selector(hass) -> selector.EntitySelector:
@@ -869,131 +898,193 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 or not self._energy_dashboard_config.is_minimally_configured()):
             return await self.async_step_sources()
 
-        # Energy Dashboard is configured - show summary and continue.
-        # Slim install (v1.7.1-beta.11+, #442): route directly to
-        # ``async_step_hardware`` and skip the EV charger step entirely.
-        # The EV step's fields stay available in the OptionsFlow for
-        # power users and via the new dashboard Configuration tab for
-        # everyone else — fresh installs no longer need to lie about
-        # their EV setup just to get past the install.
+        # (#1213) Energy Dashboard found. Show what SEM reads, as watts, and
+        # ask about the grid only when SEM is not sure of it. A new user
+        # decides here whether SEM is for them, so the common case stays one
+        # look and one click, and no sensor name shows unless asked for.
         if user_input is not None:
-            # Store Energy Dashboard sensor config + the observer_mode toggle
-            self._data.update(self._energy_dashboard_config.to_dict())
-            self._data["observer_mode"] = user_input.get(
-                "observer_mode", DEFAULT_OBSERVER_MODE)
-            # (#777) Record ALL persisted-switch defaults explicitly at
-            # install: a key present in entry data means "this install
-            # chose", so a dead install's restore-store ghost can never
-            # speak for a fresh one. Only true legacy upgrades (no key
-            # anywhere) keep the restore-state fallback.
-            self._data["vacation_mode"] = False
-            self._data["energy_plan_actuation"] = True
-            return await self.async_step_hardware()
+            return await self._finish_dashboard_sources(
+                self._own_sensor_picks(user_input))
 
-        # Show Energy Dashboard summary — list every sensor SEM picked up so the
-        # user can verify the auto-detection at a glance.
-        cfg = self._energy_dashboard_config
-        summary_lines: list[str] = []
+        check = self._build_setup_check()
+        if check.ask == ASK_MISSING:
+            return await self.async_step_pick_grid()
+        if check.ask is not None:
+            return await self.async_step_check_grid()
 
-        def _add(category: str, fields: list[tuple[str, str | None]]) -> None:
-            present = [(label, eid) for label, eid in fields if eid]
-            if not present:
-                return
-            summary_lines.append(f"**{category}**")
-            for label, eid in present:
-                summary_lines.append(f"  • {label}: `{eid}`")
-            summary_lines.append("")
-
-        if cfg.has_solar:
-            if len(cfg.solar_power_list) > 1:
-                fields = [(f"Power ({i+1})", p) for i, p in enumerate(cfg.solar_power_list)]
-                fields += [(f"Energy ({i+1})", e) for i, e in enumerate(cfg.solar_energy_list)]
-                _add(f"Solar ({len(cfg.solar_power_list)} inverters)", fields)
-            else:
-                _add("Solar", [
-                    ("Power", cfg.solar_power),
-                    ("Energy", cfg.solar_energy),
-                ])
-        if cfg.has_grid:
-            if len(cfg.grid_import_energy_list) > 1:
-                fields = [(f"Import energy ({i+1})", e) for i, e in enumerate(cfg.grid_import_energy_list)]
-                fields += [(f"Export energy ({i+1})", e) for i, e in enumerate(cfg.grid_export_energy_list)]
-                fields.insert(0, ("Power", cfg.grid_import_power))
-                _add(f"Grid ({len(cfg.grid_import_energy_list)} tariffs)", fields)
-            else:
-                _add("Grid", [
-                    ("Power", cfg.grid_import_power),
-                    ("Import energy", cfg.grid_import_energy),
-                    ("Export energy", cfg.grid_export_energy),
-                ])
-
-        def _unowned(owned: set) -> list[tuple[str, str | None]]:
-            # (#1193) counters of a battery with no power sensor
-            return ([("Charge energy (no power sensor)", e)
-                     for e in cfg.battery_charge_energy_list if e not in owned]
-                    + [("Discharge energy (no power sensor)", e)
-                       for e in cfg.battery_discharge_energy_list if e not in owned])
-
-        if cfg.has_battery:
-            # (#1171) a battery is a combined sensor or a two-sensor pair
-            n_units = len(battery_units(cfg))
-            if n_units > 1:
-                fields = [(f"Power ({i+1})", p) for i, p in enumerate(cfg.battery_power_list)]
-                for k, (p_from, p_to) in enumerate(cfg.battery_power_pairs):
-                    n = len(cfg.battery_power_list) + k + 1
-                    fields += [(f"Charge power ({n})", p_to),
-                               (f"Discharge power ({n})", p_from)]
-                # (#1193) each battery's own counters under its number; the
-                # counter lists also hold a battery with no power sensor
-                owned: set = set()
-                for n, unit in enumerate(battery_units(cfg), start=1):
-                    charge, discharge = unit_energy_counters(cfg, unit) or (None, None)
-                    owned.update((charge, discharge))
-                    fields += [(f"Charge energy ({n})", charge),
-                               (f"Discharge energy ({n})", discharge)]
-                _add(f"Battery ({n_units} units)", fields + _unowned(owned))
-            else:
-                own = (unit_energy_counters(cfg, battery_units(cfg)[0])
-                       if n_units == 1 else None)
-                charge, discharge = own or (cfg.battery_charge_energy,
-                                            cfg.battery_discharge_energy)
-                _add("Battery", [
-                    ("Power", cfg.battery_power),
-                    ("Charge power", cfg.battery_power_to),
-                    ("Discharge power", cfg.battery_power_from),
-                    ("Charge energy", charge),
-                    ("Discharge energy", discharge),
-                    # with no battery power sensor at all, only the first
-                    *(_unowned({charge, discharge}) if n_units else []),
-                ])
-        if cfg.has_ev:
-            _add("EV", [
-                ("Power", cfg.ev_power),
-                ("Energy", cfg.ev_energy),
-            ])
-
-        # Trim trailing blank line for tidy rendering
-        if summary_lines and summary_lines[-1] == "":
-            summary_lines.pop()
-
+        p = await self._setup_placeholders()
         return self.async_show_form(
             step_id="user",
+            data_schema=vol.Schema(self._own_sensors_section()),
+            description_placeholders={
+                "solar": p["solar"], "grid": p["grid"], "battery": p["battery"],
+                "home": p["home"], "why": p["why"]},
+            errors=errors,
+        )
+
+    async def async_step_check_grid(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """(#1213) One question: is the house buying or sending right now?"""
+        check = self._check()
+        if user_input is not None:
+            updates = answer_updates(check, user_input.get("grid_answer"))
+            updates.update(self._own_sensor_picks(user_input))
+            return await self._finish_dashboard_sources(updates)
+        p = await self._setup_placeholders()
+        return self.async_show_form(
+            step_id="check_grid",
             data_schema=vol.Schema({
-                # Single safety toggle, defaulted ON: a new install shows
-                # what it WOULD do and commands nothing until its owner
-                # turns this off. Reads the constant rather than repeating
-                # it — the literal here and the constant elsewhere are how
-                # the two drifted before.
-                vol.Optional(
-                    "observer_mode",
-                    default=DEFAULT_OBSERVER_MODE,
-                ): selector.BooleanSelector(),
+                vol.Required("grid_answer"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=list(check.answers()),
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="setup_grid_answer",
+                    )),
+                **self._own_sensors_section(),
             }),
             description_placeholders={
-                "summary": "\n".join(summary_lines)
-            },
-            errors=errors
+                "solar": p["solar"], "grid": p["grid"], "battery": p["battery"],
+                "home": p["home"], "why": p["why"]},
         )
+
+    async def async_step_pick_grid(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """(#1213) No grid power sensor found: offer a picker, never block."""
+        check = self._check()
+        if user_input is not None:
+            picked = (user_input.get("grid_power_sensor") or "").strip()
+            updates = {"grid_power_sensor": picked} if picked else {}
+            updates.update(self._own_sensor_picks(user_input))
+            return await self._finish_dashboard_sources(updates)
+        hint = ({"suggested_value": check.other_grid}
+                if check.other_grid else {})
+        p = await self._setup_placeholders()
+        return self.async_show_form(
+            step_id="pick_grid",
+            data_schema=vol.Schema({
+                vol.Optional("grid_power_sensor", description=hint):
+                    _power_sensor_selector(getattr(self, "hass", None)),
+                **self._own_sensors_section(grid=False),
+            }),
+            description_placeholders={
+                "solar": p["solar"], "grid": p["grid"], "battery": p["battery"],
+                "home": p["home"], "why": p["why"]},
+        )
+
+    def _build_setup_check(self):
+        try:
+            from .hardware_detection import propose_energy_sources
+            proposals = propose_energy_sources(self.hass)
+        except Exception:  # noqa: BLE001 — a proposal never breaks an install
+            proposals = {}
+        self._setup_check = build_setup_check(
+            self.hass, self._energy_dashboard_config, proposals)
+        return self._setup_check
+
+    def _check(self):
+        """The check this flow showed; built now if a submit came first."""
+        return getattr(self, "_setup_check", None) or self._build_setup_check()
+
+    def _found_sources(self) -> dict[str, str | None]:
+        """The sensor each picker starts from: what SEM reads today."""
+        cfg = self._energy_dashboard_config
+        return {
+            "solar_production_sensor": (cfg.solar_power
+                                        if self._one_solar() else None),
+            "grid_power_sensor": self._check().grid_entity,
+            "battery_power_sensor": (cfg.battery_power
+                                     if self._one_combined_battery() else None),
+            "battery_soc_sensor": cfg.battery_soc,
+        }
+
+    # A home with two inverters or two batteries sums them, and one picker
+    # cannot replace a sum, so it is not offered there.
+    def _one_solar(self) -> bool:
+        return len(self._energy_dashboard_config.solar_power_list or []) <= 1
+
+    def _one_combined_battery(self) -> bool:
+        cfg = self._energy_dashboard_config
+        return (len(battery_units(cfg)) <= 1
+                and not cfg.battery_power_pairs)
+
+    def _own_sensors_section(self, grid: bool = True) -> dict:
+        """The pickers, closed: most people never open them."""
+        found = self._found_sources()
+        fields: dict = {}
+        for key in ("solar_production_sensor", "grid_power_sensor",
+                    "battery_power_sensor", "battery_soc_sensor"):
+            if key == "grid_power_sensor" and not grid:
+                continue
+            if key == "solar_production_sensor" and not self._one_solar():
+                continue
+            if key == "battery_power_sensor" and not self._one_combined_battery():
+                continue
+            hint = {"suggested_value": found[key]} if found.get(key) else {}
+            if key == "battery_soc_sensor":
+                pick = selector.EntitySelector(selector.EntitySelectorConfig(
+                    domain="sensor", device_class="battery"))
+            else:
+                pick = _power_sensor_selector(getattr(self, "hass", None))
+            fields[vol.Optional(key, description=hint)] = pick
+        return {vol.Optional("own_sensors"): section(
+            vol.Schema(fields), {"collapsed": True})}
+
+    def _own_sensor_picks(self, user_input: dict[str, Any]) -> dict[str, Any]:
+        """Only a pick that differs from what SEM found is written: a
+        prefilled picker sent back unchanged must not pin anything."""
+        found = self._found_sources()
+        picks = user_input.get("own_sensors") or {}
+        out: dict[str, Any] = {}
+        for key, value in picks.items():
+            value = (value or "").strip() if isinstance(value, str) else value
+            if value and value != found.get(key):
+                out[key] = value
+        return out
+
+    async def _setup_placeholders(self) -> dict[str, str]:
+        check = self._check()
+        words = await _setup_words(self.hass)
+        if check.grid_w is None:
+            grid = words["none"]
+        elif check.grid_from == "dashboard" and not check.grid_is_quiet:
+            grid = f"{words['buying' if check.grid_w > 0 else 'sending']} {fmt_w(check.grid_w)}"
+        else:
+            grid = fmt_w(check.grid_w)
+        if check.battery_w is None and check.soc is None:
+            battery = words["none"]
+        else:
+            battery = ""
+            if check.battery_w is not None:
+                battery = (fmt_w(check.battery_w) if abs(check.battery_w) < QUIET_W
+                           else f"{words['discharging' if check.battery_w > 0 else 'charging']} {fmt_w(check.battery_w)}")
+            if check.soc is not None:
+                battery = f"{battery}, {round(check.soc)} %" if battery else f"{round(check.soc)} %"
+        why = {ASK_GUESSED: words["why_guessed"],
+               ASK_HOME_NEGATIVE: words["why_home_negative"]}.get(check.ask, "")
+        return {
+            "solar": fmt_w(check.solar_w) if check.solar_w is not None else words["none"],
+            "grid": grid,
+            "battery": battery,
+            "home": fmt_w(check.home_w) if check.home_w is not None else "?",
+            "why": why,
+        }
+
+    async def _finish_dashboard_sources(self, updates: dict[str, Any]) -> FlowResult:
+        self._data.update(self._energy_dashboard_config.to_dict())
+        self._data.update(updates)
+        # (#1213) Watch-only is the default and is no longer asked here:
+        # one switch fewer on the screen that decides if a user stays.
+        self._data["observer_mode"] = DEFAULT_OBSERVER_MODE
+        # (#777) Record ALL persisted-switch defaults explicitly at
+        # install: a key present in entry data means "this install
+        # chose", so a dead install's restore-store ghost can never
+        # speak for a fresh one. Only true legacy upgrades (no key
+        # anywhere) keep the restore-state fallback.
+        self._data["vacation_mode"] = False
+        self._data["energy_plan_actuation"] = True
+        return await self.async_step_hardware()
 
     async def async_step_ev_charger(
         self, user_input: dict[str, Any] | None = None

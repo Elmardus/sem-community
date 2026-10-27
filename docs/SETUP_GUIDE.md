@@ -198,20 +198,39 @@ The config flow has three steps. You can change any setting later via the
 
 ![SEM integration detail page](images/sem_integration_detail.png)
 
-### Step 1: Energy Dashboard Detection
+### Step 1: SEM found your system
 
 ![Step 1 — Energy Dashboard detection](screenshots/setup-flow/01-step1-energy-dashboard.png)
 
-SEM scans your Energy Dashboard and auto-detects all configured sensors:
-solar production, grid import/export, battery charge/discharge, and EV charger.
+SEM reads your Energy Dashboard and shows what it finds as live values:
+solar, grid (buying or sending), battery (charging or giving, and its
+charge), and what your home uses. When they look right, press **Submit**.
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| **Observer mode** | **On** | A new install observes first: SEM reads your system, builds the dashboard, and publishes the decisions it *would* make — without sending a single command to your hardware. Look at those decisions, and when they match what you'd want, turn observer mode off (`switch.sem_observer_mode`) to let SEM act. Leave it on permanently for test rigs, secondary HA instances that mirror a production one, or monitoring-only setups. |
+If a value looks wrong, open **Choose sensors myself** and pick another
+sensor. Only a sensor you change is saved; the rest keep following your
+Energy Dashboard.
 
-> **Tip:** If a sensor you expect is missing from the detection summary,
-> check your Energy Dashboard (**Settings > Dashboards > Energy**) and ensure
-> that sensor type is assigned there first.
+**One question (#1213).** When SEM is not sure about your grid meter, it
+asks once: *what is your house doing right now?* Answer **Buying from the
+grid**, **Sending to the grid**, **Use the other meter**, or **I don't
+know**. SEM asks when:
+
+- the Energy Dashboard has no grid power sensor and SEM guessed one, or
+- with these numbers your home would use less than nothing, so a sign is wrong.
+
+"I don't know" is fine: SEM then learns the direction from your energy
+counters over the next days. When SEM finds no grid power sensor at all, it
+shows a picker instead; you may skip it and set it later.
+
+A new install always starts in **observer mode**: SEM reads your system,
+builds the dashboard and shows the decisions it *would* make, without
+sending a single command to your hardware. Turn it off on the
+**Configuration** tab (`switch.sem_observer_mode`) when those decisions
+match what you want.
+
+> **Tip:** After setup, the **Configuration** tab → **Sensor sources** shows
+> the same live values, with one tap to turn a wrong grid or battery
+> direction around.
 
 ### Step 2: EV Charger (optional)
 

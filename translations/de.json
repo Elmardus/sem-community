@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Solar Energy Management Einrichtung",
-        "description": "SEM hat die folgenden Sensoren aus Ihrem Home Assistant Energie-Dashboard erkannt:\n\n{summary}\n\nKlicken Sie auf **Übernehmen**, um fortzufahren. Nur noch ein Schritt. EV-Ladegeräte, Wärmepumpe, Tarif und alle anderen Einstellungen werden später im neuen **Konfiguration**-Tab des SEM-Dashboards eingerichtet — Sie müssen sie jetzt nicht angeben.",
-        "data": {
-          "observer_mode": "Testmodus (nur lesen — keine Hardwaresteuerung)"
-        },
-        "data_description": {
-          "observer_mode": "Für normale Installation AUS lassen. Nur auf Test-/Staging-HA aktivieren."
+        "title": "SEM hat deine Anlage gefunden",
+        "description": "Das sind die Werte gerade jetzt:\n\n- Solar: {solar}\n- Netz: {grid}\n- Batterie: {battery}\n- Haus verbraucht: {home}\n\nSie kommen von denselben Sensoren wie dein Energie-Dashboard. Drücke **Senden**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Sensoren selbst wählen",
+            "description": "Nur wenn ein Wert oben falsch aussieht.",
+            "data": {
+              "solar_production_sensor": "Solarleistung",
+              "grid_power_sensor": "Netzleistung",
+              "battery_power_sensor": "Batterieleistung",
+              "battery_soc_sensor": "Batterie-Ladestand %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Ladestand in Prozent. SEM's vier Batteriezonen lesen ihn.",
           "grid_import_power_entity": "Nur wenn dein Zähler keinen einzelnen vorzeichenbehafteten Sensor hat: die Bezugsseite, immer positiv. Beide ausfüllen oder keinen.",
           "grid_export_power_entity": "Die Einspeiseseite, immer positiv. SEM rechnet Einspeisung minus Bezug — es muss keine Richtung geraten werden."
+        }
+      },
+      "check_grid": {
+        "title": "Eine Frage",
+        "description": "{why}\n\nGerade zeigt dein Netzzähler **{grid}**. Solar: {solar}. Batterie: {battery}.",
+        "data": {
+          "grid_answer": "Was macht dein Haus gerade?"
+        },
+        "data_description": {
+          "grid_answer": "Schau auf deinen Zähler oder deine Energie-App. \"Weiß ich nicht\" ist in Ordnung: SEM lernt es dann in den nächsten Tagen."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Sensoren selbst wählen",
+            "description": "Nur wenn ein Wert oben falsch aussieht.",
+            "data": {
+              "solar_production_sensor": "Solarleistung",
+              "grid_power_sensor": "Netzleistung",
+              "battery_power_sensor": "Batterieleistung",
+              "battery_soc_sensor": "Batterie-Ladestand %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Wähle deinen Netzzähler",
+        "description": "SEM hat keinen Sensor für die Netzleistung gefunden. Ohne ihn weiß SEM nicht, was du kaufst oder einspeist.\n\nWähle ihn unten oder drücke **Senden**, um zu überspringen. Du kannst ihn später im Tab Konfiguration setzen.\n\nSolar: {solar}. Batterie: {battery}.",
+        "data": {
+          "grid_power_sensor": "Netzleistung"
+        },
+        "data_description": {
+          "grid_power_sensor": "Aktuelle Leistung in Watt, kein Tageswert."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Sensoren selbst wählen",
+            "description": "Nur wenn ein Wert oben falsch aussieht.",
+            "data": {
+              "solar_production_sensor": "Solarleistung",
+              "grid_power_sensor": "Netzleistung",
+              "battery_power_sensor": "Batterieleistung",
+              "battery_soc_sensor": "Batterie-Ladestand %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,26 @@
         "per_kwh": "Pro kWh",
         "tiered": "Stufen nach kWh pro Jahr",
         "fixed_monthly": "Fest pro Monat"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Strom aus dem Netz beziehen",
+        "sending": "Strom ins Netz einspeisen",
+        "keep": "Das ist mein Netzzähler",
+        "other": "Den anderen Zähler nehmen",
+        "unknown": "Weiß ich nicht"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "buying": "Bezug",
+        "sending": "Einspeisung",
+        "charging": "lädt",
+        "discharging": "entlädt",
+        "none": "nicht gefunden",
+        "why_guessed": "Dein Energie-Dashboard hat keinen Sensor für die Netzleistung, also hat SEM einen geraten.",
+        "why_home_negative": "Mit diesen Werten würde dein Haus weniger als nichts verbrauchen, also ist ein Vorzeichen falsch."
       }
     }
   }

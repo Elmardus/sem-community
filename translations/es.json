@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configuración de Solar Energy Management",
-        "description": "SEM ha detectado los siguientes sensores en el panel Energía de Home Assistant:\n\n{summary}\n\nHaga clic en **Enviar** para continuar. Solo un paso más. Los cargadores VE, la bomba de calor, la tarifa y todos los demás ajustes se configuran después en la nueva pestaña **Configuración** del panel SEM — no es necesario configurarlos ahora.",
-        "data": {
-          "observer_mode": "Modo de prueba (solo lectura — no controla el hardware)"
-        },
-        "data_description": {
-          "observer_mode": "Déjelo DESACTIVADO para una instalación normal. Actívelo solo en un Home Assistant de prueba o preproducción que replique una instancia en producción, para que SEM nunca envíe órdenes al KEBA, al inversor ni a ningún interruptor."
+        "title": "SEM encontró tu instalación",
+        "description": "Estos son los valores ahora mismo:\n\n- Solar: {solar}\n- Red: {grid}\n- Batería: {battery}\n- La casa consume: {home}\n\nVienen de los mismos sensores que tu panel de Energía. Pulsa **Enviar**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Elegir los sensores yo mismo",
+            "description": "Solo si un valor de arriba parece incorrecto.",
+            "data": {
+              "solar_production_sensor": "Potencia solar",
+              "grid_power_sensor": "Potencia de red",
+              "battery_power_sensor": "Potencia de batería",
+              "battery_soc_sensor": "Carga de batería %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Estado de carga en porcentaje — lo leen las cuatro zonas de batería de SEM.",
           "grid_import_power_entity": "Solo si su medidor no tiene un único sensor con signo: el lado de importación, siempre positivo. Rellene ambos o ninguno.",
           "grid_export_power_entity": "El lado de exportación, siempre positivo. SEM calcula exportación menos importación, así que no hay que adivinar ninguna dirección."
+        }
+      },
+      "check_grid": {
+        "title": "Una pregunta",
+        "description": "{why}\n\nAhora mismo tu contador de red muestra **{grid}**. Solar: {solar}. Batería: {battery}.",
+        "data": {
+          "grid_answer": "¿Qué está haciendo tu casa ahora?"
+        },
+        "data_description": {
+          "grid_answer": "Mira tu contador o tu app de energía. \"No lo sé\" está bien: SEM lo aprende en los próximos días."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Elegir los sensores yo mismo",
+            "description": "Solo si un valor de arriba parece incorrecto.",
+            "data": {
+              "solar_production_sensor": "Potencia solar",
+              "grid_power_sensor": "Potencia de red",
+              "battery_power_sensor": "Potencia de batería",
+              "battery_soc_sensor": "Carga de batería %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Elige tu contador de red",
+        "description": "SEM no encontró un sensor de potencia de red. Sin él, SEM no sabe lo que compras o viertes.\n\nElígelo abajo o pulsa **Enviar** para saltar. Puedes ajustarlo más tarde en la pestaña Configuración.\n\nSolar: {solar}. Batería: {battery}.",
+        "data": {
+          "grid_power_sensor": "Potencia de red"
+        },
+        "data_description": {
+          "grid_power_sensor": "Potencia actual en vatios, no un total diario."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Elegir los sensores yo mismo",
+            "description": "Solo si un valor de arriba parece incorrecto.",
+            "data": {
+              "solar_production_sensor": "Potencia solar",
+              "grid_power_sensor": "Potencia de red",
+              "battery_power_sensor": "Potencia de batería",
+              "battery_soc_sensor": "Carga de batería %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,26 @@
         "per_kwh": "Por kWh",
         "tiered": "Tramos por kWh al año",
         "fixed_monthly": "Fijo al mes"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Compro de la red",
+        "sending": "Vierto a la red",
+        "keep": "Este es mi contador de red",
+        "other": "Usar el otro contador",
+        "unknown": "No lo sé"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "buying": "compra",
+        "sending": "vertido",
+        "charging": "cargando",
+        "discharging": "descargando",
+        "none": "no encontrado",
+        "why_guessed": "Tu panel de Energía no tiene sensor de potencia de red, así que SEM adivinó uno.",
+        "why_home_negative": "Con estos valores tu casa consumiría menos que nada, así que un signo está mal."
       }
     }
   }

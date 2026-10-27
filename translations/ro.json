@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configurare gestionare energie solară",
-        "description": "SEM a detectat următorii senzori din tabloul de bord Energie din Home Assistant:\n\n{summary}\n\nApăsați **Trimite** pentru a continua. Mai este un singur pas. Încărcătoarele VE, pompa de căldură, tariful și toate celelalte setări se configurează mai târziu în noua filă **Configurare** din tabloul SEM — nu trebuie să le tratați acum.",
-        "data": {
-          "observer_mode": "Mod test (doar citire — fără control hardware)"
-        },
-        "data_description": {
-          "observer_mode": "Lăsați OPRIT pentru o instalare normală. Activați-l doar pe un Home Assistant de test/staging care oglindește o instanță de producție, astfel încât SEM să nu trimită niciodată comenzi către KEBA, invertor sau vreun comutator."
+        "title": "SEM a găsit sistemul tău",
+        "description": "Acestea sunt valorile acum:\n\n- Solar: {solar}\n- Rețea: {grid}\n- Baterie: {battery}\n- Casa consumă: {home}\n\nVin de la aceiași senzori ca panoul tău Energie. Apasă **Trimite**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Aleg singur senzorii",
+            "description": "Doar dacă o valoare de mai sus pare greșită.",
+            "data": {
+              "solar_production_sensor": "Putere solară",
+              "grid_power_sensor": "Putere rețea",
+              "battery_power_sensor": "Putere baterie",
+              "battery_soc_sensor": "Încărcare baterie %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Starea de încărcare în procente — cele patru zone de baterie ale SEM o citesc.",
           "grid_import_power_entity": "Doar dacă contorul dvs. nu are un singur senzor cu semn: partea de import, întotdeauna pozitivă. Completați pe amândouă sau pe niciuna.",
           "grid_export_power_entity": "Partea de export, întotdeauna pozitivă. SEM calculează export minus import, deci nicio direcție nu trebuie ghicită."
+        }
+      },
+      "check_grid": {
+        "title": "O întrebare",
+        "description": "{why}\n\nAcum contorul tău de rețea arată **{grid}**. Solar: {solar}. Baterie: {battery}.",
+        "data": {
+          "grid_answer": "Ce face casa ta acum?"
+        },
+        "data_description": {
+          "grid_answer": "Uită-te la contor sau în aplicația de energie. \"Nu știu\" e în regulă: SEM învață în zilele următoare."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Aleg singur senzorii",
+            "description": "Doar dacă o valoare de mai sus pare greșită.",
+            "data": {
+              "solar_production_sensor": "Putere solară",
+              "grid_power_sensor": "Putere rețea",
+              "battery_power_sensor": "Putere baterie",
+              "battery_soc_sensor": "Încărcare baterie %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Alege contorul de rețea",
+        "description": "SEM nu a găsit un senzor de putere a rețelei. Fără el, SEM nu știe ce cumperi sau trimiți în rețea.\n\nAlege-l mai jos sau apasă **Trimite** ca să sari. Îl poți seta mai târziu în fila Configurare.\n\nSolar: {solar}. Baterie: {battery}.",
+        "data": {
+          "grid_power_sensor": "Putere rețea"
+        },
+        "data_description": {
+          "grid_power_sensor": "Putere actuală în wați, nu un total zilnic."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Aleg singur senzorii",
+            "description": "Doar dacă o valoare de mai sus pare greșită.",
+            "data": {
+              "solar_production_sensor": "Putere solară",
+              "grid_power_sensor": "Putere rețea",
+              "battery_power_sensor": "Putere baterie",
+              "battery_soc_sensor": "Încărcare baterie %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,26 @@
         "per_kwh": "Pe kWh",
         "tiered": "Praguri după kWh pe an",
         "fixed_monthly": "Fix pe lună"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Cumpăr din rețea",
+        "sending": "Trimit în rețea",
+        "keep": "Acesta este contorul meu de rețea",
+        "other": "Folosește celălalt contor",
+        "unknown": "Nu știu"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "buying": "cumpărare",
+        "sending": "injectare",
+        "charging": "se încarcă",
+        "discharging": "se descarcă",
+        "none": "negăsit",
+        "why_guessed": "Panoul tău Energie nu are senzor de putere a rețelei, așa că SEM a ghicit unul.",
+        "why_home_negative": "Cu aceste valori casa ar consuma mai puțin decât nimic, deci un semn este greșit."
       }
     }
   }

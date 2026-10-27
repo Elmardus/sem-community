@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Aurinkoenergian hallinnan asennus",
-        "description": "SEM havaitsi seuraavat anturit Home Assistantin Energia-paneelista:\n\n{summary}\n\nNapsauta **Lähetä** jatkaaksesi. Vain yksi vaihe jäljellä. Sähköauton laturit, lämpöpumppu, tariffi ja kaikki muut asetukset määritetään myöhemmin SEM-paneelin uudessa **Asetukset**-välilehdessä — sinun ei tarvitse käsitellä niitä nyt.",
-        "data": {
-          "observer_mode": "Testitila (vain luku — ei ohjaa laitteistoa)"
-        },
-        "data_description": {
-          "observer_mode": "Jätä POIS PÄÄLTÄ tavallisessa asennuksessa. Kytke PÄÄLLE vain testi- tai staging-ympäristön Home Assistantissa, joka jäljittelee tuotantoinstanssia, jolloin SEM ei koskaan lähetä komentoja KEBA-laturille, invertterille tai millekään kytkimille."
+        "title": "SEM löysi järjestelmäsi",
+        "description": "Nämä ovat arvot juuri nyt:\n\n- Aurinko: {solar}\n- Verkko: {grid}\n- Akku: {battery}\n- Talo kuluttaa: {home}\n\nNe tulevat samoista antureista kuin Energia-kojelautasi. Paina **Lähetä**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Valitse anturit itse",
+            "description": "Vain jos jokin yllä oleva arvo näyttää väärältä.",
+            "data": {
+              "solar_production_sensor": "Aurinkoteho",
+              "grid_power_sensor": "Verkkoteho",
+              "battery_power_sensor": "Akkuteho",
+              "battery_soc_sensor": "Akun varaus %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Varaustila prosentteina — SEM:n neljä akkuvyöhykettä lukevat sitä.",
           "grid_import_power_entity": "Vain jos mittarissasi ei ole yhtä etumerkillistä anturia: tuontipuoli, aina positiivinen. Täytä kumpikin näistä tai ei kumpaakaan.",
           "grid_export_power_entity": "Vientipuoli, aina positiivinen. SEM laskee vienti miinus tuonti, joten suuntaa ei tarvitse arvata."
+        }
+      },
+      "check_grid": {
+        "title": "Yksi kysymys",
+        "description": "{why}\n\nJuuri nyt verkkomittarisi näyttää **{grid}**. Aurinko: {solar}. Akku: {battery}.",
+        "data": {
+          "grid_answer": "Mitä talosi tekee juuri nyt?"
+        },
+        "data_description": {
+          "grid_answer": "Katso mittaria tai energiasovellustasi. \"En tiedä\" käy: SEM oppii sen lähipäivinä."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Valitse anturit itse",
+            "description": "Vain jos jokin yllä oleva arvo näyttää väärältä.",
+            "data": {
+              "solar_production_sensor": "Aurinkoteho",
+              "grid_power_sensor": "Verkkoteho",
+              "battery_power_sensor": "Akkuteho",
+              "battery_soc_sensor": "Akun varaus %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Valitse verkkomittarisi",
+        "description": "SEM ei löytänyt verkkotehon anturia. Ilman sitä SEM ei tiedä, mitä ostat tai myyt.\n\nValitse se alta tai ohita painamalla **Lähetä**. Voit asettaa sen myöhemmin Asetukset-välilehdellä.\n\nAurinko: {solar}. Akku: {battery}.",
+        "data": {
+          "grid_power_sensor": "Verkkoteho"
+        },
+        "data_description": {
+          "grid_power_sensor": "Hetkellinen teho watteina, ei päivän summa."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Valitse anturit itse",
+            "description": "Vain jos jokin yllä oleva arvo näyttää väärältä.",
+            "data": {
+              "solar_production_sensor": "Aurinkoteho",
+              "grid_power_sensor": "Verkkoteho",
+              "battery_power_sensor": "Akkuteho",
+              "battery_soc_sensor": "Akun varaus %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,26 @@
         "per_kwh": "kWh:lta",
         "tiered": "Portaat kWh/vuosi mukaan",
         "fixed_monthly": "Kiinteä kuukaudessa"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Ostan sähköä verkosta",
+        "sending": "Syötän sähköä verkkoon",
+        "keep": "Tämä on verkkomittarini",
+        "other": "Käytä toista mittaria",
+        "unknown": "En tiedä"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "buying": "osto",
+        "sending": "syöttö",
+        "charging": "latautuu",
+        "discharging": "purkautuu",
+        "none": "ei löytynyt",
+        "why_guessed": "Energia-kojelaudallasi ei ole verkkotehon anturia, joten SEM arvasi yhden.",
+        "why_home_negative": "Näillä arvoilla talo kuluttaisi vähemmän kuin ei mitään, joten yksi etumerkki on väärin."
       }
     }
   }

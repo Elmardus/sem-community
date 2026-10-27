@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Oppsett av solenergistyring",
-        "description": "SEM har oppdaget følgende sensorer fra Home Assistant Energi-dashbordet:\n\n{summary}\n\nKlikk **Send** for å fortsette. Bare ett steg igjen. EV-ladere, varmepumpe, tariff og alle andre innstillinger konfigureres senere i den nye **Konfigurasjon**-fanen i SEM-dashbordet — du trenger ikke å håndtere dem nå.",
-        "data": {
-          "observer_mode": "Testmodus (skrivebeskyttet — styrer ikke maskinvare)"
-        },
-        "data_description": {
-          "observer_mode": "La stå AV ved en vanlig installasjon. Slå den PÅ bare på en test-/staging-instans av Home Assistant som speiler en produksjonsinstans, slik at SEM aldri sender kommandoer til KEBA, inverteren eller noen brytere."
+        "title": "SEM fant anlegget ditt",
+        "description": "Dette er verdiene akkurat nå:\n\n- Sol: {solar}\n- Nett: {grid}\n- Batteri: {battery}\n- Huset bruker: {home}\n\nDe kommer fra de samme sensorene som Energi-dashbordet ditt. Trykk **Send**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Velg sensorer selv",
+            "description": "Bare hvis en verdi over ser feil ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Netteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batterilading %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Ladenivå i prosent — SEMs fire batterisoner leser den.",
           "grid_import_power_entity": "Bare hvis måleren din ikke har én signert sensor: importsiden, alltid positiv. Fyll ut begge disse eller ingen av dem.",
           "grid_export_power_entity": "Eksportsiden, alltid positiv. SEM beregner eksport minus import, så ingen retning må gjettes."
+        }
+      },
+      "check_grid": {
+        "title": "Ett spørsmål",
+        "description": "{why}\n\nAkkurat nå viser nettmåleren din **{grid}**. Sol: {solar}. Batteri: {battery}.",
+        "data": {
+          "grid_answer": "Hva gjør huset ditt akkurat nå?"
+        },
+        "data_description": {
+          "grid_answer": "Se på måleren eller energiappen din. \"Vet ikke\" går fint: SEM lærer det de neste dagene."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Velg sensorer selv",
+            "description": "Bare hvis en verdi over ser feil ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Netteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batterilading %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Velg nettmåleren din",
+        "description": "SEM fant ingen sensor for netteffekt. Uten den vet ikke SEM hva du kjøper eller sender ut.\n\nVelg den nedenfor, eller trykk **Send** for å hoppe over. Du kan sette den senere i fanen Konfigurasjon.\n\nSol: {solar}. Batteri: {battery}.",
+        "data": {
+          "grid_power_sensor": "Netteffekt"
+        },
+        "data_description": {
+          "grid_power_sensor": "Nåværende effekt i watt, ikke en dagssum."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Velg sensorer selv",
+            "description": "Bare hvis en verdi over ser feil ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Netteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batterilading %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,26 @@
         "per_kwh": "Per kWh",
         "tiered": "Trinn etter kWh per år",
         "fixed_monthly": "Fast per måned"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Kjøper strøm fra nettet",
+        "sending": "Sender strøm ut på nettet",
+        "keep": "Dette er nettmåleren min",
+        "other": "Bruk den andre måleren",
+        "unknown": "Vet ikke"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "buying": "kjøper",
+        "sending": "sender ut",
+        "charging": "lader",
+        "discharging": "lader ut",
+        "none": "ikke funnet",
+        "why_guessed": "Energi-dashbordet ditt har ingen sensor for netteffekt, så SEM gjettet en.",
+        "why_home_negative": "Med disse tallene ville huset bruke mindre enn ingenting, så et fortegn er feil."
       }
     }
   }
