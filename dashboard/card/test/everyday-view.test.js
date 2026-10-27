@@ -157,7 +157,7 @@ function renderTab(el) {
 
 test('battery + one charger: Everyday shows 6 setting rows, not 20', () => {
     const { per, total } = renderTab(card());
-    assert.deepEqual(per, { overview: 0, tariff: 3, ev_chargers: 2, battery_zones: 1 });
+    assert.deepEqual(per, { overview: 0, tariff: 3, ev_chargers: 2, battery_zones: 1, sensor_sources: 0 });
     assert.equal(total, 6);
 });
 

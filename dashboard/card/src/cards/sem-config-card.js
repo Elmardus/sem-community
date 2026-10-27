@@ -49,6 +49,7 @@ const ESSENTIAL_SECTIONS = new Set([
     'tariff',          // without a price, every saving SEM reports is zero
     'ev_chargers',     // the main sink on most installs
     'battery_zones',   // the floors that keep the house covered,
+    'sensor_sources',  // (#1213) the check: what SEM reads, and one tap when a direction is wrong
 ]);
 
 const ESSENTIAL_CONTROLS = new Set([
