@@ -13,7 +13,7 @@
       },
       "ev_charger": {
         "title": "EV Lader",
-        "description": "SEM heeft je EV Lader(s) automatisch ingelezen vanuit de Home Assistant entity registry. Controleer of deze kloppen en klik op **Submit** — normaal gesproken zou alles moeten kloppen. Optionele velden kunnen leeg gelaten worden.\n\nKies ÉÉN besturingsmethode: een Number-entiteit (Wallbox, go-eCharger, Heidelberg, OpenWB, Ohme, V2C, …) OF een serviceaanroep (KEBA, Easee, Zaptec, OCPP, …).",
+        "description": "SEM heeft je EV Lader(s) automatisch ingelezen vanuit het entiteitenregister van Home Assistant. Controleer of deze kloppen en klik op **Verzenden** — normaal gesproken zou alles moeten kloppen. Optionele velden kunnen leeg gelaten worden.\n\nKies ÉÉN besturingsmethode: een Number-entiteit (Wallbox, go-eCharger, Heidelberg, OpenWB, Ohme, V2C, …) OF een serviceaanroep (KEBA, Easee, Zaptec, OCPP, …).",
         "data": {
           "ev_connected_sensor": "🔌 EV Verbonden — voertuig stekker",
           "ev_charging_sensor": "⚡ EV Laden Actief — huidige laadstatus",

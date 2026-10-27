@@ -14,7 +14,9 @@ the user's language (``**Grid power**`` → ``**Netzleistung**``), so they were
 not the same as English. Others kept an English paragraph after a translated
 one, or an older English text that English has since changed. So the rule
 compares with names, codes and placeholders taken out, and also fails:
-- a value that holds a sentence of its English text (four or more words);
+- a value that holds a sentence of its English text (four or more words),
+  or keeps one of its bold names of three or more words (an English menu
+  path, ``**Settings → Integrations → SEM → Configure**``);
 - a sentence of three or more words with a word only English uses
   (``the``, ``your``, ``when`` …). ``are`` (Romanian), ``have`` (Danish)
   and ``been`` (Dutch) are words of other languages, so not on the list.
@@ -29,8 +31,9 @@ _WORD = re.compile(r"(?<![\w.{>_-])[A-Za-z][a-z]+(?![\w.}>_-])")
 # a placeholder, a quoted entity name. Each language may keep or translate it.
 _NAME = re.compile(
     r"\*\*[^*]*\*\*|`[^`]*`|\{[^}]*\}"
-    r"|(?<!\w)'[^'\n]+'(?!\w)|\"[^\"\n]+\"|„[^“\n]+“"
+    r"|(?<!\w)'[^'\n]+'(?!\w)|\"[^\"\n]+\"|„[^“”\n]+[“”]|«[^»\n]+»|“[^”\n]+”"
 )
+_BOLD = re.compile(r"\*\*([^*]+)\*\*")
 _SENTENCE = re.compile(r"(?<=[.!?:])\s+|\n+")
 # English words no other SEM language uses as a word of its own.
 _ENGLISH = frozenset(
@@ -53,6 +56,9 @@ def _said(value: str) -> str:
 
 
 def _copies(english: str, value: str) -> bool:
+    kept = set(_BOLD.findall(english)) & set(_BOLD.findall(value))
+    if any(len(_WORD.findall(name)) >= 3 for name in kept):
+        return True
     english, value = _said(english), _said(value)
     if english == value:
         return len(_WORD.findall(value)) >= 3
@@ -129,6 +135,17 @@ def test_rule_sees_an_english_sentence_of_the_same_key():
     assert _copied_prose(en, nl) == ["p"]
 
 
+def test_rule_sees_an_english_bold_name():
+    """#1227 review: Hungarian kept the English menu path in bold."""
+    en = {"m": "Open **Settings → Integrations → SEM → Configure** now.",
+          "n": "Set **{name}** in **Home Assistant**.",
+          "q": "Open **Settings → Integrations** now."}
+    hu = {"m": "Nyissa meg a **Settings → Integrations → SEM → Configure** menüt.",
+          "n": "Állítsa be: **{name}**, **Home Assistant**.",
+          "q": "Nyissa meg a **Beállítások → Integrációk** menüt."}
+    assert _copied_prose(en, hu) == ["m"]
+
+
 def test_rule_sees_an_english_sentence_in_a_translated_text():
     other = {
         # #1227: a translated Repair with the English closing paragraph.
@@ -141,6 +158,8 @@ def test_rule_sees_an_english_sentence_in_a_translated_text():
                       "n'avez pas de double tarif.",
         "quoted_name": "Le nombre de l'onduleur (par exemple 'Maximum charging "
                        "power from the battery' chez Huawei).",
+        "other_quotes": "Licznik „Power from the grid” i «Power from the grid» "
+                        "i “Power from the grid”.",
         "bold_name": "Réglez **Use the battery when the sun is down** ici.",
         "brands": "Wallbox, go-eCharger, Heidelberg, OpenWB, Ohme, V2C, KEBA.",
     }
