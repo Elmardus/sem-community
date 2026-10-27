@@ -2928,10 +2928,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=0, max=5000, step=100, unit_of_measurement="W", mode="slider")
                 ),
-                vol.Optional(
-                    "observer_mode",
-                    default=_c("observer_mode", DEFAULT_OBSERVER_MODE),
-                ): selector.BooleanSelector(),
+                # (#1213) observer_mode lives on the setup page and as
+                # switch.sem_observer_mode; one home, not three.
                 # #743 — the curtailment probe (opt-in, default off): when
                 # an export-limited inverter clamps production to
                 # consumption, probe with the EV at minimum amps and
@@ -3512,14 +3510,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=10, max=60, step=5, unit_of_measurement="s", mode="slider")
                 ),
-                vol.Optional(
-                    "grid_import_power_entity",
-                    description={"suggested_value": current_config.get("grid_import_power_entity")},
-                ): _power_sensor_selector(getattr(self, "hass", None)),
-                vol.Optional(
-                    "grid_export_power_entity",
-                    description={"suggested_value": current_config.get("grid_export_power_entity")},
-                ): _power_sensor_selector(getattr(self, "hass", None)),
+                # (#1213) the grid sensors are set at setup and changed in the
+                # config card; Settings no longer asks for them a second time.
             }),
             errors=errors,
         )
