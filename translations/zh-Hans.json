@@ -1633,6 +1633,9 @@
       },
       "battery_discharge_limit_caps_charge": {
         "name": "放电限制同时也限制充电"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "出口为负时启动汽车，从电网补足差额"
       }
     },
     "number": {

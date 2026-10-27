@@ -1633,6 +1633,9 @@
       },
       "battery_discharge_limit_caps_charge": {
         "name": "Urladdningsgränsen begränsar även laddning"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "Starta bilen vid negativ export och köp det som saknas"
       }
     },
     "number": {

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- ✨ **New switch: Start the car on negative export, buying the gap** (#1080). Off by default. A car that cannot start on the sun gets the missing watts from the grid.
 - 🐛 **EV stop estimates now follow a car sensor that moves in half-point steps** (#1229). Before, the estimate drifted above the car's reading.
 - 🐛 **A heat pump set by service now shows the state SEM sent** (#1231). Before, a renewal could cancel a boost.
 - 🐛 **The plan now runs on a home with no battery** (#1207). Before, it waited for a battery sensor that is not there.

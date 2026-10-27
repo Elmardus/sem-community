@@ -88,6 +88,14 @@ SWITCH_TYPES = [
         entity_category=EntityCategory.CONFIG,
         icon="mdi:battery-arrow-up-outline",
     ),
+    # (#1080) Default OFF. On a negative export value a car that cannot
+    # start on the sun alone is started by buying the small gap from the
+    # grid, while the sun it absorbs costs more to export than the gap costs.
+    SwitchEntityDescription(
+        key="ev_absorb_grid_fill",
+        entity_category=EntityCategory.CONFIG,
+        icon="mdi:car-electric-outline",
+    ),
     # (arc #921) Four switches, all default OFF — the arc ships asleep like
     # the spending arc (#778) and charge pacing (#820), and is woken
     # deliberately per install. Persisted in PERSISTED_FLAG_DEFAULTS.

@@ -1633,6 +1633,9 @@
       },
       "battery_discharge_limit_caps_charge": {
         "name": "Purkuraja rajoittaa myös latausta"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "Käynnistä auto negatiivisella viennillä ja osta puuttuva"
       }
     },
     "number": {
