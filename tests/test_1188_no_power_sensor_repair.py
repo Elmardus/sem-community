@@ -238,6 +238,75 @@ async def test_a_source_not_counted_is_not_missing(hass):
     assert _issue(hass, "battery") is None
 
 
+@pytest.mark.parametrize("shape", [
+    "grid_declared_pair", "grid_sum", "grid_manual_pair", "two_inverters",
+    "two_batteries", "battery_pair"])
+async def test_every_other_way_to_read_a_source_counts_as_found(hass, shape):
+    """Each source is recorded only in the last branch of its read: every
+    branch that reads something must leave it alone."""
+    _set_states(hass, missing=("grid", "solar", "battery"))
+    for eid in ("sensor.a", "sensor.b"):
+        hass.states.async_set(eid, "200", {"unit_of_measurement": "W"})
+    config = {}
+    ed = _ed(missing=("grid", "solar", "battery"))
+    source = {"grid_declared_pair": "grid", "grid_sum": "grid",
+              "grid_manual_pair": "grid", "two_inverters": "solar",
+              "two_batteries": "battery", "battery_pair": "battery"}[shape]
+    if shape == "grid_declared_pair":
+        ed.grid_power_from, ed.grid_power_to = "sensor.a", "sensor.b"
+    elif shape == "grid_sum":
+        ed.grid_power_list = ["sensor.a", "sensor.b"]
+    elif shape == "grid_manual_pair":
+        config = {"grid_import_power_entity": "sensor.a",
+                  "grid_export_power_entity": "sensor.b"}
+    elif shape == "two_inverters":
+        ed.solar_power = "sensor.a"
+        ed.solar_power_list = ["sensor.a", "sensor.b"]
+    elif shape == "two_batteries":
+        ed.battery_power = "sensor.a"
+        ed.battery_power_list = ["sensor.a", "sensor.b"]
+    else:
+        ed.battery_power_from, ed.battery_power_to = "sensor.a", "sensor.b"
+        ed.battery_power_pairs = [("sensor.a", "sensor.b")]
+    r = _reader(hass, ed, **config)
+    _cycles(r, 0.0, WAIT + 20)
+    assert _issue(hass, source) is None
+    assert source not in r._unsourced_power
+    # The control: the sources left without a sensor are still told.
+    for other in {"grid", "solar", "battery"} - {source}:
+        assert _issue(hass, other) is not None
+
+
+async def test_an_export_counter_alone_is_told_too(hass):
+    """No import counter: no grid branch reads anything, so the export
+    counter is the one named."""
+    _set_states(hass, missing=("grid",))
+    ed = _ed(missing=("grid",))
+    ed.grid_import_energy = None
+    ed.grid_import_energy_list = []
+    r = _reader(hass, ed)
+    _cycles(r, 0.0, WAIT + 20)
+    assert _issue(hass, "grid").translation_placeholders == {
+        "energy_entity": "sensor.p1_meter_energy_export"}
+
+
+async def test_a_failed_raise_is_tried_again(hass):
+    _set_states(hass, missing=("grid",))
+    r = _reader(hass, _ed(missing=("grid",)))
+    real = ir.async_create_issue
+    calls = []
+
+    def flaky(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("registry busy")
+        return real(*args, **kwargs)
+    with patch.object(ri.ir, "async_create_issue", side_effect=flaky):
+        _cycles(r, 0.0, WAIT + 20)
+    assert len(calls) == 2
+    assert _issue(hass, "grid") is not None
+
+
 # ── cleared: found, gone, a fresh reader; untouched without an answer ───
 
 
@@ -273,6 +342,20 @@ async def test_a_fresh_reader_clears_what_a_reload_left(hass):
     ri.raise_power_sensor_not_found(hass, "grid", energy_entity=COUNTER["grid"])
     r = _reader(hass, _ed())
     _cycles(r, 0.0, 0.0)
+    assert _issue(hass, "grid") is None
+
+
+async def test_a_reload_leftover_clears_when_the_source_is_found_later(hass):
+    """(review) The meter is still missing on the new reader's first cycle
+    and found a minute later: that first "found" clears the leftover."""
+    _set_states(hass, missing=("grid",))
+    ri.raise_power_sensor_not_found(hass, "grid", energy_entity=COUNTER["grid"])
+    r = _reader(hass, _ed(missing=("grid",)))
+    _cycles(r, 0.0, 60.0)
+    assert _issue(hass, "grid") is not None        # still missing: it stays
+    r.config.grid_power_sensor = "sensor.picked_grid"
+    hass.states.async_set("sensor.picked_grid", "-250", {"unit_of_measurement": "W"})
+    _cycles(r, 70.0, 70.0)
     assert _issue(hass, "grid") is None
 
 

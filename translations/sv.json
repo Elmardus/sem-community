@@ -1977,7 +1977,7 @@
     },
     "power_sensor_not_found": {
       "title": "Ingen effektsensor för {energy_entity}",
-      "description": "Energi-instrumentpanelen räknar **{energy_entity}** i kWh, men SEM hittade ingen effektsensor (W) för den. SEM läser därför denna effekt som 0 W, och energiflödena och överskottet blir fel. Åtgärda det genom att lägga till effektsensorn i denna post i Energi-instrumentpanelen. Eller öppna SEM-instrumentpanelen, fliken ⚙ **Konfiguration**, och välj **Alla inställningar** högst upp. Ställ sedan in sensorn i avsnittet **Sensorkällor**."
+      "description": "Energi-instrumentpanelen räknar **{energy_entity}** i kWh, men SEM hittade ingen effektsensor (W) för den. SEM läser därför denna effekt som 0 W, och energiflödena och överskottet blir fel. Åtgärda det genom att lägga till effektsensorn i denna post i Energi-instrumentpanelen. Eller öppna SEM-instrumentpanelen, fliken ⚙ **Konfiguration**, och välj **Alla inställningar** högst upp. Ställ sedan in sensorn i avsnittet **Sensorkällor**. Finns det ingen effektsensor kan du ignorera detta meddelande."
     },
     "charger_device_gone": {
       "title": "Laddare {name}: enheten saknas",

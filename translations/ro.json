@@ -1977,7 +1977,7 @@
     },
     "power_sensor_not_found": {
       "title": "Niciun senzor de putere pentru {energy_entity}",
-      "description": "Panoul Energie numără **{energy_entity}** în kWh, dar SEM nu a găsit niciun senzor de putere (W) pentru el. SEM citește deci această putere ca 0 W, iar fluxurile de energie și surplusul sunt greșite. Pentru a remedia, adăugați senzorul de putere la această intrare din panoul Energie. Sau deschideți panoul SEM, fila ⚙ **Configurare**, și alegeți **Toate setările** sus. Apoi setați senzorul în secțiunea **Surse de senzori**."
+      "description": "Panoul Energie numără **{energy_entity}** în kWh, dar SEM nu a găsit niciun senzor de putere (W) pentru el. SEM citește deci această putere ca 0 W, iar fluxurile de energie și surplusul sunt greșite. Pentru a remedia, adăugați senzorul de putere la această intrare din panoul Energie. Sau deschideți panoul SEM, fila ⚙ **Configurare**, și alegeți **Toate setările** sus. Apoi setați senzorul în secțiunea **Surse de senzori**. Dacă nu există niciun senzor de putere, puteți ignora această notificare."
     },
     "charger_device_gone": {
       "title": "Încărcătorul {name}: dispozitivul lipsește",

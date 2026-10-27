@@ -1977,7 +1977,7 @@
     },
     "power_sensor_not_found": {
       "title": "Nessun sensore di potenza per {energy_entity}",
-      "description": "La dashboard Energia conta **{energy_entity}** in kWh, ma SEM non ha trovato alcun sensore di potenza (W) per esso. SEM legge questa potenza come 0 W, quindi i flussi di energia e il surplus sono sbagliati. Per correggere, aggiungi il sensore di potenza a questa voce nella dashboard Energia. Oppure apri la dashboard SEM, scheda ⚙ **Configurazione**, e scegli **Tutte le impostazioni** in alto. Poi imposta il sensore nella sezione **Sorgenti dei sensori**."
+      "description": "La dashboard Energia conta **{energy_entity}** in kWh, ma SEM non ha trovato alcun sensore di potenza (W) per esso. SEM legge questa potenza come 0 W, quindi i flussi di energia e il surplus sono sbagliati. Per correggere, aggiungi il sensore di potenza a questa voce nella dashboard Energia. Oppure apri la dashboard SEM, scheda ⚙ **Configurazione**, e scegli **Tutte le impostazioni** in alto. Poi imposta il sensore nella sezione **Sorgenti dei sensori**. Se non esiste un sensore di potenza, puoi ignorare questo avviso."
     },
     "charger_device_gone": {
       "title": "Caricatore {name}: dispositivo mancante",

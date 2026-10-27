@@ -1977,7 +1977,7 @@
     },
     "power_sensor_not_found": {
       "title": "Nenhum sensor de potência para {energy_entity}",
-      "description": "O painel de Energia conta **{energy_entity}** em kWh, mas o SEM não encontrou nenhum sensor de potência (W) para ele. O SEM lê esta potência como 0 W, por isso os fluxos de energia e o excedente estão errados. Para corrigir, adicione o sensor de potência a esta entrada no painel de Energia. Ou abra o painel do SEM, separador ⚙ **Configuração**, e escolha **Todas as definições** no topo. Depois defina o sensor na secção **Fontes de sensores**."
+      "description": "O painel de Energia conta **{energy_entity}** em kWh, mas o SEM não encontrou nenhum sensor de potência (W) para ele. O SEM lê esta potência como 0 W, por isso os fluxos de energia e o excedente estão errados. Para corrigir, adicione o sensor de potência a esta entrada no painel de Energia. Ou abra o painel do SEM, separador ⚙ **Configuração**, e escolha **Todas as definições** no topo. Depois defina o sensor na secção **Fontes de sensores**. Se não existir nenhum sensor de potência, pode ignorar este aviso."
     },
     "charger_device_gone": {
       "title": "Carregador {name}: dispositivo em falta",

@@ -460,10 +460,12 @@ def _power_not_found_issue_id(source: str) -> str:
 
 
 def raise_power_sensor_not_found(hass: HomeAssistant, source: str, *,
-                                 energy_entity) -> None:
+                                 energy_entity) -> bool:
     """(#1188) The Energy Dashboard counts this source in kWh, and SEM found
     no power sensor for it, so the source reads 0 W. Until now one log line
-    said so. Non-persistent: the reader asks again after every start."""
+    said so. Non-persistent: the reader asks again after every start.
+
+    True when the Repair was filed, so the caller tries again when not."""
     try:
         ir.async_create_issue(
             hass,
@@ -482,6 +484,8 @@ def raise_power_sensor_not_found(hass: HomeAssistant, source: str, *,
     except Exception as e:  # noqa: BLE001
         _LOGGER.debug("issue_registry.create (power_sensor_not_found_%s) "
                       "failed: %s", source, e)
+        return False
+    return True
 
 
 def clear_power_sensor_not_found(hass: HomeAssistant, source: str) -> None:

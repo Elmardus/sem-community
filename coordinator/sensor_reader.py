@@ -713,9 +713,10 @@ class SensorReader:
         self._unsourced_since: dict[str, float] = {}
         #: (#1188) The counter each raised Repair names.
         self._unsourced_raised: dict[str, str] = {}
-        #: (#1188, class 84) A fresh reader's first answer clears what an
-        #: options reload left: the Repair outlives the reader.
-        self._unsourced_reconciled: bool = False
+        #: (#1188, class 84) The sources this reader has found once. Each
+        #: source's first "found" clears what an options reload left: the
+        #: Repair outlives the reader.
+        self._unsourced_reconciled: set[str] = set()
         # Warn-once guard for the discovery-*exception* path (#259); distinct from the
         # dict "warned" key (which guards "no sensor found"). Reset on cache invalidate.
         self._split_grid_discovery_warned: bool = False
@@ -2851,6 +2852,9 @@ class SensorReader:
                         "No grid power sensor found (no combined and no split import/export). "
                         "Grid power will be 0. Check Energy Dashboard grid configuration."
                     )
+        elif ed.grid_export_energy:
+            # (#1188) An export counter alone: no branch reads the grid.
+            unsourced["grid"] = ed.grid_export_energy
 
         # (#933) The grid was read by an explicit path — SEM's own pair (the
         # guess Repair's own remedy, which reloads the entry), a declared
@@ -4555,8 +4559,11 @@ class SensorReader:
             counter = unsourced.get(source)
             if counter is None:
                 self._unsourced_since.pop(source, None)
+                # Each source's first "found" of this reader clears once — a
+                # source still missing on the first cycle may be found later.
                 if (self._unsourced_raised.pop(source, None) is not None
-                        or not self._unsourced_reconciled):
+                        or source not in self._unsourced_reconciled):
+                    self._unsourced_reconciled.add(source)
                     _ri.clear_power_sensor_not_found(self.hass, source)
                 continue
             if not running or waiting:
@@ -4565,16 +4572,15 @@ class SensorReader:
             since = self._unsourced_since.setdefault(source, now)
             if now - since < _ri.UNAVAILABLE_REPAIR_THRESHOLD_S:
                 continue
-            if self._unsourced_raised.get(source) != counter:
+            if (self._unsourced_raised.get(source) != counter
+                    and _ri.raise_power_sensor_not_found(
+                        self.hass, source, energy_entity=counter)):
                 self._unsourced_raised[source] = counter
                 _LOGGER.warning(
                     "No %s power sensor: the Energy Dashboard counts %s in kWh, "
                     "but SEM found no power sensor for it, so %s power reads "
                     "0 W. Add one in the Energy Dashboard or in SEM's Sensor "
                     "sources. (#1188)", source, counter, source)
-                _ri.raise_power_sensor_not_found(
-                    self.hass, source, energy_entity=counter)
-        self._unsourced_reconciled = True
 
     def _report_split_grid_confidence(self, disc: dict) -> None:
         """(#911) An ``any-device`` adoption is a GUESS — pattern-matched
