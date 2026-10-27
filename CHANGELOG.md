@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 **Self-consumption no longer drops to 0 % when the battery sells to the grid** (#1191). The sale no longer counts as solar export.
 - ✨ **The Home diagram shows the car's charge level at the EV node** (#1211). With one charger only; an estimate has a "~".
+- ✨ **The Home diagram can hide the car's charge level** (#1219). Set `show_ev_soc: false` when two cars share one charger.
 - 🐛 **A battery marked "Inverted" in the Energy Dashboard now shows charging the right way from the start** (#1194). One that already reads right stays right.
 - 🐛 **Each battery keeps its own settings when you add or remove a battery** (#1195). A new battery no longer takes another battery's entities.
 - 🐛 **Each battery's charge direction is learned from its own energy counters** (#1193). A second battery could show charging as discharging.
