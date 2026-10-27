@@ -358,6 +358,13 @@ supports the same three control paths, in any combination:
   every write that the command landed; a mismatch is logged, never
   silently trusted.
 
+  After a successful service call, SEM's mode and SG-Ready state sensors
+  report the commanded state, just as they do for relay control. A renewal
+  using that state can therefore keep a boost alive. A delayed or mismatched
+  read-back still reports `service_unverified`; it is not confirmation that
+  the hardware reached the commanded state. A failed call keeps the previous
+  commanded state.
+
 Each additional unit carries its own priority, thresholds, sensors and
 name, and competes in the surplus distribution as its own device.
 

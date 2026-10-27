@@ -601,6 +601,9 @@ class HeatPumpController(SetpointDevice):
                         "state %d — verify the mapping (#801)",
                         self.sg_ready_state_entity, got, int(state))
                     self._last_relay_path = "service_unverified"
+            # Keep the successful command like the relay path below. A
+            # lagging read-back is reported separately, not a NORMAL command.
+            self._hp_status.sg_ready_state = state
             return True
 
         # Prior relay1 value (for restore on a partial relay2 failure, I3).
