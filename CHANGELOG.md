@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **SEM now finds the power sensor of a second inverter or battery, or a Repair names the one it cannot find** (#1226). Before, it read 0 W.
 - 🐛 **Two grid Repairs and other texts are now in your language** (#1227). Before, they were partly English in 14 languages.
 - ✨ **Setup shows what SEM found as live watts, and asks one question when it is unsure of your grid meter** (#1213).
 - 🔧 **SEM no longer guesses a battery or solar sensor when several fit** (#1213). One battery module or one phase is not the whole battery.
