@@ -1137,6 +1137,12 @@ effective_soc = max(sensor, anchor + delivered_since_anchor_kwh × 0.92 ÷ capac
   under the SOC gauge on the EV card (e.g. "Car: 55% (28 min ago) · est. now ~59%") — the gauge
   itself always shows the raw sensor value.
 
+When a vehicle SOC sensor is configured, every numeric change corrects the
+energy-based stopping estimate, including 0.5-percentage-point and smaller
+steps. Between changes, measured charging energy advances the estimate;
+polls that repeat the same SOC do not reset it. A changed reading below the
+target can therefore reopen the remaining need after an estimate-based stop.
+
 #### Charger efficiency
 
 **Options → EV Charger → Charger efficiency (%)**, default **92 %**.
