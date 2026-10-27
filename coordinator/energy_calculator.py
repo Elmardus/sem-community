@@ -441,6 +441,9 @@ class EnergyCalculator:
         #: (#1228) the meter baselines written this cycle; the house rows at
         #: the cycle's end are stamped on them (``_settle_meter_gaps``)
         self._meter_written: Set[str] = set()
+        #: (#1228) the own-meter devices staged this cycle: a held step of
+        #: any other device is dropped
+        self._meter_staged: Set[str] = set()
         #: (#1228) seconds this run has integrated, and the run they belong
         #: to: time SEM did not see is a span's length less what it saw
         self._seen_s = 0.0
@@ -898,6 +901,7 @@ class EnergyCalculator:
         # below records its own category only when it actually read a COMPLETE
         # counter set. ``_reconcile_home_energy`` reads the result.
         self._counter_backed = set()
+        self._meter_staged = set()   # (#1228) filled by ``_import_cost``
 
         # Integrate power to energy
         energy = EnergyTotals()
@@ -4450,6 +4454,7 @@ class EnergyCalculator:
         share = grid_share(getattr(power_flows, "grid_to_home", 0.0),
                            getattr(power, "home_consumption_power", 0.0))
         wants = []
+        self._meter_staged = {e.device_id for e in entries if e.meter}
         for e in entries:
             held = False
             if e.meter and e.baseline is not None:
@@ -4501,6 +4506,7 @@ class EnergyCalculator:
         if isinstance(gap, dict) and _finite(gap.get("kwh")):
             gap["kwh"] = float(gap["kwh"]) + step
             gap["price"] = entry.price
+            gap.pop("wait", None)
         else:
             self.device_meter_gaps[entry.device_id] = {
                 "kwh": step, "since": str(last["at"]),
@@ -4534,6 +4540,7 @@ class EnergyCalculator:
                 "home", "battery_charge", MIDNIGHT_EV_CATEGORY)),
             "taken": taken, "taken_cost": taken_cost,
             "seen": self._seen_s, "run": self._run_token,
+            "rise": self._dark_rise(),
         }
 
     def _settle_meter_gaps(self, today: date, month_key: str, year_key: str,
@@ -4542,38 +4549,54 @@ class EnergyCalculator:
         the same span, then stamp this cycle's rows on the new baselines.
 
         A cycle's import and share say nothing of time no cycle booked. The
-        rows do, once they cover it: SEM watched all of the span, or the grid
-        import and home rows follow their counters this cycle (the counters
-        kept counting while SEM was down). The device's grid kWh are its step
-        × the grid's share of what the house, the batteries and the car used
-        over the span, at most the import no device took. They leave the
-        house cost at the rate the house booked them.
+        rows do, once they cover it: SEM watched all of the span, or every
+        counter and the home balance are read this cycle (the counters kept
+        counting while SEM was down). The device's grid kWh are its step ×
+        the grid's share of what the house, the batteries and the car used
+        over the span, at most the import no device took; steps settled in
+        one cycle share that in proportion. They leave the house cost at
+        the rate the house booked them.
 
         Waits up to ``SOLAR_GAP_WAIT_S`` for the counters once HA runs, as
         the solar step does (#1187). Dropped, and said, when the rows cannot
         cover the span: no grid import counter (the house lost that import
-        too), a new day (the day's rows start again), no rows at the start
-        (a store from before), or the wait is over.
+        too), PV with no solar counter and the sun up, a new day (the day's
+        rows start again), no rows at the start (a store from before), the
+        device off its own meter, or the wait is over.
         """
+        rows = self._meter_rows(today)
+        ready = []
         for did in sorted(self.device_meter_gaps):
             gap = self.device_meter_gaps[did]
-            rows = self._meter_rows(today)
-            why = self._meter_gap_unread(gap, rows, now)
+            why = (self._meter_gap_unread(gap, rows, now)
+                   if did in self._meter_staged
+                   else "the device has no own meter now")
             if why == "wait":
                 continue
             del self.device_meter_gaps[did]
             if why is None:
-                self._book_meter_gap(did, gap, rows, today, month_key, year_key)
+                ready.append((did, gap))
             else:
                 _LOGGER.info(
                     "Own meter of %s: %.3f kWh over time SEM did not book — "
                     "not priced, %s (#1228)", did, _as_float(gap.get("kwh")), why)
+        if ready:
+            self._book_meter_gaps(ready, rows, today, month_key, year_key)
         if self._meter_written:
             rows = self._meter_rows(today)
             for did in self._meter_written:
                 if isinstance(self.device_meter_last.get(did), dict):
                     self.device_meter_last[did]["rows"] = dict(rows)
             self._meter_written = set()
+
+    def _dark_rise(self) -> Optional[str]:
+        """(#1228) While the sun is down, its next rising as ``sun.sun``
+        says; the same text at both ends of a span = no sunrise inside."""
+        if not self._sun_is_down():
+            return None
+        attrs = getattr(self._hass.states.get("sun.sun"), "attributes", None)
+        rise = attrs.get("next_rising") if hasattr(attrs, "get") else None
+        return str(rise) if rise else None
 
     def _meter_gap_unread(self, gap: Dict[str, Any], rows: Dict[str, Any],
                           now: datetime) -> Optional[str]:
@@ -4597,6 +4620,13 @@ class EnergyCalculator:
         if not (self._meter_counter_enabled
                 and self._meter_counter_entities.get("grid_import")):
             return "no grid import counter covers the time SEM did not see"
+        # PV with no counter: its row says nothing of that time, unless the
+        # sun stayed down from the start to now
+        if (not self._solar_counter_enabled
+                and self._lifetime_accumulators.get("lifetime_solar", 0.0) > 0
+                and (start.get("rise") is None
+                     or start.get("rise") != self._dark_rise())):
+            return "no solar counter covers that time, and the sun may have been up"
         # every counter read this cycle, not only the import: the home
         # balance takes a row still near 0 as no flow, and a battery counter
         # still loading after a restart would read the span as all grid
@@ -4608,54 +4638,70 @@ class EnergyCalculator:
         from homeassistant.core import CoreState
         if getattr(self._hass, "state", None) is not CoreState.running:
             return "wait"   # entities still loading (bug class 86)
+        # the clock runs while HA runs: a restart starts it again
+        wait = gap.get("wait") if isinstance(gap.get("wait"), dict) else {}
         try:
-            waited = (now - datetime.fromisoformat(str(gap["wait"]))).total_seconds()
+            if wait.get("run") != self._run_token:
+                raise ValueError
+            waited = (now - datetime.fromisoformat(str(wait["at"]))).total_seconds()
         except (KeyError, TypeError, ValueError):
-            gap["wait"] = now.isoformat()
+            gap["wait"] = {"at": now.isoformat(), "run": self._run_token}
             return "wait"
         if waited < SOLAR_GAP_WAIT_S:
             return "wait"
-        return "the grid and home rows did not follow their counters in time"
+        return "its counters were not all read in time"
 
-    def _book_meter_gap(self, did: str, gap: Dict[str, Any], rows: Dict[str, Any],
-                        today: date, month_key: str, year_key: str) -> None:
-        """(#1228) The held step's grid kWh, moved from the house cost to
-        the device's own price."""
-        start = gap["rows"]
-        d_import = rows["import"] - float(start["import"])
-        d_used = rows["used"] - float(start["used"])
-        free = d_import - (rows["taken"] - float(start["taken"]))
-        free_cost = ((rows["cost"] - float(start["cost"]))
-                     - (rows["taken_cost"] - float(start["taken_cost"])))
-        share = max(0.0, min(1.0, d_import / d_used)) if d_used > 0 else 0.0
-        kwh = min(max(0.0, _as_float(gap.get("kwh"))) * share, max(0.0, free))
-        if kwh <= 0.0:
-            _LOGGER.info("Own meter of %s: %.3f kWh over time SEM did not "
-                         "book — none of it from the grid (#1228)",
-                         did, _as_float(gap.get("kwh")))
-            return
-        # what the house paid a kWh of that import; the device's own price
-        # as the house prices a gap (#795): its day's average, else its price
-        # at the read after the gap, else the house's
-        house = free_cost / free
-        own_kwh = self._daily_accumulators.get(f"{DEVICE_TARIFF_KWH}{did}_{today}", 0.0)
-        own_cost = self._daily_cost_accumulators.get(
-            f"{DEVICE_TARIFF_COST}{did}_{today}", 0.0)
-        if own_kwh > 0.05:
-            price = own_cost / own_kwh
-        elif _finite(gap.get("price")):
-            price = float(gap["price"])
-        else:
-            price = house
-        self._accumulate(f"{DEVICE_TARIFF_KWH}{did}", today, month_key,
-                         year_key, kwh)
-        self._accumulate_cost(f"{DEVICE_TARIFF_COST}{did}", today, month_key,
-                              year_key, kwh * price)
-        self._accumulate_cost("cost_import", today, month_key, year_key,
-                              kwh * (price - house))
-        _LOGGER.info("Own meter of %s: %.3f of %.3f kWh over time SEM did not "
-                     "book were from the grid, priced at %.4f (#1228)",
-                     did, kwh, _as_float(gap.get("kwh")), price)
+    def _book_meter_gaps(self, ready: List[Tuple[str, Dict[str, Any]]],
+                         rows: Dict[str, Any], today: date, month_key: str,
+                         year_key: str) -> None:
+        """(#1228) The held steps' grid kWh, moved from the house cost to
+        each device's own price."""
+        plans = []
+        for did, gap in ready:
+            start = gap["rows"]
+            d_import = rows["import"] - float(start["import"])
+            d_used = rows["used"] - float(start["used"])
+            free = d_import - (rows["taken"] - float(start["taken"]))
+            free_cost = ((rows["cost"] - float(start["cost"]))
+                         - (rows["taken_cost"] - float(start["taken_cost"])))
+            share = max(0.0, min(1.0, d_import / d_used)) if d_used > 0 else 0.0
+            want = max(0.0, _as_float(gap.get("kwh"))) * share
+            plans.append((did, gap, want, free, free_cost))
+        # at most the import no device took; several steps in one cycle
+        # share the least such import in proportion
+        total = sum(p[2] for p in plans)
+        least = min(p[3] for p in plans)
+        scale = min(1.0, max(0.0, least) / total) if total > 0 else 0.0
+        for did, gap, want, free, free_cost in plans:
+            kwh = want * scale
+            if kwh <= 0.0:
+                _LOGGER.info("Own meter of %s: %.3f kWh over time SEM did not "
+                             "book — none of it from the grid (#1228)",
+                             did, _as_float(gap.get("kwh")))
+                continue
+            # what the house paid a kWh of that import; the device's own
+            # price as the house prices a gap (#795): its day's average, else
+            # its price at the read after the gap, else the house's
+            house = free_cost / free
+            own_kwh = self._daily_accumulators.get(
+                f"{DEVICE_TARIFF_KWH}{did}_{today}", 0.0)
+            own_cost = self._daily_cost_accumulators.get(
+                f"{DEVICE_TARIFF_COST}{did}_{today}", 0.0)
+            if own_kwh > 0.05:
+                price = own_cost / own_kwh
+            elif _finite(gap.get("price")):
+                price = float(gap["price"])
+            else:
+                price = house
+            self._accumulate(f"{DEVICE_TARIFF_KWH}{did}", today, month_key,
+                             year_key, kwh)
+            self._accumulate_cost(f"{DEVICE_TARIFF_COST}{did}", today,
+                                  month_key, year_key, kwh * price)
+            self._accumulate_cost("cost_import", today, month_key, year_key,
+                                  kwh * (price - house))
+            _LOGGER.info("Own meter of %s: %.3f of %.3f kWh over time SEM did "
+                         "not book were from the grid, priced at %.4f (#1228)",
+                         did, kwh, _as_float(gap.get("kwh")), price)
 
     def get_device_tariff(self, device_id: str, day: date) -> Dict[str, float]:
         """(#812) Today's grid kWh and cost of a device on its own tariff."""

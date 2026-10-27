@@ -243,6 +243,9 @@ class TestTheShareIsTheSpans:
         taken = house.pump_kwh() + house.pump_kwh("boiler")
         assert taken <= house.grid_kwh() + 1e-6
         assert house.import_cost() >= 0.0
+        # in proportion, not by name: 1.5 and 1.5 wanted, 2.0 there
+        gained = [house.pump_kwh(did) - 1000.0 * 70 / 3.6e6 for did in ("heat_pump", "boiler")]
+        assert gained[0] == pytest.approx(gained[1], abs=0.01)
 
 
 @pytest.mark.unit
@@ -299,6 +302,9 @@ class TestTheRowsMustCoverTheSpan:
         house.run(10)
         assert house.calc.device_meter_gaps == {}
         assert house.pump_kwh() - before == pytest.approx(2.0 + 2.0 * 130 / 3600, abs=0.01)
+        assert house.import_cost() == pytest.approx(
+            (house.grid_kwh() - house.pump_kwh()) * HOUSE
+            + house.pump_kwh() * PUMP, abs=1e-6)
 
     def test_the_wait_ends(self, caplog):
         house = House()
@@ -314,7 +320,7 @@ class TestTheRowsMustCoverTheSpan:
         with caplog.at_level(logging.INFO):
             house.run(240, pump_w=0.0, step=60)
         assert house.calc.device_meter_gaps == {}
-        assert "did not follow their counters in time" in caplog.text
+        assert "were not all read in time" in caplog.text
         assert house.pump_kwh() - before < 0.1
 
     def test_while_ha_starts_the_wait_has_no_clock(self):
@@ -433,3 +439,164 @@ class TestTheStore:
         state["device_meter_gaps"] = "junk"
         calc.restore_state(state)
         assert calc.device_meter_gaps == {}
+
+
+def _sun(house, up, rise="2026-10-12T05:40:00+00:00"):
+    house.states["sun.sun"] = SimpleNamespace(
+        state="above_horizon" if up else "below_horizon",
+        attributes={"next_rising": rise,
+                    "next_setting": "2026-10-12T16:40:00+00:00"})
+
+
+@pytest.mark.unit
+class TestPvWithoutASolarCounter:
+    """The house has made solar, but no counter says how much while SEM
+    was down: its row reads that time as no PV."""
+
+    def _house(self):
+        house = House()
+        house.calc._lifetime_accumulators["lifetime_solar"] = 5000.0
+        return house
+
+    def test_a_span_the_sun_may_have_lit_is_dropped(self, caplog):
+        house = self._house()
+        _sun(house, up=False)
+        house.cycle()
+        house.run(60)
+        before = house.pump_kwh()
+        house.restart()
+        house.down(8 * 3600, import_kwh=1.0, pump_kwh=3.0)
+        _sun(house, up=True, rise="2026-10-13T05:41:00+00:00")
+        house.cycle()
+        with caplog.at_level(logging.INFO):
+            house.run(10)
+        assert "no solar counter covers that time" in caplog.text
+        assert house.pump_kwh() - before < 0.01
+
+    def test_a_night_with_no_sunrise_inside_is_booked(self):
+        house = self._house()
+        _sun(house, up=False)
+        before = _outage(house, import_kwh=2.3, pump_kwh=2.0)
+        assert house.pump_kwh() - before == pytest.approx(2.0 + 2.0 / 360, abs=0.002)
+
+    def test_a_night_to_the_next_night_is_dropped(self):
+        house = self._house()
+        _sun(house, up=False)
+        house.cycle()
+        house.run(60)
+        before = house.pump_kwh()
+        house.restart()
+        house.down(3600, import_kwh=2.3, pump_kwh=2.0)
+        _sun(house, up=False, rise="2026-10-13T05:41:00+00:00")
+        house.cycle()
+        house.run(10)
+        assert house.pump_kwh() - before < 0.01
+
+
+@pytest.mark.unit
+class TestTheWaitPerRun:
+    def test_a_second_restart_starts_the_wait_again(self):
+        house = House()
+        house.cycle()
+        house.run(60)
+        before = house.pump_kwh()
+        house.restart()
+        house.down(3600, import_kwh=2.3, pump_kwh=2.0)
+        house.cycle()
+        house.dark = {IMPORT}
+        house.run(60)
+        assert "heat_pump" in house.calc.device_meter_gaps
+        # down again for 40 min; back, the counter loads for 10 s
+        house.restart()
+        house.down(2400, import_kwh=1.5, pump_kwh=1.3)
+        house.cycle()
+        house.run(10)
+        assert "heat_pump" in house.calc.device_meter_gaps
+        house.dark = set()
+        house.run(10)
+        assert house.calc.device_meter_gaps == {}
+        assert house.pump_kwh() - before == pytest.approx(3.3 + 2.0 * 80 / 3600, abs=0.01)
+
+
+    def test_a_restart_with_no_new_step_starts_it_again_too(self):
+        house = House()
+        house.cycle()
+        house.run(60)
+        before = house.pump_kwh()
+        house.restart()
+        house.down(3600, import_kwh=2.3, pump_kwh=2.0)
+        house.cycle()
+        house.dark = {IMPORT}
+        house.run(60)
+        # down 40 min with the pump off: nothing joins the held step
+        house.restart()
+        house.down(2400, import_kwh=0.2, pump_kwh=0.0)
+        house.cycle()
+        house.run(10, pump_w=0.0)
+        assert "heat_pump" in house.calc.device_meter_gaps
+        house.dark = set()
+        house.run(10, pump_w=0.0)
+        assert house.calc.device_meter_gaps == {}
+        assert house.pump_kwh() - before == pytest.approx(2.0 + 2.0 * 70 / 3600, abs=0.02)
+
+
+@pytest.mark.unit
+class TestAHeldStepOfAGoneMeter:
+    def test_is_dropped_not_booked(self, caplog):
+        house = House()
+        house.cycle()
+        house.run(60)
+        house.restart()
+        house.down(3600, import_kwh=2.3, pump_kwh=2.0)
+        house.cycle()
+        house.dark = {IMPORT}
+        house.run(10)
+        assert "heat_pump" in house.calc.device_meter_gaps
+        kwh, cost = house.pump_kwh(), house.import_cost()
+        house.pumps[0].tariff_meter = ""
+        house.dark = set()
+        with caplog.at_level(logging.INFO):
+            house.run(10)
+        assert house.calc.device_meter_gaps == {}
+        assert "has no own meter now" in caplog.text
+        # no meter now and no draw read: the hour stays the house's
+        assert house.pump_kwh() == pytest.approx(kwh)
+        assert house.import_cost() - cost == pytest.approx(
+            (2.3 + 2.3 * 10 / 3600) * HOUSE, abs=0.002)
+
+
+@pytest.mark.unit
+class TestTheRates:
+    def test_the_pumps_kwh_leave_at_the_rate_the_house_booked(self):
+        # the house rate went up after the restart: the outage's import was
+        # booked at the day's 0.30, so the pump's kWh leave at 0.30
+        house = House()
+        house.cycle()
+        house.run(900)
+        house.restart()
+        house.calc._import_rate = 0.50
+        house.down(3600, import_kwh=2.3, pump_kwh=2.0)
+        house.cycle()
+        house.run(10)
+        # the house's own kWh stay at what it paid: 0.30, and the 10 s at
+        # 0.50 since (taken out at 0.50, the house would pay −0.25 in all)
+        own_cost = house.import_cost() - house.pump_cost()
+        own_kwh = house.grid_kwh() - house.pump_kwh()
+        assert 0.30 < own_cost / own_kwh < 0.32
+        assert house.pump_cost() == pytest.approx(house.pump_kwh() * PUMP)
+
+    def test_the_pumps_day_average_prices_its_hour(self):
+        # its own rate changed after the restart; the hour is priced at its
+        # day's average, as the house prices its own (0.40 at the read)
+        house = House()
+        house.cycle()
+        house.run(900)
+        house.restart()
+        for pump in house.pumps:
+            pump.tariff_rate = 0.40
+        house.down(3600, import_kwh=2.3, pump_kwh=2.0)
+        house.cycle()
+        house.run(10)
+        live = 2.0 * 910 / 3600
+        assert house.pump_cost() == pytest.approx(
+            live * PUMP + 2.0 * PUMP + 2.0 * 10 / 3600 * PUMP, abs=0.003)
