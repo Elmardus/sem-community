@@ -53,7 +53,7 @@ async def test_install_flow_is_two_steps_only():
         "custom_components.solar_energy_management.config_flow.discover_inverter_from_registry",
         return_value=None,
     ):
-        result = await flow.async_step_user(user_input={"observer_mode": False})
+        result = await flow.async_step_user(user_input={})
 
     # Must skip ev_charger and go straight to hardware
     assert result["step_id"] == "hardware", (

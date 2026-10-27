@@ -2954,6 +2954,19 @@ def propose_energy_sources(hass=None, registry=None) -> Dict[str, Any]:
     # Rung 2 — shape. An entity that is a power sensor on an integration the
     # census calls energy-shaped is a candidate even when nothing declared
     # it, which is how a brand that publishes no vocabulary still gets help.
+    #
+    # (#1213) A guess that looks confirmed in the install form is worse than
+    # an empty picker. So a role is proposed only when ONE sensor is left at
+    # its best token: several (an inverter with battery modules, a meter box
+    # with a CT per circuit) means SEM cannot tell, and says nothing. A
+    # per-phase sensor (L1-L3, _a/_b/_c) is one slice of the total, never it.
+    tokens = (("solar", "solar_power_sensor"), ("pv", "solar_power_sensor"),
+              ("grid", "grid_import_power_sensor"),
+              ("meter", "grid_import_power_sensor"),
+              ("batter", "battery_power_sensor"))
+    bad_words = ("today", "daily", "total", "forecast", "l1", "l2", "l3")
+    phase_tail = re.compile(r"_[abc](_|$)")
+    found: Dict[str, Dict[str, list]] = {}
     for dom in sorted(by_domain, key=_domain_rank):
         ents = by_domain[dom]
         if not _census_energy_shaped(ents):
@@ -2965,19 +2978,28 @@ def propose_energy_sources(hass=None, registry=None) -> Dict[str, Any]:
             if str(getattr(e, "original_device_class", "")) != "power":
                 continue
             low = eid.lower()
-            for token, key in (("solar", "solar_power_sensor"),
-                               ("pv", "solar_power_sensor"),
-                               ("grid", "grid_import_power_sensor"),
-                               ("meter", "grid_import_power_sensor"),
-                               ("batter", "battery_power_sensor")):
+            if any(bad in low for bad in bad_words) or phase_tail.search(low):
+                continue
+            for token, key in tokens:
                 if key in out or token not in low:
                     continue
-                if any(bad in low for bad in ("today", "daily", "total",
-                                              "forecast", "l1", "l2", "l3")):
-                    continue
-                out[key] = {"entity": eid, "domain": dom,
-                            "why": "a power sensor on an energy integration"}
+                found.setdefault(key, {}).setdefault(token, []).append(
+                    (dom, eid))
                 break
+    for key in dict.fromkeys(k for _, k in tokens):
+        if key in out:
+            continue
+        # the best token that matched anything decides; two matches there
+        # are two candidates, and no proposal
+        best = next((t for t, k in tokens
+                     if k == key and found.get(key, {}).get(t)), None)
+        if best is None:
+            continue
+        hits = found[key][best]
+        if len(hits) == 1:
+            dom, eid = hits[0]
+            out[key] = {"entity": eid, "domain": dom,
+                        "why": "a power sensor on an energy integration"}
     return out
 
 

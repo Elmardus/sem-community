@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Installation av solenergihantering",
-        "description": "SEM har upptäckt följande sensorer från din Home Assistant Energi-instrumentpanel:\n\n{summary}\n\nKlicka **Skicka** för att fortsätta. Bara ett steg till. EV-laddare, värmepump, tariff och alla andra inställningar konfigureras senare på den nya **Konfiguration**-fliken i SEM-instrumentpanelen — du behöver inte hantera dem nu.",
-        "data": {
-          "observer_mode": "Testläge (skrivskyddat — styr inte hårdvara)"
-        },
-        "data_description": {
-          "observer_mode": "Lämna AV vid en normal installation. Slå PÅ endast på en test-/staginginstans av Home Assistant som speglar en produktionsinstans, så att SEM aldrig skickar kommandon till KEBA, växelriktaren eller några switchar."
+        "title": "SEM hittade din anläggning",
+        "description": "Det här är värdena just nu:\n\n- Sol: {solar}\n- Nät: {grid}\n- Batteri: {battery}\n\nDe kommer från samma sensorer som din Energi-instrumentpanel. Tryck **Skicka**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Välj sensorer själv",
+            "description": "Bara om ett värde ovan ser fel ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Näteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batteriladdning %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -37,7 +43,7 @@
       },
       "hardware": {
         "title": "Hårdvara",
-        "description": "One final value depends on your installation:\n\n• Home Battery Capacity — the usable kWh of your inverter battery.\n\nSEM also auto-detected your inverter's discharge control entity: {discharge_entity}\n\nLeave the dashboard option ON to have SEM build its Lovelace dashboard for you. **Note: this triggers a Home Assistant restart about 5 seconds after install completes.**\n\nEverything else uses safe defaults that you can tune later from the integration's options.",
+        "description": "Sista steget! SEM hittade automatiskt växelriktarens entitet för urladdningsstyrning: {discharge_entity}\n\nLåt panelvalet vara PÅ så bygger SEM sin Lovelace-panel åt dig. **Obs: detta startar om Home Assistant cirka 5 sekunder efter att installationen är klar.**\n\nAllt annat — även din toppgräns mot nätet — använder säkra standardvärden som du kan justera direkt efter installationen: toppgränsen med reglaget på fliken **Kontroll**, allt annat på fliken **Konfiguration** i SEM-panelen — bland annat elbilsladdare, värmepump, tariff och batterizoner.",
         "data": {
           "battery_capacity_kwh": "Husbatteriets kapacitet (kWh)",
           "generate_dashboard_on_install": "Skapa SEM-instrumentpanelen nu (startar om HA)",
@@ -102,6 +108,50 @@
           "grid_import_power_entity": "Bara om din mätare saknar en enda tecknad sensor: importsidan, alltid positiv. Fyll i båda dessa eller ingen.",
           "grid_export_power_entity": "Exportsidan, alltid positiv. SEM beräknar export minus import, så ingen riktning behöver gissas."
         }
+      },
+      "check_grid": {
+        "title": "En fråga",
+        "description": "{why}\n\nJust nu visar din nätmätare **{grid}**. Sol: {solar}. Batteri: {battery}.",
+        "data": {
+          "grid_answer": "Vad gör ditt hus just nu?"
+        },
+        "data_description": {
+          "grid_answer": "Titta på mätaren eller din energiapp. \"Vet inte\" går bra: SEM lär sig det de närmaste dagarna."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Välj sensorer själv",
+            "description": "Bara om ett värde ovan ser fel ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Näteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batteriladdning %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Välj din nätmätare",
+        "description": "SEM hittade ingen sensor för näteffekt. Utan den vet SEM inte vad du köper eller säljer.\n\nVälj den nedan, eller tryck **Skicka** för att hoppa över. Du kan ställa in den senare under fliken Konfiguration.\n\nSol: {solar}. Batteri: {battery}.",
+        "data": {
+          "grid_power_sensor": "Näteffekt"
+        },
+        "data_description": {
+          "grid_power_sensor": "Aktuell effekt i watt, inte en dagssumma."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Välj sensorer själv",
+            "description": "Bara om ett värde ovan ser fel ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Näteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batteriladdning %"
+            }
+          }
+        }
       }
     },
     "error": {
@@ -118,7 +168,7 @@
     "step": {
       "ev_charger": {
         "title": "EV Laddare",
-        "description": "Tips: de flesta inställningar finns nu på SEM-instrumentpanelen → fliken Konfiguration (färgglatt, live). Detta flöde finns kvar för installationer utan panel.\n\nReview and update your EV charger entity mappings. The Vehicle SOC fields are only used if you provide a Vehicle Battery SOC sensor.",
+        "description": "Tips: de flesta inställningar finns nu på SEM-instrumentpanelen → fliken Konfiguration (färgglatt, live). Detta flöde finns kvar för installationer utan panel.\n\nGranska och uppdatera entitetskopplingarna för din elbilsladdare. Fälten för fordonets SOC används bara om du anger en sensor för fordonets batteri-SOC.",
         "data": {
           "ev_connected_sensor": "EV Anslutningsstatus",
           "ev_charging_sensor": "EV Laddningsstatus",
@@ -197,7 +247,7 @@
           "battery_discharge_protection_enabled": "När detta är PÅ begränsar SEM växelriktarens urladdningsgräns under nattladdning av elbilen, så att husbatteriet bara försörjer huset (inte bilen).",
           "battery_max_discharge_power": "Hård övre gräns för batteriurladdning som upprätthålls av skyddsfunktionen.",
           "electricity_import_rate": "Dag-/enhetstariff (CHF/kWh, inkl. moms). Används för kostnadsuppföljning.",
-          "electricity_off_peak_rate": "Night tariff (CHF/kWh). Set equal to import rate if you don't have a dual tariff.",
+          "electricity_off_peak_rate": "Låglastpris (per kWh). Sätt det lika med importpriset om du inte har ett tvådelat avtal.",
           "electricity_export_rate": "Ersättning för överskottsel som betalas av elhandlaren (CHF/kWh).",
           "demand_charge_rate": "Månatlig effektavgift per kW effekttopp (CHF/kW/månad). Sätt till 0 om ditt avtal inte har någon effektavgift.",
           "observer_mode": "När detta är PÅ övervakar och beräknar SEM allt men skickar aldrig något tjänstanrop till hårdvaran. Använd på en test-/staginginstans av HA som speglar en produktionsinstallation.",
@@ -259,8 +309,8 @@
           "dynamic_tariff_entity": "Entitet för dynamiskt pris (detekteras automatiskt om tom)",
           "dynamic_forecast_entity": "Entitet för prisprognos (valfritt, identifieras automatiskt om tomt)",
           "dynamic_feedin_entity": "Entitet för överskottsersättning (valfri, för dynamiskt exportpris)",
-          "grid_import_power_entity": "Grid import power sensor (optional, auto-detected from Energy Dashboard)",
-          "grid_export_power_entity": "Grid export power sensor (optional, auto-detected from Energy Dashboard)",
+          "grid_import_power_entity": "Sensor för nätimporteffekt (valfri, hittas automatiskt)",
+          "grid_export_power_entity": "Sensor för nätexporteffekt (valfri, hittas automatiskt)",
           "tariff_classification_mode": "Prisklassificeringsläge",
           "solar_forecast_source": "Källa för solprognos",
           "grid_co2_entity": "Sensor för nätets CO₂-intensitet (valfri)",
@@ -1836,7 +1886,7 @@
         "step": {
           "confirm": {
             "title": "Rapportera detta till SEM",
-            "description": "SEM:s senaste 3+ strömkommandon till **{name}** avvisades: `{error}`. Laddaren står INTE under SEM:s kontroll just nu — den fortsätter göra det den senast blev tillsagd (inklusive att ladda för full effekt i läget av). Vanligaste orsakerna: laddarens styrentitet har bytt namn efter en uppdatering av den underliggande integrationen, eller så pekar `ev_charger_service` på en tjänst med ett annat parameterschema. Kontrollera laddarens styrentitet/tjänst i SEM-konfigurationen. Detta problem försvinner automatiskt vid nästa lyckade kommando.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEM:s senaste 3+ strömkommandon till **{name}** avvisades: `{error}`. Laddaren står INTE under SEM:s kontroll just nu — den fortsätter göra det den senast blev tillsagd (inklusive att ladda för full effekt i läget av). Vanligaste orsakerna: laddarens styrentitet har bytt namn efter en uppdatering av den underliggande integrationen, eller så pekar `ev_charger_service` på en tjänst med ett annat parameterschema. Kontrollera laddarens styrentitet/tjänst i SEM-konfigurationen. Detta problem försvinner automatiskt vid nästa lyckade kommando.\n\nSEM tror att felet är dess eget. Om du kan, öppna en felrapport med knappen i aviseringen — formuläret är redan ifyllt. Om du hellre vill kan du kopiera sammanhanget nedan till ett e-postmeddelande eller ett foruminlägg. Den här dialogen skickar ingenting någonstans.\n\n```\n{context}\n```\n\nBekräfta för att stänga aviseringen."
           }
         }
       }
@@ -1847,7 +1897,7 @@
         "step": {
           "confirm": {
             "title": "Rapportera detta till SEM",
-            "description": "SEM har beordrat **{name}** att stoppa, men ingen konfigurerad mekanism kan faktiskt öppna kontaktorn — bilen drar fortfarande {power} W. Den enda styrning SEM har för den här laddaren är `{entity}`, och dess minimum ligger över 0 A, så att skriva 0 A gör ingenting (SEM skriver aldrig ett värde som entiteten skulle avvisa). Har du ett hembatteri kommer den här effekten ur det — när som helst på dygnet. Lösning: konfigurera en start/stopp-entitet (`ev_start_stop_entity`), en laddlägesentitet eller en stopptjänst för den här laddaren i SEM:s inställningar. Meddelandet försvinner så snart laddaren slutar dra effekt.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEM har beordrat **{name}** att stoppa, men ingen konfigurerad mekanism kan faktiskt öppna kontaktorn — bilen drar fortfarande {power} W. Den enda styrning SEM har för den här laddaren är `{entity}`, och dess minimum ligger över 0 A, så att skriva 0 A gör ingenting (SEM skriver aldrig ett värde som entiteten skulle avvisa). Har du ett hembatteri kommer den här effekten ur det — när som helst på dygnet. Lösning: konfigurera en start/stopp-entitet (`ev_start_stop_entity`), en laddlägesentitet eller en stopptjänst för den här laddaren i SEM:s inställningar. Meddelandet försvinner så snart laddaren slutar dra effekt.\n\nSEM tror att felet är dess eget. Om du kan, öppna en felrapport med knappen i aviseringen — formuläret är redan ifyllt. Om du hellre vill kan du kopiera sammanhanget nedan till ett e-postmeddelande eller ett foruminlägg. Den här dialogen skickar ingenting någonstans.\n\n```\n{context}\n```\n\nBekräfta för att stänga aviseringen."
           }
         }
       }
@@ -1886,7 +1936,7 @@
         "step": {
           "confirm": {
             "title": "Rapportera detta till SEM",
-            "description": "**{name}** är inställd på ett laddmål i procent, men fordonet rapporterar just nu ingen laddningsnivå — SEM kan därför inte stanna *exakt* vid **{target}%**.\n\nDet laddar ändå inte blint: från den senaste riktiga avläsningen under den här sessionen räknar det den energi som faktiskt levererats och stannar när den uppmätta summan når ditt mål — överskridandet är bara det bilen tagit sedan avläsningen. Om ingen riktig avläsning alls har kommit in under sessionen (eller om SEM startades om mitt i laddningen) saknas referenspunkt, och laddningen pågår tills bilen själv drar ner effekten nära fullt.\n\nFör en gräns som träffar rätt, koppla en **riktig SOC-sensor för fordonet** till den här laddaren (Konfiguration → EV → Fordons-SOC-entitet). Batteriprocenten på instrumentpanelen är SEM:s *uppskattade* SOC, som medvetet ignoreras för den hårda gränsen (den kan driva). Den här reparationen försvinner automatiskt så snart en riktig SOC-avläsning finns igen.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "**{name}** är inställd på ett laddmål i procent, men fordonet rapporterar just nu ingen laddningsnivå — SEM kan därför inte stanna *exakt* vid **{target}%**.\n\nDet laddar ändå inte blint: från den senaste riktiga avläsningen under den här sessionen räknar det den energi som faktiskt levererats och stannar när den uppmätta summan når ditt mål — överskridandet är bara det bilen tagit sedan avläsningen. Om ingen riktig avläsning alls har kommit in under sessionen (eller om SEM startades om mitt i laddningen) saknas referenspunkt, och laddningen pågår tills bilen själv drar ner effekten nära fullt.\n\nFör en gräns som träffar rätt, koppla en **riktig SOC-sensor för fordonet** till den här laddaren (Konfiguration → EV → Fordons-SOC-entitet). Batteriprocenten på instrumentpanelen är SEM:s *uppskattade* SOC, som medvetet ignoreras för den hårda gränsen (den kan driva). Den här reparationen försvinner automatiskt så snart en riktig SOC-avläsning finns igen.\n\nSEM tror att felet är dess eget. Om du kan, öppna en felrapport med knappen i aviseringen — formuläret är redan ifyllt. Om du hellre vill kan du kopiera sammanhanget nedan till ett e-postmeddelande eller ett foruminlägg. Den här dialogen skickar ingenting någonstans.\n\n```\n{context}\n```\n\nBekräfta för att stänga aviseringen."
           }
         }
       }
@@ -1953,7 +2003,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM kontrollerar två gissade nätmätare",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguration**, and pick **Alla inställningar** at the top. Then set **Näteffekt** in section **Sensorkällor**. If your meter has one sensor for import and one for export, set **Nätimportsensor** and **Nätexportsensor** in section **Tariff och priser** instead."
+      "description": "SEM har ingen näteffektsensor, så den gissade utifrån namnet: **{import_entity}** för nätimport och **{export_entity}** för nätexport. SEM använder dem inte förrän de stämmer med dina energiräknare för nätet, så näteffekten visar 0 tills vidare. Så väljer du din mätare: öppna SEM-panelen, fliken ⚙ **Konfiguration**, och välj **Alla inställningar** högst upp. Ställ sedan in **Näteffekt** i avsnittet **Sensorkällor**. Om din mätare har en sensor för import och en för export, ställ i stället in **Nätimportsensor** och **Nätexportsensor** i avsnittet **Tariff och priser**."
     },
     "battery_control_write_not_taken": {
       "title": "En batteristyrningsskrivning tas inte emot: {entity_id}",
@@ -1973,7 +2023,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM kunde inte hitta dina nätmätare",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguration**, and pick **Alla inställningar** at the top. Then set **Näteffekt** in section **Sensorkällor**. If your meter has one sensor for import and one for export, set **Nätimportsensor** and **Nätexportsensor** in section **Tariff och priser** instead."
+      "description": "SEM har ingen näteffektsensor, och det den gissade utifrån namnet är inte din nätmätare: **{import_entity}** för import, **{export_entity}** för export. De stämmer inte med dina energiräknare för nätet, eller så saknas en av de två. SEM visar hellre ingen näteffekt än en felaktig. Så väljer du din mätare: öppna SEM-panelen, fliken ⚙ **Konfiguration**, och välj **Alla inställningar** högst upp. Ställ sedan in **Näteffekt** i avsnittet **Sensorkällor**. Om din mätare har en sensor för import och en för export, ställ i stället in **Nätimportsensor** och **Nätexportsensor** i avsnittet **Tariff och priser**."
     },
     "power_sensor_not_found": {
       "title": "Ingen effektsensor för {energy_entity}",
@@ -2063,6 +2113,21 @@
         "per_kwh": "Per kWh",
         "tiered": "Steg efter kWh per år",
         "fixed_monthly": "Fast per månad"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Köper ström från nätet",
+        "sending": "Skickar ström till nätet",
+        "keep": "Det här är min nätmätare",
+        "other": "Använd den andra mätaren",
+        "unknown": "Vet inte"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "none": "hittades inte",
+        "why_guessed": "Din Energi-instrumentpanel har ingen sensor för näteffekt, så SEM gissade en."
       }
     }
   }

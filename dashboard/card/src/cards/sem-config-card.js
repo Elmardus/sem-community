@@ -25,6 +25,7 @@ import { socDisplay } from '../util/missing-value.js';
 import { chargerAddPlan, detectRowLabelKey, isCo2IntensityEntity, isOutdoorTemperatureCandidate, isPowerEntity, nearMissAction, watchOnlyHelpKey } from '../util/detect-rows.js';
 import { roleSource, showsRoleLegend } from '../util/role-source.js';
 import { getAllSettings, setAllSettings, VIEW_MODE_EVENT } from '../util/view-mode.js';
+import { sourceCheckRows, fmtWatts } from '../util/source-check.js';
 
 // Section index — order = visual order in the rendered tab. Each entry
 // carries a colour-accent that matches the section icon, mirroring the
@@ -48,6 +49,7 @@ const ESSENTIAL_SECTIONS = new Set([
     'tariff',          // without a price, every saving SEM reports is zero
     'ev_chargers',     // the main sink on most installs
     'battery_zones',   // the floors that keep the house covered,
+    'sensor_sources',  // (#1213) the check: what SEM reads, and one tap when a direction is wrong
 ]);
 
 const ESSENTIAL_CONTROLS = new Set([
@@ -1419,9 +1421,50 @@ class SEMConfigCard extends SEMLitBase {
         `;
     }
 
+    // (#1213) What SEM reads right now, in plain words, and one tap when a
+    // direction is wrong. Shown in Everyday too: this is where a new user
+    // checks SEM, and they should not need All settings for it.
+    _renderSourceCheck(T) {
+        const rows = sourceCheckRows((suffix) => this._hass?.states[this._prefix + suffix]);
+        this._countRow(true);
+        const battery = rows.some((r) => r.key === 'battery');
+        return html`
+            <div class="grid-sign-block source-check">
+                <div class="setting-help-text" style="margin:0 0 4px">
+                    ${this._t('config_check_intro')}</div>
+                ${rows.map((r) => html`
+                    <div class="readonly-row">
+                        <span class="ctrl-label">${this._t('config_check_' + r.key)}</span>
+                        <span class="readonly-value">${r.dir
+                            ? this._t('config_check_' + r.dir) + ' ' : ''}${fmtWatts(r.w)}</span>
+                    </div>`)}
+                <div class="setting-help-text" style="margin:4px 0 0">
+                    ${this._t('config_check_question')}</div>
+                <div class="action-row">
+                    <button class="action-btn" ?disabled=${this._signBusy}
+                            @click=${() => this._flipGridSign()}>
+                        <ha-icon icon="mdi:swap-vertical-bold" style="--mdc-icon-size:16px"></ha-icon>
+                        ${this._t('config_check_grid_wrong')}
+                    </button>
+                    ${battery ? html`
+                    <button class="action-btn" ?disabled=${this._battSignBusy}
+                            @click=${() => this._flipBatterySign()}>
+                        <ha-icon icon="mdi:swap-vertical-bold" style="--mdc-icon-size:16px"></ha-icon>
+                        ${this._t('config_check_battery_wrong')}
+                    </button>` : nothing}
+                </div>
+                ${this._signMsg ? html`<div class="sign-feedback">${this._signMsg}</div>` : nothing}
+                ${this._battSignMsg ? html`<div class="sign-feedback">${this._battSignMsg}</div>` : nothing}
+                <div class="setting-help-text" style="margin:2px 0 6px">
+                    ${this._t('config_check_wrong_sensor')}</div>
+            </div>
+        `;
+    }
+
     _renderSensorSources(T) {
         const opts = this._options || {};
         return html`
+            ${this._renderSourceCheck(T)}
             <div class="setting-help-text" style="margin:0 0 6px">
                 ${this._t('config_sources_intro')}</div>
             ${this._renderPicker('grid_power_sensor', 'config_grid_power_sensor',
@@ -3761,6 +3804,7 @@ class SEMConfigCard extends SEMLitBase {
                 }
                 /* #461 grid-sign fix block */
                 .grid-sign-block { margin-top: 6px; padding-top: 8px; border-top: 1px solid ${T.surfaceBorder}; }
+                .grid-sign-block.source-check { margin-top: 0; padding-top: 0; border-top: none; }
                 .grid-sign-block .action-row { display: flex; justify-content: flex-end; gap: 8px; padding: 6px 0 2px; }
                 .grid-sign-block .action-btn {
                     display: inline-flex; align-items: center; gap: 6px;

@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Konfiguracja zarządzania energią słoneczną",
-        "description": "SEM wykrył następujące czujniki w pulpicie Energia Home Assistant:\n\n{summary}\n\nKliknij **Prześlij**, aby kontynuować. Jeszcze tylko jeden krok. Ładowarki EV, pompa ciepła, taryfa i wszystkie inne ustawienia są konfigurowane później w nowej zakładce **Konfiguracja** na pulpicie SEM — nie musisz ich teraz ustawiać.",
-        "data": {
-          "observer_mode": "Tryb testowy (tylko odczyt — bez sterowania sprzętem)"
-        },
-        "data_description": {
-          "observer_mode": "Pozostaw WYŁĄCZONE przy normalnej instalacji. Włącz tylko na testowej/stagingowej instancji Home Assistant, która odzwierciedla instalację produkcyjną, aby SEM nigdy nie wysyłał poleceń do KEBA, falownika ani żadnych przełączników."
+        "title": "SEM znalazł Twoją instalację",
+        "description": "Oto wartości w tej chwili:\n\n- Słońce: {solar}\n- Sieć: {grid}\n- Bateria: {battery}\n\nPochodzą z tych samych czujników co Twój panel Energia. Naciśnij **Zatwierdź**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Wybierz czujniki samodzielnie",
+            "description": "Tylko jeśli któraś wartość powyżej wygląda źle.",
+            "data": {
+              "solar_production_sensor": "Moc fotowoltaiki",
+              "grid_power_sensor": "Moc sieci",
+              "battery_power_sensor": "Moc baterii",
+              "battery_soc_sensor": "Naładowanie baterii %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -37,7 +43,7 @@
       },
       "hardware": {
         "title": "Sprzęt",
-        "description": "One final value depends on your installation:\n\n• Home Battery Capacity — the usable kWh of your inverter battery.\n\nSEM also auto-detected your inverter's discharge control entity: {discharge_entity}\n\nLeave the dashboard option ON to have SEM build its Lovelace dashboard for you. **Note: this triggers a Home Assistant restart about 5 seconds after install completes.**\n\nEverything else uses safe defaults that you can tune later from the integration's options.",
+        "description": "Ostatni krok! SEM automatycznie wykrył encję sterowania rozładowaniem Twojego falownika: {discharge_entity}\n\nZostaw opcję pulpitu WŁĄCZONĄ, a SEM zbuduje dla Ciebie swój pulpit Lovelace. **Uwaga: około 5 sekund po zakończeniu instalacji Home Assistant uruchomi się ponownie.**\n\nWszystko inne — w tym Twój limit szczytowy sieci — używa bezpiecznych wartości domyślnych, które możesz zmienić zaraz po konfiguracji: limit szczytowy suwakiem na karcie **Sterowanie**, wszystko inne na karcie **Konfiguracja** pulpitu SEM — w tym ładowarki EV, pompę ciepła, taryfę i strefy baterii.",
         "data": {
           "battery_capacity_kwh": "Pojemność baterii domowej (kWh)",
           "generate_dashboard_on_install": "Wygeneruj teraz pulpit SEM (restartuje HA)",
@@ -102,6 +108,50 @@
           "grid_import_power_entity": "Tylko jeśli Twój licznik nie ma pojedynczego czujnika ze znakiem: strona importu, zawsze dodatnia. Wypełnij obie te pozycje albo żadną.",
           "grid_export_power_entity": "Strona eksportu, zawsze dodatnia. SEM oblicza eksport minus import, więc żadnego kierunku nie trzeba zgadywać."
         }
+      },
+      "check_grid": {
+        "title": "Jedno pytanie",
+        "description": "{why}\n\nW tej chwili Twój licznik sieci pokazuje **{grid}**. Słońce: {solar}. Bateria: {battery}.",
+        "data": {
+          "grid_answer": "Co teraz robi Twój dom?"
+        },
+        "data_description": {
+          "grid_answer": "Spójrz na licznik lub aplikację energii. \"Nie wiem\" też jest dobre: SEM nauczy się tego w najbliższych dniach."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Wybierz czujniki samodzielnie",
+            "description": "Tylko jeśli któraś wartość powyżej wygląda źle.",
+            "data": {
+              "solar_production_sensor": "Moc fotowoltaiki",
+              "grid_power_sensor": "Moc sieci",
+              "battery_power_sensor": "Moc baterii",
+              "battery_soc_sensor": "Naładowanie baterii %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Wybierz licznik sieci",
+        "description": "SEM nie znalazł czujnika mocy sieci. Bez niego SEM nie wie, co kupujesz lub oddajesz.\n\nWybierz go poniżej albo naciśnij **Zatwierdź**, aby pominąć. Możesz ustawić go później w zakładce Konfiguracja.\n\nSłońce: {solar}. Bateria: {battery}.",
+        "data": {
+          "grid_power_sensor": "Moc sieci"
+        },
+        "data_description": {
+          "grid_power_sensor": "Bieżąca moc w watach, nie suma dzienna."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Wybierz czujniki samodzielnie",
+            "description": "Tylko jeśli któraś wartość powyżej wygląda źle.",
+            "data": {
+              "solar_production_sensor": "Moc fotowoltaiki",
+              "grid_power_sensor": "Moc sieci",
+              "battery_power_sensor": "Moc baterii",
+              "battery_soc_sensor": "Naładowanie baterii %"
+            }
+          }
+        }
       }
     },
     "error": {
@@ -118,7 +168,7 @@
     "step": {
       "ev_charger": {
         "title": "Ładowarka EV",
-        "description": "Wskazówka: większość ustawień znajduje się teraz na pulpicie SEM → karta Konfiguracja (kolorowo, na żywo). Ten przepływ pozostaje dla instalacji bez pulpitu.\n\nReview and update your EV charger entity mappings. The Vehicle SOC fields are only used if you provide a Vehicle Battery SOC sensor.",
+        "description": "Wskazówka: większość ustawień znajduje się teraz na pulpicie SEM → karta Konfiguracja (kolorowo, na żywo). Ten przepływ pozostaje dla instalacji bez pulpitu.\n\nSprawdź i zaktualizuj przypisania encji ładowarki EV. Pola SOC pojazdu są używane tylko wtedy, gdy podasz czujnik SOC akumulatora pojazdu.",
         "data": {
           "ev_connected_sensor": "Status podłączenia EV",
           "ev_charging_sensor": "Status ładowania EV",
@@ -197,7 +247,7 @@
           "battery_discharge_protection_enabled": "Gdy WŁĄCZONE, SEM ogranicza limit rozładowania falownika podczas nocnego ładowania EV, tak aby bateria domowa zasilała wyłącznie dom (a nie pojazd).",
           "battery_max_discharge_power": "Twardy górny limit rozładowania baterii wymuszany przez funkcję ochrony.",
           "electricity_import_rate": "Taryfa dzienna / jednostrefowa (CHF/kWh, z VAT). Używana do śledzenia kosztów.",
-          "electricity_off_peak_rate": "Night tariff (CHF/kWh). Set equal to import rate if you don't have a dual tariff.",
+          "electricity_off_peak_rate": "Stawka poza szczytem (za kWh). Ustaw równą stawce importu, jeśli nie masz taryfy dwustrefowej.",
           "electricity_export_rate": "Stawka za oddanie energii do sieci wypłacana przez operatora (CHF/kWh).",
           "demand_charge_rate": "Miesięczna opłata mocowa za kW szczytu (CHF/kW/miesiąc). Ustaw 0, jeśli Twoja umowa nie przewiduje opłaty mocowej.",
           "observer_mode": "Gdy WŁĄCZONE, SEM wszystko monitoruje i wylicza, ale nigdy nie wysyła wywołania usługi do sprzętu. Stosuj na testowej/stagingowej instancji HA odzwierciedlającej instalację produkcyjną.",
@@ -259,8 +309,8 @@
           "dynamic_tariff_entity": "Encja ceny dynamicznej (wykrywana automatycznie, jeśli pusta)",
           "dynamic_forecast_entity": "Encja prognozy cen (opcjonalnie, wykrywana automatycznie, jeśli puste)",
           "dynamic_feedin_entity": "Encja ceny oddania energii (opcjonalna, dla dynamicznej stawki eksportu)",
-          "grid_import_power_entity": "Grid import power sensor (optional, auto-detected from Energy Dashboard)",
-          "grid_export_power_entity": "Grid export power sensor (optional, auto-detected from Energy Dashboard)",
+          "grid_import_power_entity": "Czujnik mocy importu z sieci (opcjonalny, wykrywany automatycznie)",
+          "grid_export_power_entity": "Czujnik mocy eksportu do sieci (opcjonalny, wykrywany automatycznie)",
           "tariff_classification_mode": "Tryb klasyfikacji cen",
           "solar_forecast_source": "Źródło prognozy słonecznej",
           "grid_co2_entity": "Czujnik intensywności CO₂ sieci (opcjonalnie)",
@@ -1836,7 +1886,7 @@
         "step": {
           "confirm": {
             "title": "Zgłoś to do SEM",
-            "description": "Ostatnie co najmniej 3 polecenia prądu wysłane przez SEM do **{name}** zostały odrzucone: `{error}`. Ładowarka NIE jest w tej chwili pod kontrolą SEM — będzie robić to, co zostało jej ostatnio nakazane (łącznie z ładowaniem pełną mocą w trybie wyłączonym). Najczęstsze przyczyny: encja sterująca ładowarki została zmieniona przez aktualizację integracji nadrzędnej albo `ev_charger_service` wskazuje usługę o innym schemacie parametrów. Sprawdź encję sterującą / usługę ładowarki w konfiguracji SEM. To zgłoszenie znika automatycznie po następnym udanym poleceniu.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "Ostatnie co najmniej 3 polecenia prądu wysłane przez SEM do **{name}** zostały odrzucone: `{error}`. Ładowarka NIE jest w tej chwili pod kontrolą SEM — będzie robić to, co zostało jej ostatnio nakazane (łącznie z ładowaniem pełną mocą w trybie wyłączonym). Najczęstsze przyczyny: encja sterująca ładowarki została zmieniona przez aktualizację integracji nadrzędnej albo `ev_charger_service` wskazuje usługę o innym schemacie parametrów. Sprawdź encję sterującą / usługę ładowarki w konfiguracji SEM. To zgłoszenie znika automatycznie po następnym udanym poleceniu.\n\nSEM uważa, że to jego własny błąd. Jeśli możesz, zgłoś błąd przyciskiem w powiadomieniu — formularz będzie już wypełniony. Jeśli wolisz, skopiuj poniższy kontekst do e-maila lub wpisu na forum. To okno niczego nigdzie nie wysyła.\n\n```\n{context}\n```\n\nPotwierdź, aby zamknąć powiadomienie."
           }
         }
       }
@@ -1847,7 +1897,7 @@
         "step": {
           "confirm": {
             "title": "Zgłoś to do SEM",
-            "description": "SEM wydał **{name}** polecenie zatrzymania, ale żaden skonfigurowany mechanizm nie potrafi faktycznie rozłączyć stycznika — samochód nadal pobiera {power} W. Jedyne sterowanie, jakie SEM ma dla tej ładowarki, to `{entity}`, a jej minimum jest większe od 0 A, więc zapis 0 A nic nie daje (SEM nigdy nie zapisuje wartości, którą encja by odrzuciła). Jeśli masz magazyn energii, ta moc pochodzi z niego — o każdej porze dnia i nocy. Rozwiązanie: skonfiguruj dla tej ładowarki w opcjach SEM encję start/stop (`ev_start_stop_entity`), encję trybu ładowania albo usługę zatrzymania. To ostrzeżenie zniknie, gdy tylko ładowarka przestanie pobierać moc.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEM wydał **{name}** polecenie zatrzymania, ale żaden skonfigurowany mechanizm nie potrafi faktycznie rozłączyć stycznika — samochód nadal pobiera {power} W. Jedyne sterowanie, jakie SEM ma dla tej ładowarki, to `{entity}`, a jej minimum jest większe od 0 A, więc zapis 0 A nic nie daje (SEM nigdy nie zapisuje wartości, którą encja by odrzuciła). Jeśli masz magazyn energii, ta moc pochodzi z niego — o każdej porze dnia i nocy. Rozwiązanie: skonfiguruj dla tej ładowarki w opcjach SEM encję start/stop (`ev_start_stop_entity`), encję trybu ładowania albo usługę zatrzymania. To ostrzeżenie zniknie, gdy tylko ładowarka przestanie pobierać moc.\n\nSEM uważa, że to jego własny błąd. Jeśli możesz, zgłoś błąd przyciskiem w powiadomieniu — formularz będzie już wypełniony. Jeśli wolisz, skopiuj poniższy kontekst do e-maila lub wpisu na forum. To okno niczego nigdzie nie wysyła.\n\n```\n{context}\n```\n\nPotwierdź, aby zamknąć powiadomienie."
           }
         }
       }
@@ -1886,7 +1936,7 @@
         "step": {
           "confirm": {
             "title": "Zgłoś to do SEM",
-            "description": "**{name}** ma ustawiony procentowy cel ładowania, ale pojazd w tej chwili nie raportuje stanu naładowania, więc SEM nie może zatrzymać się *dokładnie* przy **{target}%**.\n\nNie ładuje jednak na ślepo: od ostatniego rzeczywistego odczytu w tej sesji zlicza faktycznie dostarczoną energię i zatrzymuje ładowanie, gdy ta zmierzona suma osiągnie cel — przekroczenie to tylko to, co auto pobrało od tamtego odczytu. Jeśli w tej sesji nie dotarł żaden rzeczywisty odczyt (albo SEM uruchomił się ponownie w trakcie ładowania), nie ma punktu odniesienia i ładowanie trwa, aż samo auto zredukuje moc tuż przed pełnym.\n\nAby limit trafiał w punkt, podłącz **rzeczywisty czujnik SOC pojazdu** dla tej ładowarki (Konfiguracja → EV → Encja SOC pojazdu). Procent baterii na pulpicie to *szacowany* SOC SEM, celowo pomijany przy twardym limicie (może się rozjeżdżać). Ta naprawa znika automatycznie, gdy tylko znów pojawi się rzeczywisty odczyt SOC.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "**{name}** ma ustawiony procentowy cel ładowania, ale pojazd w tej chwili nie raportuje stanu naładowania, więc SEM nie może zatrzymać się *dokładnie* przy **{target}%**.\n\nNie ładuje jednak na ślepo: od ostatniego rzeczywistego odczytu w tej sesji zlicza faktycznie dostarczoną energię i zatrzymuje ładowanie, gdy ta zmierzona suma osiągnie cel — przekroczenie to tylko to, co auto pobrało od tamtego odczytu. Jeśli w tej sesji nie dotarł żaden rzeczywisty odczyt (albo SEM uruchomił się ponownie w trakcie ładowania), nie ma punktu odniesienia i ładowanie trwa, aż samo auto zredukuje moc tuż przed pełnym.\n\nAby limit trafiał w punkt, podłącz **rzeczywisty czujnik SOC pojazdu** dla tej ładowarki (Konfiguracja → EV → Encja SOC pojazdu). Procent baterii na pulpicie to *szacowany* SOC SEM, celowo pomijany przy twardym limicie (może się rozjeżdżać). Ta naprawa znika automatycznie, gdy tylko znów pojawi się rzeczywisty odczyt SOC.\n\nSEM uważa, że to jego własny błąd. Jeśli możesz, zgłoś błąd przyciskiem w powiadomieniu — formularz będzie już wypełniony. Jeśli wolisz, skopiuj poniższy kontekst do e-maila lub wpisu na forum. To okno niczego nigdzie nie wysyła.\n\n```\n{context}\n```\n\nPotwierdź, aby zamknąć powiadomienie."
           }
         }
       }
@@ -1953,7 +2003,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM sprawdza dwa odgadnięte liczniki sieci",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguracja**, and pick **Wszystkie ustawienia** at the top. Then set **Moc sieci** in section **Źródła czujników**. If your meter has one sensor for import and one for export, set **Czujnik importu z sieci** and **Czujnik eksportu do sieci** in section **Taryfa i ceny** instead."
+      "description": "SEM nie ma czujnika mocy sieci, więc zgadł po nazwie: **{import_entity}** dla poboru z sieci i **{export_entity}** dla oddawania do sieci. SEM nie używa ich, dopóki nie zgadzają się z Twoimi licznikami energii sieci, więc na razie moc sieci wynosi 0. Jak wybrać licznik: otwórz pulpit SEM, kartę ⚙ **Konfiguracja**, i wybierz u góry **Wszystkie ustawienia**. Następnie ustaw **Moc sieci** w sekcji **Źródła czujników**. Jeśli Twój licznik ma jeden czujnik do poboru i jeden do oddawania, ustaw zamiast tego **Czujnik importu z sieci** i **Czujnik eksportu do sieci** w sekcji **Taryfa i ceny**."
     },
     "battery_control_write_not_taken": {
       "title": "Zapis sterowania baterią nie został przyjęty: {entity_id}",
@@ -1973,7 +2023,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM nie mógł znaleźć Twoich liczników mocy sieci",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfiguracja**, and pick **Wszystkie ustawienia** at the top. Then set **Moc sieci** in section **Źródła czujników**. If your meter has one sensor for import and one for export, set **Czujnik importu z sieci** and **Czujnik eksportu do sieci** in section **Taryfa i ceny** instead."
+      "description": "SEM nie ma czujnika mocy sieci, a czujniki zgadnięte po nazwie nie są Twoim licznikiem sieci: **{import_entity}** dla poboru, **{export_entity}** dla oddawania. Nie zgadzają się z Twoimi licznikami energii sieci albo brakuje jednego z nich. SEM woli nie pokazywać mocy sieci niż pokazywać błędną. Jak wybrać licznik: otwórz pulpit SEM, kartę ⚙ **Konfiguracja**, i wybierz u góry **Wszystkie ustawienia**. Następnie ustaw **Moc sieci** w sekcji **Źródła czujników**. Jeśli Twój licznik ma jeden czujnik do poboru i jeden do oddawania, ustaw zamiast tego **Czujnik importu z sieci** i **Czujnik eksportu do sieci** w sekcji **Taryfa i ceny**."
     },
     "power_sensor_not_found": {
       "title": "Brak czujnika mocy dla {energy_entity}",
@@ -2063,6 +2113,21 @@
         "per_kwh": "Za kWh",
         "tiered": "Progi według kWh rocznie",
         "fixed_monthly": "Stała miesięcznie"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Pobieram prąd z sieci",
+        "sending": "Oddaję prąd do sieci",
+        "keep": "To jest mój licznik sieci",
+        "other": "Użyj drugiego licznika",
+        "unknown": "Nie wiem"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "none": "nie znaleziono",
+        "why_guessed": "Twój panel Energia nie ma czujnika mocy sieci, więc SEM zgadł jeden."
       }
     }
   }

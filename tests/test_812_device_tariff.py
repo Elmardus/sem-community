@@ -472,13 +472,16 @@ class TestTheBooks:
         staged = DT(_hass_with(_meter(100.2))).cycle([d], calc.device_meter_last, t1)
         _cycle(calc, t1, import_w=60000.0, entries=staged)
         assert calc.device_meter_last["heat_pump"]["value"] == pytest.approx(100.0)
-        # next cycle, 1 min on: the whole step since the baseline, booked
+        # next cycle, 1 min on: the whole step since the baseline is judged.
+        # (#1228) It spans the skipped minutes, so this cycle's import does
+        # not price it; with no grid counter the house booked none of that
+        # time either, so it is dropped (test_1228 books it from the rows)
         t2 = t1 + timedelta(minutes=1)
         staged = DT(_hass_with(_meter(100.25))).cycle([d], calc.device_meter_last, t2)
         _cycle(calc, t2, import_w=60000.0, entries=staged)
-        assert calc.get_device_tariff("heat_pump", t2.date())["daily_grid_kwh"] == \
-            pytest.approx(0.25)
+        assert calc.get_device_tariff("heat_pump", t2.date())["daily_grid_kwh"] == 0.0
         assert calc.device_meter_last["heat_pump"]["value"] == pytest.approx(100.25)
+        assert calc.device_meter_gaps == {}
 
     def test_an_unreadable_price_is_the_house_rate(self):
         calc = _calc(0.30)

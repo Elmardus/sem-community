@@ -20,9 +20,11 @@ What reads it:
   the SAME classifier the house price uses: a ``DynamicTariffProvider`` over
   that entity, read through ``price_signal.comparative_level``.
 * the decision log: the inputs of a load's record carry its own price.
-* a daily cost per device: its grid kWh × its price. Grid kWh are the own
-  meter's deltas when one is named, else the device's kWh × the share of
-  the house load the grid supplied this cycle (SEM's own flow split).
+* a daily cost per device: its grid kWh × its price. Grid kWh are the
+  device's use — the own meter's step when one is named, else its draw —
+  × the share of the house load the grid supplied this cycle (SEM's own
+  flow split). (#1228) A meter step over more time than a cycle (SEM down,
+  a skipped cycle) is booked against the house rows over the same time.
 
 Pure apart from reading entity states through ``hass``.
 """

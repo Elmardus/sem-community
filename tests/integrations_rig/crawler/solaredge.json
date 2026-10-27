@@ -1,0 +1,26 @@
+{
+ "chargers": [],
+ "meters": [],
+ "near_misses": [],
+ "proposals": [
+  {
+   "battery_power": [
+    "sensor.battery_bat001_power",
+    "set_option"
+   ],
+   "battery_soc": [
+    "sensor.battery_bat001_state_of_charge",
+    "set_option"
+   ],
+   "grid_power": [
+    "sensor.solaredge_grid_power",
+    "set_option"
+   ],
+   "solar_power": [
+    "sensor.solaredge_solar_power",
+    "set_option"
+   ]
+  }
+ ],
+ "vehicles": []
+}

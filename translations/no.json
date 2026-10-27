@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Oppsett av solenergistyring",
-        "description": "SEM har oppdaget følgende sensorer fra Home Assistant Energi-dashbordet:\n\n{summary}\n\nKlikk **Send** for å fortsette. Bare ett steg igjen. EV-ladere, varmepumpe, tariff og alle andre innstillinger konfigureres senere i den nye **Konfigurasjon**-fanen i SEM-dashbordet — du trenger ikke å håndtere dem nå.",
-        "data": {
-          "observer_mode": "Testmodus (skrivebeskyttet — styrer ikke maskinvare)"
-        },
-        "data_description": {
-          "observer_mode": "La stå AV ved en vanlig installasjon. Slå den PÅ bare på en test-/staging-instans av Home Assistant som speiler en produksjonsinstans, slik at SEM aldri sender kommandoer til KEBA, inverteren eller noen brytere."
+        "title": "SEM fant anlegget ditt",
+        "description": "Dette er verdiene akkurat nå:\n\n- Sol: {solar}\n- Nett: {grid}\n- Batteri: {battery}\n\nDe kommer fra de samme sensorene som Energi-dashbordet ditt. Trykk **Send**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Velg sensorer selv",
+            "description": "Bare hvis en verdi over ser feil ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Netteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batterilading %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -37,7 +43,7 @@
       },
       "hardware": {
         "title": "Maskinvare",
-        "description": "One final value depends on your installation:\n\n• Home Battery Capacity — the usable kWh of your inverter battery.\n\nSEM also auto-detected your inverter's discharge control entity: {discharge_entity}\n\nLeave the dashboard option ON to have SEM build its Lovelace dashboard for you. **Note: this triggers a Home Assistant restart about 5 seconds after install completes.**\n\nEverything else uses safe defaults that you can tune later from the integration's options.",
+        "description": "Siste trinn! SEM fant automatisk inverterens entitet for utladingsstyring: {discharge_entity}\n\nLa dashbord-valget stå PÅ, så bygger SEM Lovelace-dashbordet sitt for deg. **Merk: dette starter Home Assistant på nytt omtrent 5 sekunder etter at installasjonen er ferdig.**\n\nAlt annet — også toppgrensen din mot nettet — bruker trygge standardverdier som du kan justere rett etter oppsettet: toppgrensen med glidebryteren på fanen **Kontroll**, alt annet på fanen **Konfigurasjon** på SEM-dashbordet — blant annet elbilladere, varmepumpe, tariff og batterisoner.",
         "data": {
           "battery_capacity_kwh": "Husbatteriets kapasitet (kWh)",
           "generate_dashboard_on_install": "Generer SEM-dashbordet nå (starter HA på nytt)",
@@ -102,6 +108,50 @@
           "grid_import_power_entity": "Bare hvis måleren din ikke har én signert sensor: importsiden, alltid positiv. Fyll ut begge disse eller ingen av dem.",
           "grid_export_power_entity": "Eksportsiden, alltid positiv. SEM beregner eksport minus import, så ingen retning må gjettes."
         }
+      },
+      "check_grid": {
+        "title": "Ett spørsmål",
+        "description": "{why}\n\nAkkurat nå viser nettmåleren din **{grid}**. Sol: {solar}. Batteri: {battery}.",
+        "data": {
+          "grid_answer": "Hva gjør huset ditt akkurat nå?"
+        },
+        "data_description": {
+          "grid_answer": "Se på måleren eller energiappen din. \"Vet ikke\" går fint: SEM lærer det de neste dagene."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Velg sensorer selv",
+            "description": "Bare hvis en verdi over ser feil ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Netteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batterilading %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Velg nettmåleren din",
+        "description": "SEM fant ingen sensor for netteffekt. Uten den vet ikke SEM hva du kjøper eller sender ut.\n\nVelg den nedenfor, eller trykk **Send** for å hoppe over. Du kan sette den senere i fanen Konfigurasjon.\n\nSol: {solar}. Batteri: {battery}.",
+        "data": {
+          "grid_power_sensor": "Netteffekt"
+        },
+        "data_description": {
+          "grid_power_sensor": "Nåværende effekt i watt, ikke en dagssum."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Velg sensorer selv",
+            "description": "Bare hvis en verdi over ser feil ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Netteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batterilading %"
+            }
+          }
+        }
       }
     },
     "error": {
@@ -118,7 +168,7 @@
     "step": {
       "ev_charger": {
         "title": "EV Lader",
-        "description": "Tips: de fleste innstillinger finnes nå på SEM-dashbordet → fanen Konfigurasjon (fargerikt, live). Denne flyten beholdes for oppsett uten dashbord.\n\nReview and update your EV charger entity mappings. The Vehicle SOC fields are only used if you provide a Vehicle Battery SOC sensor.",
+        "description": "Tips: de fleste innstillinger finnes nå på SEM-dashbordet → fanen Konfigurasjon (fargerikt, live). Denne flyten beholdes for oppsett uten dashbord.\n\nGå gjennom og oppdater entitetskoblingene for elbilladeren din. Feltene for kjøretøyets SOC brukes bare hvis du oppgir en SOC-sensor for kjøretøyets batteri.",
         "data": {
           "ev_connected_sensor": "EV Tilkoblingsstatus",
           "ev_charging_sensor": "EV Ladestatus",
@@ -197,7 +247,7 @@
           "battery_discharge_protection_enabled": "Når denne er PÅ, begrenser SEM inverterens utladegrense under nattlading av elbilen, slik at husbatteriet bare forsyner huset (ikke elbilen).",
           "battery_max_discharge_power": "Absolutt øvre grense for batteriutlading som håndheves av vernefunksjonen.",
           "electricity_import_rate": "Dag-/fastpristariff (CHF/kWh, inkl. mva.). Brukes til kostnadssporing.",
-          "electricity_off_peak_rate": "Night tariff (CHF/kWh). Set equal to import rate if you don't have a dual tariff.",
+          "electricity_off_peak_rate": "Lavlastpris (per kWh). Sett den lik importprisen hvis du ikke har todelt tariff.",
           "electricity_export_rate": "Innmatingspris betalt av nettselskapet (CHF/kWh).",
           "demand_charge_rate": "Månedlig effektledd per kW topplast (CHF/kW/måned). Sett til 0 hvis avtalen din ikke har effektledd.",
           "observer_mode": "Når denne er PÅ, overvåker og beregner SEM alt, men sender aldri et tjenestekall til maskinvaren. Brukes på en test-/staging-HA som speiler en produksjonsinstallasjon.",
@@ -259,8 +309,8 @@
           "dynamic_tariff_entity": "Entitet for dynamisk pris (oppdages automatisk hvis tom)",
           "dynamic_forecast_entity": "Entitet for prisprognose (valgfritt, oppdages automatisk hvis tom)",
           "dynamic_feedin_entity": "Entitet for innmatingspris (valgfri, for dynamisk eksportpris)",
-          "grid_import_power_entity": "Grid import power sensor (optional, auto-detected from Energy Dashboard)",
-          "grid_export_power_entity": "Grid export power sensor (optional, auto-detected from Energy Dashboard)",
+          "grid_import_power_entity": "Nettimport-effektsensor (valgfri, funnet automatisk)",
+          "grid_export_power_entity": "Netteksport-effektsensor (valgfri, funnet automatisk)",
           "tariff_classification_mode": "Prisklassifiseringsmodus",
           "solar_forecast_source": "Kilde for solprognose",
           "grid_co2_entity": "Sensor for nettets CO₂-intensitet (valgfri)",
@@ -1836,7 +1886,7 @@
         "step": {
           "confirm": {
             "title": "Rapporter dette til SEM",
-            "description": "SEMs siste 3+ strømkommandoer til **{name}** ble avvist: `{error}`. Laderen er IKKE under SEMs kontroll akkurat nå — den fortsetter med det den sist fikk beskjed om (inkludert lading på full effekt i av-modus). Vanligste årsaker: laderens styringsentitet ble omdøpt av en oppdatering i den underliggende integrasjonen, eller `ev_charger_service` peker på en tjeneste med et annet parameteroppsett. Kontroller laderens styringsentitet / tjeneste i SEM-konfigurasjonen. Denne saken lukkes automatisk ved neste vellykkede kommando.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEMs siste 3+ strømkommandoer til **{name}** ble avvist: `{error}`. Laderen er IKKE under SEMs kontroll akkurat nå — den fortsetter med det den sist fikk beskjed om (inkludert lading på full effekt i av-modus). Vanligste årsaker: laderens styringsentitet ble omdøpt av en oppdatering i den underliggende integrasjonen, eller `ev_charger_service` peker på en tjeneste med et annet parameteroppsett. Kontroller laderens styringsentitet / tjeneste i SEM-konfigurasjonen. Denne saken lukkes automatisk ved neste vellykkede kommando.\n\nSEM mener at denne feilen er dens egen. Hvis du kan, åpne en feilrapport med knappen i varselet — skjemaet er allerede fylt ut. Du kan også kopiere konteksten nedenfor til en e-post eller et foruminnlegg. Denne dialogen sender ingenting noe sted.\n\n```\n{context}\n```\n\nBekreft for å lukke varselet."
           }
         }
       }
@@ -1847,7 +1897,7 @@
         "step": {
           "confirm": {
             "title": "Rapporter dette til SEM",
-            "description": "SEM har bedt **{name}** om å stoppe, men ingen konfigurert mekanisme kan faktisk åpne kontaktoren — bilen trekker fortsatt {power} W. Den eneste styringen SEM har for denne laderen er `{entity}`, og minimumsverdien ligger over 0 A, så det å skrive 0 A gjør ingenting (SEM skriver aldri en verdi som entiteten ville avvise). Har du et husbatteri, kommer denne effekten derfra — når som helst på døgnet. Løsning: konfigurer en start/stopp-entitet (`ev_start_stop_entity`), en lademodus-entitet eller en stopptjeneste for denne laderen i SEM-innstillingene. Varselet forsvinner så snart laderen slutter å trekke effekt.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEM har bedt **{name}** om å stoppe, men ingen konfigurert mekanisme kan faktisk åpne kontaktoren — bilen trekker fortsatt {power} W. Den eneste styringen SEM har for denne laderen er `{entity}`, og minimumsverdien ligger over 0 A, så det å skrive 0 A gjør ingenting (SEM skriver aldri en verdi som entiteten ville avvise). Har du et husbatteri, kommer denne effekten derfra — når som helst på døgnet. Løsning: konfigurer en start/stopp-entitet (`ev_start_stop_entity`), en lademodus-entitet eller en stopptjeneste for denne laderen i SEM-innstillingene. Varselet forsvinner så snart laderen slutter å trekke effekt.\n\nSEM mener at denne feilen er dens egen. Hvis du kan, åpne en feilrapport med knappen i varselet — skjemaet er allerede fylt ut. Du kan også kopiere konteksten nedenfor til en e-post eller et foruminnlegg. Denne dialogen sender ingenting noe sted.\n\n```\n{context}\n```\n\nBekreft for å lukke varselet."
           }
         }
       }
@@ -1886,7 +1936,7 @@
         "step": {
           "confirm": {
             "title": "Rapporter dette til SEM",
-            "description": "**{name}** er satt til et lademål i prosent, men kjøretøyet rapporterer ikke ladenivået sitt akkurat nå, så SEM kan ikke stoppe *nøyaktig* ved **{target}%**.\n\nDen lader likevel ikke i blinde: fra den siste ekte avlesningen i denne økten teller den energien som faktisk er levert, og stopper når den målte summen når målet ditt — overskridelsen er bare det bilen har tatt siden den avlesningen. Har det ikke kommet noen ekte avlesning i det hele tatt i denne økten (eller startet SEM på nytt midt i ladingen), mangler referansepunktet, og ladingen fortsetter til bilen selv trapper ned nær fullt.\n\nFor en grense som treffer, koble en **ekte SOC-sensor for kjøretøyet** til denne laderen (Konfigurasjon → EV → Kjøretøyets SOC-entitet). Batteriprosenten på dashbordet er SEMs *estimerte* SOC, som bevisst ignoreres for den harde grensen (den kan drifte). Denne reparasjonen forsvinner automatisk så snart en ekte SOC-avlesning er tilgjengelig igjen.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "**{name}** er satt til et lademål i prosent, men kjøretøyet rapporterer ikke ladenivået sitt akkurat nå, så SEM kan ikke stoppe *nøyaktig* ved **{target}%**.\n\nDen lader likevel ikke i blinde: fra den siste ekte avlesningen i denne økten teller den energien som faktisk er levert, og stopper når den målte summen når målet ditt — overskridelsen er bare det bilen har tatt siden den avlesningen. Har det ikke kommet noen ekte avlesning i det hele tatt i denne økten (eller startet SEM på nytt midt i ladingen), mangler referansepunktet, og ladingen fortsetter til bilen selv trapper ned nær fullt.\n\nFor en grense som treffer, koble en **ekte SOC-sensor for kjøretøyet** til denne laderen (Konfigurasjon → EV → Kjøretøyets SOC-entitet). Batteriprosenten på dashbordet er SEMs *estimerte* SOC, som bevisst ignoreres for den harde grensen (den kan drifte). Denne reparasjonen forsvinner automatisk så snart en ekte SOC-avlesning er tilgjengelig igjen.\n\nSEM mener at denne feilen er dens egen. Hvis du kan, åpne en feilrapport med knappen i varselet — skjemaet er allerede fylt ut. Du kan også kopiere konteksten nedenfor til en e-post eller et foruminnlegg. Denne dialogen sender ingenting noe sted.\n\n```\n{context}\n```\n\nBekreft for å lukke varselet."
           }
         }
       }
@@ -1953,7 +2003,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM sjekker to gjettede nettmålere",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfigurasjon**, and pick **Alle innstillinger** at the top. Then set **Netteffekt** in section **Sensorkilder**. If your meter has one sensor for import and one for export, set **Nettimport-sensor** and **Netteksport-sensor** in section **Tariff og priser** instead."
+      "description": "SEM har ingen netteffekt-sensor, så den gjettet ut fra navnet: **{import_entity}** for nettimport og **{export_entity}** for netteksport. SEM bruker dem ikke før de stemmer med energitellerne dine for nettet, så netteffekten viser 0 inntil videre. Slik velger du måleren din: åpne SEM-dashbordet, fanen ⚙ **Konfigurasjon**, og velg **Alle innstillinger** øverst. Sett deretter **Netteffekt** i delen **Sensorkilder**. Har måleren din én sensor for import og én for eksport, setter du i stedet **Nettimport-sensor** og **Netteksport-sensor** i delen **Tariff og priser**."
     },
     "battery_control_write_not_taken": {
       "title": "En batteristyringsskriving tas ikke: {entity_id}",
@@ -1973,7 +2023,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM fant ikke nettmålerne dine",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfigurasjon**, and pick **Alle innstillinger** at the top. Then set **Netteffekt** in section **Sensorkilder**. If your meter has one sensor for import and one for export, set **Nettimport-sensor** and **Netteksport-sensor** in section **Tariff og priser** instead."
+      "description": "SEM har ingen netteffekt-sensor, og det den gjettet ut fra navnet, er ikke nettmåleren din: **{import_entity}** for import, **{export_entity}** for eksport. De stemmer ikke med energitellerne dine for nettet, eller en av de to mangler. SEM viser heller ingen netteffekt enn en feil. Slik velger du måleren din: åpne SEM-dashbordet, fanen ⚙ **Konfigurasjon**, og velg **Alle innstillinger** øverst. Sett deretter **Netteffekt** i delen **Sensorkilder**. Har måleren din én sensor for import og én for eksport, setter du i stedet **Nettimport-sensor** og **Netteksport-sensor** i delen **Tariff og priser**."
     },
     "power_sensor_not_found": {
       "title": "Ingen effektsensor for {energy_entity}",
@@ -2063,6 +2113,21 @@
         "per_kwh": "Per kWh",
         "tiered": "Trinn etter kWh per år",
         "fixed_monthly": "Fast per måned"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Kjøper strøm fra nettet",
+        "sending": "Sender strøm ut på nettet",
+        "keep": "Dette er nettmåleren min",
+        "other": "Bruk den andre måleren",
+        "unknown": "Vet ikke"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "none": "ikke funnet",
+        "why_guessed": "Energi-dashbordet ditt har ingen sensor for netteffekt, så SEM gjettet en."
       }
     }
   }
