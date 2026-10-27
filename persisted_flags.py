@@ -61,6 +61,8 @@ PERSISTED_FLAG_DEFAULTS: Final[Dict[str, bool]] = {
     "ev_morning_window_enabled": False,
     # (#1083) the Simulation tab ships hidden.
     "simulation_tab": False,
+    # (#1078) ships off: a discharge limit is one-sided unless said otherwise.
+    "battery_discharge_limit_caps_charge": False,
 }
 
 

@@ -80,6 +80,14 @@ SWITCH_TYPES = [
         entity_category=EntityCategory.CONFIG,
         icon="mdi:car-electric",
     ),
+    # (#1078) Default OFF. For a battery whose discharge limit also caps
+    # charging: the car clamp lifts while the car is not drawing and the sun
+    # covers the house.
+    SwitchEntityDescription(
+        key="battery_discharge_limit_caps_charge",
+        entity_category=EntityCategory.CONFIG,
+        icon="mdi:battery-arrow-up-outline",
+    ),
     # (arc #921) Four switches, all default OFF — the arc ships asleep like
     # the spending arc (#778) and charge pacing (#820), and is woken
     # deliberately per install. Persisted in PERSISTED_FLAG_DEFAULTS.

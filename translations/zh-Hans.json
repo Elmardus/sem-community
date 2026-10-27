@@ -1630,6 +1630,9 @@
       },
       "simulation_tab": {
         "name": "模拟标签页"
+      },
+      "battery_discharge_limit_caps_charge": {
+        "name": "放电限制同时也限制充电"
       }
     },
     "number": {
