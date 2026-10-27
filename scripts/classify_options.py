@@ -48,6 +48,11 @@ FLOW_ACTIONS = {
     # user answers it, so it counts toward the first-run number they feel; it
     # is never stored, so it is not a setting and cannot be "dead".
     "review_details",
+    # (#1213) the one question about the grid meter, and the closed section of
+    # pickers. Both are answered in the flow; the answers land in
+    # grid_sign_invert / grid_power_sensor / ..., which are the settings.
+    "grid_answer",
+    "own_sensors",
 }
 
 #: Modules that ANSWER a config question rather than consume it. Only keys

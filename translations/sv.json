@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Installation av solenergihantering",
-        "description": "SEM har upptäckt följande sensorer från din Home Assistant Energi-instrumentpanel:\n\n{summary}\n\nKlicka **Skicka** för att fortsätta. Bara ett steg till. EV-laddare, värmepump, tariff och alla andra inställningar konfigureras senare på den nya **Konfiguration**-fliken i SEM-instrumentpanelen — du behöver inte hantera dem nu.",
-        "data": {
-          "observer_mode": "Testläge (skrivskyddat — styr inte hårdvara)"
-        },
-        "data_description": {
-          "observer_mode": "Lämna AV vid en normal installation. Slå PÅ endast på en test-/staginginstans av Home Assistant som speglar en produktionsinstans, så att SEM aldrig skickar kommandon till KEBA, växelriktaren eller några switchar."
+        "title": "SEM hittade din anläggning",
+        "description": "Det här är värdena just nu:\n\n- Sol: {solar}\n- Nät: {grid}\n- Batteri: {battery}\n\nDe kommer från samma sensorer som din Energi-instrumentpanel. Tryck **Skicka**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Välj sensorer själv",
+            "description": "Bara om ett värde ovan ser fel ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Näteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batteriladdning %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Laddningsnivå i procent — SEM:s fyra batterizoner läser den.",
           "grid_import_power_entity": "Bara om din mätare saknar en enda tecknad sensor: importsidan, alltid positiv. Fyll i båda dessa eller ingen.",
           "grid_export_power_entity": "Exportsidan, alltid positiv. SEM beräknar export minus import, så ingen riktning behöver gissas."
+        }
+      },
+      "check_grid": {
+        "title": "En fråga",
+        "description": "{why}\n\nJust nu visar din nätmätare **{grid}**. Sol: {solar}. Batteri: {battery}.",
+        "data": {
+          "grid_answer": "Vad gör ditt hus just nu?"
+        },
+        "data_description": {
+          "grid_answer": "Titta på mätaren eller din energiapp. \"Vet inte\" går bra: SEM lär sig det de närmaste dagarna."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Välj sensorer själv",
+            "description": "Bara om ett värde ovan ser fel ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Näteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batteriladdning %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Välj din nätmätare",
+        "description": "SEM hittade ingen sensor för näteffekt. Utan den vet SEM inte vad du köper eller säljer.\n\nVälj den nedan, eller tryck **Skicka** för att hoppa över. Du kan ställa in den senare under fliken Konfiguration.\n\nSol: {solar}. Batteri: {battery}.",
+        "data": {
+          "grid_power_sensor": "Näteffekt"
+        },
+        "data_description": {
+          "grid_power_sensor": "Aktuell effekt i watt, inte en dagssumma."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Välj sensorer själv",
+            "description": "Bara om ett värde ovan ser fel ut.",
+            "data": {
+              "solar_production_sensor": "Soleffekt",
+              "grid_power_sensor": "Näteffekt",
+              "battery_power_sensor": "Batterieffekt",
+              "battery_soc_sensor": "Batteriladdning %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,21 @@
         "per_kwh": "Per kWh",
         "tiered": "Steg efter kWh per år",
         "fixed_monthly": "Fast per månad"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Köper ström från nätet",
+        "sending": "Skickar ström till nätet",
+        "keep": "Det här är min nätmätare",
+        "other": "Använd den andra mätaren",
+        "unknown": "Vet inte"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "none": "hittades inte",
+        "why_guessed": "Din Energi-instrumentpanel har ingen sensor för näteffekt, så SEM gissade en."
       }
     }
   }

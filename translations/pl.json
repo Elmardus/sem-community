@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Konfiguracja zarządzania energią słoneczną",
-        "description": "SEM wykrył następujące czujniki w pulpicie Energia Home Assistant:\n\n{summary}\n\nKliknij **Prześlij**, aby kontynuować. Jeszcze tylko jeden krok. Ładowarki EV, pompa ciepła, taryfa i wszystkie inne ustawienia są konfigurowane później w nowej zakładce **Konfiguracja** na pulpicie SEM — nie musisz ich teraz ustawiać.",
-        "data": {
-          "observer_mode": "Tryb testowy (tylko odczyt — bez sterowania sprzętem)"
-        },
-        "data_description": {
-          "observer_mode": "Pozostaw WYŁĄCZONE przy normalnej instalacji. Włącz tylko na testowej/stagingowej instancji Home Assistant, która odzwierciedla instalację produkcyjną, aby SEM nigdy nie wysyłał poleceń do KEBA, falownika ani żadnych przełączników."
+        "title": "SEM znalazł Twoją instalację",
+        "description": "Oto wartości w tej chwili:\n\n- Słońce: {solar}\n- Sieć: {grid}\n- Bateria: {battery}\n\nPochodzą z tych samych czujników co Twój panel Energia. Naciśnij **Zatwierdź**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Wybierz czujniki samodzielnie",
+            "description": "Tylko jeśli któraś wartość powyżej wygląda źle.",
+            "data": {
+              "solar_production_sensor": "Moc fotowoltaiki",
+              "grid_power_sensor": "Moc sieci",
+              "battery_power_sensor": "Moc baterii",
+              "battery_soc_sensor": "Naładowanie baterii %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Stan naładowania w procentach — czytają go cztery strefy baterii SEM.",
           "grid_import_power_entity": "Tylko jeśli Twój licznik nie ma pojedynczego czujnika ze znakiem: strona importu, zawsze dodatnia. Wypełnij obie te pozycje albo żadną.",
           "grid_export_power_entity": "Strona eksportu, zawsze dodatnia. SEM oblicza eksport minus import, więc żadnego kierunku nie trzeba zgadywać."
+        }
+      },
+      "check_grid": {
+        "title": "Jedno pytanie",
+        "description": "{why}\n\nW tej chwili Twój licznik sieci pokazuje **{grid}**. Słońce: {solar}. Bateria: {battery}.",
+        "data": {
+          "grid_answer": "Co teraz robi Twój dom?"
+        },
+        "data_description": {
+          "grid_answer": "Spójrz na licznik lub aplikację energii. \"Nie wiem\" też jest dobre: SEM nauczy się tego w najbliższych dniach."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Wybierz czujniki samodzielnie",
+            "description": "Tylko jeśli któraś wartość powyżej wygląda źle.",
+            "data": {
+              "solar_production_sensor": "Moc fotowoltaiki",
+              "grid_power_sensor": "Moc sieci",
+              "battery_power_sensor": "Moc baterii",
+              "battery_soc_sensor": "Naładowanie baterii %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Wybierz licznik sieci",
+        "description": "SEM nie znalazł czujnika mocy sieci. Bez niego SEM nie wie, co kupujesz lub oddajesz.\n\nWybierz go poniżej albo naciśnij **Zatwierdź**, aby pominąć. Możesz ustawić go później w zakładce Konfiguracja.\n\nSłońce: {solar}. Bateria: {battery}.",
+        "data": {
+          "grid_power_sensor": "Moc sieci"
+        },
+        "data_description": {
+          "grid_power_sensor": "Bieżąca moc w watach, nie suma dzienna."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Wybierz czujniki samodzielnie",
+            "description": "Tylko jeśli któraś wartość powyżej wygląda źle.",
+            "data": {
+              "solar_production_sensor": "Moc fotowoltaiki",
+              "grid_power_sensor": "Moc sieci",
+              "battery_power_sensor": "Moc baterii",
+              "battery_soc_sensor": "Naładowanie baterii %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,21 @@
         "per_kwh": "Za kWh",
         "tiered": "Progi według kWh rocznie",
         "fixed_monthly": "Stała miesięcznie"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Pobieram prąd z sieci",
+        "sending": "Oddaję prąd do sieci",
+        "keep": "To jest mój licznik sieci",
+        "other": "Użyj drugiego licznika",
+        "unknown": "Nie wiem"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "none": "nie znaleziono",
+        "why_guessed": "Twój panel Energia nie ma czujnika mocy sieci, więc SEM zgadł jeden."
       }
     }
   }

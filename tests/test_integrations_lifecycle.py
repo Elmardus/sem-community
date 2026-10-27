@@ -50,6 +50,10 @@ NO_OFFER: Dict[str, str] = {
     "entsoe": "a price feed",
     "entsoe_named_15m": "a price feed",
     "helios_forecast": "a solar forecast",
+    "solaredge": "an inverter: the setup check runs on it (#1213), no charger",
+    "enphase_envoy": "an inverter and meter box: the setup check runs on it "
+                     "(#1213), no charger",
+    "sma": "an inverter: the setup check runs on it (#1213), no charger",
     "vicare": "a heat pump",
     "tesla_fleet": "a car, paired to a charger, not one",
     "teslemetry": "a car, paired to a charger, not one",

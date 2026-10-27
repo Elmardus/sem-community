@@ -214,7 +214,7 @@ organized in collapsible sections under three headings:
 
 | Group | Sections |
 |---|---|
-| **Basics** | Setup overview, Tariff & pricing, EV chargers, Battery zones, Sensor sources (power-source overrides for grid / solar / battery / house, #628) |
+| **Basics** | Setup overview, Tariff & pricing, EV chargers, Battery zones, Sensor sources (what SEM reads now, in plain words, with one tap to turn a wrong grid or battery direction around, #1213; and the power-source overrides for grid / solar / battery / house, #628) |
 | **My devices** | Heat pump, Hot water, Load management, PV strings (when 2+ strings are detected), Detected hardware |
 | **Fine-tuning** | Battery scheduler, Battery intelligence, Solar forecast, Notifications (with the **Hints** setting, 2.2), Advanced (update interval, delays, min solar power, regulation offset, Observer Mode, grid VPP, SEM status history, sign fixes) |
 

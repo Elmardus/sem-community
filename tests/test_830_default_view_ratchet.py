@@ -36,7 +36,13 @@ def _set(name):
 
 
 #: The ceiling. Raising either number is a decision, not a detail.
-MAX_SECTIONS = 4
+#: 4 → 5 (#1213): Sensor sources. A new user decides here whether SEM is for
+#: them: it opens with what SEM reads, in watts, and one tap to turn a wrong
+#: grid or battery direction around. The pickers stay in All settings (they
+#: are counted as hidden rows), so what a user sees is one block, not four
+#: more controls. Two new users (#1051, #1103) left because a wrong guess
+#: could only be fixed behind All settings.
+MAX_SECTIONS = 5
 #: 5 → 7 (#897): the load-management arm switch and its ceiling. The shedder
 #: switches off house circuits, and hiding its on/off behind Advanced is how
 #: a first install shed a Span panel circuit by circuit (forum #30). A
@@ -52,7 +58,7 @@ MAX_SECTIONS = 4
 MAX_CONTROLS = 9
 
 
-def test_the_default_view_shows_at_most_four_sections():
+def test_the_default_view_shows_at_most_five_sections():
     got = _set("ESSENTIAL_SECTIONS")
     assert len(got) <= MAX_SECTIONS, (
         f"the default view grew to {len(got)} sections: {sorted(got)}. "

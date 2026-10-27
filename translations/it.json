@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configurazione Solar Energy Management",
-        "description": "SEM ha rilevato i seguenti sensori dal tuo Dashboard Energia di Home Assistant:\n\n{summary}\n\nClicca **Invia** per continuare. Solo un altro passo. Caricabatterie VE, pompa di calore, tariffa e tutte le altre impostazioni vengono configurate dopo nella nuova scheda **Configurazione** del dashboard SEM — non serve impostarle ora.",
-        "data": {
-          "observer_mode": "Modalità test (sola lettura — non controlla l'hardware)"
-        },
-        "data_description": {
-          "observer_mode": "Lascia DISATTIVATA per un'installazione normale. Attivala solo su un Home Assistant di test/staging che replica un'istanza di produzione, così SEM non invia mai comandi a KEBA, all'inverter o a qualsiasi interruttore."
+        "title": "SEM ha trovato il tuo impianto",
+        "description": "Questi sono i valori in questo momento:\n\n- Solare: {solar}\n- Rete: {grid}\n- Batteria: {battery}\n\nVengono dagli stessi sensori della tua dashboard Energia. Premi **Invia**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Scegli i sensori da solo",
+            "description": "Solo se un valore qui sopra sembra sbagliato.",
+            "data": {
+              "solar_production_sensor": "Potenza solare",
+              "grid_power_sensor": "Potenza di rete",
+              "battery_power_sensor": "Potenza batteria",
+              "battery_soc_sensor": "Carica batteria %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Stato di carica in percentuale — le quattro zone di batteria di SEM lo leggono.",
           "grid_import_power_entity": "Solo se il tuo contatore non ha un unico sensore con segno: il lato importazione, sempre positivo. Compila entrambi questi campi o nessuno.",
           "grid_export_power_entity": "Il lato esportazione, sempre positivo. SEM calcola esportazione meno importazione, così nessun verso deve essere indovinato."
+        }
+      },
+      "check_grid": {
+        "title": "Una domanda",
+        "description": "{why}\n\nIn questo momento il tuo contatore di rete mostra **{grid}**. Solare: {solar}. Batteria: {battery}.",
+        "data": {
+          "grid_answer": "Cosa sta facendo la tua casa adesso?"
+        },
+        "data_description": {
+          "grid_answer": "Guarda il contatore o la tua app energia. \"Non lo so\" va bene: SEM lo impara nei prossimi giorni."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Scegli i sensori da solo",
+            "description": "Solo se un valore qui sopra sembra sbagliato.",
+            "data": {
+              "solar_production_sensor": "Potenza solare",
+              "grid_power_sensor": "Potenza di rete",
+              "battery_power_sensor": "Potenza batteria",
+              "battery_soc_sensor": "Carica batteria %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Scegli il contatore di rete",
+        "description": "SEM non ha trovato un sensore di potenza di rete. Senza, SEM non sa cosa compri o immetti.\n\nSceglilo qui sotto, oppure premi **Invia** per saltare. Puoi impostarlo più tardi nella scheda Configurazione.\n\nSolare: {solar}. Batteria: {battery}.",
+        "data": {
+          "grid_power_sensor": "Potenza di rete"
+        },
+        "data_description": {
+          "grid_power_sensor": "Potenza attuale in watt, non un totale giornaliero."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Scegli i sensori da solo",
+            "description": "Solo se un valore qui sopra sembra sbagliato.",
+            "data": {
+              "solar_production_sensor": "Potenza solare",
+              "grid_power_sensor": "Potenza di rete",
+              "battery_power_sensor": "Potenza batteria",
+              "battery_soc_sensor": "Carica batteria %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,21 @@
         "per_kwh": "Per kWh",
         "tiered": "Scaglioni per kWh all'anno",
         "fixed_monthly": "Fisso al mese"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Prelevo dalla rete",
+        "sending": "Immetto in rete",
+        "keep": "Questo è il mio contatore di rete",
+        "other": "Usa l'altro contatore",
+        "unknown": "Non lo so"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "none": "non trovato",
+        "why_guessed": "La tua dashboard Energia non ha un sensore di potenza di rete, quindi SEM ne ha indovinato uno."
       }
     }
   }

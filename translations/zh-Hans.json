@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "太阳能消纳管理 (SEM) 设置",
-        "description": "SEM 已从您的 Home Assistant 能源看板中检测到以下传感器：\n\n{summary}\n\n点击 **提交** 继续。只需最后一步。充电桩、热泵、电价以及所有其他高级设置稍后都可以在 SEM 看板全新的 **配置** 标签页中进行设置——现在无需处理它们。",
-        "data": {
-          "observer_mode": "测试模式（只读——不控制任何硬件）"
-        },
-        "data_description": {
-          "observer_mode": "正常安装请保持【关闭】状态。仅在镜像了生产实例的测试/临时 Home Assistant 系统上才需要【开启】，开启后 SEM 将绝不会向 KEBA、逆变器或任何开关发送控制指令。"
+        "title": "SEM 找到了你的系统",
+        "description": "这是当前的数值：\n\n- 光伏：{solar}\n- 电网：{grid}\n- 电池：{battery}\n\n它们来自与你的能源仪表板相同的传感器。请按 **提交**。",
+        "sections": {
+          "own_sensors": {
+            "name": "自己选择传感器",
+            "description": "仅当上面的某个数值看起来不对时。",
+            "data": {
+              "solar_production_sensor": "光伏功率",
+              "grid_power_sensor": "电网功率",
+              "battery_power_sensor": "电池功率",
+              "battery_soc_sensor": "电池电量 %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "以百分比表示的电量（SOC）——SEM 的四个电池区域会读取此值。",
           "grid_import_power_entity": "仅当您的电表没有单一的带符号传感器时才需要：购电侧，始终为正值。这两项请都填写，或都不填。",
           "grid_export_power_entity": "馈电侧，始终为正值。SEM 会用馈电减去购电来计算，因此无需猜测方向。"
+        }
+      },
+      "check_grid": {
+        "title": "一个问题",
+        "description": "{why}\n\n你的电网电表现在显示 **{grid}**。光伏：{solar}。电池：{battery}。",
+        "data": {
+          "grid_answer": "你的家现在在做什么？"
+        },
+        "data_description": {
+          "grid_answer": "看看电表或你的能源应用。选“我不知道”也可以：SEM 会在接下来几天里学会。"
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "自己选择传感器",
+            "description": "仅当上面的某个数值看起来不对时。",
+            "data": {
+              "solar_production_sensor": "光伏功率",
+              "grid_power_sensor": "电网功率",
+              "battery_power_sensor": "电池功率",
+              "battery_soc_sensor": "电池电量 %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "选择你的电网电表",
+        "description": "SEM 没有找到电网功率传感器。没有它，SEM 不知道你买入或送出了多少电。\n\n请在下面选择，或按 **提交** 跳过。你也可以稍后在“配置”标签页中设置。\n\n光伏：{solar}。电池：{battery}。",
+        "data": {
+          "grid_power_sensor": "电网功率"
+        },
+        "data_description": {
+          "grid_power_sensor": "以瓦为单位的实时功率，不是日累计。"
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "自己选择传感器",
+            "description": "仅当上面的某个数值看起来不对时。",
+            "data": {
+              "solar_production_sensor": "光伏功率",
+              "grid_power_sensor": "电网功率",
+              "battery_power_sensor": "电池功率",
+              "battery_soc_sensor": "电池电量 %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,21 @@
         "per_kwh": "按度",
         "tiered": "按年度度数分阶梯",
         "fixed_monthly": "每月固定"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "正在从电网买电",
+        "sending": "正在向电网送电",
+        "keep": "这是我的电网电表",
+        "other": "使用另一个电表",
+        "unknown": "我不知道"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "none": "未找到",
+        "why_guessed": "你的能源仪表板没有电网功率传感器，所以 SEM 猜了一个。"
       }
     }
   }

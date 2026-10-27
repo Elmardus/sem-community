@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Solar Energy Management Configuratie",
-        "description": "SEM heeft de volgende sensoren in uw Home Assistant Energie-dashboard gevonden:\n\n{summary}\n\nKlik op **Versturen** om door te gaan. Nog één stap. EV-laders, warmtepompen, tarief en alle andere instellingen worden later geconfigureerd in het nieuwe **Configuratie**-tabblad van het SEM-dashboard — u hoeft ze nu niet in te vullen.",
-        "data": {
-          "observer_mode": "Test mode (read-only — geen hardware wijzigingen)"
-        },
-        "data_description": {
-          "observer_mode": "Laat deze instelling uit staan for een normale installatie. Zet deze instelling alleen aan als je een testinstallatie hebt of wil experimenteren met wat er potentieel mogelijk is."
+        "title": "SEM heeft je systeem gevonden",
+        "description": "Dit zijn de waarden nu:\n\n- Zon: {solar}\n- Net: {grid}\n- Batterij: {battery}\n\nZe komen van dezelfde sensoren als je Energie-dashboard. Druk op **Verzenden**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Zelf sensoren kiezen",
+            "description": "Alleen als een waarde hierboven niet klopt.",
+            "data": {
+              "solar_production_sensor": "Zonnevermogen",
+              "grid_power_sensor": "Netvermogen",
+              "battery_power_sensor": "Batterijvermogen",
+              "battery_soc_sensor": "Batterijlading %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Laadtoestand in procent — SEM's vier batterijzones lezen deze waarde.",
           "grid_import_power_entity": "Alleen als je meter geen enkele sensor met teken heeft: de importzijde, altijd positief. Vul beide velden in, of geen van beide.",
           "grid_export_power_entity": "De exportzijde, altijd positief. SEM berekent export minus import, zodat geen richting hoeft te worden geraden."
+        }
+      },
+      "check_grid": {
+        "title": "Eén vraag",
+        "description": "{why}\n\nNu toont je netmeter **{grid}**. Zon: {solar}. Batterij: {battery}.",
+        "data": {
+          "grid_answer": "Wat doet je huis nu?"
+        },
+        "data_description": {
+          "grid_answer": "Kijk op je meter of in je energie-app. \"Weet ik niet\" mag: SEM leert het dan in de komende dagen."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Zelf sensoren kiezen",
+            "description": "Alleen als een waarde hierboven niet klopt.",
+            "data": {
+              "solar_production_sensor": "Zonnevermogen",
+              "grid_power_sensor": "Netvermogen",
+              "battery_power_sensor": "Batterijvermogen",
+              "battery_soc_sensor": "Batterijlading %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Kies je netmeter",
+        "description": "SEM vond geen sensor voor het netvermogen. Zonder die sensor weet SEM niet wat je koopt of teruglevert.\n\nKies hem hieronder, of druk op **Verzenden** om over te slaan. Je kunt hem later instellen in het tabblad Configuratie.\n\nZon: {solar}. Batterij: {battery}.",
+        "data": {
+          "grid_power_sensor": "Netvermogen"
+        },
+        "data_description": {
+          "grid_power_sensor": "Actueel vermogen in watt, geen dagtotaal."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Zelf sensoren kiezen",
+            "description": "Alleen als een waarde hierboven niet klopt.",
+            "data": {
+              "solar_production_sensor": "Zonnevermogen",
+              "grid_power_sensor": "Netvermogen",
+              "battery_power_sensor": "Batterijvermogen",
+              "battery_soc_sensor": "Batterijlading %"
+            }
+          }
         }
       }
     },
@@ -2063,6 +2113,21 @@
         "per_kwh": "Per kWh",
         "tiered": "Staffel naar kWh per jaar",
         "fixed_monthly": "Vast per maand"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Stroom van het net afnemen",
+        "sending": "Stroom aan het net terugleveren",
+        "keep": "Dit is mijn netmeter",
+        "other": "De andere meter gebruiken",
+        "unknown": "Weet ik niet"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "none": "niet gevonden",
+        "why_guessed": "Je Energie-dashboard heeft geen sensor voor het netvermogen, dus SEM heeft er een geraden."
       }
     }
   }
