@@ -12774,9 +12774,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             grid_pair = [getattr(ed, "grid_power_from", None),
                          getattr(ed, "grid_power_to", None)]
             disc = getattr(self._sensor_reader, "_split_grid_discovery", None)
-            if isinstance(disc, dict) and disc.get("confidence") in (
-                    "declared", "same-device"):
-                grid_pair += [disc.get("import"), disc.get("export")]
+            proof = getattr(self._sensor_reader, "_split_grid_proof", None)
+            if isinstance(disc, dict):
+                held = (disc.get("import"), disc.get("export"))
+                proven = (isinstance(proof, dict) and proof.get("verdict") is True
+                          and tuple(proof.get("pair") or ()) == held)
+                if proven or disc.get("confidence") in ("declared", "same-device"):
+                    grid_pair += list(held)
             for val in grid_pair:
                 if isinstance(val, str) and "." in val:
                     out.add(val)

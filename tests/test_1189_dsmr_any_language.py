@@ -322,7 +322,7 @@ class TestTheCardKnowsTheGridSensorsInUse:
     SEM reads got two "Use" buttons — and one click on half the pair sets
     export to 0 W."""
 
-    def _used(self, ed, disc):
+    def _used(self, ed, disc, proof=None):
         from types import SimpleNamespace
 
         from custom_components.solar_energy_management.coordinator.coordinator import (
@@ -332,8 +332,19 @@ class TestTheCardKnowsTheGridSensorsInUse:
         coord.config = {}
         coord._sensor_reader = SimpleNamespace(
             config=SimpleNamespace(), _energy_dashboard_config=ed,
-            _split_grid_discovery=disc)
+            _split_grid_discovery=disc, _split_grid_proof=proof)
         return coord._configured_entity_ids()
+
+    def test_a_guess_the_counters_proved(self):
+        from types import SimpleNamespace
+        disc = {"import": "sensor.p1_power_consumption",
+                "export": "sensor.p1_power_production",
+                "confidence": "any-device"}
+        pair = (disc["import"], disc["export"])
+        assert set(pair) <= self._used(
+            SimpleNamespace(), disc, {"pair": pair, "verdict": True})
+        assert not set(pair) & self._used(
+            SimpleNamespace(), disc, {"pair": pair, "verdict": None})
 
     def test_the_pair_sem_found_and_trusts(self):
         from types import SimpleNamespace
