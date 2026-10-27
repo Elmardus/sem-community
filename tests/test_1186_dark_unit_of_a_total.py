@@ -290,6 +290,50 @@ class TestTheHeldUnitTakesTheFinalSign:
         assert shown_w(p, "battery_power") == pytest.approx(900.0)
 
 
+class TestAGateThatRefutesTheTotalUnreadsEveryUnit:
+    """The #988 solar gate and the #902 battery gate refute a TOTAL. Taking
+    one read away left the other unit's read, so a home with two inverters
+    or a two-sensor battery published the refuted 0 W as a reading."""
+
+    def _solar(self, inverters):
+        states = {e: _state(2000, "W") for e in inverters}
+        states["sensor.bat"] = _state(0, "W")
+        r, clock = _built(states, ed=EnergyDashboardConfig(
+            solar_power=inverters[0],
+            solar_power_list=inverters if len(inverters) > 1 else [],
+            battery_power="sensor.bat", has_solar=True, has_battery=True))
+        r.read_power()
+        changes = {e: 0 for e in inverters}
+        changes["sensor.bat"] = 1267             # charging from nothing
+        return _read(r, clock, states, **changes)
+
+    @pytest.mark.parametrize("inverters", [
+        ["sensor.inv_a"], ["sensor.inv_a", "sensor.inv_b"]], ids=["one", "two"])
+    def test_a_refuted_solar_zero_is_no_reading(self, inverters):
+        p = self._solar(inverters)
+        assert "solar" in p.dark_inputs
+        assert p.solar_power_unavailable is True
+        assert _published(p)["solar_power"] is None
+
+    def test_an_impossible_two_sensor_battery_is_no_reading(self):
+        states = {"sensor.p_to": _state(0, "W"), "sensor.p_from": _state(0, "W")}
+        r, clock = _built(states, ed=SHAPES[3][1]["ed"])
+        r.read_power()
+        p = _read(r, clock, states, **{"sensor.p_from": 22_806_824})
+        assert p.battery_power_all_unavailable is True
+        assert _published(p)["battery_power"] is None
+
+    def test_a_fleet_keeps_the_unit_it_still_reads(self):
+        """The twin: one impossible unit of two leaves a battery read."""
+        states = {"sensor.b1": _state(1000, "W"), "sensor.b2": _state(-400, "W")}
+        r, clock = _built(states, ed=SHAPES[1][1]["ed"])
+        r.read_power()
+        p = _read(r, clock, states, **{"sensor.b2": 22_806_824})
+        assert p.battery_power_all_unavailable is False
+        assert p.battery_power == pytest.approx(1000.0)
+        assert shown_w(p, "battery_power") == pytest.approx(600.0)
+
+
 # ── 2. What SEM publishes ──────────────────────────────────────────────────
 
 class TestThePublishedTotal:

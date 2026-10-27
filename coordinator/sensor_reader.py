@@ -3785,7 +3785,15 @@ class SensorReader:
         readings.battery_power = 0.0
         self._battery_power_missing = True
         self._input_dark["battery"] = self._input_dark.get("battery", 0) + 1
-        self._input_reads["battery"] = max(0, self._input_reads.get("battery", 0) - 1)
+        # (#1186) Only a unit still read keeps the battery read: one
+        # impossible value with no such unit is no reading at all — both
+        # sides of a two-sensor battery, not one. A fleet rebuilds its total
+        # from the units it still reads.
+        still_read = any(getattr(bp, "power_read", False) is True
+                         for bp in readings.batteries.values())
+        self._input_reads["battery"] = (
+            max(0, self._input_reads.get("battery", 0) - 1)
+            if still_read else 0)
 
     def _gate_solar_power(self, readings: PowerReadings) -> None:
         """(#988) A solar zero the rest of the balance refutes is a dark read.
@@ -3849,7 +3857,10 @@ class SensorReader:
         )
         self._solar_zero_refuted = True
         self._input_dark["solar"] = self._input_dark.get("solar", 0) + 1
-        self._input_reads["solar"] = max(0, self._input_reads.get("solar", 0) - 1)
+        # (#1186) The refuted zero is the TOTAL, so every solar read is no
+        # reading: with two inverters at 0 W, taking one read away left the
+        # other, and the total was published as 0 W.
+        self._input_reads["solar"] = 0
 
     def _hold_battery_soc(self, readings: PowerReadings) -> None:
         """The SOC sensor is dark this cycle: hold the last value read so the
