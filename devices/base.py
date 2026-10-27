@@ -3333,6 +3333,11 @@ class CurrentControlDevice(ControllableDevice):
         """
         if not bool(getattr(self, "arm_failsafe_enabled", True)):
             return
+        # (#1079) Another party steers this charger and SEM yields: a
+        # persisted 0 A dead-man would end THEIR session ~10 s into any
+        # masterless window (restart, unload; #1163). Nothing is armed.
+        if getattr(self, "external_yield", False) is True:
+            return
         domain = (self.charger_service or "").split(".", 1)[0]
         if not domain or not self.hass.services.has_service(domain, "set_failsafe"):
             return

@@ -1,5 +1,6 @@
 """(#1080) The closed-meter grant: the car starts below its floor when the
 sun it absorbs costs more to export than the grid costs to fill the gap."""
+import pytest
 from types import SimpleNamespace
 
 from custom_components.solar_energy_management.coordinator.coordinator import (
@@ -58,6 +59,8 @@ class TestAbsorbGrant:
 
 
 class _Prov:
+    _last_price_source = "entity"
+
     def get_current_export_rate(self):
         return -0.20
 
@@ -114,6 +117,21 @@ class TestCoordinatorGate:
         h._tariff_provider = SimpleNamespace(
             get_current_export_rate=lambda: None,
             get_current_import_rate=lambda: None)
+        assert h._absorb_grant_w(POWER) == 0.0
+
+    @pytest.mark.parametrize("source", ["fallback", "cache"])
+    def test_a_guessed_import_price_grants_nothing(self, monkeypatch, source):
+        """A dead price entity falls back to a cached average or the default
+        0.30. That is a guess, and "could not ask" is not "worth it" (review
+        of #1080)."""
+        from custom_components.solar_energy_management.coordinator import (
+            curtailment,
+        )
+        monkeypatch.setattr(curtailment, "solar_mode_floor",
+                            lambda hass, cfg: (True, 4140.0))
+        h = _Host(0.0)
+        assert h._absorb_grant_w(POWER) > 0          # the entity price grants
+        h._tariff_provider._last_price_source = source
         assert h._absorb_grant_w(POWER) == 0.0
 
     def test_no_verdict_yet_grants_nothing(self):

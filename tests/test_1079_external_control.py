@@ -181,6 +181,16 @@ class TestChargerSeam:
         dev.hass.services.async_call.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_a_yielded_charger_gets_no_zero_amp_dead_man(self):
+        """A persisted 0 A dead-man ends the other party's session ~10 s
+        into any masterless window (#1163). Yield arms none (review)."""
+        dev = self._device(True)
+        dev.charger_service = "keba.set_current"
+        dev.hass.services.has_service = MagicMock(return_value=True)
+        await dev.arm_failsafe_off()
+        dev.hass.services.async_call.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_default_device_sends(self):
         dev = self._device(False)
         assert await dev.send("number", "set_value", {"value": 10}) is True

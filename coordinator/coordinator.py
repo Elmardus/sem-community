@@ -13977,6 +13977,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             from .curtailment import absorb_grant_w, solar_mode_floor
             prov = getattr(self, "_tariff_provider", None)
             wants_solar, floor_w = solar_mode_floor(self.hass, self.config)
+            # The import price must be READ, not guessed: a dead price entity
+            # falls back to a cached average or the configured default, and
+            # "could not ask" is not "worth it" (#925, review of #1080).
+            _import = prov.get_current_import_rate()
+            if getattr(prov, "_last_price_source", None) != "entity":
+                _import = None
             grant = absorb_grant_w(
                 closed=True,
                 ev_connected=bool(power.ev_connected),
@@ -13986,7 +13992,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 battery_charge_w=float(power.battery_charge_power or 0.0),
                 floor_w=floor_w,
                 export_value=prov.get_current_export_rate(),
-                import_price=prov.get_current_import_rate())
+                import_price=_import)
             self._absorb_last = {"grant_w": round(grant),
                                  "floor_w": round(floor_w)}
             return grant
