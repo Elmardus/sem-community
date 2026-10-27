@@ -2206,9 +2206,15 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         if seen is None:
             seen = self._shown_home_input_seen = {}
         holding = False
+        # (#1186) …and while a dark unit of an input is held: home is built
+        # from that unit's 0 W, the input SEM shows from its last read.
+        units = getattr(power, "held_w", None)
+        units = units if isinstance(units, dict) else {}
         for name, flag in self._SHOWN_HOME_INPUTS:
             if not getattr(power, flag, False):
                 seen[name] = now
+                if name in units:
+                    holding = True      # the reader holds the dark unit
             elif name in seen and now - seen[name] <= SENSOR_DARK_READ_GRACE_S:
                 holding = True          # its entity still shows a value
         if not holding and self._battery_stop_not_reported(power, now):

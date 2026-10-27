@@ -445,6 +445,10 @@ class FlowCalculator:
         # no destination attribution to compute — just pass-through.
         if power.solar_power_per_string:
             flows.solar_per_string = dict(power.solar_power_per_string)
+            # (#1203) a dark string's last live watts, for its daily energy
+            held = getattr(power, "solar_power_per_string_held", None)
+            if isinstance(held, dict) and held:
+                flows.solar_per_string_held = dict(held)
 
         # Per-charger native attribution (Step 5 of arch/
         # multi-charger-primary, addresses #351 finding M3).
@@ -621,10 +625,15 @@ class FlowCalculator:
         # kWh counter. Sum invariant pinned in tests:
         # ``sum(per_string.energy_kwh) ≈ fleet solar integration``
         # within rounding.
+        # (#1203) A dark string books its last live watts for the grace —
+        # the window its entity shows them — as the solar row does (#1186).
         if power_flows.solar_per_string:
+            held = getattr(power_flows, "solar_per_string_held", None)
+            if not isinstance(held, dict):
+                held = {}
             for sid, watts in power_flows.solar_per_string.items():
                 acc = self._per_string_accumulators.setdefault(sid, {})
-                w = watts or 0.0
+                w = held.get(sid, watts) or 0.0
                 acc["energy_kwh"] = (
                     acc.get("energy_kwh", 0.0) + w * hours / 1000.0
                 )

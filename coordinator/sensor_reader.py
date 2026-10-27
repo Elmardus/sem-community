@@ -425,6 +425,9 @@ class SensorConfig:
 # caught it before PROD. Membership here is the whole fix.
 _DEGRADABLE_POWER_INPUTS = frozenset(
     {"solar", "grid", "grid_import", "grid_export", "battery"})
+#: (#1186) the input a power read's label is a unit of
+_UNIT_INPUT = {"solar": "solar", "grid": "grid", "grid_import": "grid",
+               "grid_export": "grid", "battery": "battery"}
 
 
 class SensorReader:
@@ -651,6 +654,13 @@ class SensorReader:
         # blank a total that is mostly real.
         self._input_reads: dict[str, int] = {}
         self._input_dark: dict[str, int] = {}
+        # (#1186) Each unit of a total read from two or more sensors: its
+        # last live watts and when (monotonic), by unit key. This cycle's
+        # units by input — (key, live watts or None, watts in the sum) —
+        # and the sign each input's raw sum took after the read.
+        self._unit_last_live: dict[str, tuple[float, float]] = {}
+        self._unit_terms: dict[str, list] = {}
+        self._unit_sign: dict[str, float] = {}
         # (HA Repairs, 2026-06-06) per-entity timestamp when sensor
         # first went unavailable in the current outage. Used to delay
         # the Repair issue past a transient flap window
@@ -842,7 +852,8 @@ class SensorReader:
             ev_charging_sensor=config.get("ev_charging_sensor", ""),
         )
 
-    def _read_solar_power(self, entity_id: Optional[str]) -> float:
+    def _read_solar_power(self, entity_id: Optional[str], *,
+                          allow_none: bool = False) -> "float | None":
         """(#1065) Read one solar power sensor — the ONE door for every
         fleet/per-inverter solar read (a structural test pins it).
 
@@ -851,8 +862,11 @@ class SensorReader:
         MQTT) froze at 8.1 W at dusk and SEM published 8 W of solar all
         night, though #851 had already called that exact reading asleep —
         for the warning only. See ``_asleep_at_night``.
+
+        (#1186) ``allow_none``: None when it gave no number, for a unit the
+        total holds on its own.
         """
-        value = self._read_sensor(entity_id, "solar")
+        value = self._read_sensor(entity_id, "solar", allow_none=allow_none)
         if value and self._asleep_at_night((entity_id,), value):
             return 0.0
         return value
@@ -909,11 +923,16 @@ class SensorReader:
         downstream readers fall back to ``readings.solar_power``."""
         if len(self._pv_strings) < 2:
             return
+        now = float(self._now_monotonic())
         for slot, source in self._pv_strings.items():
             watts = self._read_pv_string_source(slot, source)
             readings.solar_power_per_string[slot] = (
                 float(watts) if watts is not None else 0.0)
             readings.solar_power_per_string_read[slot] = watts is not None
+            # (#1203) a dark string's last live watts, for its daily energy
+            held = self._held_unit_w(f"pv:{slot}", watts, now)
+            if watts is None and held is not None:
+                readings.solar_power_per_string_held[slot] = held
 
     def set_pv_strings(
         self,
@@ -1063,6 +1082,8 @@ class SensorReader:
         self._battery_read_is_pair = False    # (#1215) per-cycle
         self._input_reads = {}                # (#818) per-cycle
         self._input_dark = {}                 # (#818) per-cycle
+        self._unit_terms = {}                 # (#1186) per-cycle
+        self._unit_sign = {"grid": 1.0, "battery": 1.0}
         self._unsourced_power = None          # (#1188) per-cycle
         # (#1022) the previous cycle's dark solar verdict has just ended
         self._accrue_solar_downtime(time.monotonic())
@@ -1130,7 +1151,7 @@ class SensorReader:
         # stabilise.
         manual_grid_invert = bool(self._raw_config.get("grid_sign_invert", False))
         if manual_grid_invert:
-            readings.grid_power = -readings.grid_power
+            self._negate_total(readings, "grid")
             readings.calculate_derived()
         else:
             # Auto-detect grid sign convention using Energy Dashboard counters.
@@ -1140,7 +1161,7 @@ class SensorReader:
             needs_negate = self._detect_grid_sign(readings)
 
             if needs_negate:
-                readings.grid_power = -readings.grid_power
+                self._negate_total(readings, "grid")
                 readings.calculate_derived()
 
             # #589 — observe-only post-lock contradiction check for the
@@ -1170,7 +1191,7 @@ class SensorReader:
         # that inverted a synthetic pair (export 2000 → −2000) under a flip
         # tapped months earlier against `sensor.power_meter_wirkleistung`.
         if self.user_flip_applies():
-            readings.grid_power = -readings.grid_power
+            self._negate_total(readings, "grid")
             readings.calculate_derived()
 
         # Auto-detect battery sign convention using Energy Dashboard counters.
@@ -1235,7 +1256,7 @@ class SensorReader:
             if bool(self._raw_config.get("battery_sign_user_flip", False)):
                 for bid, bp in list(readings.batteries.items()):
                     readings.batteries[bid] = replace(bp, power_w=-bp.power_w)
-                readings.battery_power = -readings.battery_power
+                self._negate_total(readings, "battery")
                 readings.calculate_derived()
         else:
             from dataclasses import replace
@@ -1253,13 +1274,13 @@ class SensorReader:
 
             battery_needs_negate = self._detect_battery_sign(readings)
             if battery_needs_negate:
-                readings.battery_power = -readings.battery_power
+                self._negate_total(readings, "battery")
                 _negate_per_battery()
                 readings.calculate_derived()
             # #588 B1 — one-tap user battery sign flip, same as per_battery_mode
             # branch. Sits on top of the auto-detect / manual-invert path.
             if bool(self._raw_config.get("battery_sign_user_flip", False)):
-                readings.battery_power = -readings.battery_power
+                self._negate_total(readings, "battery")
                 _negate_per_battery()
                 readings.calculate_derived()
 
@@ -1287,8 +1308,94 @@ class SensorReader:
         readings.dark_inputs = tuple(sorted(
             n for n, c in self._input_dark.items() if c))
         readings.solar_power_unavailable = self._all_dark("solar")
+        # (#1186) …and what each dark unit adds back to the shown total —
+        # last, when every unit's watts and every input's sign are final.
+        self._hold_dark_units(readings)
 
         return readings
+
+    def _negate_total(self, readings: PowerReadings, name: str) -> None:
+        """(#1186) Turn the grid or battery total over, and with it the sign
+        its held units are added in (they are kept as read)."""
+        field_name = f"{name}_power"
+        setattr(readings, field_name, -getattr(readings, field_name))
+        self._unit_sign[name] = -self._unit_sign.get(name, 1.0)
+
+    def _unit(self, name: str, key: str, watts: "float | None",
+              coef: float = 1.0) -> float:
+        """(#1186) One unit of a total read from several sensors: noted for
+        the hold, and its watts for the sum (0.0 when it gave no number).
+        ``coef`` is how the sum takes it (−1 for an import or discharge
+        side); ``name`` is the input ("solar", "grid", "battery")."""
+        terms = getattr(self, "_unit_terms", None)
+        if terms is None:
+            terms = self._unit_terms = {}
+        live = None if watts is None else coef * float(watts)
+        terms.setdefault(name, []).append((key, live, live or 0.0))
+        return 0.0 if watts is None else float(watts)
+
+    def _held_unit_w(self, key: str, watts: "float | None",
+                     now: float) -> "float | None":
+        """(#1186) A unit's watts for the SHOWN figure. A number is stamped
+        and returned. With none, its last live read while that is no older
+        than ``SENSOR_DARK_READ_GRACE_S`` (the age its own entity holds a
+        value for; it counts from the read, so a dark cycle never renews
+        it), else None: past the grace, what it reads is not known."""
+        store = getattr(self, "_unit_last_live", None)
+        if store is None:
+            store = self._unit_last_live = {}
+        if watts is not None:
+            store[key] = (float(watts), now)
+            return float(watts)
+        last = store.get(key)
+        if last is not None and 0.0 <= now - last[1] <= SENSOR_DARK_READ_GRACE_S:
+            return last[0]
+        return None
+
+    def _hold_dark_units(self, readings: PowerReadings) -> None:
+        """(#1186) Each unit of a total keeps its own last live read.
+
+        A total read from two or more sensors — two inverters, two
+        batteries, the import and export sides of a grid meter — was held
+        only when EVERY read was dark (``*_unavailable``, #818/#1177). With
+        one dark unit, its part was 0 W in the total SEM shows and in the
+        daily rows, while that unit's own entity held its value. Now each
+        unit is held on its own clock; ``readings.held_w`` says what the
+        held units add to the input, in SEM's sign. The input itself keeps
+        the reader's 0 W, because steering never takes a held value (#988,
+        #1047). An input with every read dark is left to its flag. Each
+        battery of a fleet is taken as it stands after its own sign check;
+        every other unit as read, turned with its total (``_negate_total``).
+        """
+        now = float(self._now_monotonic())
+        terms = dict(getattr(self, "_unit_terms", None) or {})
+        sign = dict(getattr(self, "_unit_sign", None) or {})
+        if len(readings.batteries) >= 2:
+            terms["battery"] = [
+                (f"battery:{bp.name or bid}",
+                 float(bp.power_w) if getattr(bp, "power_read", False) is True
+                 else None,
+                 float(bp.power_w or 0.0))
+                for bid, bp in readings.batteries.items()]
+            sign["battery"] = 1.0
+        all_dark = {
+            "solar": readings.solar_power_unavailable,
+            "grid": readings.grid_power_unavailable,
+            "battery": readings.battery_power_all_unavailable,
+        }
+        held_w: dict[str, float] = {}
+        for name, units in terms.items():
+            if len(units) < 2:
+                continue                  # one sensor: its flag holds it
+            add, holding = 0.0, False
+            for key, live, in_sum in units:
+                w = self._held_unit_w(key, live, now)
+                if live is None and w is not None:
+                    add += w - in_sum     # its last read, not what the sum took
+                    holding = True
+            if holding and not all_dark.get(name, False):
+                held_w[name] = sign.get(name, 1.0) * add
+        readings.held_w = held_w
 
     # ── Sign-state persistence (#476 item 5) ─────────────────────────
     #
@@ -2842,8 +2949,15 @@ class SensorReader:
         return bool(dark) and self._input_reads.get(name, 0) == 0
 
     def _read_sensors_sum(self, entity_ids: list, name: str) -> float:
-        """Sum values from multiple sensors of the same type."""
-        return sum(self._read_sensor(eid, name) for eid in entity_ids)
+        """Sum values from multiple sensors of the same type.
+
+        (#1186) Each sensor of a power input is a unit of the total, held
+        on its own (``_hold_dark_units``)."""
+        unit = _UNIT_INPUT.get(name)
+        if unit is None:
+            return sum(self._read_sensor(eid, name) for eid in entity_ids)
+        return sum(self._unit(unit, eid, self._read_sensor(
+            eid, name, allow_none=True)) for eid in entity_ids)
 
     def _read_from_energy_dashboard(self) -> PowerReadings:
         """Read power values from Energy Dashboard configured sensors."""
@@ -2872,7 +2986,9 @@ class SensorReader:
         if len(ed.solar_power_list) > 1:
             per_inverter_total = 0.0
             for entity in ed.solar_power_list:
-                w = self._read_solar_power(entity)
+                # (#1186) each inverter is a unit of the total, held on its own
+                w = self._unit("solar", entity, self._read_solar_power(
+                    entity, allow_none=True))
                 per_inverter_total += w
                 readings.inverters[entity] = InverterPower(
                     inverter_id=entity, power_w=w, name=entity,
@@ -2978,8 +3094,11 @@ class SensorReader:
             # power sensor) yields a statically wrong grid sign with zero
             # feedback (#461, RienduPre). Validate + audit below.
             self._validate_manual_grid_config(ed, manual_import, manual_export)
-            import_w = self._read_sensor(manual_import, "grid_import") if manual_import else 0.0
-            export_w = self._read_sensor(manual_export, "grid_export") if manual_export else 0.0
+            # (#1186) each side is a unit of the grid, held on its own
+            import_w = self._unit("grid", manual_import, self._read_sensor(
+                manual_import, "grid_import", allow_none=True), -1.0) if manual_import else 0.0
+            export_w = self._unit("grid", manual_export, self._read_sensor(
+                manual_export, "grid_export", allow_none=True)) if manual_export else 0.0
             readings.grid_power = export_w - import_w
             self._grid_sign_detected = True
             self._grid_source_key = f"manual:{manual_import}|{manual_export}"
@@ -2998,8 +3117,10 @@ class SensorReader:
             # override above: grid_power = export − import, both sensors
             # always positive; the convention is fixed BY DECLARATION so no
             # sign auto-detection runs (nothing to detect).
-            import_w = self._read_sensor(ed.grid_power_from, "grid_import")
-            export_w = self._read_sensor(ed.grid_power_to, "grid_export")
+            import_w = self._unit("grid", ed.grid_power_from, self._read_sensor(
+                ed.grid_power_from, "grid_import", allow_none=True), -1.0)
+            export_w = self._unit("grid", ed.grid_power_to, self._read_sensor(
+                ed.grid_power_to, "grid_export", allow_none=True))
             readings.grid_power = export_w - import_w
             self._grid_sign_detected = True
             self._grid_source_key = f"ed_pair:{ed.grid_power_from}|{ed.grid_power_to}"
@@ -3103,8 +3224,12 @@ class SensorReader:
                 # own Repair (split_grid_rejected / split_grid_guessed).
                 unsourced["grid"] = ed.grid_import_energy
             if disc["import"]:
-                import_w = self._read_sensor(disc["import"], "grid_import")
-                export_w = self._read_sensor(disc["export"], "grid_export") if disc["export"] else 0.0
+                raw_import = self._read_sensor(
+                    disc["import"], "grid_import", allow_none=True)
+                raw_export = self._read_sensor(
+                    disc["export"], "grid_export", allow_none=True) if disc["export"] else None
+                import_w = 0.0 if raw_import is None else float(raw_import)
+                export_w = 0.0 if raw_export is None else float(raw_export)
                 # (#947) A pick with DEVICE evidence is a meter. A name-only
                 # pick has to earn it against the energy counters first, and
                 # steers nothing while the answer is still "I cannot tell".
@@ -3128,7 +3253,10 @@ class SensorReader:
                     readings.grid_power = export_w - import_w
                     self._grid_sign_detected = True  # No sign correction needed
                     self._grid_source_key = f"discovered:{disc['import']}|{disc['export']}"
+                    # (#1186) a grid read from the pair: each side a unit
+                    self._unit("grid", disc["import"], raw_import, -1.0)
                     if disc["export"]:
+                        self._unit("grid", disc["export"], raw_export)
                         self._audit_split_pair(
                             "grid", "Grid (auto-discovered split pair)",
                             import_w, disc["import"], export_w, disc["export"],
@@ -3291,8 +3419,11 @@ class SensorReader:
             # #551 — "Two sensors" battery power_config (e.g. Fronius Verto):
             # separate charge/discharge sensors, NO combined entity exists.
             # net = charge − discharge (SEM convention: positive = charging).
-            charge_w = self._read_sensor(ed.battery_power_to, "battery")
-            discharge_w = self._read_sensor(ed.battery_power_from, "battery")
+            # (#1186) each side is a unit of the battery, held on its own
+            charge_w = self._unit("battery", ed.battery_power_to, self._read_sensor(
+                ed.battery_power_to, "battery", allow_none=True))
+            discharge_w = self._unit("battery", ed.battery_power_from, self._read_sensor(
+                ed.battery_power_from, "battery", allow_none=True), -1.0)
             # #661 — the single-battery twin of the pairs loop above. This is
             # the branch a one-battery Fronius Verto takes (n_units == 1, so
             # the loop never ran), and it nets exactly the same way, so it
@@ -5181,8 +5312,11 @@ class SensorReader:
         manual_import, manual_export = self._manual_grid_pair()
         grid_override = self._not_own_pick(self.config.grid_power_sensor)
         if manual_import and manual_export:
-            import_w = self._read_sensor(manual_import, "grid_import")
-            export_w = self._read_sensor(manual_export, "grid_export")
+            # (#1186) each side is a unit of the grid, held on its own
+            import_w = self._unit("grid", manual_import, self._read_sensor(
+                manual_import, "grid_import", allow_none=True), -1.0)
+            export_w = self._unit("grid", manual_export, self._read_sensor(
+                manual_export, "grid_export", allow_none=True))
             readings.grid_power = export_w - import_w
             self._grid_source_key = f"manual:{manual_import}|{manual_export}"
             self._grid_sign_detected = True

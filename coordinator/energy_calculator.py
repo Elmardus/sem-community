@@ -21,7 +21,7 @@ from ..consts.core import SENSOR_DARK_READ_GRACE_S
 
 from .types import (
     PowerReadings, EnergyTotals, CostData, PerformanceMetrics,
-    PowerFlows, EnergyFlows,
+    PowerFlows, EnergyFlows, shown_w,
 )
 from ..utils.time_manager import TimeManager
 from .units import energy_state_to_kwh
@@ -819,15 +819,24 @@ class EnergyCalculator:
         never reads these values — they exist for the integrals only.
         ``_integral_held`` / ``_integral_live`` name the inputs held / read
         live this cycle.
+
+        (#1186) An input read from several sensors with one of them dark
+        books the figure SEM shows (``shown_w``): each dark unit at its own
+        last live read, kept by the reader. That figure is the input's read,
+        as its entity's last value is; while a unit is held the input
+        counts as held, so the battery's flow shares and the grid's battery
+        export come from the last read with every unit live.
         """
         watts: Dict[str, float] = {}
         held, live = set(), set()
+        units = getattr(power, "held_w", None)
+        units = units if isinstance(units, dict) else {}
         for name, flag, fields in _INTEGRAL_INPUTS:
-            read = tuple(float(getattr(power, f, 0.0) or 0.0) for f in fields)
+            read = tuple(float(shown_w(power, f) or 0.0) for f in fields)
             last = self._integral_last_live.get(name)
             if getattr(power, flag, False) is not True:
                 self._integral_last_live[name] = (read, at)
-                live.add(name)
+                (held if name in units else live).add(name)
             elif (last is not None and 0.0 <= (at - last[1]).total_seconds()
                   <= SENSOR_DARK_READ_GRACE_S):
                 read = last[0]
