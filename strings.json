@@ -1633,6 +1633,9 @@
       },
       "battery_discharge_limit_caps_charge": {
         "name": "Discharge limit also caps charging"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "Start the car on negative export, buying the gap"
       }
     },
     "number": {

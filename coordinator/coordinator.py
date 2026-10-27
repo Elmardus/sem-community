@@ -3236,6 +3236,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         curtailment = getattr(self, "_curtailment_last", None)
         if curtailment:
             mgmt["curtailment"] = dict(curtailment)
+        # (#1080) the closed-meter grant, only once it has ever been non-zero
+        absorb = getattr(self, "_absorb_last", None)
+        if absorb and absorb.get("grant_w"):
+            mgmt["absorb"] = dict(absorb)
         st.management = LayerRecord(LayerStatus.OK, "policy inputs", mgmt)
 
         # (#961, from @RienduPre in #958) ``calculated_current`` is the FLEET canonical
@@ -13842,7 +13846,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 .get("battery_dynamic_floor_pct")),
             battery_priority=battery_priority,
             battery_commanded=self._battery_commanded(),
-            curtailment_grant_w=self._curtailment_grant_w(power),
+            curtailment_grant_w=(self._curtailment_grant_w(power)
+                                 + self._absorb_grant_w(power)),
             sink_verdicts=_verdicts,
             export_command=getattr(self, "_export_command", None),
             export_guard_enabled=bool(self.config.get("export_guard_enabled", False)),
@@ -13855,6 +13860,40 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             boost_floor_soc=getattr(
                 getattr(self, "_battery_boost", None), "floor_soc", None),
         )
+
+    def _absorb_grant_w(self, power) -> float:
+        """(#1080) The closed-meter grant for the car, through the same
+        surplus seam as the curtailment grant. Only while the value rules
+        are in force (``_active_export_threshold``): without them the meter
+        closes on a negative price as before and nothing changes. Prices
+        are read through the tariff provider, as the verdicts read them."""
+        self._absorb_last = {"grant_w": 0.0}
+        try:
+            if not self.config.get("ev_absorb_grid_fill", False):
+                return 0.0       # opt-in (#1080): off buys nothing from the grid
+            if self._active_export_threshold() is None:
+                return 0.0
+            _gv = (getattr(self, "_sink_verdicts", None) or {}).get("grid_export")
+            if getattr(_gv, "state", "open") != "closed":
+                return 0.0
+            from .curtailment import absorb_grant_w, solar_mode_floor
+            prov = getattr(self, "_tariff_provider", None)
+            wants_solar, floor_w = solar_mode_floor(self.hass, self.config)
+            grant = absorb_grant_w(
+                closed=True,
+                ev_connected=bool(power.ev_connected),
+                wants_solar=wants_solar,
+                solar_w=float(power.solar_power or 0.0),
+                home_w=float(power.home_consumption_power or 0.0),
+                battery_charge_w=float(power.battery_charge_power or 0.0),
+                floor_w=floor_w,
+                export_value=prov.get_current_export_rate(),
+                import_price=prov.get_current_import_rate())
+            self._absorb_last = {"grant_w": round(grant),
+                                 "floor_w": round(floor_w)}
+            return grant
+        except Exception:  # noqa: BLE001 — a grant must never break a cycle
+            return 0.0
 
     def _curtailment_grant_w(self, power) -> float:
         """#743 — one probe tick per cycle; the grant rides the fleet
@@ -13912,33 +13951,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             except Exception:  # noqa: BLE001
                 expected_w = 0.0
 
-            from ..consts.ev_charge_modes import effective_charge_mode_for
             from .sensor_reader import parse_export_limited
+            from .curtailment import solar_mode_floor
 
-            solar_modes = ("solar_only", "solar_plus_battery",
-                           "min_plus_solar", "solar_plus_cheap")
-            chargers = [
-                c for c in (self.config.get("ev_chargers") or [])
-                if isinstance(c, dict)
-            ] or [{}]
-            wants_solar = False
-            floor_w = 4140.0
-            for cfg in chargers:
-                try:
-                    mode = effective_charge_mode_for(self.hass, self.config, cfg)
-                except Exception:  # noqa: BLE001
-                    mode = None
-                if mode in solar_modes:
-                    wants_solar = True
-                    floor_w = (
-                        float(cfg.get("ev_min_current")
-                              or self.config.get("ev_min_current") or 6)
-                        * float(cfg.get("ev_voltage")
-                                or self.config.get("ev_voltage") or 230)
-                        * float(cfg.get("ev_phases")
-                                or self.config.get("ev_phases") or 3)
-                    )
-                    break
+            wants_solar, floor_w = solar_mode_floor(self.hass, self.config)
 
             # Brand sharpening: manual override wins, else autodetect on
             # the solar sensor's device (Huawei/GoodWe/SolaX/Victron/…).

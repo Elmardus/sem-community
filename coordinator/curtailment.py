@@ -242,3 +242,65 @@ def marks_day_curtailed(state) -> bool:
     sample skip must never widen into "any suspicious day learns nothing".
     """
     return state == "harvest"
+
+
+def absorb_grant_w(*, closed: bool, ev_connected: bool, wants_solar: bool,
+                   solar_w: float, home_w: float, battery_charge_w: float,
+                   floor_w: float, export_value, import_price) -> float:
+    """(#1080) Watts to add to the car's surplus while the meter is closed.
+
+    The grid sink is CLOSED (export value below the threshold), so every
+    kWh the house sends out costs money. The pack has already taken its
+    share (``battery_charge_w`` comes off the surplus), and the loads take
+    what is left through the closed-meter rule. The car is the one load
+    that cannot start below its floor, so the grant fills the gap up to
+    the floor from the grid, for as long as that is cheaper than the sun
+    it absorbs: ``gap x import price < sun x export loss``.
+
+    Measured on the solar side (not on the export meter), so the grant
+    does not vanish when the car starts and the export drops to zero.
+    Unknown prices, an unplugged car or a mode that does not use the sun
+    grant nothing (#925): "could not ask" is not "worth it".
+    """
+    if not (closed and ev_connected and wants_solar) or floor_w <= 0:
+        return 0.0
+    try:
+        value = float(export_value)
+        price = float(import_price)
+    except (TypeError, ValueError):
+        return 0.0
+    loss = -value
+    if loss <= 0.0 or price < 0.0:
+        return 0.0
+    sun = float(solar_w) - float(home_w) - float(battery_charge_w)
+    if sun <= 0.0:
+        return 0.0
+    gap = float(floor_w) - sun
+    if gap <= 0.0:
+        return 0.0                      # the sun already reaches the floor
+    return gap if gap * price < sun * loss else 0.0
+
+
+def solar_mode_floor(hass, config) -> "tuple[bool, float]":
+    """(#743, #1080) Does any charger charge from the sun, and what is the
+    smallest start power of that charger? One reader for the curtailment
+    probe and the closed-meter grant."""
+    from ..consts.ev_charge_modes import effective_charge_mode_for
+    solar_modes = ("solar_only", "solar_plus_battery",
+                   "min_plus_solar", "solar_plus_cheap")
+    chargers = [c for c in (config.get("ev_chargers") or [])
+                if isinstance(c, dict)] or [{}]
+    for cfg in chargers:
+        try:
+            mode = effective_charge_mode_for(hass, config, cfg)
+        except Exception:  # noqa: BLE001
+            mode = None
+        if mode in solar_modes:
+            return True, (
+                float(cfg.get("ev_min_current")
+                      or config.get("ev_min_current") or 6)
+                * float(cfg.get("ev_voltage")
+                        or config.get("ev_voltage") or 230)
+                * float(cfg.get("ev_phases")
+                        or config.get("ev_phases") or 3))
+    return False, 4140.0

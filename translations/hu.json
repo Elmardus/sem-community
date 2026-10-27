@@ -1633,6 +1633,9 @@
       },
       "battery_discharge_limit_caps_charge": {
         "name": "A kisütési korlát a töltést is korlátozza"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "Autó indítása negatív exportnál, a hiány megvásárlásával"
       }
     },
     "number": {

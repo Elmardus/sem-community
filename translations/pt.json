@@ -1633,6 +1633,9 @@
       },
       "battery_discharge_limit_caps_charge": {
         "name": "O limite de descarga também limita o carregamento"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "Iniciar o carro com exportação negativa, comprando a diferença"
       }
     },
     "number": {
