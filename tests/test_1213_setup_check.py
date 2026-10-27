@@ -246,3 +246,11 @@ def test_every_answer_and_word_is_translated():
         sel = json.loads(path.read_text(encoding="utf-8"))["selector"]
         assert set(sel["setup_grid_answer"]["options"]) == answers, path.name
         assert set(sel["setup_words"]["options"]) == words, path.name
+
+
+def test_the_preselected_answer_writes_nothing():
+    """HA preselects the first option of a required choice. Submit pressed
+    without reading must not turn a sign around."""
+    for w in (1240, -1240, 12):
+        check = _guessed(w)
+        assert answer_updates(check, check.answers()[0]) == {}, w

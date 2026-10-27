@@ -42,11 +42,20 @@ class SetupCheck:
         return self.grid_w is None or abs(self.grid_w) < QUIET_W
 
     def answers(self) -> Tuple[str, ...]:
-        """The answers that mean something for this meter right now."""
-        out = ["keep"] if self.grid_is_quiet else ["buying", "sending"]
+        """The answers that mean something for this meter right now.
+
+        The FIRST one is what Home Assistant's form preselects, so it must be
+        an answer that writes nothing: a user who presses Submit without
+        reading must not turn a sign around.
+        """
+        if self.grid_is_quiet:
+            out = ["keep"]
+        else:
+            out = ["unknown", "buying", "sending"]
         if self.other_grid:
             out.append("other")
-        out.append("unknown")
+        if self.grid_is_quiet:
+            out.append("unknown")
         return tuple(out)
 
 
