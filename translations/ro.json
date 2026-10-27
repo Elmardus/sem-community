@@ -37,7 +37,7 @@
       },
       "hardware": {
         "title": "Hardware",
-        "description": "One final value depends on your installation:\n\n• Home Battery Capacity — the usable kWh of your inverter battery.\n\nSEM also auto-detected your inverter's discharge control entity: {discharge_entity}\n\nLeave the dashboard option ON to have SEM build its Lovelace dashboard for you. **Note: this triggers a Home Assistant restart about 5 seconds after install completes.**\n\nEverything else uses safe defaults that you can tune later from the integration's options.",
+        "description": "Ultimul pas! SEM a detectat automat entitatea de control al descărcării invertorului dvs.: {discharge_entity}\n\nLăsați opțiunea tabloului de bord PORNITĂ pentru ca SEM să vă creeze tabloul Lovelace. **Notă: aceasta repornește Home Assistant la aproximativ 5 secunde după terminarea instalării.**\n\nTot restul — inclusiv limita de vârf a rețelei — folosește valori implicite sigure pe care le puteți ajusta imediat după configurare: limita de vârf din glisorul filei **Control**, tot restul din fila **Configurare** a tabloului SEM — inclusiv încărcătoarele VE, pompa de căldură, tariful și zonele bateriei.",
         "data": {
           "battery_capacity_kwh": "Capacitatea bateriei casnice (kWh)",
           "generate_dashboard_on_install": "Generează acum tabloul de bord SEM (repornește HA)",
@@ -118,7 +118,7 @@
     "step": {
       "ev_charger": {
         "title": "Încărcător EV",
-        "description": "Sfat: majoritatea setărilor sunt acum pe tabloul SEM → fila Configurare (colorat, live). Acest flux rămâne pentru instalări fără tablou de bord.\n\nReview and update your EV charger entity mappings. The Vehicle SOC fields are only used if you provide a Vehicle Battery SOC sensor.",
+        "description": "Sfat: majoritatea setărilor sunt acum pe tabloul SEM → fila Configurare (colorat, live). Acest flux rămâne pentru instalări fără tablou de bord.\n\nVerificați și actualizați asocierile de entități ale încărcătorului VE. Câmpurile SOC ale vehiculului sunt folosite doar dacă furnizați un senzor SOC al bateriei vehiculului.",
         "data": {
           "ev_connected_sensor": "Stare conectare VE",
           "ev_charging_sensor": "Stare încărcare VE",
@@ -197,7 +197,7 @@
           "battery_discharge_protection_enabled": "Când este ACTIVĂ, SEM limitează pragul de descărcare al invertorului în timpul încărcării VE pe timp de noapte, astfel încât bateria casei să alimenteze doar locuința (nu și VE).",
           "battery_max_discharge_power": "Limita superioară strictă a descărcării bateriei, impusă de funcția de protecție.",
           "electricity_import_rate": "Tarif de zi / unic (CHF/kWh, cu TVA inclus). Folosit pentru urmărirea costurilor.",
-          "electricity_off_peak_rate": "Night tariff (CHF/kWh). Set equal to import rate if you don't have a dual tariff.",
+          "electricity_off_peak_rate": "Tarif în afara orelor de vârf (pe kWh). Setați-l egal cu tariful de import dacă nu aveți un tarif dublu.",
           "electricity_export_rate": "Tariful de injecție plătit de furnizor (CHF/kWh).",
           "demand_charge_rate": "Taxa lunară de putere per kW de vârf (CHF/kW/lună). Setați 0 dacă în contractul dumneavoastră nu există o taxă de putere.",
           "observer_mode": "Când este ACTIV, SEM monitorizează și calculează totul, dar nu trimite niciodată un apel de serviciu către hardware. Folosiți-l pe un HA de test/staging care oglindește o instalare de producție.",
@@ -259,8 +259,8 @@
           "dynamic_tariff_entity": "Entitate preț dinamic (detectată automat dacă e goală)",
           "dynamic_forecast_entity": "Entitatea de prognoză a prețurilor (opțional, detectată automat dacă e goală)",
           "dynamic_feedin_entity": "Entitate preț de injecție (opțional, pentru tarif de export dinamic)",
-          "grid_import_power_entity": "Grid import power sensor (optional, auto-detected from Energy Dashboard)",
-          "grid_export_power_entity": "Grid export power sensor (optional, auto-detected from Energy Dashboard)",
+          "grid_import_power_entity": "Senzor putere import rețea (opțional, detectat automat)",
+          "grid_export_power_entity": "Senzor putere export rețea (opțional, detectat automat)",
           "tariff_classification_mode": "Mod de clasificare a prețurilor",
           "solar_forecast_source": "Sursa prognozei solare",
           "grid_co2_entity": "Senzor intensitate CO₂ a rețelei (opțional)",
@@ -1836,7 +1836,7 @@
         "step": {
           "confirm": {
             "title": "Raportează aceasta către SEM",
-            "description": "Ultimele 3+ comenzi de curent trimise de SEM către **{name}** au fost respinse: `{error}`. Încărcătorul NU este sub controlul SEM în acest moment — va continua să facă ce i s-a comandat ultima dată (inclusiv să încarce la putere maximă în modul oprit). Cele mai frecvente cauze: entitatea de control a încărcătorului a fost redenumită de o actualizare a integrării din amonte sau `ev_charger_service` indică un serviciu cu o altă schemă de parametri. Verificați entitatea/serviciul de control al încărcătorului în configurația SEM. Această problemă se șterge automat la următoarea comandă reușită.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "Ultimele 3+ comenzi de curent trimise de SEM către **{name}** au fost respinse: `{error}`. Încărcătorul NU este sub controlul SEM în acest moment — va continua să facă ce i s-a comandat ultima dată (inclusiv să încarce la putere maximă în modul oprit). Cele mai frecvente cauze: entitatea de control a încărcătorului a fost redenumită de o actualizare a integrării din amonte sau `ev_charger_service` indică un serviciu cu o altă schemă de parametri. Verificați entitatea/serviciul de control al încărcătorului în configurația SEM. Această problemă se șterge automat la următoarea comandă reușită.\n\nSEM crede că această eroare îi aparține. Dacă puteți, deschideți un raport de eroare cu butonul din notificare — formularul vine deja completat. Dacă preferați, copiați contextul de mai jos într-un e-mail sau o postare pe forum. Acest dialog nu trimite nimic nicăieri.\n\n```\n{context}\n```\n\nConfirmați pentru a închide notificarea."
           }
         }
       }
@@ -1847,7 +1847,7 @@
         "step": {
           "confirm": {
             "title": "Raportează aceasta către SEM",
-            "description": "SEM i-a comandat lui **{name}** să se oprească, dar niciun mecanism configurat nu poate deschide efectiv contactorul — mașina consumă în continuare {power} W. Singurul control pe care SEM îl are pentru acest încărcător este `{entity}`, iar minimul acestuia este peste 0 A, deci scrierea valorii 0 A nu face nimic (SEM nu scrie niciodată o valoare pe care entitatea ar respinge-o). Dacă ai o baterie de casă, această putere iese din ea — la orice oră din zi sau din noapte. Soluție: configurează pentru acest încărcător, în opțiunile SEM, o entitate pornire/oprire (`ev_start_stop_entity`), o entitate de mod de încărcare sau un serviciu de oprire. Avertismentul dispare de îndată ce încărcătorul nu mai consumă.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEM i-a comandat lui **{name}** să se oprească, dar niciun mecanism configurat nu poate deschide efectiv contactorul — mașina consumă în continuare {power} W. Singurul control pe care SEM îl are pentru acest încărcător este `{entity}`, iar minimul acestuia este peste 0 A, deci scrierea valorii 0 A nu face nimic (SEM nu scrie niciodată o valoare pe care entitatea ar respinge-o). Dacă ai o baterie de casă, această putere iese din ea — la orice oră din zi sau din noapte. Soluție: configurează pentru acest încărcător, în opțiunile SEM, o entitate pornire/oprire (`ev_start_stop_entity`), o entitate de mod de încărcare sau un serviciu de oprire. Avertismentul dispare de îndată ce încărcătorul nu mai consumă.\n\nSEM crede că această eroare îi aparține. Dacă puteți, deschideți un raport de eroare cu butonul din notificare — formularul vine deja completat. Dacă preferați, copiați contextul de mai jos într-un e-mail sau o postare pe forum. Acest dialog nu trimite nimic nicăieri.\n\n```\n{context}\n```\n\nConfirmați pentru a închide notificarea."
           }
         }
       }
@@ -1886,7 +1886,7 @@
         "step": {
           "confirm": {
             "title": "Raportează aceasta către SEM",
-            "description": "**{name}** are setată o țintă de încărcare în procente, dar vehiculul nu îşi raportează starea de încărcare în acest moment, aşa că SEM nu poate opri *exact* la **{target}%**.\n\nTotuşi nu încarcă orbeşte: de la ultima citire reală din această sesiune contorizează energia livrată efectiv şi opreşte în momentul în care acest total măsurat atinge ţinta — depăşirea este doar cât a luat maşina de la acea citire încoace. Dacă în această sesiune nu a sosit nicio citire reală (sau SEM a repornit în timpul încărcării), nu există reper şi încărcarea continuă până când maşina însăşi reduce puterea, aproape plină.\n\nPentru o limită care nimereşte exact, configuraţi un **senzor real de SOC al vehiculului** pentru acest încărcător (Configurare → EV → Entitate SOC vehicul). Procentul bateriei din tabloul de bord este SOC-ul *estimat* de SEM, ignorat în mod deliberat pentru limita fermă (poate devia). Această reparaţie dispare automat de îndată ce o citire reală de SOC este din nou disponibilă.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "**{name}** are setată o țintă de încărcare în procente, dar vehiculul nu îşi raportează starea de încărcare în acest moment, aşa că SEM nu poate opri *exact* la **{target}%**.\n\nTotuşi nu încarcă orbeşte: de la ultima citire reală din această sesiune contorizează energia livrată efectiv şi opreşte în momentul în care acest total măsurat atinge ţinta — depăşirea este doar cât a luat maşina de la acea citire încoace. Dacă în această sesiune nu a sosit nicio citire reală (sau SEM a repornit în timpul încărcării), nu există reper şi încărcarea continuă până când maşina însăşi reduce puterea, aproape plină.\n\nPentru o limită care nimereşte exact, configuraţi un **senzor real de SOC al vehiculului** pentru acest încărcător (Configurare → EV → Entitate SOC vehicul). Procentul bateriei din tabloul de bord este SOC-ul *estimat* de SEM, ignorat în mod deliberat pentru limita fermă (poate devia). Această reparaţie dispare automat de îndată ce o citire reală de SOC este din nou disponibilă.\n\nSEM crede că această eroare îi aparține. Dacă puteți, deschideți un raport de eroare cu butonul din notificare — formularul vine deja completat. Dacă preferați, copiați contextul de mai jos într-un e-mail sau o postare pe forum. Acest dialog nu trimite nimic nicăieri.\n\n```\n{context}\n```\n\nConfirmați pentru a închide notificarea."
           }
         }
       }
@@ -1953,7 +1953,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM verifică două contoare de rețea ghicite",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Configurare**, and pick **Toate setările** at the top. Then set **Putere rețea** in section **Surse de senzori**. If your meter has one sensor for import and one for export, set **Senzor import rețea** and **Senzor export rețea** in section **Tarif și prețuri** instead."
+      "description": "SEM nu are un senzor de putere a rețelei, așa că a ghicit după nume: **{import_entity}** pentru importul din rețea și **{export_entity}** pentru exportul în rețea. SEM nu le folosește până când nu se potrivesc cu contoarele dvs. de energie ale rețelei, așa că deocamdată puterea rețelei arată 0. Pentru a alege contorul: deschideți tabloul SEM, fila ⚙ **Configurare**, și alegeți **Toate setările** din partea de sus. Apoi setați **Putere rețea** în secțiunea **Surse de senzori**. Dacă contorul dvs. are un senzor pentru import și unul pentru export, setați în schimb **Senzor import rețea** și **Senzor export rețea** în secțiunea **Tarif și prețuri**."
     },
     "battery_control_write_not_taken": {
       "title": "O scriere de control al bateriei nu este preluată: {entity_id}",
@@ -1973,7 +1973,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM nu a putut găsi contoarele dvs. de putere din rețea",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Configurare**, and pick **Toate setările** at the top. Then set **Putere rețea** in section **Surse de senzori**. If your meter has one sensor for import and one for export, set **Senzor import rețea** and **Senzor export rețea** in section **Tarif și prețuri** instead."
+      "description": "SEM nu are un senzor de putere a rețelei, iar senzorii ghiciți după nume nu sunt contorul dvs. de rețea: **{import_entity}** pentru import, **{export_entity}** pentru export. Nu se potrivesc cu contoarele dvs. de energie ale rețelei, sau unul dintre cei doi lipsește. SEM preferă să nu arate nicio putere a rețelei decât una greșită. Pentru a alege contorul: deschideți tabloul SEM, fila ⚙ **Configurare**, și alegeți **Toate setările** din partea de sus. Apoi setați **Putere rețea** în secțiunea **Surse de senzori**. Dacă contorul dvs. are un senzor pentru import și unul pentru export, setați în schimb **Senzor import rețea** și **Senzor export rețea** în secțiunea **Tarif și prețuri**."
     },
     "power_sensor_not_found": {
       "title": "Niciun senzor de putere pentru {energy_entity}",

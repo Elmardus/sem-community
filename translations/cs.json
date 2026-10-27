@@ -37,7 +37,7 @@
       },
       "hardware": {
         "title": "Hardware",
-        "description": "One final value depends on your installation:\n\n• Home Battery Capacity — the usable kWh of your inverter battery.\n\nSEM also auto-detected your inverter's discharge control entity: {discharge_entity}\n\nLeave the dashboard option ON to have SEM build its Lovelace dashboard for you. **Note: this triggers a Home Assistant restart about 5 seconds after install completes.**\n\nEverything else uses safe defaults that you can tune later from the integration's options.",
+        "description": "Poslední krok! SEM automaticky zjistil entitu pro řízení vybíjení vašeho střídače: {discharge_entity}\n\nPonechte volbu panelu ZAPNUTOU a SEM pro vás vytvoří svůj panel Lovelace. **Poznámka: přibližně 5 sekund po dokončení instalace se Home Assistant restartuje.**\n\nVše ostatní — včetně limitu špičky ze sítě — používá bezpečné výchozí hodnoty, které můžete upravit hned po nastavení: limit špičky posuvníkem na kartě **Ovládání**, vše ostatní na kartě **Konfigurace** v panelu SEM — včetně nabíječek EV, tepelného čerpadla, tarifu a zón baterie.",
         "data": {
           "battery_capacity_kwh": "Kapacita domácí baterie (kWh)",
           "generate_dashboard_on_install": "Vygenerovat nyní panel SEM (restartuje HA)",
@@ -118,7 +118,7 @@
     "step": {
       "ev_charger": {
         "title": "Nabíječka EV",
-        "description": "Tip: většina nastavení je nyní na panelu SEM → karta Konfigurace (barevně, živě). Tento průvodce zůstává pro instalace bez panelu.\n\nReview and update your EV charger entity mappings. The Vehicle SOC fields are only used if you provide a Vehicle Battery SOC sensor.",
+        "description": "Tip: většina nastavení je nyní na panelu SEM → karta Konfigurace (barevně, živě). Tento průvodce zůstává pro instalace bez panelu.\n\nZkontrolujte a upravte přiřazení entit vaší nabíječky EV. Pole SOC vozidla se použijí, jen pokud zadáte senzor SOC baterie vozidla.",
         "data": {
           "ev_connected_sensor": "Stav připojení EV",
           "ev_charging_sensor": "Stav nabíjení EV",
@@ -197,7 +197,7 @@
           "battery_discharge_protection_enabled": "Je-li ZAPNUTO, SEM během nočního nabíjení EV omezí limit vybíjení měniče tak, aby domácí baterie napájela pouze dům (nikoli EV).",
           "battery_max_discharge_power": "Pevná horní mez vybíjení baterie vynucovaná funkcí ochrany.",
           "electricity_import_rate": "Denní / jednotný tarif (CHF/kWh, včetně DPH). Používá se pro sledování nákladů.",
-          "electricity_off_peak_rate": "Night tariff (CHF/kWh). Set equal to import rate if you don't have a dual tariff.",
+          "electricity_off_peak_rate": "Sazba mimo špičku (za kWh). Pokud nemáte dvoutarif, nastavte stejnou hodnotu jako sazbu za odběr.",
           "electricity_export_rate": "Výkupní sazba placená distributorem (CHF/kWh).",
           "demand_charge_rate": "Měsíční poplatek za rezervovaný příkon na kW špičky (CHF/kW/měsíc). Nastavte 0, pokud vaše smlouva takový poplatek nemá.",
           "observer_mode": "Je-li ZAPNUTO, SEM vše sleduje a počítá, ale nikdy neodešle volání služby do hardwaru. Použijte na testovacím/přípravném HA, který zrcadlí produkční instalaci.",
@@ -259,8 +259,8 @@
           "dynamic_tariff_entity": "Entita dynamické ceny (zjistí se automaticky, pokud je prázdné)",
           "dynamic_forecast_entity": "Entita předpovědi cen (volitelné, zjistí se automaticky)",
           "dynamic_feedin_entity": "Entita výkupní ceny (volitelné, pro dynamickou sazbu dodávky)",
-          "grid_import_power_entity": "Grid import power sensor (optional, auto-detected from Energy Dashboard)",
-          "grid_export_power_entity": "Grid export power sensor (optional, auto-detected from Energy Dashboard)",
+          "grid_import_power_entity": "Senzor výkonu importu ze sítě (volitelné, zjištěno automaticky)",
+          "grid_export_power_entity": "Senzor výkonu exportu do sítě (volitelné, zjištěno automaticky)",
           "tariff_classification_mode": "Režim klasifikace cen",
           "solar_forecast_source": "Zdroj předpovědi výroby",
           "grid_co2_entity": "Senzor intenzity CO₂ sítě (volitelné)",
@@ -1836,7 +1836,7 @@
         "step": {
           "confirm": {
             "title": "Nahlásit toto SEM",
-            "description": "Poslední 3 a více příkazů proudu, které SEM poslal na **{name}**, bylo odmítnuto: `{error}`. Nabíječka právě NENÍ pod kontrolou SEM — bude dál dělat to, co jí bylo řečeno naposledy (včetně nabíjení plným výkonem v režimu vypnuto). Nejčastější příčiny: ovládací entitu nabíječky přejmenovala aktualizace nadřazené integrace, nebo `ev_charger_service` ukazuje na službu s jiným schématem parametrů. Zkontrolujte ovládací entitu / službu nabíječky v konfiguraci SEM. Tato oprava zmizí automaticky po prvním úspěšném příkazu.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "Poslední 3 a více příkazů proudu, které SEM poslal na **{name}**, bylo odmítnuto: `{error}`. Nabíječka právě NENÍ pod kontrolou SEM — bude dál dělat to, co jí bylo řečeno naposledy (včetně nabíjení plným výkonem v režimu vypnuto). Nejčastější příčiny: ovládací entitu nabíječky přejmenovala aktualizace nadřazené integrace, nebo `ev_charger_service` ukazuje na službu s jiným schématem parametrů. Zkontrolujte ovládací entitu / službu nabíječky v konfiguraci SEM. Tato oprava zmizí automaticky po prvním úspěšném příkazu.\n\nSEM se domnívá, že jde o jeho vlastní chybu. Pokud můžete, otevřete hlášení chyby tlačítkem v upozornění — formulář už bude vyplněný. Případně zkopírujte níže uvedený kontext do e-mailu nebo příspěvku na fóru. Tento dialog nic nikam neodesílá.\n\n```\n{context}\n```\n\nPotvrzením upozornění zavřete."
           }
         }
       }
@@ -1847,7 +1847,7 @@
         "step": {
           "confirm": {
             "title": "Nahlásit toto SEM",
-            "description": "SEM dal **{name}** pokyn k zastavení, ale žádný nakonfigurovaný mechanismus nedokáže skutečně rozepnout stykač — auto stále odebírá {power} W. Jediné ovládání, které SEM pro tuto nabíječku má, je `{entity}`, a jeho minimum je vyšší než 0 A, takže zápis 0 A nic neudělá (SEM nikdy nezapíše hodnotu, kterou by entita odmítla). Pokud máte domácí baterii, tento výkon jde z ní — v kteroukoli denní i noční dobu. Řešení: nastavte pro tuto nabíječku v možnostech SEM entitu start/stop (`ev_start_stop_entity`), entitu režimu nabíjení nebo službu zastavení. Toto upozornění zmizí, jakmile nabíječka přestane odebírat.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEM dal **{name}** pokyn k zastavení, ale žádný nakonfigurovaný mechanismus nedokáže skutečně rozepnout stykač — auto stále odebírá {power} W. Jediné ovládání, které SEM pro tuto nabíječku má, je `{entity}`, a jeho minimum je vyšší než 0 A, takže zápis 0 A nic neudělá (SEM nikdy nezapíše hodnotu, kterou by entita odmítla). Pokud máte domácí baterii, tento výkon jde z ní — v kteroukoli denní i noční dobu. Řešení: nastavte pro tuto nabíječku v možnostech SEM entitu start/stop (`ev_start_stop_entity`), entitu režimu nabíjení nebo službu zastavení. Toto upozornění zmizí, jakmile nabíječka přestane odebírat.\n\nSEM se domnívá, že jde o jeho vlastní chybu. Pokud můžete, otevřete hlášení chyby tlačítkem v upozornění — formulář už bude vyplněný. Případně zkopírujte níže uvedený kontext do e-mailu nebo příspěvku na fóru. Tento dialog nic nikam neodesílá.\n\n```\n{context}\n```\n\nPotvrzením upozornění zavřete."
           }
         }
       }
@@ -1886,7 +1886,7 @@
         "step": {
           "confirm": {
             "title": "Nahlásit toto SEM",
-            "description": "**{name}** má nastavený procentní cíl nabíjení, ale vozidlo právě teď nehlásí stav nabití, takže SEM nemůže zastavit *přesně* na **{target}%**.\n\nNenabíjí ale naslepo: od posledního skutečného odečtu v této relaci počítá skutečně dodanou energii a zastaví, jakmile tento naměřený součet dosáhne vašeho cíle — překročení je jen to, co si auto od onoho odečtu vzalo. Pokud v této relaci nedorazil žádný skutečný odečet (nebo se SEM restartoval během nabíjení), není se od čeho odrazit a nabíjí se, dokud auto samo krátce před plným nesníží výkon.\n\nAby limit padl přesně, nastavte pro tuto nabíječku **skutečný senzor SOC vozidla** (Konfigurace → EV → Entita SOC vozidla). Procenta baterie na nástěnce jsou *odhadovaný* SOC od SEM, který se pro tvrdý limit záměrně ignoruje (může se rozejít). Tato oprava zmizí automaticky, jakmile bude opět k dispozici skutečný odečet SOC.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "**{name}** má nastavený procentní cíl nabíjení, ale vozidlo právě teď nehlásí stav nabití, takže SEM nemůže zastavit *přesně* na **{target}%**.\n\nNenabíjí ale naslepo: od posledního skutečného odečtu v této relaci počítá skutečně dodanou energii a zastaví, jakmile tento naměřený součet dosáhne vašeho cíle — překročení je jen to, co si auto od onoho odečtu vzalo. Pokud v této relaci nedorazil žádný skutečný odečet (nebo se SEM restartoval během nabíjení), není se od čeho odrazit a nabíjí se, dokud auto samo krátce před plným nesníží výkon.\n\nAby limit padl přesně, nastavte pro tuto nabíječku **skutečný senzor SOC vozidla** (Konfigurace → EV → Entita SOC vozidla). Procenta baterie na nástěnce jsou *odhadovaný* SOC od SEM, který se pro tvrdý limit záměrně ignoruje (může se rozejít). Tato oprava zmizí automaticky, jakmile bude opět k dispozici skutečný odečet SOC.\n\nSEM se domnívá, že jde o jeho vlastní chybu. Pokud můžete, otevřete hlášení chyby tlačítkem v upozornění — formulář už bude vyplněný. Případně zkopírujte níže uvedený kontext do e-mailu nebo příspěvku na fóru. Tento dialog nic nikam neodesílá.\n\n```\n{context}\n```\n\nPotvrzením upozornění zavřete."
           }
         }
       }
@@ -1953,7 +1953,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM kontroluje dva odhadnuté elektroměry sítě",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Konfigurace**, and pick **Všechna nastavení** at the top. Then set **Výkon sítě** in section **Zdroje senzorů**. If your meter has one sensor for import and one for export, set **Senzor importu ze sítě** and **Senzor exportu do sítě** in section **Tarif a ceny** instead."
+      "description": "SEM nemá senzor výkonu sítě, a proto odhadl podle názvu: **{import_entity}** pro odběr ze sítě a **{export_entity}** pro dodávku do sítě. SEM je nepoužije, dokud neodpovídají vašim počítadlům energie ze sítě, takže výkon sítě zatím ukazuje 0. Jak vybrat elektroměr: otevřete panel SEM, kartu ⚙ **Konfigurace** a nahoře zvolte **Všechna nastavení**. Pak nastavte **Výkon sítě** v sekci **Zdroje senzorů**. Pokud má váš elektroměr jeden senzor pro odběr a jeden pro dodávku, nastavte místo toho **Senzor importu ze sítě** a **Senzor exportu do sítě** v sekci **Tarif a ceny**."
     },
     "battery_control_write_not_taken": {
       "title": "Zápis řízení baterie se neujal: {entity_id}",
@@ -1973,7 +1973,7 @@
     },
     "split_grid_rejected": {
       "title": "SEM nemohl najít vaše elektroměry sítě",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Konfigurace**, and pick **Všechna nastavení** at the top. Then set **Výkon sítě** in section **Zdroje senzorů**. If your meter has one sensor for import and one for export, set **Senzor importu ze sítě** and **Senzor exportu do sítě** in section **Tarif a ceny** instead."
+      "description": "SEM nemá senzor výkonu sítě a jeho odhady podle názvu nejsou váš elektroměr sítě: **{import_entity}** pro odběr, **{export_entity}** pro dodávku. Neodpovídají vašim počítadlům energie ze sítě, nebo jeden z nich chybí. SEM raději neukazuje žádný výkon sítě než chybný. Jak vybrat elektroměr: otevřete panel SEM, kartu ⚙ **Konfigurace** a nahoře zvolte **Všechna nastavení**. Pak nastavte **Výkon sítě** v sekci **Zdroje senzorů**. Pokud má váš elektroměr jeden senzor pro odběr a jeden pro dodávku, nastavte místo toho **Senzor importu ze sítě** a **Senzor exportu do sítě** v sekci **Tarif a ceny**."
     },
     "power_sensor_not_found": {
       "title": "Žádný senzor výkonu pro {energy_entity}",
