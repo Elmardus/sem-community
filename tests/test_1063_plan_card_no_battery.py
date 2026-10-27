@@ -27,6 +27,7 @@ kWh overnight — the promised refill never came".
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -398,7 +399,8 @@ class TestPlanReadinessUsesBatteryPresence:
     """
 
     @staticmethod
-    def _coordinator(presence, saved, *, soc_read=None, detected=None):
+    def _coordinator(presence, saved, *, soc_read=None, detected=None,
+                     uptime_s=3600.0):
         fake = MagicMock()
         fake.config = {} if saved is None else {"battery_capacity_kwh": saved}
         fake.setup_presence = presence
@@ -408,6 +410,7 @@ class TestPlanReadinessUsesBatteryPresence:
             auto_detect_battery_capacity_kwh=lambda: detected,
             _last_valid_soc=soc_read)
         fake._runtimes_restored = True
+        fake._boot_monotonic = time.monotonic() - uptime_s
         fake._shadow_plan_date = None
         fake._plan_ev_conn_sig = None
         fake._manual_replan_requested = False
@@ -420,9 +423,9 @@ class TestPlanReadinessUsesBatteryPresence:
 
     @classmethod
     def _tick_tries_a_stamp(cls, presence, saved, *, unavailable=True,
-                           soc_read=None, detected=None):
+                           soc_read=None, detected=None, uptime_s=3600.0):
         fake = cls._coordinator(presence, saved, soc_read=soc_read,
-                                detected=detected)
+                                detected=detected, uptime_s=uptime_s)
         fake._shadow_energy_plan.return_value = False
         power = SimpleNamespace(battery_soc=0.0,
                                 battery_soc_unavailable=unavailable)
@@ -485,6 +488,16 @@ class TestPlanReadinessUsesBatteryPresence:
 
     def test_present_battery_with_readable_zero_soc_can_plan(self):
         assert self._tick_tries_a_stamp(PRESENT, 15.0, unavailable=False) is True
+
+    def test_unknown_just_after_a_restart_still_waits(self):
+        """A real battery whose SOC and size sensors are still loading
+        reads UNKNOWN with nothing read. The first minutes must not stamp a
+        zero-battery plan (review of #1207)."""
+        assert self._tick_tries_a_stamp(UNKNOWN, 15.0, uptime_s=30.0) is False
+        assert self._tick_tries_a_stamp(None, 15.0, uptime_s=30.0) is False
+
+    def test_absent_stamps_at_once_even_just_after_a_restart(self):
+        assert self._tick_tries_a_stamp(ABSENT, 15.0, uptime_s=30.0) is True
 
     def test_no_saved_size_stamps_as_before(self):
         assert self._tick_tries_a_stamp(ABSENT, None) is True

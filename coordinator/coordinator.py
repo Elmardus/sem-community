@@ -11513,8 +11513,17 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # settings flow saves a default even on battery-less homes.
                 # Use the same presence check as battery_capacity_kwh so
                 # an absent pack cannot leave EV/load plans stale forever.
+                # A pack that is merely not read YET (UNKNOWN presence, SOC and
+                # capacity sensors still loading after a restart) is not an
+                # absent one: only a plain ABSENT, or an unseen pack that
+                # stayed unseen for 10 minutes of uptime, may plan without it.
+                _no_pack = (
+                    presence_of(self).get(Module.BATTERY) is Presence.ABSENT
+                    or (battery_unseen(self)
+                        and time.monotonic() - getattr(
+                            self, "_boot_monotonic", 0.0) >= 600.0))
                 _batt_ready = (
-                    battery_unseen(self)
+                    _no_pack
                     or float(self.config.get("battery_capacity_kwh", 0) or 0) <= 0
                     or not getattr(power, "battery_soc_unavailable", False)  # DARK-SOC: plan — a skipped rebuild retries next cycle
                 )

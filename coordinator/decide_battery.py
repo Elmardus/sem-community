@@ -1015,14 +1015,13 @@ def _decide_battery(view: "BatteryView") -> BatteryDecision:
         if _held_for_cars:
             spend_open = False
         # (#1078) A discharge limit that also caps charging (a battery's own
-        # maximum_power) blocks the sun from the pack while the car is only
-        # plugged in. With the switch on, a car that is NOT drawing and a sun
-        # that covers the house lifts the clamp for that cycle. A car that
-        # draws keeps it: the sun goes to the car first, so the pack would
-        # not charge anyway.
+        # maximum_power) blocks the sun from the pack while a car is only
+        # plugged in. With the switch on, a car that has not drawn for the
+        # 15 minutes of ev_drew_recently (so not a pulsing car in a gap) and
+        # a sun that covers the house lifts the clamp. A live car keeps it.
         _lift_two_sided = (
             bool(cfg.get("battery_discharge_limit_caps_charge", False))
-            and not view.ev_charging and surplus_w > 0.0)
+            and not _car_live and surplus_w > 0.0)
         if not _lift_two_sided and (
                 (surplus_w < gate_w and not spend_open)
                 or below_buffer or not _assist_ok):
