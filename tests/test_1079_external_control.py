@@ -184,10 +184,13 @@ class TestChargerSeam:
     async def test_a_yielded_charger_gets_no_zero_amp_dead_man(self):
         """A persisted 0 A dead-man ends the other party's session ~10 s
         into any masterless window (#1163). Yield arms none (review)."""
+        from custom_components.solar_energy_management.devices.base import (
+            CurrentControlDevice,
+        )
         dev = self._device(True)
         dev.charger_service = "keba.set_current"
         dev.hass.services.has_service = MagicMock(return_value=True)
-        await dev.arm_failsafe_off()
+        await CurrentControlDevice.arm_failsafe_off(dev)
         dev.hass.services.async_call.assert_not_called()
 
     @pytest.mark.asyncio
