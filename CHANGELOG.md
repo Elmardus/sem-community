@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A P1 Monitor meter or a Tibber Pulse now shows grid power in any language** (#1222). Before, it could read 0 W.
 - 🐛 **A DSMR Reader meter now shows grid power** (#1223). Before, it read 0 W when the Energy Dashboard grid entry had no power sensor.
 - 🔧 **Settings no longer asks for the grid sensors or observer mode a second time** (#1213). Setup and the config card keep them.
 - ✨ **New switch: Start the car on negative export, buying the gap** (#1080). Off by default. It buys the watts the sun lacks.
