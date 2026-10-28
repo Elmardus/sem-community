@@ -1324,7 +1324,11 @@ class SEMConfigCard extends SEMLitBase {
                 </span>
             </div>
             ${alts.map((a, i) => {
-                const altWrite = proposalWrite(p, a.entity, this._options);
+                // (#1224) a runner-up takes the same gate as the first
+                // choice; a refusal carries its reason
+                const altOk = !a.action || a.action === 'set_option';
+                const altWrite = altOk ? proposalWrite(p, a.entity, this._options) : null;
+                const altWhy = altOk ? '' : whyNoButton(a);
                 return html`
                 <div class="row" style="margin:-6px 0 6px">
                     <span class="lbl" style="opacity:.6">${this._t('config_proposed_or')}</span>
@@ -1332,6 +1336,8 @@ class SEMConfigCard extends SEMLitBase {
                         <span style="opacity:.6"> · ${a.matched_key}</span>
                         ${p.action === 'set_option' && altWrite && !writeIsSaved(altWrite, this._options)
                             ? html` ${useButton(altWrite, 'prop_' + role + '_alt' + i)}` : nothing}
+                        ${p.action === 'set_option' && altWhy
+                            ? html` <span style="opacity:.7;font-family:inherit">${altWhy}</span>` : nothing}
                     </span>
                 </div>`;
             })}`;

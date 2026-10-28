@@ -10,9 +10,14 @@ import { proposalWrite, writeIsSaved } from '../src/util/detect-rows.js';
 
 const IMP = 'grid_import_power_entity';
 const EXP = 'grid_export_power_entity';
-const pair = { [IMP]: ['sensor.imp', 'sensor.imp2'], [EXP]: ['sensor.exp'] };
-const impRow = { config_key: IMP, entity: 'sensor.imp', action: 'set_option', pair };
-const expRow = { config_key: EXP, entity: 'sensor.exp', action: 'set_option', pair };
+// each choice of a half → the other half's choices on the same device
+const impRow = { config_key: IMP, entity: 'sensor.imp', action: 'set_option', pair: {
+    'sensor.imp': { [EXP]: ['sensor.exp'] },
+    'sensor.imp2': { [EXP]: ['sensor.exp'] },
+} };
+const expRow = { config_key: EXP, entity: 'sensor.exp', action: 'set_option', pair: {
+    'sensor.exp': { [IMP]: ['sensor.imp', 'sensor.imp2'] },
+} };
 
 test('a click on either half saves both', () => {
     const both = { [IMP]: 'sensor.imp', [EXP]: 'sensor.exp' };
@@ -31,19 +36,37 @@ test("the other half keeps the user's earlier choice from this device", () => {
         { [IMP]: 'sensor.imp2', [EXP]: 'sensor.exp' });
 });
 
-test("a saved half from another device is replaced, never mixed in", () => {
+test('a saved half from another device is replaced, never mixed in', () => {
     const saved = { [IMP]: 'sensor.other_meter' };
     assert.deepEqual(proposalWrite(expRow, 'sensor.exp', saved),
         { [IMP]: 'sensor.imp', [EXP]: 'sensor.exp' });
 });
 
-test('one entity is never both halves', () => {
-    const odd = { [IMP]: ['sensor.x'], [EXP]: ['sensor.x'] };
-    assert.equal(proposalWrite({ config_key: IMP, pair: odd }, 'sensor.x', {}), null);
+test('two meters of one integration never mix', () => {
+    const row = { config_key: IMP, entity: 'sensor.a_imp', pair: {
+        'sensor.a_imp': { [EXP]: ['sensor.a_exp'] },
+        'sensor.b_imp': { [EXP]: ['sensor.b_exp'] },
+    } };
+    // home B's pair is saved; a click on home A's import saves home A's pair
+    const saved = { [IMP]: 'sensor.b_imp', [EXP]: 'sensor.b_exp' };
+    assert.deepEqual(proposalWrite(row, 'sensor.a_imp', saved),
+        { [IMP]: 'sensor.a_imp', [EXP]: 'sensor.a_exp' });
+    assert.deepEqual(proposalWrite(row, 'sensor.b_imp', {}),
+        { [IMP]: 'sensor.b_imp', [EXP]: 'sensor.b_exp' });
 });
 
-test("a pair without the row's own key saves nothing", () => {
-    assert.equal(proposalWrite({ config_key: 'battery_soc_sensor', pair }, 'sensor.soc', {}), null);
+test('a choice with no partner on its device saves nothing', () => {
+    assert.equal(proposalWrite(impRow, 'sensor.elsewhere', {}), null);
+    const empty = { config_key: IMP, pair: { 'sensor.x': { [EXP]: [] } } };
+    assert.equal(proposalWrite(empty, 'sensor.x', {}), null);
+    assert.equal(proposalWrite({ config_key: IMP, pair: { 'sensor.x': {} } }, 'sensor.x', {}), null);
+});
+
+test('one entity is never both halves', () => {
+    const odd = { config_key: IMP, pair: { 'sensor.x': { [EXP]: ['sensor.x'] } } };
+    assert.equal(proposalWrite(odd, 'sensor.x', {}), null);
+    const self = { config_key: IMP, pair: { 'sensor.x': { [IMP]: ['sensor.y'] } } };
+    assert.equal(proposalWrite(self, 'sensor.x', {}), null);
 });
 
 test('a role outside a pair saves its own key only', () => {
@@ -74,4 +97,6 @@ test('the card saves what proposalWrite says, in one call', () => {
         'a button that writes one key saves half a pair');
     assert.equal((rows.match(/proposalWrite\(p, /g) || []).length, 2,
         'the row and each alternative ask proposalWrite');
+    assert.match(rows, /const altOk = !a\.action \|\| a\.action === 'set_option'/,
+        'a runner-up the gate refused gets no button');
 });

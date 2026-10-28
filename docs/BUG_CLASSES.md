@@ -3228,24 +3228,32 @@ withheld the button from a half whose partner the device lacks. When the device 
 each row still had its own *Use this* button, and a click saved only that key. On a home whose
 dashboard declares the pair (`stat_rate_from`/`to`), the saved half then outranked it on the
 reader's ED path, so export read 0 W with one log line. A half whose partner was present but could
-not take a button (not loaded, wrong unit) kept its own button too: the rule counted presence.
-**Where it lives:** `hardware_detection.propose_roles_from_roster` (the pair check), the card's
-Detected-hardware rows (`sem-config-card.js` `proposalRow`, primary and each alternative), and
-`coordinator/sensor_reader.py::_read_from_energy_dashboard` (a half beside a whole answer). Checked:
-the install step refuses half a pair; the install form takes only halves that still offer the
-button (`propose_energy_sources` rung 1); the Sensor sources pickers and the options flow save one
-key on purpose (a home that never exports sets import alone); the legacy reader already ignores a
-half. **Closure:** both halves usable → each carries `pair` (each key's choices on this device), and
-the card's `proposalWrite` saves the clicked entity plus the other half (the saved one when it is a
-choice of this device, else the first) in one `set_option` call; a row counts as "in use" only when
-the whole write is saved, so a half saved by an older card is offered whole again. One half unusable
-→ the other gets `pair_blocked` and no button. The reader sets a half aside when the Grid power pick,
-the dashboard's pair, its meter sum or its combined sensor measures both directions, and reads the
-dashboard as if the half were not saved. **Guard:** `tests/test_1224_half_grid_pair.py` (the pair on
-each half, alternatives, blocked partners, a saved half, the reader's ranks) and
-`dashboard/card/test/pair-write.test.js` (the write, the saved-partner rule, "in use", and a source
-check that every button asks `proposalWrite`). **Left open:** a half saved by an older card on a home
-with no whole dashboard answer is still read alone, export 0 W, and only the log says so (#1239).
+not take a button (not loaded, wrong unit) kept its own button too: the rule counted presence. The
+review found two more: the card asks once per DOMAIN, so "this device" held two Tibber homes and one
+click could pair home A's import with home B's export; and each runner-up had a button the unit and
+load gate never judged. **Where it lives:** `hardware_detection.propose_roles_from_roster` (the pair
+check, the gate), the card's Detected-hardware rows (`sem-config-card.js` `proposalRow`, first choice
+and each runner-up), and `coordinator/sensor_reader.py::_read_from_energy_dashboard` (a half beside a
+whole answer; the #589 sign check and `diag_grid_mode` asked the saved keys, not what was read).
+Checked: the install step refuses half a pair; the install form takes only halves that still offer
+the button (`propose_energy_sources` rung 1); the Sensor sources pickers and the options flow save
+one key on purpose (a home that never exports sets import alone); the legacy reader already ignores
+a half. **Closure:** `pair` maps each usable choice of a half to the other half's usable choices on
+the SAME `device_id` (no device proves no pair); a first choice with none there is `pair_incomplete`.
+The card's `proposalWrite` saves the clicked entity plus the other half (the saved one when it is
+one of those, else the first) in one `set_option` call. A row counts as "in use" only when the whole
+write is saved, so a half saved by an older card is offered whole again. One half unusable → the
+other gets `pair_blocked` and no button. Each runner-up takes `_gate_proposal`; a refused one keeps
+its reason and gets no button. The reader sets a half aside when the Grid power pick, the dashboard's
+pair, its meter sum or its combined sensor measures both directions, and reads the dashboard as if
+the half were not saved; the sign check and the mode follow the source read this cycle. **Guard:**
+`tests/test_1224_half_grid_pair.py` (the pair on each half, runner-ups, two meters of one domain, no
+device, blocked partners, gated runner-ups, a saved half, the reader's ranks, the sign check, the
+mode) and `dashboard/card/test/pair-write.test.js` (the write, the saved-partner rule, two meters,
+"in use", and a source check that every button asks `proposalWrite`). **Left open:** a half saved by
+an older card on a home with no whole dashboard answer is still read alone, export 0 W, and only the
+log says so (#1238). The rows name roles by their ids (`grid_export_power`), as the whole
+Detected-hardware view does.
 
 ### 73. A success that is not an event re-arms the clock — GUARDED
 **Symptom:** the #915 write read-back never produced a verdict on PROD: `write_verified` stayed

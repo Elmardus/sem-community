@@ -1102,10 +1102,10 @@ class SensorReader:
             # auto/counter/solar/restored lock.  Runs only when the lock is
             # set AND we are on the combined/split auto path (manual entity
             # overrides use _audit_manual_grid_sign in _read_from_energy_dashboard).
-            _manual_ent = (
-                self._raw_config.get("grid_import_power_entity")
-                or self._raw_config.get("grid_export_power_entity")
-            )
+            # (#1224) The pair read THIS cycle, not the saved keys: half a
+            # pair beside the dashboard's own answer is set aside, and the
+            # dashboard's sign is the one to check.
+            _manual_ent = str(self._grid_read_source or "").startswith("manual:")
             _ed_for_audit = self._energy_dashboard_config
             if (self._grid_sign_detected
                     and not _manual_ent

@@ -2155,6 +2155,14 @@ def propose_roles_from_roster(dev_entities, domain: str, *,
         # power limit and measured in amps got a button.
         out[role]["judged"] = state_of is not None
         if out[role]["action"] == "set_option" and state_of is not None:
+            # (#1224) Each runner-up has its own button, so it takes the
+            # same gate; a refusal rides on it with the reason.
+            for alt in out[role].get("alternatives", ()):
+                probe = {"entity": alt["entity"], "action": "set_option"}
+                _gate_proposal(probe, role, state_of, strategy_values)
+                if probe["action"] != "set_option":
+                    alt.update({k: v for k, v in probe.items()
+                                if k != "entity"})
             _gate_proposal(out[role], role, state_of, strategy_values)
     # (#915, 06.09 audit) Half a split pair is not a proposal — PER DEVICE.
     # The crawler enforces PAIRED_ROLES on the whole declared vocabulary, but
@@ -2168,6 +2176,8 @@ def propose_roles_from_roster(dev_entities, domain: str, *,
         pairs = getattr(_lex, "PAIRED_ROLES", ())
     except Exception:  # noqa: BLE001
         pairs = ()
+    device_of = {str(getattr(e, "entity_id", "")): getattr(e, "device_id", None)
+                 for e in dev_entities}
     for pair in pairs:
         present = [r for r in pair if r in out]
         if 0 < len(present) < len(pair):
@@ -2190,12 +2200,30 @@ def propose_roles_from_roster(dev_entities, domain: str, *,
             continue
         # (#1224) Each half's button saves the whole pair in one write. The
         # card used to save only the half that was clicked, and the other
-        # read 0 W. ``pair`` holds each half's choices on this device.
-        whole = {out[x]["config_key"]: [out[x]["entity"]] + [
-                     a["entity"] for a in out[x].get("alternatives", ())]
-                 for x in pair}
+        # read 0 W. ``pair`` maps each choice of a half to the other half's
+        # choices on the SAME device: one call can hold a whole domain (two
+        # Tibber homes), and half of each is no meter. A choice with no
+        # partner there has no button; a first choice without one is a half.
+        usable = {x: [out[x]["entity"]] + [
+                      a["entity"] for a in out[x].get("alternatives", ())
+                      if a.get("action", "set_option") == "set_option"]
+                  for x in pair}
         for r in pair:
-            out[r]["pair"] = whole
+            writes = {}
+            for eid in usable[r]:
+                dev = device_of.get(eid)
+                partners = {
+                    out[x]["config_key"]: [
+                        o for o in usable[x]
+                        if o != eid and dev and device_of.get(o) == dev]
+                    for x in pair if x != r}
+                if partners and all(partners.values()):
+                    writes[eid] = partners
+            if writes:
+                out[r]["pair"] = writes
+            if out[r]["entity"] not in writes:
+                out[r]["action"] = "pair_incomplete"
+                out[r]["missing_role"] = [x for x in pair if x != r]
     return out
 
 
