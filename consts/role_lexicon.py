@@ -41,7 +41,10 @@ SITE_CURRENT_KEY: Final[str] = r"(^|_)available_current"
 #: role -> matching rule. ``platform`` is the HA entity domain the role must
 #: live in; ``any`` is a tuple of regexes of which one must match the declared
 #: key; ``not`` disqualifies. Regexes are matched case-insensitively with
-#: ``re.search`` against the translation key alone.
+#: ``re.search`` against the translation key alone. (#1222) ``brand_any`` maps
+#: an integration domain to more ``any`` regexes that count for that one
+#: integration only: words that are the role in one brand and something else
+#: in the rest. Each one is a whole key, ``^…$``.
 ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
     # ── battery control ────────────────────────────────────────────────
     "battery_discharge_limit": {
@@ -284,6 +287,15 @@ READ_ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
                 r"^power_from_grid$",         # mypv (AC-THOR)
                 r"^power_flow_from_grid$",    # tibber
                 r"^gridconsumedpower$"),      # senec
+        # (#1222) P1 Monitor calls its meter's pair ``power_consumption`` /
+        # ``power_production``, and a Tibber Pulse ``power`` /
+        # ``power_production``. Their names follow the user's language (NL
+        # "Stroomverbruik", DE "Stromverbrauch"; Tibber DE "Energie"). The
+        # keys do not, but a heat pump, a car and a solar inverter use the
+        # same words for their own power (lambda_heat_pumps, kia_uvo,
+        # enphase_envoy). So the words count in these brands only.
+        "brand_any": {"p1_monitor": (r"^power_consumption$",),
+                      "tibber": (r"^power$",)},
         "not": (r"energy", r"today", r"daily", r"total", r"month", r"year",
                 r"cumulative", r"phase", r"l1", r"l2", r"l3"),
     },
@@ -299,6 +311,10 @@ READ_ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
                 r"^power_flow_to_grid$",      # tibber
                 r"^feed_in_power$",           # huawei_solar
                 r"^feedinpower$"),            # solax_cloud_api
+        # (#1222) see grid_import_power: forecast_solar and enphase_envoy
+        # use these words for SOLAR power
+        "brand_any": {"p1_monitor": (r"^power_production$",),
+                      "tibber": (r"^power_production$",)},
         "not": (r"energy", r"today", r"daily", r"total", r"month", r"year",
                 r"cumulative", r"phase", r"l1", r"l2", r"l3", r"limit"),
     },
@@ -709,17 +725,25 @@ ALL_RULE_SETS: Final[tuple] = ("ROLE_RULES", "READ_ROLE_RULES",
                                "VEHICLE_ROLE_RULES")
 
 
-def role_for(platform: str, key: str) -> str | None:
+def rule_any(rule: Dict[str, Any], domain: str = "") -> tuple:
+    """(#1222) A rule's ``any`` regexes, plus the ones that count for
+    ``domain`` only (``brand_any``). Every reader of a rule asks here."""
+    return (tuple(rule["any"])
+            + tuple((rule.get("brand_any") or {}).get(domain, ())))
+
+
+def role_for(platform: str, key: str, domain: str = "") -> str | None:
     """The SEM role a declared ``translation_key`` on ``platform`` plays, or
     ``None``. First matching rule wins; rules are ordered by specificity in
-    ``ROLE_RULES`` above."""
+    ``ROLE_RULES`` above. ``domain`` is the integration that declares the
+    key; without it a ``brand_any`` word matches nothing."""
     import re
     for role, rule in {**ROLE_RULES, **READ_ROLE_RULES}.items():
         if rule["platform"] != platform:
             continue
         if any(re.search(p, key, re.I) for p in rule.get("not", ())):
             continue
-        if any(re.search(p, key, re.I) for p in rule["any"]):
+        if any(re.search(p, key, re.I) for p in rule_any(rule, domain)):
             return role
     return None
 
