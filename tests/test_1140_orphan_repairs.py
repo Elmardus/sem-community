@@ -86,6 +86,10 @@ KEYED = {
         "clear_orphan_hot_water_repairs, once per coordinator (#454)",
     "raise_hot_water_temperature_sensor_unavailable":
         "clear_orphan_hot_water_repairs, once per coordinator (#454)",
+    "raise_external_write_seen":
+        "keyed on the device (charger:<id> or battery); every known device is "
+        "cleared each cycle its writes stop or its mode is not observe "
+        "(#1079), and a restart drops the non-persistent Repair",
     "raise_power_sensor_not_found":
         "keyed on the fixed source (grid/solar/battery); each is cleared the "
         "cycle the dashboard read finds its sensor or stops counting it "

@@ -169,7 +169,8 @@ class SEMBatteryCard extends SEMLitBase {
         // (#820) A cap the inverter never took is not a cap either.
         const blocked = {no_limit_entity: 'pacing_no_limit',
                          limit_unreadable: 'pacing_limit_unreadable',
-                         write_refused: 'pacing_write_refused'}[a.action];
+                         write_refused: 'pacing_write_refused',
+                         yielded: 'pacing_yielded'}[a.action];
         if (blocked) {
             return html`
                 <div class="tonight-row" style="opacity:.85" title="${a.reason || ''}">

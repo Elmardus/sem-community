@@ -379,7 +379,7 @@ async def test_the_start_lifts_a_removed_batterys_cap_and_holds_while_a_reload_i
     )
     restored = []
 
-    async def _restore(_hass, config):
+    async def _restore(_hass, config, yielded=False):
         listed = list(config.get("battery_discharge_control_entities") or [])
         restored.append(listed)
         if "number.sessy1_limit" in listed:

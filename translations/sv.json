@@ -1630,6 +1630,12 @@
       },
       "simulation_tab": {
         "name": "Simuleringsflik"
+      },
+      "battery_discharge_limit_caps_charge": {
+        "name": "Urladdningsgränsen begränsar även laddning"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "Starta bilen vid negativ export och köp det som saknas"
       }
     },
     "number": {
@@ -2044,6 +2050,10 @@
     "charger_role_entity_gone": {
       "title": "Laddare {name}: en entitet är borta",
       "description": "Laddaren {name} använder {entity}, som är borta eller avstängd. Välj en annan entitet i laddarens inställningar eller kontrollera enhetens integration."
+    },
+    "external_write_seen": {
+      "title": "En annan part skriver till {name}",
+      "description": "Något annat än SEM ändrar hela tiden **{name}**, och SEM och den parten ångrar varandras arbete. Ställ in enheten på *Ja, SEM viker* i SEM:s flik Konfiguration och välj entiteten som visar när den andra parten styr."
     }
   },
   "selector": {

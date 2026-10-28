@@ -1630,6 +1630,12 @@
       },
       "simulation_tab": {
         "name": "Separador de simulação"
+      },
+      "battery_discharge_limit_caps_charge": {
+        "name": "O limite de descarga também limita o carregamento"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "Iniciar o carro com exportação negativa, comprando a diferença"
       }
     },
     "number": {
@@ -2044,6 +2050,10 @@
     "charger_role_entity_gone": {
       "title": "Carregador {name}: uma entidade desapareceu",
       "description": "O carregador {name} usa {entity}, que desapareceu ou está desativada. Escolha outra entidade nas definições do carregador ou verifique a integração do dispositivo."
+    },
+    "external_write_seen": {
+      "title": "Um terceiro escreve em {name}",
+      "description": "Algo diferente do SEM altera **{name}** repetidamente, e o SEM e esse terceiro desfazem o trabalho um do outro. No separador Configuração do SEM, defina este dispositivo como *Sim, o SEM cede* e escolha a entidade que mostra quando o terceiro tem o controlo."
     }
   },
   "selector": {

@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 # [Unreleased]
 
 - 🐛 **A DSMR Reader meter now shows grid power** (#1223). Before, it read 0 W when the Energy Dashboard grid entry had no power sensor.
+- 🔧 **Settings no longer asks for the grid sensors or observer mode a second time** (#1213). Setup and the config card keep them.
+- ✨ **New switch: Start the car on negative export, buying the gap** (#1080). Off by default. It buys the watts the sun lacks.
+- ✨ **SEM can yield a charger or the battery to another party that steers it** (#1079). Off by default; set it under Steered by another party.
+- 🐛 **EV stop estimates now follow a car sensor that moves in half-point steps** (#1229). Before, the estimate drifted above the car's reading.
+- 🐛 **A heat pump set by service now shows the state SEM sent** (#1231). Before, a renewal could cancel a boost.
+- 🐛 **The plan now runs on a home with no battery** (#1207). Before, it waited for a battery sensor that is not there.
+- 🐛 **Solar made while Home Assistant was down now counts after a restart after dark** (#1187). Before, that solar was lost.
+- ✨ **New switch: Discharge limit also caps charging** (#1078). Off by default. On, a parked car no longer blocks solar charging of that battery.
+- ✨ **The Home diagram can hide the car's charge level** (#1219). Set `show_ev_soc: false` when two cars share one charger.
+- ✨ **Hot water settings are easier to read** (#1145). "Bank by" is now "Extra from surplus", with an example and the entity in use.
+- 🧹 **The options audit counts real duplicates only** (#1213). Heat pump pages, and a shared entity plus its per-battery override, are no longer counted twice.
 - 🐛 **One click on a grid meter in Detected hardware now saves both its import and export sensors** (#1224). Before, export could read 0 W.
 - 🐛 **A SlimmeLezer P1 reader now shows grid power** (#1225). Before, it read 0 W. SEM also no longer takes one phase for the whole meter.
 - 🐛 **SEM now finds the power sensor of a second inverter or battery, or a Repair says it found none** (#1226). Before, it read 0 W.
@@ -21,7 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ **Setup shows what SEM found as live watts, and asks one question when it is unsure of your grid meter** (#1213).
 - 🔧 **SEM no longer guesses a battery or solar sensor when several fit** (#1213). One battery module or one phase is not the whole battery.
 - 🐛 **A device on its own tariff and meter keeps the kWh it used while Home Assistant was down** (#1228). Before, the house price took them.
-- 🐛 **Solar made while Home Assistant was down now counts after a restart after dark** (#1187). Before, that solar was lost and home fell to 0.
 - 🐛 **A Repair now tells you when SEM finds no grid, solar or battery power sensor** (#1188). Before, that power read 0 W without notice.
 - 🐛 **A DSMR smart meter on a Dutch or German Home Assistant now shows grid power** (#1189). Before, grid power read 0 W.
 - 🐛 **The Energy tab Sankey shows a Battery → Grid line when the battery sells** (#1190). Build the dashboard again to see it.

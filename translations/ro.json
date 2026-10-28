@@ -1630,6 +1630,12 @@
       },
       "simulation_tab": {
         "name": "Fila simulare"
+      },
+      "battery_discharge_limit_caps_charge": {
+        "name": "Limita de descărcare limitează și încărcarea"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "Pornește mașina la export negativ, cumpărând diferența"
       }
     },
     "number": {
@@ -2044,6 +2050,10 @@
     "charger_role_entity_gone": {
       "title": "Încărcătorul {name}: o entitate a dispărut",
       "description": "Încărcătorul {name} folosește {entity}, care a dispărut sau e dezactivată. Alege altă entitate în setările încărcătorului sau verifică integrarea dispozitivului."
+    },
+    "external_write_seen": {
+      "title": "O altă parte scrie în {name}",
+      "description": "Altceva decât SEM schimbă mereu **{name}**, iar SEM și acea parte își anulează reciproc munca. În fila Configurare a SEM, setează acest dispozitiv pe *Da, SEM se retrage* și alege entitatea care arată când cealaltă parte are controlul."
     }
   },
   "selector": {

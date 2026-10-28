@@ -204,6 +204,7 @@ def _pacer():
         battery_capacity_kwh=21.0,
         _planning_evidence={"forecast_trust_d1": 0.9},
         _observer_mode=False,
+        external_yielding=lambda key: False,
         _charge_pacing_writer=None,
         _today_pacing_ledger=lambda: _ledger(),
     )

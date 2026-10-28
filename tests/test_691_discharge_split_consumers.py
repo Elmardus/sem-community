@@ -180,6 +180,18 @@ class TestStartupRestorePerBattery:
         hass.services.async_call.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_yielded_battery_is_not_restored(self):
+        """(#1079 review) A restart must not clobber another party's own
+        limit on a battery yielded to it — exactly the case the yield
+        feature exists for. ruflo found this write unconditional."""
+        hass = _hass_with_limits({"number.b1_limit": 500.0})
+        await restore_discharge_limit_on_startup(hass, {
+            "battery_discharge_control_entities": ["number.b1_limit"],
+            "battery_max_discharge_power": 5000,
+        }, yielded=True)
+        hass.services.async_call.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_unavailable_entity_does_not_block_the_others(self):
         """One missing entity (integration still loading) must not stop
         the rest of the fleet from being restored."""

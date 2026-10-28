@@ -160,3 +160,19 @@ test('no relay switch for a charger or the battery (null)', () => {
     const html = buildLoadConfigModalHTML({ deviceName: 'Keba', values, t });
     assert.doesNotMatch(html, /cfg-relay/);
 });
+
+test('(#1145) a form that opens empty names the entity already in use', () => {
+    const html = buildLoadConfigModalHTML({
+        deviceName: 'Boiler', values: controlToFormValues(null),
+        t: (k) => (k === 'cfg_in_use_hint' ? 'In use: {entity}.' : k),
+        inUse: 'switch.boiler',
+    });
+    assert.match(html, /In use: switch\.boiler\./);
+});
+
+test('(#1145) no hint when nothing is in use', () => {
+    const html = buildLoadConfigModalHTML({
+        deviceName: 'Boiler', values: controlToFormValues(null), t,
+    });
+    assert.doesNotMatch(html, /cfg_in_use_hint/);
+});

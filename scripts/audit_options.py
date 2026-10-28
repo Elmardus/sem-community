@@ -57,7 +57,18 @@ NOT_DUPLICATE = {
     # page holds one battery's own (its slot of the per-battery list), which
     # wins over the shared one. Two real settings.
     "battery_discharge_control_entity": "shared entity + per-battery override, not duplication",
+    # (#1213) same pattern as the discharge entity above.
+    "battery_charge_end_soc_entity": "shared entity + per-battery override, not duplication",
+    # (#1213) the menus' own selector, one per menu — not a setting.
+    "action": "a menu's choice list, one per menu, not a setting",
 }
+
+#: (#1213) The first heat pump page and the "another heat pump" page hold
+#: the same keys for two DIFFERENT pumps — the same shape as the charger
+#: family above, so they are one family, not sixteen repeated settings.
+STEP_FAMILY["heat_pump"] = "heat_pump"
+STEP_FAMILY["heat_pump_unit"] = "heat_pump"
+STEP_FAMILY["heat_pump_menu"] = "heat_pump"
 
 
 def _declaring_steps(cf: str) -> dict:

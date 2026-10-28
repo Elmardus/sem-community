@@ -33,6 +33,9 @@ DOCS_SIDE = {
     # (#947) the guess was checked against the energy counters and failed —
     # the next step is naming the real meters, which is the user's config
     "split_grid_rejected",
+    # (#1079) another party writes to a device SEM drives — the next step is
+    # the user's own external-control setting
+    "external_write_seen",
     # (#1188) the dashboard counts a source in kWh and SEM found no power
     # sensor — the next step is adding one, the user's own config
     "power_sensor_not_found",

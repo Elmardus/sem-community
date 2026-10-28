@@ -441,12 +441,19 @@ class ChargePacingWriter:
         self._adopt_check = False
 
     async def apply(self, hass, entity_id: str, cap_w, *,
-                    observer: bool, hw_max_w: float | None = None) -> str:
+                    observer: bool, yielded: bool = False,
+                    hw_max_w: float | None = None) -> str:
         """Returns a short action token: wrote|held|write_refused|restored|
-        idle|observer|no_limit_entity|limit_unreadable.
+        idle|observer|yielded|no_limit_entity|limit_unreadable.
 
         ``hw_max_w`` is the battery's full charge power: what a release
-        gives back when the captured value is lower (#820)."""
+        gives back when the captured value is lower (#820).
+
+        (#1079 review) ``yielded`` is checked first and touches nothing —
+        no adopt, no write, no release — so pacing's own state is exactly
+        as another party left it whenever SEM takes the battery back."""
+        if yielded:
+            return "yielded"
         if not observer:
             await self._adopt(hass, entity_id)
         if not entity_id:

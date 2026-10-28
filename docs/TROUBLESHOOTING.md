@@ -373,6 +373,14 @@ at all — vendor cloud APIs such as FusionSolar's northbound API typically do
 not — then leaving both empty is the correct answer, and SEM saying it is
 blind on grid is the honest reading, not a fault to work around.
 
+## Another party writes to a device
+
+**Symptom:** a Repair says *Another party writes to* a charger or the battery. The device's setting keeps changing back, and SEM's commands do not hold.
+
+**Cause (#1079):** a supplier, an aggregator or a grid operator also controls this device, and SEM and that party undo each other. You set the device to *SEM drives, tell me*, and SEM saw writes it did not make.
+
+**Fix:** if the other party should win while it is active, open SEM's ⚙ **Configuration** tab, pick **All settings**, find the device (**Steered by another party**) and choose *Yes, SEM yields*. Pick the switch, binary sensor or select that shows when the other party is in control. If the other party should not control it, stop that programme. The Repair clears when the writes stop.
+
 ## SEM found no power sensor
 
 **Symptom:** a Repair says *No power sensor for* a kWh counter of your grid, solar or battery. That source reads 0 W on every SEM card, and the energy flows and the surplus are wrong.

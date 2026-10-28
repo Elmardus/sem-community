@@ -103,6 +103,10 @@ DECLARED: dict[str, str] = {
         "which reloads), a declared pair, a combined sensor — clears the "
         "guess Repair once per reader (_split_guess_reconciled, #933); the "
         "startup sweep never runs on a reload",
+    "coordinator/coordinator.py::SEMCoordinator._refresh_external_control":
+        "not an edge memo: the book is only the window state of the "
+        "indicator; the Repair is decided afresh each cycle for every known "
+        "device and is non-persistent, so a restart drops it (#1079)",
     "coordinator/sensor_reader.py::SensorReader.report_unsourced_power":
         "each source's first 'found' answer of a reader lifetime clears once "
         "(_unsourced_reconciled, a set per source, #1188), also when the "

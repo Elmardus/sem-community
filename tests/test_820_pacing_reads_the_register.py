@@ -290,6 +290,7 @@ def _coordinator(reg: Register):
         battery_capacity_kwh=19.0,
         _planning_evidence={"forecast_trust_d1": 0.9},
         _observer_mode=False, _charge_pacing_writer=None,
+        external_yielding=lambda key: False,
         _today_pacing_ledger=_day,
     )
 

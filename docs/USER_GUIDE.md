@@ -222,6 +222,16 @@ reaches the supported-hardware list after someone confirms it on real hardware.
 
 > **Note:** Android notification channels, groups, and action buttons are only sent to `notify.mobile_app_*` services. Other services receive message + title only.
 
+### A device another party steers (#1079)
+
+A supplier, an aggregator or a grid operator may control your car charger or your battery too. When they and SEM both write to it, they undo each other. Per charger, and for the home battery, ⚙ **Configuration → All settings → Steered by another party** has three choices:
+
+- **No** (default): nothing changes.
+- **Yes, SEM yields**: while your **Steering indicator** is on, SEM writes nothing to that device. SEM never stops or starts it on its own. The device's real draw stays in the home's numbers, so the other devices plan around it. A charger's failsafe is the one thing SEM still keeps set. The indicator is any switch, binary sensor or select that shows the other party is in control. It must read *off* for 5 minutes before SEM takes the device back, and an indicator that is unknown or unavailable changes nothing, so a restart never counts as "steered".
+- **SEM drives, tell me**: SEM keeps control. A Repair appears when it sees writes it did not make.
+
+The diagnose service and the downloaded diagnostics list each such device: who steers it, since when, and whether SEM yields.
+
 ### Multi-Charger Setup
 
 SEM supports multiple EV chargers with priority-based surplus distribution:
@@ -357,6 +367,13 @@ supports the same three control paths, in any combination:
   in per write. An optional read-back entity lets SEM verify after
   every write that the command landed; a mismatch is logged, never
   silently trusted.
+
+  After a successful service call, SEM's mode and SG-Ready state sensors
+  report the commanded state, just as they do for relay control. A renewal
+  using that state can therefore keep a boost alive. A delayed or mismatched
+  read-back still reports `service_unverified`; it is not confirmation that
+  the hardware reached the commanded state. A failed call keeps the previous
+  commanded state.
 
 Each additional unit carries its own priority, thresholds, sensors and
 name, and competes in the surplus distribution as its own device.
@@ -1137,6 +1154,12 @@ effective_soc = max(sensor, anchor + delivered_since_anchor_kwh × 0.92 ÷ capac
   under the SOC gauge on the EV card (e.g. "Car: 55% (28 min ago) · est. now ~59%") — the gauge
   itself always shows the raw sensor value.
 
+When a vehicle SOC sensor is configured, every numeric change corrects the
+energy-based stopping estimate, including 0.5-percentage-point and smaller
+steps. Between changes, measured charging energy advances the estimate;
+polls that repeat the same SOC do not reset it. A changed reading below the
+target can therefore reopen the remaining need after an estimate-based stop.
+
 #### Charger efficiency
 
 **Options → EV Charger → Charger efficiency (%)**, default **92 %**.
@@ -1651,6 +1674,15 @@ Advanced**. When a sold kWh is worth less than this
 loads take the sun first. SEM never buys from the grid for it. It needs the
 **Export guard** switch on. Default 0: only a negative price stops export.
 More in [Tariff models](TARIFF_MODELS.md#stop-exporting-below-1090).
+
+While the meter is closed, the sun goes in this order: the battery first,
+then the car, then your other loads by their priority, and only what is
+left is cut at the inverter. A load starts on less spare sun than usual,
+because the usual margin that keeps a little export is dropped. SEM does
+not buy from the grid to start a load, unless you turn on **Start the car
+on negative export, buying the gap** (off by default). Then a car that
+cannot start on the sun alone gets the missing watts from the grid, only
+while exporting that sun costs more than buying the gap.
 
 Proven end to end on real hardware on 17.09.2026: with the price held negative
 and 2 kW of export on the meter, SEM's guard engaged after its delay, wrote the

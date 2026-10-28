@@ -36,6 +36,15 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util import dt as dt_util
 
+from .external_control import (
+    MODE_NONE,
+    SUSPECT_STRIKES,
+    ExternalControlBook,
+    Spec,
+    friendly_name,
+    normalise_mode,
+)
+
 from ..consts.core import CAPABILITY_MISS_CONFIRM_READS, CAPABILITY_MISS_HOLD_S
 from ..consts.core import CONF_INTRADAY_FORECAST, DEFAULT_INTRADAY_FORECAST
 from ..consts.core import (CONF_CO2_LIVE_INTENSITY, CONF_GRID_CO2_ENTITY,
@@ -1209,6 +1218,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
 
         # Observer mode: read-only monitoring, no hardware control
         self._observer_mode = config.get("observer_mode", False)
+
+        # (#1079) Devices another party steers: who, since when, and whether
+        # SEM yields. Every device defaults to mode "none" = no change.
+        self._external_control = ExternalControlBook()
 
         # Vacation mode (#594): suppress comfort heating (heat pump boost +
         # hot water solar target) while away. Two activation sources OR'd
@@ -3244,6 +3257,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         curtailment = getattr(self, "_curtailment_last", None)
         if curtailment:
             mgmt["curtailment"] = dict(curtailment)
+        # (#1080) the closed-meter grant, only once it has ever been non-zero
+        absorb = getattr(self, "_absorb_last", None)
+        if absorb and absorb.get("grant_w"):
+            mgmt["absorb"] = dict(absorb)
         st.management = LayerRecord(LayerStatus.OK, "policy inputs", mgmt)
 
         # (#961, from @RienduPre in #958) ``calculated_current`` is the FLEET canonical
@@ -3535,6 +3552,86 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         _push = getattr(self, "_push_observer_mode_to_devices", None)
         if _push is not None:
             _push()
+
+    def _external_control_specs(self) -> Dict[str, Spec]:
+        """(#1079) What the user set per device: ``charger:<id>`` for each
+        charger (its own settings) and ``battery`` for the home battery."""
+        specs: Dict[str, Spec] = {}
+        for index, charger in enumerate(self.config.get("ev_chargers") or []):
+            if not isinstance(charger, dict):
+                continue
+            mode = normalise_mode(charger.get("external_control_mode"))
+            if mode == MODE_NONE:
+                continue
+            cid = charger.get("id") or f"ev_charger_{index}"
+            entity = str(charger.get("external_control_indicator") or "")
+            specs[f"charger:{cid}"] = Spec(
+                mode, entity, friendly_name(self.hass, entity))
+        mode = normalise_mode(self.config.get("battery_external_control_mode"))
+        if mode != MODE_NONE:
+            entity = str(self.config.get("battery_external_control_indicator") or "")
+            specs["battery"] = Spec(
+                mode, entity, friendly_name(self.hass, entity))
+        return specs
+
+    def _refresh_external_control(self) -> None:
+        """(#1079) One look at every device with an external-control mode.
+        Never raises: a bad setting must not stop a cycle."""
+        book = getattr(self, "_external_control", None)
+        if book is None:
+            return
+        from .repair_issues import (
+            clear_external_write_seen, raise_external_write_seen)
+        try:
+            specs = self._external_control_specs()
+            suspects: Dict[str, bool] = {}
+            if specs:
+                for key in specs:
+                    if key.startswith("charger:"):
+                        rec = (getattr(self, "_charger_reconcilers", None)
+                               or {}).get(key[len("charger:"):])
+                        suspects[key] = int(getattr(
+                            rec, "_stop_commanded_while_drawing", 0) or 0
+                        ) >= SUSPECT_STRIKES
+                    else:
+                        suspects[key] = any(
+                            int(getattr(a, "write_not_taken_strikes", 0) or 0)
+                            >= SUSPECT_STRIKES
+                            for _bid, a in self._live_battery_adapters())
+            book.update(self.hass, specs, time.monotonic(), dt_util.now(),
+                        suspects)
+            # Every device SEM knows, not only those with a mode: a device
+            # set back to none still gets its Repair cleared, and no memo is
+            # needed to remember what was raised.
+            known = ["battery"] + [
+                f"charger:{c.get('id') or f'ev_charger_{i}'}"
+                for i, c in enumerate(self.config.get("ev_chargers") or [])
+                if isinstance(c, dict)]
+            for key in known:
+                name = key.split(":", 1)[-1] if ":" in key else "battery"
+                if book.raising(key):
+                    raise_external_write_seen(self.hass, key, name=name)
+                else:
+                    clear_external_write_seen(self.hass, key)
+            # The seam's flag follows the book every cycle, both ways: a
+            # device set back to none, or a charger that is not acted on this
+            # cycle, never keeps a stale "yield".
+            for cid, dev in list((getattr(self, "_ev_devices", None)
+                                  or {}).items()):
+                try:
+                    dev.external_yield = (
+                        not self._observer_mode
+                        and book.yielding(f"charger:{cid}"))
+                except AttributeError:
+                    pass
+        except Exception:  # noqa: BLE001 — a bad setting never stops a cycle
+            _LOGGER.debug("external control refresh failed", exc_info=True)
+
+    def external_yielding(self, key: str) -> bool:
+        """(#1079) True while another party steers ``key`` and the user said
+        SEM yields. ``charger:<id>`` or ``battery``."""
+        book = getattr(self, "_external_control", None)
+        return bool(book is not None and book.yielding(key))
 
     def observer_withheld_commands(self) -> dict:
         """(#855, audit F7) THIS cycle's withheld hardware commands, keyed by
@@ -3854,10 +3951,17 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # all. It now runs from ``async_seed_from_recorder``, after HA
             # has started.
 
+            # (#1079 review) This cycle's external-control reading must exist
+            # BEFORE the startup restore below, or a battery yielded to
+            # another party loses its limit to SEM on every restart — the
+            # line below is otherwise a no-op the first cycle (fresh book).
+            self._refresh_external_control()
+            _yielded_at_startup = self.external_yielding("battery")
             # Ensure battery discharge limit is restored after restart
             # (protects against stale limit left by previous run)
             from .actuate_battery import restore_discharge_limit_on_startup
-            await restore_discharge_limit_on_startup(self.hass, self.config)
+            await restore_discharge_limit_on_startup(
+                self.hass, self.config, yielded=_yielded_at_startup)
             # (#1195) …and the limit of a battery taken out of the Energy
             # Dashboard while SEM was off. Its slot went at setup; the list
             # kept it before, and this restore lifted it. Each on its own: a
@@ -3867,7 +3971,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 try:
                     await restore_discharge_limit_on_startup(self.hass, {
                         **self.config, "battery_discharge_control_entity": "",
-                        "battery_discharge_control_entities": [entity]})
+                        "battery_discharge_control_entities": [entity]},
+                        yielded=_yielded_at_startup)
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.warning(
                         "Could not lift the discharge limit of a battery no "
@@ -3896,6 +4001,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # (see switch.py) so a toggle takes effect immediately and even if this
         # entity_id ever changes; this per-cycle pull is the backstop.
         self._sync_observer_mode_from_switch()
+        self._refresh_external_control()
 
         # #589 3a (publish isolation) — once the core snapshot is built we
         # alias it here; a failure in the ~550-line analytics/diagnostic
@@ -4959,6 +5065,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                                 reconciler=reconciler,
                                 observer=self._observer_mode,
                                 controller=self._surplus_controller,
+                                yielded=self.external_yielding(f"charger:{cid}"),
                             )
                             # Add this charger's just-committed draw to the shared night
                             # peak budget so lower-priority chargers size against the
@@ -5127,6 +5234,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                         decision, adapter, view.power, reconciler=reconciler,
                         observer=self._observer_mode,
                         controller=self._surplus_controller,
+                        yielded=self.external_yielding(f"charger:{cid}"),
                     )
                     self._save_ev_session_state()
                 except (HomeAssistantError, ServiceValidationError) as e:
@@ -9176,6 +9284,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # the value the register happened to hold when pacing engaged
         action = await self._charge_pacing_writer.apply(
             self.hass, entity, cap, observer=self._observer_mode,
+            yielded=self.external_yielding("battery"),
             hw_max_w=float(self.config.get(
                 "battery_max_charge_power_w", 5000.0) or 5000.0))
         _bv = (getattr(self, "_sink_verdicts", None) or {}).get("battery")
@@ -9212,6 +9321,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 "the charge-power limit entity cannot be read — SEM will not "
                 "write a value it could not put back"
                 if action == "limit_unreadable" else
+                # (#1079 review) Yielded means SEM holds its hands still —
+                # the decision above still describes what pacing WOULD do.
+                "the battery is yielded to another party — SEM writes nothing"
+                if action == "yielded" else
                 decision.reason if decision else (
                     "pacing idle — outside daylight or no forecast"
                     if not ledger else f"pacing idle — {_why}")),
@@ -9918,6 +10031,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 controller=self._surplus_controller,
                 # (#818) same signal the charger side uses
                 inputs_degraded=_degraded,
+                # (#1079) another party steers the battery, SEM yields
+                yielded=self.external_yielding("battery"),
             )
 
         if getattr(self, "_battery_reload_pending", False) is True:
@@ -11516,10 +11631,23 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # walked from nothing, takeover landed on the FIRST slot
                 # and every battery demand yielded a battery that was
                 # actually at 63 %. A silent sensor is not an empty
-                # battery (#638 finding #3) — wait for the reading; the
-                # no-battery install shape (capacity 0) stamps normally.
+                # battery (#638 finding #3) — wait for the reading.
+                # A saved capacity is not proof of a battery (#1063): the
+                # settings flow saves a default even on battery-less homes.
+                # Use the same presence check as battery_capacity_kwh so
+                # an absent pack cannot leave EV/load plans stale forever.
+                # A pack that is merely not read YET (UNKNOWN presence, SOC and
+                # capacity sensors still loading after a restart) is not an
+                # absent one: only a plain ABSENT, or an unseen pack that
+                # stayed unseen for 10 minutes of uptime, may plan without it.
+                _no_pack = (
+                    presence_of(self).get(Module.BATTERY) is Presence.ABSENT
+                    or (battery_unseen(self)
+                        and time.monotonic() - getattr(
+                            self, "_boot_monotonic", 0.0) >= 600.0))
                 _batt_ready = (
-                    float(self.config.get("battery_capacity_kwh", 0) or 0) <= 0
+                    _no_pack
+                    or float(self.config.get("battery_capacity_kwh", 0) or 0) <= 0
                     or not getattr(power, "battery_soc_unavailable", False)  # DARK-SOC: plan — a skipped rebuild retries next cycle
                 )
                 if _batt_ready and self._shadow_energy_plan(
@@ -13837,7 +13965,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 .get("battery_dynamic_floor_pct")),
             battery_priority=battery_priority,
             battery_commanded=self._battery_commanded(),
-            curtailment_grant_w=self._curtailment_grant_w(power),
+            curtailment_grant_w=(self._curtailment_grant_w(power)
+                                 + self._absorb_grant_w(power)),
             sink_verdicts=_verdicts,
             export_command=getattr(self, "_export_command", None),
             export_guard_enabled=bool(self.config.get("export_guard_enabled", False)),
@@ -13850,6 +13979,46 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             boost_floor_soc=getattr(
                 getattr(self, "_battery_boost", None), "floor_soc", None),
         )
+
+    def _absorb_grant_w(self, power) -> float:
+        """(#1080) The closed-meter grant for the car, through the same
+        surplus seam as the curtailment grant. Only while the value rules
+        are in force (``_active_export_threshold``): without them the meter
+        closes on a negative price as before and nothing changes. Prices
+        are read through the tariff provider, as the verdicts read them."""
+        self._absorb_last = {"grant_w": 0.0}
+        try:
+            if not self.config.get("ev_absorb_grid_fill", False):
+                return 0.0       # opt-in (#1080): off buys nothing from the grid
+            if self._active_export_threshold() is None:
+                return 0.0
+            _gv = (getattr(self, "_sink_verdicts", None) or {}).get("grid_export")
+            if getattr(_gv, "state", "open") != "closed":
+                return 0.0
+            from .curtailment import absorb_grant_w, solar_mode_floor
+            prov = getattr(self, "_tariff_provider", None)
+            wants_solar, floor_w = solar_mode_floor(self.hass, self.config)
+            # The import price must be READ, not guessed: a dead price entity
+            # falls back to a cached average or the configured default, and
+            # "could not ask" is not "worth it" (#925, review of #1080).
+            _import = prov.get_current_import_rate()
+            if getattr(prov, "_last_price_source", None) != "entity":
+                _import = None
+            grant = absorb_grant_w(
+                closed=True,
+                ev_connected=bool(power.ev_connected),
+                wants_solar=wants_solar,
+                solar_w=float(power.solar_power or 0.0),
+                home_w=float(power.home_consumption_power or 0.0),
+                battery_charge_w=float(power.battery_charge_power or 0.0),
+                floor_w=floor_w,
+                export_value=prov.get_current_export_rate(),
+                import_price=_import)
+            self._absorb_last = {"grant_w": round(grant),
+                                 "floor_w": round(floor_w)}
+            return grant
+        except Exception:  # noqa: BLE001 — a grant must never break a cycle
+            return 0.0
 
     def _curtailment_grant_w(self, power) -> float:
         """#743 — one probe tick per cycle; the grant rides the fleet
@@ -13907,33 +14076,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             except Exception:  # noqa: BLE001
                 expected_w = 0.0
 
-            from ..consts.ev_charge_modes import effective_charge_mode_for
             from .sensor_reader import parse_export_limited
+            from .curtailment import solar_mode_floor
 
-            solar_modes = ("solar_only", "solar_plus_battery",
-                           "min_plus_solar", "solar_plus_cheap")
-            chargers = [
-                c for c in (self.config.get("ev_chargers") or [])
-                if isinstance(c, dict)
-            ] or [{}]
-            wants_solar = False
-            floor_w = 4140.0
-            for cfg in chargers:
-                try:
-                    mode = effective_charge_mode_for(self.hass, self.config, cfg)
-                except Exception:  # noqa: BLE001
-                    mode = None
-                if mode in solar_modes:
-                    wants_solar = True
-                    floor_w = (
-                        float(cfg.get("ev_min_current")
-                              or self.config.get("ev_min_current") or 6)
-                        * float(cfg.get("ev_voltage")
-                                or self.config.get("ev_voltage") or 230)
-                        * float(cfg.get("ev_phases")
-                                or self.config.get("ev_phases") or 3)
-                    )
-                    break
+            wants_solar, floor_w = solar_mode_floor(self.hass, self.config)
 
             # Brand sharpening: manual override wins, else autodetect on
             # the solar sensor's device (Huawei/GoodWe/SolaX/Victron/…).

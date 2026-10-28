@@ -665,7 +665,10 @@ class EVTaperDetector:
         if vehicle_soc is not None:
             # Calibrate: sync internal state to real SOC so virtual
             # continues accurately when car API goes offline
-            if self._last_real_soc is None or abs(vehicle_soc - self._last_real_soc) > 0.5:
+            # Real readings can advance in half-point (or smaller) steps.
+            # Every changed value must correct the stop ceiling; repeated
+            # identical polls must retain delivery since the last anchor.
+            if self._last_real_soc is None or vehicle_soc != self._last_real_soc:
                 self._estimated_soc = vehicle_soc
                 if capacity > 0:
                     self._energy_since_full = (100.0 - vehicle_soc) / 100.0 * capacity

@@ -37,6 +37,11 @@ allocation explains itself in one line.
 
 ## Guidance vs. accounting
 
+An installation without a home battery can plan EV charging and loads even
+if Settings saved a default battery capacity. Battery readiness uses the
+same presence check as the resolved home-battery capacity. A real battery
+with unavailable SOC still waits for a reading before the plan is rebuilt.
+
 Two clocks run in SEM, and keeping them apart is what makes the design
 easy to reason about:
 

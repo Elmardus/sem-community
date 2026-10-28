@@ -94,3 +94,69 @@ async def test_without_a_service_the_relay_path_is_unchanged():
     await c._set_sg_ready_state(SGReadyState.BOOST)
     assert [c0 for c0, _ in hass.services.calls] == [
         "homeassistant.turn_off", "homeassistant.turn_on"]   # 0:1 for BOOST
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("readback", [None, "matching", "lagging", "unknown"])
+async def test_successful_service_updates_commanded_and_published_sg_state(readback):
+    """A renewal consuming SEM's SG sensor must repeat the successful command."""
+    from custom_components.solar_energy_management.coordinator.coordinator import (
+        SEMCoordinator,
+    )
+    from custom_components.solar_energy_management.devices.heat_pump_controller import (
+        SGReadyState,
+    )
+    states = {}
+    c, hass = _controller(
+        sg_ready_state_entity="sensor.sg_state" if readback else None,
+        _state_map=states,
+    )
+    previous = SGReadyState.NORMAL
+    for requested in (SGReadyState.BOOST, SGReadyState.FORCE_ON, SGReadyState.NORMAL):
+        if readback:
+            value = (str(int(requested)) if readback == "matching" else
+                     str(int(previous)) if readback == "lagging" else "unknown")
+            states["sensor.sg_state"] = SimpleNamespace(state=value)
+        assert await c._set_sg_ready_state(requested) is True
+        assert hass.services.calls[-1][1]["value"] == str(int(requested))
+        assert c.sg_ready_state is requested
+        mode, published, _ = SEMCoordinator._heat_pump_sensor_state(c)
+        assert (mode, published) == (requested.name.lower(), int(requested))
+        # A delayed/unreadable observation must still be surfaced separately.
+        assert c._last_relay_path == (
+            "service_unverified" if readback in ("lagging", "unknown") else "service")
+        previous = requested
+
+
+@pytest.mark.asyncio
+async def test_service_activation_and_deactivation_publish_the_boost_lifecycle():
+    from custom_components.solar_energy_management.coordinator.coordinator import (
+        SEMCoordinator,
+    )
+    c, _ = _controller()
+    await c.activate(c.force_on_threshold - 1)
+    assert SEMCoordinator._heat_pump_sensor_state(c) == ("boost", 3, True)
+    await c.deactivate()
+    assert SEMCoordinator._heat_pump_sensor_state(c) == ("normal", 2, False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["service_error", "invalid_service"])
+async def test_failed_service_keeps_last_sg_state(failure):
+    from custom_components.solar_energy_management.coordinator.coordinator import (
+        SEMCoordinator,
+    )
+    from custom_components.solar_energy_management.devices.heat_pump_controller import (
+        SGReadyState,
+    )
+    c, hass = _controller()
+    c._hp_status.sg_ready_state = SGReadyState.BOOST
+    if failure == "service_error":
+        async def boom(*a, **k):
+            raise RuntimeError("service offline")
+        hass.services.async_call = boom
+    else:
+        c.sg_ready_service = "invalid"
+    assert await c._set_sg_ready_state(SGReadyState.NORMAL) is False
+    assert c.sg_ready_state is SGReadyState.BOOST
+    assert SEMCoordinator._heat_pump_sensor_state(c)[1] == 3

@@ -454,6 +454,10 @@ class ControllableDevice(ABC):
         # that would have gone to the box, which is the thing the old
         # decision-level WOULD could not say (#854 hid an enable here).
         self.withheld_commands: list = []
+        # (#1079) Set each cycle by the coordinator from the user's
+        # external-control mode; True = another party steers, SEM yields.
+        self.external_yield: bool = False
+        self.yielded_commands: list = []
         self._commanded_claim: bool = False  # backing field, see _sem_commanded
         # Monotonic anchor for the "belief says on but the entity reads off"
         # drift grace window (a transient unavailable/poll gap must not flip us).
@@ -1039,6 +1043,26 @@ class ControllableDevice(ABC):
             payload["option"] = listed_option(
                 getattr(self, "hass", None), payload.get("entity_id"),
                 payload["option"])
+        # (#1079) Another party steers this device and the user said SEM
+        # yields: nothing goes out. The failsafe arming is the one
+        # exception — it does not steer, it keeps the box's own safety net
+        # set, and withholding it would let that net lapse. A device nobody
+        # told is a device that acts (same default as observer_mode).
+        if (getattr(self, "external_yield", False) is True
+                and service != "set_failsafe"):
+            if not hasattr(self, "yielded_commands"):
+                self.yielded_commands = []
+            self.yielded_commands.append(
+                {"service": f"{domain}.{service}", "data": payload,
+                 "why": why or "-"})
+            del self.yielded_commands[:-20]
+            log_on_change(
+                _LOGGER, f"yield:send:{self.device_id}:{domain}.{service}",
+                logging.INFO,
+                "YIELD · %s is steered by another party, SEM withholds %s.%s%s",
+                self.name, domain, service, f" — {why}" if why else "",
+            )
+            return False
         # getattr, not attribute access: devices built without __init__
         # (test fixtures, legacy construction paths) must still SEND. The
         # documented default is False — "a device nobody told is a device
@@ -3308,6 +3332,11 @@ class CurrentControlDevice(ControllableDevice):
         charging failsafe. Same opt-out as the charging arm.
         """
         if not bool(getattr(self, "arm_failsafe_enabled", True)):
+            return
+        # (#1079) Another party steers this charger and SEM yields: a
+        # persisted 0 A dead-man would end THEIR session ~10 s into any
+        # masterless window (restart, unload; #1163). Nothing is armed.
+        if getattr(self, "external_yield", False) is True:
             return
         domain = (self.charger_service or "").split(".", 1)[0]
         if not domain or not self.hass.services.has_service(domain, "set_failsafe"):

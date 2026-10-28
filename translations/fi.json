@@ -1630,6 +1630,12 @@
       },
       "simulation_tab": {
         "name": "Simulointivälilehti"
+      },
+      "battery_discharge_limit_caps_charge": {
+        "name": "Purkuraja rajoittaa myös latausta"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "Käynnistä auto negatiivisella viennillä ja osta puuttuva"
       }
     },
     "number": {
@@ -2044,6 +2050,10 @@
     "charger_role_entity_gone": {
       "title": "Laturi {name}: entiteetti on poissa",
       "description": "Laturi {name} käyttää entiteettiä {entity}, joka on poissa tai poistettu käytöstä. Valitse toinen entiteetti laturin asetuksista tai tarkista laitteen integraatio."
+    },
+    "external_write_seen": {
+      "title": "Toinen osapuoli kirjoittaa kohteeseen {name}",
+      "description": "Jokin muu kuin SEM muuttaa kohdetta **{name}** jatkuvasti, ja SEM ja se osapuoli kumoavat toistensa työn. Aseta laite SEM:n Asetukset-välilehdellä tilaan *Kyllä, SEM väistyy* ja valitse entiteetti, joka näyttää, milloin toinen osapuoli ohjaa."
     }
   },
   "selector": {
