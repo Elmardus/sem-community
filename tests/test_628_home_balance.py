@@ -430,15 +430,20 @@ class TestReviewFindings628:
         home is DERIVED from those rows — so the net has to be in place before
         the derivation, not after it. Ordered the other way, one corrupt BMS
         register publishes a bogus house figure for a cycle before the cap that
-        exists to prevent exactly that gets its turn."""
+        exists to prevent exactly that gets its turn.
+
+        (#1218) The counter's 90 kWh is now refused at the ceiling, so the
+        row is not the counter's: home is not derived from it at all and keeps
+        its own figure. Built on the cap's 45 kWh it read 71.7 — the cap is a
+        bound, not a reading."""
         calc, _ = _rig({**BIG_DAY, "battery_discharge": 90.00, "home": 30.00})
         calc.config["battery_capacity_kwh"] = 15  # → 45 kWh/day ceiling
-        capped = 53.80 + 1.20 - 20.30 + 45.00 - 8.00
 
         for _ in range(2):  # stable, not a one-cycle coincidence
             energy = _cycle(calc)
             assert energy.daily_battery_discharge == 45.00
-            assert energy.daily_home == pytest.approx(capped, abs=0.01)
+            assert "battery_discharge" not in calc._counter_backed
+            assert energy.daily_home == pytest.approx(30.00, abs=0.01)
 
     def test_a_charger_change_drops_the_mirror_baselines_in_place(self):
         """A charger added mid-run re-anchors the fleet bucket; the mirror
