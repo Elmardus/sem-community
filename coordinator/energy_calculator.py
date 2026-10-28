@@ -2695,6 +2695,8 @@ class EnergyCalculator:
         # (``_daily_ceiling``, #1218).
         inverter_kwp = self.config.get("system_size_kwp", 10)
         if target > self._daily_ceiling("solar"):
+            # (#1218) The row is the power sensor's, not the counter's.
+            self._counter_backed.discard("solar")
             _LOGGER.warning(
                 "Solar counter reconciliation target %.1f kWh exceeds "
                 "%d kWp × 16h — ignoring this cycle (unit mismatch?)",
@@ -3507,8 +3509,8 @@ class EnergyCalculator:
             log_on_change(
                 _LOGGER, f"backing:{category}", logging.INFO,
                 "%s: no longer counter-backed — a configured counter is "
-                "unreadable; the daily row runs on power integration alone "
-                "until it returns", category,
+                "unreadable or above the day's ceiling; the daily row runs on "
+                "power integration alone until it returns", category,
             )
         elif prev is False:
             log_on_change(
@@ -3609,11 +3611,6 @@ class EnergyCalculator:
             self._tally_backing(category, today_str, backed=False)
             return
 
-        # (#628) Complete read — this category's daily row is the hardware's
-        # this cycle, so the home balance may build on it.
-        self._counter_backed.add(category)
-        self._tally_backing(category, today_str, backed=True)
-
         # A counter that went BACKWARDS since its last reading (meter reboot,
         # a daily-type register resetting at midnight) invalidates the whole
         # baseline set for this category: its past contribution is already
@@ -3656,7 +3653,15 @@ class EnergyCalculator:
                     "until it is back below (unit mismatch?)",
                     category, target, ceiling,
                 )
+            # The row is the power sensor's now, not the counter's: the home
+            # balance may not build on it.
+            self._tally_backing(category, today_str, backed=False)
             return
+
+        # (#628) Complete read — this category's daily row is the hardware's
+        # this cycle, so the home balance may build on it.
+        self._counter_backed.add(category)
+        self._tally_backing(category, today_str, backed=True)
 
         delta = target - integrated
         if abs(delta) <= METER_RECONCILIATION_THRESHOLD:

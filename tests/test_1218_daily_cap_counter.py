@@ -24,6 +24,7 @@ import pytest
 from freezegun import freeze_time
 
 from custom_components.solar_energy_management.coordinator.energy_calculator import (
+    GRID_EXPORT_BATTERY_CATEGORY,
     MAX_PLAUSIBLE_DAILY_KWH,
     EnergyCalculator,
 )
@@ -86,8 +87,10 @@ def _read(*, solar=0.0, home=0.0, battery=0.0, grid=0.0) -> PowerReadings:
 
 # Every row busy at once: sun, a charging pack and an export by day…
 DAYTIME = _read(solar=4000.0, home=500.0, battery=1500.0, grid=2000.0)
-# …and a discharging pack beside an import.
+# …a discharging pack beside an import…
 EVENING = _read(solar=0.0, home=2500.0, battery=-1500.0, grid=-1000.0)
+# …and a sale: the export row has the battery's part booked beside it.
+SALE = _read(solar=500.0, home=500.0, battery=-3000.0, grid=3000.0)
 
 
 def _cycle(calc: EnergyCalculator, power: PowerReadings):
@@ -188,6 +191,23 @@ class TestTheReportedShape:
         assert "battery_charge" in refused[0].getMessage()
         assert not [r for r in caplog.records if "capping" in r.getMessage()]
 
+    def test_a_refused_row_is_not_counter_backed(self):
+        """The home balance builds only on rows the counters hold."""
+        calc = self._run("battery_charge")
+        assert "battery_charge" not in calc._counter_backed
+        assert calc.counter_backing_today()["battery_charge"]["skipped"] == 30
+        followed = self._run("battery_charge", step=5.0)
+        assert "battery_charge" in followed._counter_backed
+
+    def test_a_refused_solar_row_is_not_counter_backed(self):
+        counter = {COUNTER["solar"]: 1000.0}
+        calc = _calc(["solar"], counter)
+        _cycle(calc, DAYTIME)
+        assert "solar" in calc._counter_backed
+        counter[COUNTER["solar"]] += 500.0         # above kWp × 16
+        _cycle(calc, DAYTIME)
+        assert "solar" not in calc._counter_backed
+
 
 @pytest.mark.unit
 @pytest.mark.usefixtures("noon")
@@ -203,7 +223,7 @@ class TestTheRowsMoveTogether:
         for n in range(cycles):
             for entity in counter:
                 counter[entity] += step if n == 0 else 0.01
-            _cycle(calc, DAYTIME if n % 2 else EVENING)
+            _cycle(calc, (EVENING, DAYTIME, SALE)[n % 3])
         return calc
 
     @pytest.mark.parametrize("step", [
@@ -214,7 +234,8 @@ class TestTheRowsMoveTogether:
     ])
     def test_month_year_and_lifetime_hold_the_day(self, step):
         calc = self._drive(step)
-        for category in COUNTER:
+        assert _rows(calc, GRID_EXPORT_BATTERY_CATEGORY)[0] > 0.0
+        for category in (*COUNTER, GRID_EXPORT_BATTERY_CATEGORY):
             day, month, year, lifetime = _rows(calc, category)
             assert (month, year, lifetime) == pytest.approx(
                 (day, day, day)), category
