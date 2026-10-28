@@ -267,7 +267,7 @@ On a solar install a second voter runs first: solar production has no sign ambig
 | Fronius | + = import, - = export | Auto-negated |
 | Template sensor (HA convention) | + = import, - = export | Auto-negated |
 
-**If you configured the grid entities manually** (`grid_import_power_entity` / `grid_export_power_entity` in the SEM options): SEM uses exactly what you configured and does NOT auto-correct the sign — manual config is treated as explicit intent. Since v1.7.3-beta.7 SEM cross-checks your manual entities against the Energy Dashboard counters and logs a WARNING (`Manual grid power entities CONTRADICT…`) plus sets `diag_grid_manual_mismatch: true` in the diagnose dump when the two fields appear swapped. Checklist for the manual fields:
+**If you configured the grid entities manually** (`grid_import_power_entity` / `grid_export_power_entity` on the **Configuration** tab, **Sensor sources**): SEM uses exactly what you configured and does NOT auto-correct the sign — manual config is treated as explicit intent. Since v1.7.3-beta.7 SEM cross-checks your manual entities against the Energy Dashboard counters and logs a WARNING (`Manual grid power entities CONTRADICT…`) plus sets `diag_grid_manual_mismatch: true` in the diagnose dump when the two fields appear swapped. Checklist for the manual fields:
 
 - The **import** field takes the sensor that is non-zero while you draw from the grid; the **export** field the one that is non-zero while you feed in. When unsure, watch both in Developer Tools → States at a moment of known heavy import (e.g. EV charging at night).
 - Both fields must be **power** sensors (W/kW) — an energy counter (kWh) in either field is flagged with a WARNING and produces garbage values.

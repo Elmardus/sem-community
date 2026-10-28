@@ -2023,7 +2023,7 @@ SEM skips:
 - Battery discharge limit changes
 - Device shedding commands
 
-Enable via **Settings** > **Devices & Services** > **Solar Energy Management** > **Configure** > **Observer Mode**, or via `switch.sem_observer_mode`.
+Turn it on or off on the dashboard **Configuration** tab (`switch.sem_observer_mode`). The **Configure** button no longer asks for it.
 
 ---
 

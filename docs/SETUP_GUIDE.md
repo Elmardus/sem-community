@@ -216,6 +216,10 @@ solar, grid and battery (with its charge).
    for that line, then press **Submit**. Only a sensor you change is saved.
    The others keep following your Energy Dashboard.
 
+If a line is empty, SEM found several sensors that could fit, such as one per
+battery module or one per phase. It does not guess. Pick the one for the whole
+battery, solar or meter.
+
 You do not need to know a sensor name to pass this step. Nothing here
 changes your hardware.
 
