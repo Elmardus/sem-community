@@ -590,6 +590,33 @@ class TestAdoptionProvesTheRegister:
         assert reg.writes == [1550.0]
 
 
+class TestYieldedWritesNothing:
+    """(#1079 review) ruflo found this call had no yield parameter at all —
+    a battery yielded to another party kept being paced regardless. Checked
+    first, before adopt, so pacing's own state is untouched either way."""
+
+    def test_yielded_makes_no_write_while_engaged(self):
+        store, reg = TestAdoptionProvesTheRegister()._lifetime_one()
+        n = len(reg.writes)
+        clock = Clock(5000.0)
+        w = ChargePacingWriter(store=store)
+        w._clock = clock
+        h = reg.hass()
+        assert _run(w.apply(h, ENTITY, 1550.0, observer=False,
+                            yielded=True)) == "yielded"
+        assert len(reg.writes) == n
+
+    def test_yielded_makes_no_write_on_a_fresh_writer(self):
+        reg = TemplateNumber(500.0, step=10.0)
+        w = ChargePacingWriter(store=FakeStore())
+        w._clock = Clock()
+        h = reg.hass()
+        assert _run(w.apply(h, ENTITY, 1550.0, observer=False,
+                            yielded=True)) == "yielded"
+        assert reg.writes == []
+        assert w.engaged is False, "yield must not touch pacing's own state"
+
+
 class TestTheUnloadReleaseReadsTheRecord:
     """Review 4: a writer that saw only observer cycles never adopts the
     record. The unload must still hand the register back — from the

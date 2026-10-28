@@ -530,7 +530,9 @@ async def _dispatch_battery(
     )
 
 
-async def restore_discharge_limit_on_startup(hass, config: dict) -> None:
+async def restore_discharge_limit_on_startup(
+    hass, config: dict, yielded: bool = False,
+) -> None:
     """Startup-only: push the configured max discharge limit.
 
     (#624 — relocated from the deleted ``BatteryProtectionMixin``.)
@@ -545,6 +547,14 @@ async def restore_discharge_limit_on_startup(hass, config: dict) -> None:
     if config.get("observer_mode", False):
         _LOGGER.info(
             "Startup: observer mode active — battery discharge restore skipped"
+        )
+        return
+    # (#1079 review) A restart is exactly the moment this must not clobber
+    # another party's own limit — the one case the yield feature exists for.
+    if yielded:
+        _LOGGER.info(
+            "Startup: battery yielded to another party — discharge restore "
+            "skipped (#1079)"
         )
         return
 

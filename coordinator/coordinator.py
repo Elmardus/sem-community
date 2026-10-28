@@ -3951,10 +3951,17 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # all. It now runs from ``async_seed_from_recorder``, after HA
             # has started.
 
+            # (#1079 review) This cycle's external-control reading must exist
+            # BEFORE the startup restore below, or a battery yielded to
+            # another party loses its limit to SEM on every restart — the
+            # line below is otherwise a no-op the first cycle (fresh book).
+            self._refresh_external_control()
+            _yielded_at_startup = self.external_yielding("battery")
             # Ensure battery discharge limit is restored after restart
             # (protects against stale limit left by previous run)
             from .actuate_battery import restore_discharge_limit_on_startup
-            await restore_discharge_limit_on_startup(self.hass, self.config)
+            await restore_discharge_limit_on_startup(
+                self.hass, self.config, yielded=_yielded_at_startup)
             # (#1195) …and the limit of a battery taken out of the Energy
             # Dashboard while SEM was off. Its slot went at setup; the list
             # kept it before, and this restore lifted it. Each on its own: a
@@ -3964,7 +3971,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 try:
                     await restore_discharge_limit_on_startup(self.hass, {
                         **self.config, "battery_discharge_control_entity": "",
-                        "battery_discharge_control_entities": [entity]})
+                        "battery_discharge_control_entities": [entity]},
+                        yielded=_yielded_at_startup)
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.warning(
                         "Could not lift the discharge limit of a battery no "
@@ -9276,6 +9284,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # the value the register happened to hold when pacing engaged
         action = await self._charge_pacing_writer.apply(
             self.hass, entity, cap, observer=self._observer_mode,
+            yielded=self.external_yielding("battery"),
             hw_max_w=float(self.config.get(
                 "battery_max_charge_power_w", 5000.0) or 5000.0))
         _bv = (getattr(self, "_sink_verdicts", None) or {}).get("battery")
@@ -9312,6 +9321,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 "the charge-power limit entity cannot be read — SEM will not "
                 "write a value it could not put back"
                 if action == "limit_unreadable" else
+                # (#1079 review) Yielded means SEM holds its hands still —
+                # the decision above still describes what pacing WOULD do.
+                "the battery is yielded to another party — SEM writes nothing"
+                if action == "yielded" else
                 decision.reason if decision else (
                     "pacing idle — outside daylight or no forecast"
                     if not ledger else f"pacing idle — {_why}")),
