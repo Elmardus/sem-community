@@ -22,7 +22,7 @@ import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semTheme, semDefineCard, semCardSurfaceCSS } from '../base/sem-shared.js';
 import { priceLevelKey } from '../util/price-level.js';
 import { socDisplay } from '../util/missing-value.js';
-import { chargerAddPlan, detectRowLabelKey, isCo2IntensityEntity, isOutdoorTemperatureCandidate, isPowerEntity, nearMissAction, watchOnlyHelpKey } from '../util/detect-rows.js';
+import { chargerAddPlan, detectRowLabelKey, isCo2IntensityEntity, isOutdoorTemperatureCandidate, isPowerEntity, nearMissAction, proposalWrite, watchOnlyHelpKey, writeIsSaved } from '../util/detect-rows.js';
 import { roleSource, showsRoleLegend } from '../util/role-source.js';
 import { getAllSettings, setAllSettings, VIEW_MODE_EVENT } from '../util/view-mode.js';
 import { sourceCheckRows, fmtWatts } from '../util/source-check.js';
@@ -473,32 +473,38 @@ class SEMConfigCard extends SEMLitBase {
     // hatch and fires the same ``update_listener`` the OptionsFlow
     // does, so the coordinator reloads on structural changes.
     async _saveOption(key, value, fieldKey) {
+        return this._saveOptions({ [key]: value }, fieldKey || key);
+    }
+
+    // (#1224) Several keys in ONE set_option call — a split grid pair is
+    // saved whole, never one half at a time.
+    async _saveOptions(values, fieldKey) {
         const entryId = await this._ensureEntryId();
-        this._saveStatus = { ...this._saveStatus, [fieldKey || key]: 'saving' };
+        this._saveStatus = { ...this._saveStatus, [fieldKey]: 'saving' };
         try {
             await this._hass.callService(
                 'solar_energy_management',
                 'set_option',
                 {
-                    options: { [key]: value },
+                    options: { ...values },
                     ...(entryId ? { entry_id: entryId } : {}),
                 },
             );
-            this._saveStatus = { ...this._saveStatus, [fieldKey || key]: 'ok' };
+            this._saveStatus = { ...this._saveStatus, [fieldKey]: 'ok' };
             // Refresh local cache so the displayed value updates
             // immediately — without waiting for the next render cycle.
-            this._options = { ...this._options, [key]: value };
+            this._options = { ...this._options, ...values };
             this.requestUpdate();
             const timer = setTimeout(() => {
                 this._statusTimers.delete(timer);
                 this._saveStatus = { ...this._saveStatus };
-                delete this._saveStatus[fieldKey || key];
+                delete this._saveStatus[fieldKey];
                 this.requestUpdate();
             }, 1200);
             this._statusTimers.add(timer);
         } catch (err) {
-            console.error('[sem-config-card] save failed', key, err);
-            this._saveStatus = { ...this._saveStatus, [fieldKey || key]: err?.message || 'save failed' };
+            console.error('[sem-config-card] save failed', Object.keys(values), err);
+            this._saveStatus = { ...this._saveStatus, [fieldKey]: err?.message || 'save failed' };
             this.requestUpdate();
         }
     }
@@ -1271,6 +1277,9 @@ class SEMConfigCard extends SEMLitBase {
                       options: (p.options || []).join(', ') });
                 case 'pair_incomplete': return fill('config_proposed_pair_incomplete',
                     { missing: (p.missing_role || []).join(', ') });
+                // (#1224) the other half is here but cannot be used yet
+                case 'pair_blocked': return fill('config_proposed_pair_blocked',
+                    { missing: (p.missing_role || []).join(', ') });
                 case 'per_charger': return this._t('config_proposed_per_charger');
                 // (#956) a service the registry could not be asked about, or
                 // one SEM cannot drive as-is — the reason travels with the row
@@ -1279,11 +1288,13 @@ class SEMConfigCard extends SEMLitBase {
                 default: return p.reason || '';
             }
         };
-        const useButton = (p, entity, fieldKey) => {
+        // (#1224) A click saves what proposalWrite says: half of a split
+        // grid pair saves the whole pair, in one write.
+        const useButton = (write, fieldKey) => {
             const st = this._saveStatus?.[fieldKey];
             return html`
                 <button class="sem-btn" ?disabled=${st === 'saving'}
-                    @click=${() => this._saveOption(p.config_key, entity, fieldKey)}>
+                    @click=${() => this._saveOptions(write, fieldKey)}>
                     ${st === 'saving' ? this._t('config_proposed_using')
                                       : this._t('config_proposed_use')}
                 </button>
@@ -1294,7 +1305,8 @@ class SEMConfigCard extends SEMLitBase {
             // (#956) a proposal may name a SERVICE instead of an entity
             // (KEBA's set_current); it renders the same, lands per charger.
             const what = p.entity || p.service || (p.candidates || []).join(' / ') || '';
-            const already = this._options?.[p.config_key] === p.entity;
+            const write = proposalWrite(p, p.entity, this._options);
+            const already = writeIsSaved(write, this._options);
             const reason = whyNoButton(p);
             // (#915) the runners-up: a brand that declares several keys for
             // one role gets a deterministic first pick, and the user gets to
@@ -1311,20 +1323,29 @@ class SEMConfigCard extends SEMLitBase {
             <div class="row" style="margin:-6px 0 6px">
                 <span class="lbl"></span>
                 <span>
-                    ${p.action === 'set_option' && !already ? useButton(p, p.entity, 'prop_' + role) : nothing}
+                    ${p.action === 'set_option' && write && !already ? useButton(write, 'prop_' + role) : nothing}
                     ${already ? html`<span style="opacity:.7">${this._t('config_proposed_already')}</span>` : nothing}
                     ${reason ? html`<span style="opacity:.7">${reason}</span>` : nothing}
                 </span>
             </div>
-            ${alts.map((a, i) => html`
+            ${alts.map((a, i) => {
+                // (#1224) a runner-up takes the same gate as the first
+                // choice; a refusal carries its reason
+                const altOk = !a.action || a.action === 'set_option';
+                const altWrite = altOk ? proposalWrite(p, a.entity, this._options) : null;
+                const altWhy = altOk ? '' : whyNoButton(a);
+                return html`
                 <div class="row" style="margin:-6px 0 6px">
                     <span class="lbl" style="opacity:.6">${this._t('config_proposed_or')}</span>
                     <span style="font-family:monospace;font-size:0.85em">${a.entity}
                         <span style="opacity:.6"> · ${a.matched_key}</span>
-                        ${p.action === 'set_option' && p.config_key && this._options?.[p.config_key] !== a.entity
-                            ? html` ${useButton(p, a.entity, 'prop_' + role + '_alt' + i)}` : nothing}
+                        ${p.action === 'set_option' && altWrite && !writeIsSaved(altWrite, this._options)
+                            ? html` ${useButton(altWrite, 'prop_' + role + '_alt' + i)}` : nothing}
+                        ${p.action === 'set_option' && altWhy
+                            ? html` <span style="opacity:.7;font-family:inherit">${altWhy}</span>` : nothing}
                     </span>
-                </div>`)}`;
+                </div>`;
+            })}`;
         };
         const prober = r.prober_candidates || [];
         const dis = r.disagreements || [];

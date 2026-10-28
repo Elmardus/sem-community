@@ -47,8 +47,11 @@ def build_diagnostics(coord) -> Dict[str, Any]:
     out["diag_version"] = coord._get_version()
 
     _disc = getattr(reader, "_split_grid_discovery", None) or {}
+    # (#1224) half a saved pair the reader set aside is not the grid's mode
+    _read = getattr(reader, "_grid_source_key", None)
+    _aside = isinstance(_read, str) and not _read.startswith("manual:")
     if (coord.config.get("grid_import_power_entity")
-            or coord.config.get("grid_export_power_entity")):
+            or coord.config.get("grid_export_power_entity")) and not _aside:
         out["diag_grid_mode"] = "manual"
         # #461 follow-up: observe-only audit verdict — True when the manual
         # import/export assignment has contradicted the Energy Dashboard

@@ -1102,10 +1102,10 @@ class SensorReader:
             # auto/counter/solar/restored lock.  Runs only when the lock is
             # set AND we are on the combined/split auto path (manual entity
             # overrides use _audit_manual_grid_sign in _read_from_energy_dashboard).
-            _manual_ent = (
-                self._raw_config.get("grid_import_power_entity")
-                or self._raw_config.get("grid_export_power_entity")
-            )
+            # (#1224) The pair read THIS cycle, not the saved keys: half a
+            # pair beside the dashboard's own answer is set aside, and the
+            # dashboard's sign is the one to check.
+            _manual_ent = str(self._grid_read_source or "").startswith("manual:")
             _ed_for_audit = self._energy_dashboard_config
             if (self._grid_sign_detected
                     and not _manual_ent
@@ -2695,26 +2695,36 @@ class SensorReader:
                     "pick to use the dashboard again. (#1103)",
                     grid_override, replaced)
         guessing = False                # (#933) set by the discovery branch only
-        if bool(manual_import) != bool(manual_export) and combined:
-            # (07.09 re-audit) HALF a manual pair, and a combined sensor
-            # exists: prefer the combined one. Reading the import half alone
-            # says "export − import" with export pinned at 0.0 — a house
-            # that exports then reads as one that never does, permanently,
-            # with only a one-time log line. Same resolution as the legacy
-            # path. A house with NO combined sensor keeps today's behaviour:
-            # for a zero-export install the import half IS the whole story,
-            # which is what tests/test_split_grid_integration.py pins.
+        # (#1224) The dashboard's own two-sensor pair is a whole answer too.
+        ed_pair = (f"{ed.grid_power_from} / {ed.grid_power_to}"
+                   if ed.grid_power_from and ed.grid_power_to else None)
+        if bool(manual_import) != bool(manual_export) and (combined or ed_pair):
+            # (07.09 re-audit) HALF a manual pair, and the dashboard (or the
+            # Grid power pick) measures both directions: read that instead.
+            # Reading the import half alone says "export − import" with
+            # export pinned at 0.0 — a house that exports then reads as one
+            # that never does, permanently, with only a one-time log line.
+            # Same resolution as the legacy path. The half is set aside and
+            # the steps below read as if it were not saved, so the
+            # dashboard's pair and its meter sum keep their rank (#1224: one
+            # click on the Config card saved half a pair, and it outranked
+            # the dashboard's own pair). A house with NO whole answer keeps
+            # today's behaviour: for a zero-export install the import half
+            # IS the whole story, which is what
+            # tests/test_split_grid_integration.py pins.
             if not getattr(self, "_half_pair_ed_warned", False):
                 self._half_pair_ed_warned = True
+                used = (grid_override or ed_pair
+                        or (" + ".join(ed.grid_power_list)
+                            if len(ed.grid_power_list) > 1 else combined))
                 _LOGGER.warning(
                     "Only one of grid_import_power_entity / "
                     "grid_export_power_entity is set (%s / %s) — using the "
-                    "combined grid sensor %s instead, so both directions are "
+                    "grid sensor %s instead, so both directions are "
                     "measured rather than one assumed 0",
-                    manual_import, manual_export, combined)
-            readings.grid_power = self._read_sensor(combined, "grid")
-            self._grid_source_key = f"combined:{combined}"
-        elif manual_import or manual_export:
+                    manual_import, manual_export, used)
+            manual_import = manual_export = None
+        if manual_import or manual_export:
             # Manual override — user explicitly set grid power sensors.
             # NO auto-detection runs on this path, so misconfiguration
             # (swapped roles, one side missing, energy counter instead of
