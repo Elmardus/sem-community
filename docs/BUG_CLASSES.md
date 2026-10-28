@@ -264,7 +264,7 @@ key); the roles baseline holds the dsmr pair. **Review:** the declared tier now 
 only-restored row (a dead DSMR entry hid the meter that works), a `declared` pair replaces a held name
 guess, and the Config card counts the grid pair SEM reads as in use (no "Use" buttons for it). An
 English DSMR with phase sensors on had its import read from phase L3; the key reads the total. **Still open:** P1 Monitor's keys are common words a
-heat pump also uses, so they need a one-brand rule (#1222); the crawler reads `ram_` in DSMR Reader's
+heat pump also uses, so they need a one-brand rule (#1222, fixed); the crawler reads `ram_` in DSMR Reader's
 `telegram_timestamp` as an appliance and drops its pair (#1223); the card saves a split pair one
 half per click, and half a pair reads export as 0 W (#1224).
 **Instance (#1223) — the pair the roster never got:** DSMR Reader declares `current_power_usage` /
@@ -284,6 +284,18 @@ on the counters' own device the name search kept the LAST match, so a phase row 
 `tests/test_1225_slimmelezer_pair.py` (the firmware's rows in kW with phases, a control without the words,
 other brands and other ESPHome names left out, EG4/DSMR phase twins). Setup still says "no grid power
 sensor" for a pair the reader finds later (#1237).
+**Instance (#1222) — words that are a meter in one brand only:** P1 Monitor names its pair
+`power_consumption`/`power_production` (NL "Stroomverbruik", DE "Stromverbrauch"), so a Dutch or German
+meter read 0 W. A heat pump, a car and a solar inverter declare the same keys, so no lexicon rule could
+take them for every brand, and the crawler gave `p1_monitor` no keys and called it "other". **Closure:**
+a rule's `brand_any` maps one integration to more `^key$` words; the crawler (`_match_role`, with the
+domain through `classify_kind`, `_declares_a_whole_pair` and `roles_from_vocabulary`) and `role_for` read
+them through `rule_any`. The rebuilt roster carries the pair, and the declared tier finds it as `declared`.
+**Swept:** a Tibber Pulse has the same shape (`power`/`power_production`, DE "Energie"); English found
+the export half only. `power` is `exact_only` beside `average_power`. **Guard:**
+`tests/test_1222_p1_monitor_pair.py` (names read from HA's own translation files, a control without the
+keys, a heat pump with the same keys, every `brand_any` word anchored, reaching the roster, and read only
+through `rule_any`).
 **Missing-wiring sibling (#744, @Azlinon, 2026-08-11) — the derivation existed but was never called
 for LOADS.** The keyword gap above is one facet; the sharper one is a source where the whole
 derivation is *absent*. The Energy Dashboard's individual-device UI collects only the kWh energy
@@ -309,7 +321,7 @@ channel; energy/reactive sensors excluded; a power-only 400 W load reads ON end-
 payload; and a brand-named *derived* sensor does NOT make a controlless load controllable). **Sweep
 question:** for every power/energy figure a surface derives from an Energy-Dashboard entity, is the
 companion power sensor *derived* when the ED has no `stat_rate`, or assumed present — and does that
-derivation leak into a *control* decision? Refs #250 #274 #597 #600 #744 #1172 #1189 #1225.
+derivation leak into a *control* decision? Refs #250 #274 #597 #600 #744 #1172 #1189 #1222 #1225.
 
 ### 11. Corrected value overwrites a raw display field (paired-figure basis mismatch) — GUARDED
 **Symptom:** two figures shown side by side on a card disagree in a way that reads as a

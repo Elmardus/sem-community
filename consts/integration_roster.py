@@ -30,7 +30,7 @@ from typing import Any, Dict, Final
 SCHEMA: Final = 1
 
 
-ROSTER_META: Final[Dict[str, Any]] = {'generated_at': '2026-10-28T08:33:37Z', 'sources': {'core_analytics': 'https://analytics.home-assistant.io/data.json', 'core_index': 'https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/generated/integrations.json', 'custom_installs': 'https://analytics.home-assistant.io/custom_integrations.json', 'hacs': 'https://data-v2.hacs.xyz/integration/data.json', 'website': 'https://www.home-assistant.io/integrations.json'}, 'install_floor': 50, 'candidates': 1365, 'kept': 201, 'with_roles': 66, 'roles_mined': 189}
+ROSTER_META: Final[Dict[str, Any]] = {'generated_at': '2026-10-28T11:49:57Z', 'sources': {'core_analytics': 'https://analytics.home-assistant.io/data.json', 'core_index': 'https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/generated/integrations.json', 'custom_installs': 'https://analytics.home-assistant.io/custom_integrations.json', 'hacs': 'https://data-v2.hacs.xyz/integration/data.json', 'website': 'https://www.home-assistant.io/integrations.json'}, 'install_floor': 50, 'candidates': 1365, 'kept': 202, 'with_roles': 67, 'roles_mined': 191}
 
 #: domain -> what the ecosystem says this integration is.
 ROSTER: Final[Dict[str, Dict[str, Any]]] = {
@@ -141,6 +141,7 @@ ROSTER: Final[Dict[str, Dict[str, Any]]] = {
     'open_meteo_solar_forecast': {'name': 'Open-Meteo Solar Forecast', 'repo': 'rany2/ha-open-meteo-solar-forecast', 'origin': 'hacs', 'installs': 2525, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
     'openevse': {'name': 'OpenEVSE', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 360, 'kind': 'charger', 'kind_from': 'vocabulary'},
     'opentherm_gw': {'name': 'OpenTherm Gateway', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 352, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
+    'p1_monitor': {'name': 'P1 Monitor', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 341, 'kind': 'energy', 'kind_from': 'vocabulary'},
     'peblar': {'name': 'Peblar', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 765, 'kind': 'charger', 'kind_from': 'vocabulary'},
     'pirateweather': {'name': 'Pirate Weather', 'repo': 'Pirate-Weather/pirate-weather-ha', 'origin': 'hacs', 'installs': 8427, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
     'polestar_api': {'name': 'Polestar API', 'repo': 'pypolestar/polestar_api', 'origin': 'hacs', 'installs': 1034, 'kind': 'vehicle', 'kind_from': 'vocabulary'},
@@ -388,6 +389,10 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'ev_current_control': {'platform': 'number', 'keys': ('charge_rate',), 'options': ()},
         'vehicle_range': {'platform': 'sensor', 'keys': ('vehicle_range',), 'options': ()},
     },
+    'p1_monitor': {
+        'grid_export_power': {'platform': 'sensor', 'keys': ('power_production',), 'options': ()},
+        'grid_import_power': {'platform': 'sensor', 'keys': ('power_consumption',), 'options': ()},
+    },
     'peblar': {
         'ev_current_control': {'platform': 'number', 'keys': ('charge_current_limit',), 'options': ()},
     },
@@ -480,8 +485,8 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
     },
     'tibber': {
         'battery_capacity_spec': {'platform': 'sensor', 'keys': ('storage_rated_capacity',), 'options': ()},
-        'grid_export_power': {'platform': 'sensor', 'keys': ('power_flow_to_grid',), 'options': ()},
-        'grid_import_power': {'platform': 'sensor', 'keys': ('power_flow_from_grid',), 'options': ()},
+        'grid_export_power': {'platform': 'sensor', 'keys': ('power_flow_to_grid', 'power_production'), 'options': ()},
+        'grid_import_power': {'platform': 'sensor', 'keys': ('power', 'power_flow_from_grid'), 'options': (), 'exact_only': ('power',)},
         'grid_power': {'platform': 'sensor', 'keys': ('power_flow_grid',), 'options': ()},
         'system_size_spec': {'platform': 'sensor', 'keys': ('storage_rated_power',), 'options': ()},
     },

@@ -648,8 +648,10 @@ def _lexicon_module():
 
 
 def _match_role(rules: Dict[str, Dict[str, Any]], platform: str,
-                key: str) -> Optional[str]:
-    """First rule whose platform, ``any`` and ``not`` clauses all agree."""
+                key: str, domain: str = "") -> Optional[str]:
+    """First rule whose platform, ``any`` and ``not`` clauses all agree.
+    ``domain`` is the integration that declares the key: its ``brand_any``
+    words count too (#1222)."""
     if platform == SERVICE_PLATFORM:
         # (#956) services are matched by their own table — the entity rules
         # are keyed by role and a role can only carry one platform there.
@@ -665,7 +667,8 @@ def _match_role(rules: Dict[str, Dict[str, Any]], platform: str,
             continue
         if any(re.search(p, key, re.I) for p in rule.get("not", ())):
             continue
-        if any(re.search(p, key, re.I) for p in rule["any"]):
+        if any(re.search(p, key, re.I)
+               for p in _lexicon_module().rule_any(rule, domain)):
             return role
     return None
 
@@ -729,7 +732,7 @@ def classify_kind(vocab: Dict[str, Dict[str, dict]], lexicon,
             and not lexicon.says_any(blob, lexicon.GENERATOR_MARKERS)):
         return "charger"
     if not (lexicon.says_any(blob, lexicon.ENERGY_ANCHORS)
-            or _declares_a_whole_pair(vocab, lexicon)):
+            or _declares_a_whole_pair(vocab, lexicon, domain)):
         # A domain SEM already supports has human evidence behind it (a
         # matrix row with a citation); a thin published vocabulary does not
         # override that. Sessy publishes three sensors and one select.
@@ -749,16 +752,19 @@ def _reports_electricity(vocab: Dict[str, Dict[str, dict]], lexicon) -> bool:
     return sum(1 for k in keys if lexicon.UNIT_SHAPED_KEY.search(k)) >= 2
 
 
-def _declares_a_whole_pair(vocab: Dict[str, Dict[str, dict]], lexicon) -> bool:
+def _declares_a_whole_pair(vocab: Dict[str, Dict[str, dict]], lexicon,
+                           domain: str = "") -> bool:
     """(#1223) Both halves of a PAIRED_ROLES pair, named by the lexicon's own
     read rules, are an energy anchor of their own: nothing but a grid meter
     declares the power it takes from the grid AND the power it sends back.
     DSMR Reader declares ``current_power_usage``/``current_power_return`` and
     no word on the anchor list, so it read as "other" and its pair was never
-    proposed. Half a pair anchors nothing, as it proposes nothing."""
+    proposed. Half a pair anchors nothing, as it proposes nothing.
+    (#1222) P1 Monitor's pair is named by its own words only (``brand_any``),
+    so the pair is asked with the domain that declares it."""
     for pair in lexicon.PAIRED_ROLES:
         rules = {r: lexicon.READ_ROLE_RULES[r] for r in pair}
-        found = {_match_role(rules, platform, key)
+        found = {_match_role(rules, platform, key, domain)
                  for platform, keys in vocab.items() for key in keys}
         if all(r in found for r in pair):
             return True
@@ -766,9 +772,11 @@ def _declares_a_whole_pair(vocab: Dict[str, Dict[str, dict]], lexicon) -> bool:
 
 
 def roles_from_vocabulary(vocab: Dict[str, Dict[str, dict]], lexicon,
-                          kind: str = "energy") -> Dict[str, dict]:
+                          kind: str = "energy",
+                          domain: str = "") -> Dict[str, dict]:
     """Declared keys -> SEM roles, via the hand-written lexicon. An appliance
-    contributes nothing; a vehicle contributes only vehicle roles."""
+    contributes nothing; a vehicle contributes only vehicle roles.
+    ``domain`` is the integration the vocabulary belongs to (#1222)."""
     if kind in ("appliance", "other"):
         return {}
     if kind == "vehicle":
@@ -802,7 +810,7 @@ def roles_from_vocabulary(vocab: Dict[str, Dict[str, dict]], lexicon,
     roles: Dict[str, dict] = {}
     for platform, keys in sorted(vocab.items()):
         for key, body in sorted(keys.items()):
-            role = _match_role(rules, platform, key)
+            role = _match_role(rules, platform, key, domain)
             if not role:
                 continue
             # (#941) a table key takes the platform its rule requires, so
@@ -919,7 +927,7 @@ def build_roster(sources: Dict[str, Any], *, offline: bool, floor: int,
                                 offline=offline)
         kind = (classify_kind(vocab, lexicon, known=dom in known, domain=dom)
                 if vocab else "energy")
-        return (dom, kind, roles_from_vocabulary(vocab, lexicon, kind),
+        return (dom, kind, roles_from_vocabulary(vocab, lexicon, kind, dom),
                 bool(vocab), _reports_electricity(vocab, lexicon))
 
     mined: Dict[str, dict] = {}

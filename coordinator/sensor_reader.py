@@ -156,13 +156,17 @@ EV_ACTIVE_CHARGE_FLOOR_W = 500.0
 # whose own repository declares a key containing this string.
 #   * ``power_production`` is declared by forecast_solar
 #     (``power_production_next_12hours``) and enphase_envoy
-#     (``current_power_production``) — SOLAR production — and by NO grid meter
-#     found. It is the string that made SEM read a solar forecast as the
-#     reporter's grid export meter. It is kept because it IS a real older-DSMR
-#     entity_id, and entity_ids are the namespace these match in; it is now
-#     harmless because a guess no longer steers unproven.
+#     (``current_power_production``) — SOLAR production. It is the string that
+#     made SEM read a solar forecast as the reporter's grid export meter. It is
+#     kept because it IS a real older-DSMR entity_id, and entity_ids are the
+#     namespace these match in; it is now harmless because a guess no longer
+#     steers unproven.
 #   * ``power_consumption`` is likewise declared by blebox, connectlife and a
-#     Daikin COMPRESSOR, and by no grid meter found.
+#     Daikin COMPRESSOR.
+#   * (#1222) Two grid meter integrations DO declare these words for their
+#     pair. The lexicon takes the words for those two only (``brand_any`` in
+#     ``consts/role_lexicon.py``), so the declared tier finds them in any
+#     language.
 #   * ``from_grid_power`` and ``consumption_from_grid`` matched NOTHING in any
 #     cached vocabulary. They are kept rather than deleted because absence from
 #     the declared corpus is not proof of absence from a user's entity_ids, and
@@ -178,7 +182,7 @@ IMPORT_PATTERNS: tuple[str, ...] = (
     "pac_to_user",            # growatt_server TLX (declared)
     "grid_import",            # anker_solix, eg4_web_monitor, abb (declared)
     "from_grid_power",        # no declared match found
-    "power_consumption",      # NOT a grid meter in any declared vocabulary
+    "power_consumption",      # a grid meter in one integration (brand_any)
     "consumption_from_grid",  # no declared match found
     "import_power",           # eg4_web_monitor (declared); also easee, a CHARGER
     "grid_imported_power",    # senec (declared)
@@ -188,7 +192,7 @@ EXPORT_PATTERNS: tuple[str, ...] = (
     "pac_to_grid",            # growatt_server TLX (declared)
     "grid_export",            # anker_solix, eg4_web_monitor, abb (declared)
     "to_grid_power",          # anker_solix sub-flows only (battery_to_grid_power)
-    "power_production",       # SOLAR production in every declared vocabulary
+    "power_production",       # SOLAR, except two meters (brand_any)
     "export_power",           # eg4_web_monitor (declared); also easee, a CHARGER
     "grid_exported_power",    # senec (declared)
 )
@@ -4180,7 +4184,8 @@ class SensorReader:
         - Growatt: *_import_from_grid / *_export_to_grid
         - Growatt TLX: *_pac_to_user* / *_pac_to_grid*
         - DSMR/P1 (NL/BE): *_power_consumption / *_power_production
-          (English names; tier 1 finds core dsmr in any language, #1189)
+          (English names; tier 1 finds core dsmr in any language, #1189,
+          and two more meters, #1222)
         - E3DC: *_consumption_from_grid / *_export_to_grid
         - GivEnergy: *_import_power / *_export_power
         - Senec: *_grid_imported_power / *_grid_exported_power
