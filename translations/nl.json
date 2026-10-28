@@ -2029,6 +2029,10 @@
       "title": "Geen vermogenssensor voor {energy_entity}",
       "description": "Het Energiedashboard telt **{energy_entity}** in kWh, maar SEM vond er geen vermogenssensor (W) voor. SEM leest dit vermogen als 0 W, dus de energiestromen en het overschot kloppen niet. Voeg daarom de vermogenssensor toe aan deze regel in het Energiedashboard. Of open het SEM-dashboard, tab ⚙ **Configuratie**, en kies bovenaan **Alle instellingen**. Stel dan de sensor in bij sectie **Sensorbronnen**. Is er geen vermogenssensor, dan kun je deze melding negeren."
     },
+    "power_sensor_not_found_unit": {
+      "title": "Geen vermogenssensor voor {energy_entity}",
+      "description": "Het Energiedashboard telt **{energy_entity}** in kWh, maar SEM vond er geen vermogenssensor (W) voor. SEM telt alleen de andere zonne- of batterijregels op, dus de energiestromen en het overschot kloppen niet. Voeg daarom de vermogenssensor toe aan deze regel in het Energiedashboard. Is er geen vermogenssensor, dan kun je deze melding negeren."
+    },
     "charger_device_gone": {
       "title": "Lader {name}: apparaat ontbreekt",
       "description": "Home Assistant heeft het apparaat achter lader {name} niet meer. SEM kan hem niet aansturen. Verwijder de lader in SEM of voeg het apparaat opnieuw toe."

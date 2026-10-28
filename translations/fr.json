@@ -2029,6 +2029,10 @@
       "title": "Aucun capteur de puissance pour {energy_entity}",
       "description": "Le tableau de bord Énergie compte **{energy_entity}** en kWh, mais SEM n'a trouvé aucun capteur de puissance (W) pour lui. SEM lit donc cette puissance comme 0 W, et les flux d'énergie et le surplus sont faux. Pour corriger, ajoutez le capteur de puissance à cette entrée du tableau de bord Énergie. Ou ouvrez le tableau de bord SEM, onglet ⚙ **Configuration**, et choisissez **Tous les réglages** en haut. Puis réglez le capteur dans la section **Sources des capteurs**. S'il n'existe aucun capteur de puissance, vous pouvez ignorer cet avis."
     },
+    "power_sensor_not_found_unit": {
+      "title": "Aucun capteur de puissance pour {energy_entity}",
+      "description": "Le tableau de bord Énergie compte **{energy_entity}** en kWh, mais SEM n'a trouvé aucun capteur de puissance (W) pour lui. SEM n'additionne donc que les autres entrées solaires ou de batterie, et les flux d'énergie et le surplus sont faux. Pour corriger, ajoutez le capteur de puissance à cette entrée du tableau de bord Énergie. S'il n'existe aucun capteur de puissance, vous pouvez ignorer cet avis."
+    },
     "charger_device_gone": {
       "title": "Borne {name} : appareil introuvable",
       "description": "Home Assistant ne connaît plus l'appareil de la borne {name}. SEM ne peut pas la piloter. Supprimez la borne dans SEM ou ajoutez de nouveau l'appareil."

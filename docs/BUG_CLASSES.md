@@ -265,9 +265,20 @@ only-restored row (a dead DSMR entry hid the meter that works), a `declared` pai
 guess, and the Config card counts the grid pair SEM reads as in use (no "Use" buttons for it). An
 English DSMR with phase sensors on had its import read from phase L3; the key reads the total. **Still open:** P1 Monitor's keys are common words a
 heat pump also uses, so they need a one-brand rule (#1222); the crawler reads `ram_` in DSMR Reader's
-`telegram_timestamp` as an appliance and drops its pair (#1223); a SlimmeLezer (ESPHome) names its pair
-`power_consumed`/`power_produced`, which no word list holds (#1225); the card saves a split pair one
+`telegram_timestamp` as an appliance and drops its pair (#1223); the card saves a split pair one
 half per click, and half a pair reads export as 0 W (#1224).
+**Instance (#1225) — a pair named by firmware:** a SlimmeLezer P1 reader (ESPHome `dsmr`) names its pair
+`power_consumed`/`power_produced`, so the grid read 0 W. ESPHome is an opaque platform: the names come
+from the device, and there is no key to declare. The same words name Sinapsi Alfa's SOLAR output and
+P1 Monitor's phase rows. **Closure:** `PLATFORM_SPLIT_GRID_NAMES` asks the words on `esphome` only, and only
+as the whole name the firmware gave (`original_name`, or the object id at the end of the unique_id), so
+"Solar Power Produced" and "Power Consumed 3" stay out and a renamed entity_id is still found. **Swept:**
+on the counters' own device the name search kept the LAST match, so a phase row (`grid_import_power_l2`,
+`…_power_consumption_phase_l3`) beat the whole meter and was trusted. A whole-meter row now wins
+(`_PHASE_ROW`); a phase row still picked is `any-device`, so the counters check it. **Guard:**
+`tests/test_1225_slimmelezer_pair.py` (the firmware's rows in kW with phases, a control without the words,
+other brands and other ESPHome names left out, EG4/DSMR phase twins). Setup still says "no grid power
+sensor" for a pair the reader finds later (#1237).
 **Missing-wiring sibling (#744, @Azlinon, 2026-08-11) — the derivation existed but was never called
 for LOADS.** The keyword gap above is one facet; the sharper one is a source where the whole
 derivation is *absent*. The Energy Dashboard's individual-device UI collects only the kWh energy
@@ -293,7 +304,7 @@ channel; energy/reactive sensors excluded; a power-only 400 W load reads ON end-
 payload; and a brand-named *derived* sensor does NOT make a controlless load controllable). **Sweep
 question:** for every power/energy figure a surface derives from an Energy-Dashboard entity, is the
 companion power sensor *derived* when the ED has no `stat_rate`, or assumed present — and does that
-derivation leak into a *control* decision? Refs #250 #274 #597 #600 #744 #1172 #1189.
+derivation leak into a *control* decision? Refs #250 #274 #597 #600 #744 #1172 #1189 #1225.
 
 ### 11. Corrected value overwrites a raw display field (paired-figure basis mismatch) — GUARDED
 **Symptom:** two figures shown side by side on a card disagree in a way that reads as a
@@ -3211,6 +3222,41 @@ heal; a random check over two chargers, three starts, writers' edits and no lega
 that the step is the last word on `refs`. Thirteen mutants are killed. **Left open:** a ref that already
 got its plug at a start before this fix (2.2.0-beta.20) is not asked again: the store no longer shows
 the plug was added (#1152, closed: class 151 asks setup's own save once).
+
+**Fourth instance — #1224, half a grid pair one click away.** The #915 pair rule (`PAIRED_ROLES`)
+withheld the button from a half whose partner the device lacks. When the device had both halves,
+each row still had its own *Use this* button, and a click saved only that key. On a home whose
+dashboard declares the pair (`stat_rate_from`/`to`), the saved half then outranked it on the
+reader's ED path, so export read 0 W with one log line. A half whose partner was present but could
+not take a button (not loaded, wrong unit) kept its own button too: the rule counted presence. The
+review found two more: the card asks once per DOMAIN, so "this device" held two Tibber homes and one
+click could pair home A's import with home B's export; and each runner-up had a button the unit and
+load gate never judged. **Where it lives:** `hardware_detection.propose_roles_from_roster` (the pair
+check, the gate), the card's Detected-hardware rows (`sem-config-card.js` `proposalRow`, first choice
+and each runner-up), and `coordinator/sensor_reader.py::_read_from_energy_dashboard` (a half beside a
+whole answer; the #589 sign check and `diag_grid_mode` asked the saved keys, not what was read).
+The install form (`propose_energy_sources` rung 1) took each half's own first choice, so two meters
+of one integration could fill it with two halves of two meters. Checked: the install step refuses
+half a pair; the Sensor sources pickers and the options flow save
+one key on purpose (a home that never exports sets import alone); the legacy reader already ignores
+a half. **Closure:** `pair` maps each usable choice of a half to the other half's usable choices on
+the SAME `device_id` (no device proves no pair). A first choice with none there gives the lead to the
+first runner-up that has one, else the row is `pair_incomplete`. The install form fills a half only
+with its partner from `pair`.
+The card's `proposalWrite` saves the clicked entity plus the other half (the saved one when it is
+one of those, else the first) in one `set_option` call. A row counts as "in use" only when the whole
+write is saved, so a half saved by an older card is offered whole again. One half unusable → the
+other gets `pair_blocked` and no button. Each runner-up takes `_gate_proposal`; a refused one keeps
+its reason and gets no button. The reader sets a half aside when the Grid power pick, the dashboard's
+pair, its meter sum or its combined sensor measures both directions, and reads the dashboard as if
+the half were not saved; the sign check and the mode follow the source read this cycle. **Guard:**
+`tests/test_1224_half_grid_pair.py` (the pair on each half, runner-ups, two meters of one domain, no
+device, blocked partners, gated runner-ups, a saved half, the reader's ranks, the sign check, the
+mode) and `dashboard/card/test/pair-write.test.js` (the write, the saved-partner rule, two meters,
+"in use", and a source check that every button asks `proposalWrite`). **Left open:** a half saved by
+an older card on a home with no whole dashboard answer is still read alone, export 0 W, and only the
+log says so (#1238). The rows name roles by their ids (`grid_export_power`), as the whole
+Detected-hardware view does.
 
 ### 73. A success that is not an event re-arms the clock — GUARDED
 **Symptom:** the #915 write read-back never produced a verdict on PROD: `write_verified` stayed
@@ -6417,8 +6463,13 @@ Refs #1190 #776 #1172 #923 #1221.
 **Closure:** the read records each source it counts but reads from nothing (`_unsourced_power`); `report_unsourced_power`, called by the cycle after the read, files `power_sensor_not_found_<source>` (one text, the counter as placeholder) once HA runs, the dashboard retry is over and `UNAVAILABLE_REPAIR_THRESHOLD_S` has passed (class 86). It clears the cycle a sensor or a Config card pick is found, or the dashboard stops counting the source. Each source's first "found" of a reader clears an options-reload leftover once, also when it is found only after the first cycle (class 84; the review caught a single flag that missed that). A cycle that did not read the dashboard changes nothing. A failed raise is tried again. Non-persistent; the text says a home with no power sensor at all may ignore it.
 **Guard:** `tests/test_1188_no_power_sensor_repair.py` — each source parametrized over `POWER_SOURCES`, the reporter's P1 home, start-up, the retry, a late meter, the picks, half a grid pair, clears, raised once, every other read path (declared pair, sum, manual pair, two inverters, two batteries, battery pair) left alone, the export counter alone, the reload leftover found late, a failed raise, the cycle's call site, the placeholder in all 17 files, and an AST check that every source in `POWER_SOURCES` is recorded by the read.
 **Sweep question:** for every input SEM reads as 0 W because it found nothing, who is told, and where?
-**Left open:** a second inverter or battery with kWh and no power sensor is never searched for, so SEM sums only the units it has (#1226); the two grid-guess Repairs were English in 14 languages, and the class 143 test missed it (#1227, fixed). Not filed: a split-grid scan that throws (#259) reads as "nothing found" here — the Repair's advice still fixes it, and the log says the scan failed.
+**Left open:** a second inverter or battery with kWh and no power sensor was never searched for, so SEM summed only the units it had (#1226, **fixed**: round 2 below); the two grid-guess Repairs were English in 14 languages, and the class 143 test missed it (#1227, fixed). Not filed: a split-grid scan that throws (#259) reads as "nothing found" here — the Repair's advice still fixes it, and the log says the scan failed.
 Refs #1188 #1172 #799 #947 #911 #274 #1226 #1227.
+
+**Round 2 (#1226) — every unit, not the first.** A home with two inverters (or two batteries), one with kWh counters and no power sensor, read solar (or battery) as the other unit alone, and no Repair said so. The derive (`ha_energy_reader._derive_missing_power_sensors`, `_derive_battery_power_if_unrepresented`) looked for a power sensor only when the scalar `solar_power` / `battery_power` was empty, and those hold the first unit. #761's battery guard asked the same of the house: one two-sensor battery stopped the search for every other battery. The reader recorded a source as missing only in the branch where no unit read. Kin of class 52 round 2 (the scalar is the first source) and class 146 (a check every unit needs, asked of the first).
+**Closure:** the parser keeps each source with counters and no power (`solar_energy_only`, `battery_energy_only`), and `_derive_unit_power` asks each one on its own device. A sensor found joins the unit list the reader sums (`derived_units` says which; `derived_power` names a type only when its scalar was found). A battery keeps its own counters (class 167). A source with nothing found is kept in `unsourced_counters`; the reader names all of them in the same Repair, and `power_resolution_incomplete` keeps the #274 retry going for them. When other units of the source read, the Repair has its own text (`power_sensor_not_found_unit`): it sends the user to the Energy Dashboard only, since the Config card pick stands for the whole source and would drop the units that read. A source whose counter sits on a device a unit of its type already reads (its power sensor or its counter) is left alone and not named: that device's sensor may hold it too (an inverter's string rows, a fleet sensor beside a pack's own), and a second one would count the same watts twice. The review found three more: (1) a found battery depended on its integration having loaded, so a slow start dropped it and its saved slots (class 166); a sensor with no state is now judged by the registry (`_registered_as_power`, as #1172 does for declared keys), so the list is the same on every start. (2) A first slot record (no `battery_slot_units` yet) took the slots as they stand, so a battery found beside a two-sensor one took the pair's slot and its control entities; `battery_units_before_derive` gives the old numbering for that first record, and the found battery starts unset. (3) Setup saves the dashboard's first battery sensor as the battery pick (`to_dict`), and the reader took that as a pick for the whole battery; a pick that is one unit's own sensor no longer hides the Repair (solar the same, for a pick set by hand). A second review found two more: (4) a row linked to a site total (a site meter on another device, a template) already holds the other rows, and adding a found sensor read 7000 W for 5000 W; a link not on its own counter's device now stops the search for its type (`_derive_unit_power` `links`), and nothing is named. (5) A pick for the whole source (the #1226 work-around) lost to a found sensor once two units were listed (#623 sums first); `yield_found_units_to_picks` takes the found units out before the reader and the platforms read the config, while at most one linked unit is left. Checked and right: grid counters are tariffs of one meter, and a split meter is found in the reader; per-unit SOC and sign follow the unit list; the PV string slots show inverter totals once two inverters read, as for two linked ones.
+**Guard:** `tests/test_1226_every_unit_power.py` — real registry, real parser and reader: a second inverter (either order) and a second battery are found and summed, with their own counters; a battery beside a two-sensor one; nothing found: the Repair names the counter (two named together), clears when a late integration registers, uses the per-unit text while others read and the #1188 text when none do; never twice: a string row on a read inverter, a counter beside a template link, two rows of one device, a pack beside a fleet sensor; the picks, also the saved first sensor; a site total or a template total on one row is not added to; a whole-source pick beats found units, beside two linked units it changes nothing, and the dashboard read applies it before the hand-out (AST); a cold start with no states finds the same batteries; a registered non-power sensor is not taken; the first record keeps the pair's slot, at the real call site; the per-unit text in all 17 files; diagnostics. An oracle builds every home of one to three solar sources and one to three batteries (linked, found, nothing on the device): each source is read or named. 13 of its first 18 tests fail on the old code; eight mutants of the review fixes each fail a test.
+**Left open:** a second row on a device SEM already reads, or beside a link SEM cannot place (a template, a Riemann sum of the inverter's own sensor), is neither read nor named: a Shelly 2PM channel or a Deye BAT2 with only the other one linked (#1236). A found battery is numbered before two-sensor batteries, so on a home with those their `b<N>` entities move by one (settings follow, class 166; automations on the old numbers do not), and SEM starts to steer the found battery like a linked one. The diagnostics summary line still says `pwr=stat_rate` when a second unit was found (the per-source lists say it). A counter with no device keeps the #274 retry going though nothing can be found (a few minutes; a choice).
 
 ### 171. A rule for the moment of a read, used for a step that covers hours SEM did not see — GUARDED
 **Symptom:** HA was down from 02:30 to 20:00 on 12.10.2026 (PROD). The inverter's yield counter rose 30.38 kWh in one step, read after sunset. Daily solar stayed 0 kWh while the meter rows took their whole steps (20.42 kWh export, 8.79 kWh into the battery), so home, their balance, fell from 1.62 to 0 kWh (#1187, found while fixing #1177).
