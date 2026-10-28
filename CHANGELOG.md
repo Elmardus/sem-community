@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **The Simulation tab and cost estimates no longer count a battery sale as solar sent out** (#1216). Before, self-consumption and solar savings read too low.
+
 # [2.2.0-beta.29] — 28.10.2026
 
 - 🐛 **A battery counter step above the daily limit no longer makes the month, year and lifetime totals grow** (#1218). Before, they grew on every cycle.
