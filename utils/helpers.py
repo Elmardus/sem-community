@@ -121,6 +121,13 @@ def solar_share_pct(solar: float, *others: float) -> Optional[float]:
     return solar / total * 100.0
 
 
+#: (#1216) SEM's own daily sensor of the pack's sale (the ``battery_to_grid``
+#: flow, #776). Recorded history holds no other split of who exported: a
+#: reader of history loads it beside the export. Before SEM published it
+#: there is no split, and all export is solar's, as before.
+BATTERY_SALE_SENSOR_KEY = "flow_battery_to_grid_energy"
+
+
 def battery_export_part(export: float, battery_to_grid: float) -> float:
     """(#1191) The battery's part of one read's export: what the flows sent
     from the pack to the grid, never more than the export itself.

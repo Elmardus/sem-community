@@ -616,6 +616,8 @@ class _Flow:
     battery_discharge: float = 0.0
     #: the part of ``battery_charge`` that came from the grid
     grid_charge: float = 0.0
+    #: (#1216) the part of ``grid_export`` the pack sold
+    battery_export: float = 0.0
 
 
 def _self_consume(hour: SimHour, soc: float, floor_kwh: float, cap: float,
@@ -707,11 +709,13 @@ def _dispatch(decision: BatteryDecision, hour: SimHour, soc: float,
                   max(0.0, soc - floor_kwh) * eff)
         net = hour.solar - hour.home - hour.ev
         if net >= 0:
-            return _Flow(battery_discharge=dis, grid_export=net + dis), None
+            return _Flow(battery_discharge=dis, grid_export=net + dis,
+                         battery_export=dis), None
         need = -net
         return _Flow(battery_discharge=dis,
                      grid_import=max(0.0, need - dis),
-                     grid_export=max(0.0, dis - need)), None
+                     grid_export=max(0.0, dis - need),
+                     battery_export=max(0.0, dis - need)), None
     note = f"intent {getattr(intent, 'value', intent)} run as normal"
     return _self_consume(hour, soc, reserve_kwh, cap, eff, params, inf), note
 
@@ -984,6 +988,7 @@ def simulate_day(day: HourlyDay, params: SimParams,
             "soc_end_pct": round(100.0 * soc_end / cap, 6) if cap else None,
             "solar": hour.solar, "home": bal.home_kwh, "ev": hour.ev,
             "grid_import": flow.grid_import, "grid_export": flow.grid_export,
+            "grid_export_battery": flow.battery_export,
             "battery_charge": flow.battery_charge,
             "battery_discharge": flow.battery_discharge,
             "grid_charge": flow.grid_charge,
@@ -1001,6 +1006,8 @@ def simulate_day(day: HourlyDay, params: SimParams,
                              home_kwh=rec["home"], ev_kwh=rec["ev"],
                              solar_kwh=rec["solar"])
         actual_rows.append({**rec, "over_limit_kwh": _over(rec["grid_import"], params),
+                            # (#1216) the real pack's sale, from its sensor
+                            "grid_export_battery": day.sale(h),
                             **rec_cost.as_dict()})
         # Carry the hour into the next one.
         state.soc_kwh = soc_end

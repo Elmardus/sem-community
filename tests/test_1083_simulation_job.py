@@ -141,7 +141,9 @@ def _entity_id(key):
             "battery_soc": "soc",
             "tariff_current_import_rate": "import_rate",
             "tariff_current_export_rate": "export_rate",
-            "forecast_today_kwh": "forecast"}[key]
+            "forecast_today_kwh": "forecast",
+            # (#1216) the pack's sale, read beside the day-tag roles
+            "flow_battery_to_grid_energy": "grid_export_battery"}[key]
     return f"sensor.sem_{role}"
 
 
