@@ -2175,6 +2175,27 @@ def propose_roles_from_roster(dev_entities, domain: str, *,
                 if out[r].get("action") == "set_option":
                     out[r]["action"] = "pair_incomplete"
                     out[r]["missing_role"] = [x for x in pair if x not in out]
+            continue
+        if not present:
+            continue
+        # (#1224) Both halves are here, but one may not take a button (not
+        # loaded, wrong unit). The other half's button would save half a
+        # pair, so neither half gets one.
+        blocked = [x for x in pair if out[x].get("action") != "set_option"]
+        if blocked:
+            for r in pair:
+                if out[r].get("action") == "set_option":
+                    out[r]["action"] = "pair_blocked"
+                    out[r]["missing_role"] = blocked
+            continue
+        # (#1224) Each half's button saves the whole pair in one write. The
+        # card used to save only the half that was clicked, and the other
+        # read 0 W. ``pair`` holds each half's choices on this device.
+        whole = {out[x]["config_key"]: [out[x]["entity"]] + [
+                     a["entity"] for a in out[x].get("alternatives", ())]
+                 for x in pair}
+        for r in pair:
+            out[r]["pair"] = whole
     return out
 
 

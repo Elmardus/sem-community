@@ -96,3 +96,33 @@ export function chargerAddPlan(suggested, existingIds, count) {
                    ev_surplus_priority: (count || 0) + 3 },
     };
 }
+
+/** (#1224) What one "Use this" click on a proposal saves. Half of a split
+ *  pair (``p.pair``: each key's choices on this device) saves the whole pair
+ *  in one write: the clicked entity for its own key, and for the other half
+ *  the one already saved when it is one of this device's choices, else the
+ *  first choice. Saving only the clicked half read the other as 0 W.
+ *  ``null`` when there is nothing to save, or no whole pair can be made. */
+export function proposalWrite(p, entity, saved) {
+    if (!p || !p.config_key || !entity) return null;
+    if (!p.pair) return { [p.config_key]: entity };
+    if (!(p.config_key in p.pair)) return null;
+    const out = {};
+    for (const [key, choices] of Object.entries(p.pair)) {
+        if (key === p.config_key) {
+            out[key] = entity;
+            continue;
+        }
+        const left = (choices || []).filter((e) => e && e !== entity);
+        const have = saved && saved[key];
+        const pick = left.includes(have) ? have : left[0];
+        if (!pick) return null;
+        out[key] = pick;
+    }
+    return out;
+}
+
+/** (#1224) True when every key a click would write already holds it. */
+export function writeIsSaved(write, saved) {
+    return !!write && Object.entries(write).every(([k, v]) => !!saved && saved[k] === v);
+}
