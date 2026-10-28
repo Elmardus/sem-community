@@ -1881,6 +1881,22 @@ watts". Same file, same fix shape: the solver reads the drain the curve already 
 The cousin defect beside it — a cap solved to land full in the LAST slot exactly, no margin, against a
 docstring that promised "sunset − margin" — is class 46 (b), a discarded field: `end_margin_slots`
 existed, defaulted to no margin, and no caller set it.
+**Fourth catch (#1221, 28.10.2026) — a card figure, not a decision.** The Energy Impact card
+printed its own "CO2 today": (solar → home + solar → EV) × 128 g/kWh. `sensor.sem_daily_co2_avoided`
+counts all solar used on site, also into the battery, and adds the live grid value when that is on.
+On a day the battery charged from the sun, the card showed less than the sensor. The card already
+watched the sensor and never read it. **Closure:** the card prints the sensor's state ("—" when it is
+out). The line under it shows two new attributes the sensor publishes, `solar_used_kwh` and
+`co2_kg_per_kwh_today` (the day's average once the live value counts). They are unrecorded, and the
+card draws again when they change (class 127). The sensor's `co2_fallback_kg_per_kwh` read a `0.128`
+literal and now reads `GRID_CO2_KG_PER_KWH` (class 46). **Guard:**
+`dashboard/card/test/energy-impact-co2.test.js` — the real card: the hero is the sensor, not the flows;
+the detail line at the fixed and the live rate; the dash when out; a redraw on an attribute-only
+change; a source check for no `128` and no `flow_solar_to` read. `tests/test_1221_energy_impact_co2.py`
+— solar into the battery is in the kWh, kWh × rate gives the figure (also on a day at two rates), the
+rate with no solar yet, and the sensor publishes both. All fail on the old code. **Checked and right:**
+the Home card and the tab header read the CO2 sensors; the Costs card's "avoided" subtotal adds the
+two savings sensors, the same sum `daily_total_savings` makes; the Grid card's net has no sensor.
 
 ---
 

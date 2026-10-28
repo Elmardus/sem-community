@@ -43,6 +43,7 @@ from .utils.device_names import charger_display_name  # (#1053)
 from .const import SENSOR_LABEL_MAPPING
 from .consts.labels import SEM_LABELS
 from .coordinator import SEMCoordinator
+from .coordinator.energy_calculator import GRID_CO2_KG_PER_KWH
 from .ha_energy_reader import battery_units
 from .coordinator.install_modules import (
     Module, keeps, kept_descriptions, presence_of, presence_summary,
@@ -2660,6 +2661,10 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         # live-card helper rebuilt from the registry on demand: nothing about
         # it charts, and the diagnostics download carries the full report.
         "detection_report",
+        # (#1221) the Energy Impact card's detail line under the daily CO2
+        # avoided — the state is the record, these move with every 0.1 kWh
+        "solar_used_kwh",
+        "co2_kg_per_kwh_today",
     })
 
     # Sensors disabled by default (not used by dashboard template)
@@ -3600,12 +3605,18 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
             # source kind (never its entity id), the value, whether the fixed
             # Swiss average is in force, and whether the live value counts.
             st = getattr(self.coordinator, "_grid_co2_status", None) or {}
+            d = self.coordinator.data
             attrs.update({
                 "co2_source": st.get("source", "none"),
                 "co2_kg_per_kwh": st.get("kg_per_kwh"),
-                "co2_fallback_kg_per_kwh": 0.128,
+                "co2_fallback_kg_per_kwh": GRID_CO2_KG_PER_KWH,
                 "co2_live": bool(self.coordinator.config.get(
                     "co2_live_intensity", False)),
+                # (#1221) the kWh this sensor counts and the kg per kWh it
+                # used today — the Energy Impact card shows these, so it
+                # never works the figure out again on its own
+                "solar_used_kwh": d.get("daily_co2_solar_used_kwh"),
+                "co2_kg_per_kwh_today": d.get("daily_co2_kg_per_kwh"),
             })
         elif self.entity_description.key == "forecast_correction_factor":
             d = self.coordinator.data

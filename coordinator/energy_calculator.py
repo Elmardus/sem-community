@@ -3974,8 +3974,16 @@ class EnergyCalculator:
 
         # (#1088) + the live-intensity correction (0 while the flag is off
         # and before it ever ran). Never below 0: CO2 avoided is a saving.
-        costs.daily_co2_avoided_kg = round(max(0.0, daily_self_consumed * GRID_CO2_KG_PER_KWH
-            + self._co2_correction("daily", today)), 2)
+        daily_co2 = max(0.0, daily_self_consumed * GRID_CO2_KG_PER_KWH
+            + self._co2_correction("daily", today))
+        costs.daily_co2_avoided_kg = round(daily_co2, 2)
+        # (#1221) The two numbers behind it, for the Energy Impact card: the
+        # kWh it counts and the kg per kWh it used today (the day's average
+        # once the live value counts). No kWh yet: the rate a kWh counts at now.
+        costs.daily_co2_solar_used_kwh = round(daily_self_consumed, 1)
+        costs.daily_co2_kg_per_kwh = round(
+            daily_co2 / daily_self_consumed if daily_self_consumed > 0
+            else self.grid_co2_kg_now(), 4)
         costs.yearly_co2_avoided_kg = round(max(0.0, yearly_self_consumed * GRID_CO2_KG_PER_KWH
             + self._co2_correction("yearly", year_key)), 1)
         costs.yearly_trees_equivalent = round(
