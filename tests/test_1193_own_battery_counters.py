@@ -32,7 +32,7 @@ from __future__ import annotations
 import ast
 import logging
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -500,6 +500,8 @@ def test_reset_and_a_fresh_store_are_marked():
 
 
 # ── 5. What a person sees names the battery's own counters ─────────────────
+# (#1213) The setup screen shows watts, not sensor names, so it is no
+# longer a place that names counters.
 
 def test_the_sign_payload_names_each_batterys_counters():
     home = _Home("pair_first")
@@ -511,39 +513,6 @@ def test_the_sign_payload_names_each_batterys_counters():
     one.cycle(8)
     assert one.reader.battery_sign_diagnostics()["per_bid"][FLEET]["counters"] == [
         "sensor.sessy_charged", "sensor.sessy_discharged"]
-
-
-@pytest.mark.asyncio
-async def test_the_setup_summary_numbers_counters_by_battery(monkeypatch):
-    from custom_components.solar_energy_management import config_flow as cf
-    ed = _parse_prefs(MagicMock(), {"energy_sources": [SOLAR, GRID, PAIR, OLD, SESSY],
-                                    "device_consumption": []}, quiet=True)
-    monkeypatch.setattr(cf, "read_energy_dashboard_config", AsyncMock(return_value=ed))
-    flow = cf.SolarEnergyManagementConfigFlow()
-    flow.hass = MagicMock()
-    result = await flow.async_step_user()
-    summary = result["description_placeholders"]["summary"]
-    assert "Power (1): `sensor.sessy_power`" in summary
-    assert "Charge energy (1): `sensor.sessy_charged`" in summary
-    assert "Charge energy (2): `sensor.verto_charged`" in summary
-    assert "Discharge energy (2): `sensor.verto_discharged`" in summary
-    # the battery with no power sensor is listed, without a number
-    assert "Charge energy (no power sensor): `sensor.old_charged`" in summary
-    assert "Discharge energy (no power sensor): `sensor.old_discharged`" in summary
-
-
-@pytest.mark.asyncio
-async def test_the_one_battery_summary_shows_its_own_counters(monkeypatch):
-    from custom_components.solar_energy_management import config_flow as cf
-    monkeypatch.setattr(cf, "read_energy_dashboard_config",
-                        AsyncMock(return_value=_ed("energy_only_first")))
-    flow = cf.SolarEnergyManagementConfigFlow()
-    flow.hass = MagicMock()
-    summary = (await flow.async_step_user())["description_placeholders"]["summary"]
-    assert "Power: `sensor.sessy_power`" in summary
-    assert "Charge energy: `sensor.sessy_charged`" in summary
-    assert "Discharge energy: `sensor.sessy_discharged`" in summary
-    assert "Charge energy (no power sensor): `sensor.old_charged`" in summary
 
 
 @pytest.mark.asyncio
@@ -578,10 +547,6 @@ async def test_the_diagnostics_dump_holds_each_batterys_counters():
 DECLARED_COUNTER_LIST_READERS = {
     ("ha_energy_reader.py", "_extract_battery_config"):
         "the parser that fills them",
-    ("config_flow.py", "async_step_user"):
-        "holds _unowned below (the walk sees nested functions)",
-    ("config_flow.py", "_unowned"):
-        "the setup summary lists counters no battery owns",
     ("coordinator/sensor_reader.py", "battery_sign_diagnostics"):
         "the sign payload lists every counter",
     ("coordinator/sensor_reader.py", "_audit_battery_sign_lock"):

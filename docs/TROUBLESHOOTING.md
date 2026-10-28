@@ -377,11 +377,15 @@ blind on grid is the honest reading, not a fault to work around.
 
 **Symptom:** a Repair says *No power sensor for* a kWh counter of your grid, solar or battery. That source reads 0 W on every SEM card, and the energy flows and the surplus are wrong.
 
+**Fix:** pick the sensor in the Configuration tab: [Sensor source overrides](SETUP_GUIDE.md#sensor-source-overrides). During a new setup, SEM asks for it on its own screen: [Step 1](SETUP_GUIDE.md#when-sem-asks-one-more-question).
+
 **Cause (#1188):** the Energy Dashboard entry counts energy (kWh) but has no power sensor (W), and SEM found none on the counter's own device. For the grid, SEM also looked for an import and export pair. SEM reads power, not kWh, to steer, so it reads 0 W. Before, only the HA log said `No grid power sensor found`. SEM waits 5 minutes after Home Assistant has started, so a meter that loads late does not raise it.
 
 **Fix:** add the power sensor to that entry in the Energy Dashboard (*Settings → Dashboards → Energy*). Or set it on SEM's ⚙ **Configuration** tab: pick **All settings**, then **Sensor sources** → **Grid power**, **Solar power sensor** or **Battery power sensor**. A grid meter with one sensor for import and one for export goes in **Tariff & pricing** → **Grid import sensor** and **Grid export sensor**. The Repair clears on the next read.
 
 If the device has no power sensor at all (some cloud integrations publish only kWh), you can ignore the Repair. SEM then reads that power as 0 W.
+
+**Two inverters or batteries (#1226):** SEM looks for a power sensor for each entry on its own. When one entry has none, SEM adds up only the others, and the Repair names that entry's counter. Add its power sensor to that entry in the Energy Dashboard. The pick on SEM's Configuration tab stands for all of solar (or the battery), so it would drop the entries that read. SEM does not take a second sensor from a device it already reads power from, because it could count the same power twice.
 
 ## The battery platform is pinned to generic
 
