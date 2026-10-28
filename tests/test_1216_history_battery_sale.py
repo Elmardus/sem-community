@@ -302,12 +302,13 @@ class TestTheMonthEstimate:
             "cost_batt_savings", 3, MARCH, 0.30, 0.08) == pytest.approx(15.0)
 
     def test_the_sale_is_never_more_than_the_export(self, calc):
-        energy = {**MARCH, GRID_EXPORT_BATTERY_CATEGORY: {3: 90.0}}
-        # sold = 60 (the whole export): 100 − 0 − 20 = 80; 50 − 60 → 0
+        energy = {**MARCH, "battery_discharge": {3: 80.0},
+                  GRID_EXPORT_BATTERY_CATEGORY: {3: 70.0}}
+        # sold = 60 (the whole export): 100 − 0 − 20 = 80; 80 − 60 = 20
         assert calc._estimate_month_cost(
             "cost_savings", 3, energy, 0.30, 0.08) == pytest.approx(24.0)
         assert calc._estimate_month_cost(
-            "cost_batt_savings", 3, energy, 0.30, 0.08) == 0.0
+            "cost_batt_savings", 3, energy, 0.30, 0.08) == pytest.approx(6.0)
 
 
 class _Registry:
