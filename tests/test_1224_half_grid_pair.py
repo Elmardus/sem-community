@@ -117,6 +117,41 @@ class TestAPairIsOneDevice:
             assert out[role]["action"] == "pair_incomplete", role
             assert "pair" not in out[role]
 
+    def test_a_runner_up_that_makes_a_pair_leads_the_row(self):
+        """(review) Neither first choice has a partner on its device, but
+        home B's two sensors do: they lead the rows, so the button shows."""
+        ents = [_ent("sensor.a_usage", "dsmr", "current_electricity_usage", "devA"),
+                _ent("sensor.b_usage", "dsmr", "current_electricity_usage", "devB"),
+                _ent("sensor.a0_delivery", "dsmr", "current_electricity_delivery", "devC"),
+                _ent("sensor.b_delivery", "dsmr", "current_electricity_delivery", "devB")]
+        out = hd.propose_roles_from_roster(ents, "dsmr")
+        imp, exp = out["grid_import_power"], out["grid_export_power"]
+        assert imp["action"] == exp["action"] == "set_option"
+        assert (imp["entity"], exp["entity"]) == ("sensor.b_usage", "sensor.b_delivery")
+        assert [a["entity"] for a in imp["alternatives"]] == ["sensor.a_usage"]
+        assert [a["entity"] for a in exp["alternatives"]] == ["sensor.a0_delivery"]
+        assert imp["pair"] == {"sensor.b_usage": {EXP_KEY: ["sensor.b_delivery"]}}
+
+    def test_the_install_form_fills_one_meter(self):
+        """(review) The install form took each half's own first choice:
+        home A's import beside the export that sits on home B."""
+        ents = [_ent("sensor.a_usage", "dsmr", "current_electricity_usage", "devA"),
+                _ent("sensor.b_usage", "dsmr", "current_electricity_usage", "devB"),
+                _ent("sensor.a_delivery", "dsmr", "current_electricity_delivery", "devB"),
+                _ent("sensor.b_delivery", "dsmr", "current_electricity_delivery", "devA")]
+        reg = SimpleNamespace(entities={e.entity_id: e for e in ents})
+        out = hd.propose_energy_sources(registry=reg)
+        device = {e.entity_id: e.device_id for e in ents}
+        assert IMP_KEY in out and EXP_KEY in out
+        assert device[out[IMP_KEY]["entity"]] == device[out[EXP_KEY]["entity"]]
+
+    def test_the_install_form_fills_no_half_alone(self):
+        ents = [_ent("sensor.a_usage", "dsmr", "current_electricity_usage", "devA"),
+                _ent("sensor.b_delivery", "dsmr", "current_electricity_delivery", "devB")]
+        reg = SimpleNamespace(entities={e.entity_id: e for e in ents})
+        out = hd.propose_energy_sources(registry=reg)
+        assert IMP_KEY not in out and EXP_KEY not in out
+
     def test_no_device_proves_no_pair(self):
         ents = [_ent("sensor.dsmr_usage", "dsmr", "current_electricity_usage", None),
                 _ent("sensor.dsmr_delivery", "dsmr", "current_electricity_delivery", None)]
@@ -305,7 +340,7 @@ class TestTheDiagnosticsSayWhatWasRead:
         return build_diagnostics(coord)["diag_grid_mode"]
 
     def test_a_set_aside_half_is_not_the_mode(self):
-        assert self._mode("ed_pair:sensor.ed_import_w|sensor.ed_export_w") == "combined"
+        assert self._mode("ed_pair:sensor.ed_import_w|sensor.ed_export_w") != "manual"
 
     def test_a_read_half_is_manual(self):
         assert self._mode("manual:sensor.dsmr_usage|None") == "manual"

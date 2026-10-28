@@ -2221,9 +2221,21 @@ def propose_roles_from_roster(dev_entities, domain: str, *,
                     writes[eid] = partners
             if writes:
                 out[r]["pair"] = writes
+            alts = out[r].get("alternatives") or []
             if out[r]["entity"] not in writes:
-                out[r]["action"] = "pair_incomplete"
-                out[r]["missing_role"] = [x for x in pair if x != r]
+                # a runner-up that makes a whole pair leads the row instead,
+                # so its button shows; the roster order still decides which
+                i = next((n for n, a in enumerate(alts)
+                          if a["entity"] in writes), None)
+                if i is None:
+                    out[r]["action"] = "pair_incomplete"
+                    out[r]["missing_role"] = [x for x in pair if x != r]
+                    continue
+                lead = alts[i]
+                alts[i] = {"entity": out[r]["entity"],
+                           "matched_key": out[r]["matched_key"]}
+                out[r]["entity"] = lead["entity"]
+                out[r]["matched_key"] = lead["matched_key"]
     return out
 
 
@@ -2933,6 +2945,18 @@ _SOURCE_ROLE_TO_KEY = {
 }
 
 
+def _pair_role_names() -> frozenset:
+    try:
+        from .consts import role_lexicon as _lex
+    except Exception:  # noqa: BLE001
+        return frozenset()
+    return frozenset(r for pair in getattr(_lex, "PAIRED_ROLES", ())
+                     for r in pair)
+
+
+_PAIR_ROLE_NAMES = _pair_role_names()
+
+
 def propose_energy_sources(hass=None, registry=None) -> Dict[str, Any]:
     """(#915) The solar / grid / battery power sensors, proposed from the
     integrations this box already runs.
@@ -2996,6 +3020,19 @@ def propose_energy_sources(hass=None, registry=None) -> Dict[str, Any]:
             # device) would otherwise be pre-filled into the install form
             # looking confirmed. Only a role still offering the button.
             if proposed[role].get("action") not in ("set_option", None):
+                continue
+            if role in _PAIR_ROLE_NAMES:
+                # (#1224) half of a split pair comes with its partner on
+                # the same device, or not at all: each half's own first
+                # choice may sit on another meter of the same integration
+                eid = proposed[role]["entity"]
+                partners = (proposed[role].get("pair") or {}).get(eid) or {}
+                fills = {key: eid, **{k: v[0] for k, v in partners.items() if v}}
+                if len(fills) < 2 or any(k in out for k in fills):
+                    continue
+                for k, v in fills.items():
+                    out[k] = {"entity": v, "domain": dom,
+                              "why": "declared as one half of a grid pair"}
                 continue
             out[key] = {"entity": proposed[role]["entity"], "domain": dom,
                         "why": f"declared as {proposed[role]['matched_key']}"}

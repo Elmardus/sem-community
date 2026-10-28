@@ -3235,11 +3235,14 @@ load gate never judged. **Where it lives:** `hardware_detection.propose_roles_fr
 check, the gate), the card's Detected-hardware rows (`sem-config-card.js` `proposalRow`, first choice
 and each runner-up), and `coordinator/sensor_reader.py::_read_from_energy_dashboard` (a half beside a
 whole answer; the #589 sign check and `diag_grid_mode` asked the saved keys, not what was read).
-Checked: the install step refuses half a pair; the install form takes only halves that still offer
-the button (`propose_energy_sources` rung 1); the Sensor sources pickers and the options flow save
+The install form (`propose_energy_sources` rung 1) took each half's own first choice, so two meters
+of one integration could fill it with two halves of two meters. Checked: the install step refuses
+half a pair; the Sensor sources pickers and the options flow save
 one key on purpose (a home that never exports sets import alone); the legacy reader already ignores
 a half. **Closure:** `pair` maps each usable choice of a half to the other half's usable choices on
-the SAME `device_id` (no device proves no pair); a first choice with none there is `pair_incomplete`.
+the SAME `device_id` (no device proves no pair). A first choice with none there gives the lead to the
+first runner-up that has one, else the row is `pair_incomplete`. The install form fills a half only
+with its partner from `pair`.
 The card's `proposalWrite` saves the clicked entity plus the other half (the saved one when it is
 one of those, else the first) in one `set_option` call. A row counts as "in use" only when the whole
 write is saved, so a half saved by an older card is offered whole again. One half unusable → the
