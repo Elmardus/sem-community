@@ -14,6 +14,7 @@ from .const import DOMAIN
 from .coordinator import SEMCoordinator
 from .coordinator.install_modules import presence_of, presence_summary
 from .features.device_axes import has_control_handle, may_actuate, user_hands_off
+from .ha_energy_reader import unsourced_counters
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -358,6 +359,7 @@ async def async_get_config_entry_diagnostics(
             list(p) for p in (getattr(ed_config, "battery_power_pairs", []) or [])
             if isinstance(p, (list, tuple))]
         unit_counters = getattr(ed_config, "battery_unit_counters", None)
+        derived_units = getattr(ed_config, "derived_units", None)
         per_source_lists = {
             "solar_power_list": list(getattr(ed_config, "solar_power_list", []) or []),
             "battery_power_list": list(getattr(ed_config, "battery_power_list", []) or []),
@@ -368,6 +370,13 @@ async def async_get_config_entry_diagnostics(
                 if isinstance(pair, (list, tuple))
             } if isinstance(unit_counters, dict) else {},
             "grid_power_list": list(getattr(ed_config, "grid_power_list", []) or []),
+            # (#1226) each power sensor SEM found itself → the counter it
+            # was found from, and the counters it found none for
+            "derived_units": dict(derived_units)
+            if isinstance(derived_units, dict) else {},
+            "unsourced_counters": {
+                kind: unsourced_counters(ed_config, kind)
+                for kind in ("solar", "battery")},
         }
         per_source_readings = {
             "solar": {eid: _read_state(eid) for eid in per_source_lists["solar_power_list"]},

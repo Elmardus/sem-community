@@ -208,7 +208,8 @@ def _strip_unset_tail(slots: list) -> list:
     return out
 
 
-def realign_battery_slots(saved: Any, units: Any) -> tuple[dict, bool] | None:
+def realign_battery_slots(saved: Any, units: Any,
+                          before: Any = None) -> tuple[dict, bool] | None:
     """(#1195) The per-battery lists put in the order of ``units``.
 
     Slot N of each list is battery bN's, and bN is the N-th entry of
@@ -224,6 +225,12 @@ def realign_battery_slots(saved: Any, units: Any) -> tuple[dict, bool] | None:
     they stand, and a slot past the last battery is no battery's: left from
     an older, longer list, it drove the next battery added.
 
+    (#1226) ``before``: the batteries in the order the saved slots were
+    written for, used only while there is no record. A build before #1226
+    counted a power sensor SEM found itself only when no battery had its
+    own, so a battery found now beside others is not in it and starts unset,
+    instead of taking the slot of the battery it pushed back.
+
     Returns ``(changes, moved)`` — the option keys to write, and whether the
     battery list is another than the one recorded — or None when the lists
     already are in this order. Pure. An empty ``units`` (no battery read
@@ -237,6 +244,11 @@ def realign_battery_slots(saved: Any, units: Any) -> tuple[dict, bool] | None:
     record = saved.get(BATTERY_SLOT_UNITS_KEY)
     if not (isinstance(record, list) and all(isinstance(u, str) for u in record)):
         record = None
+    first = record is None
+    if (first and isinstance(before, (list, tuple))
+            and all(isinstance(u, str) and u for u in before)
+            and list(before) != units):
+        record = list(before)
     if record == units:
         return None
     if record is None:
@@ -259,11 +271,11 @@ def realign_battery_slots(saved: Any, units: Any) -> tuple[dict, bool] | None:
             for j in old_slot_of])
         if new != _strip_unset_tail(old):
             changes[key] = new
-    return changes, record is not None
+    return changes, not first
 
 
 def align_battery_slots(hass: Any, entry: Any, coordinator: Any, units: Any,
-                        *, running: bool) -> bool:
+                        *, running: bool, before: Any = None) -> bool:
     """(#1195) Keep each battery's saved settings with that battery.
 
     Runs on every Energy Dashboard read: at setup, before the controls are
@@ -281,7 +293,7 @@ def align_battery_slots(hass: Any, entry: Any, coordinator: Any, units: Any,
     if not isinstance(options, Mapping):
         return False
     merged = {**(data if isinstance(data, Mapping) else {}), **options}
-    plan = realign_battery_slots(merged, units)
+    plan = realign_battery_slots(merged, units, before)
     if plan is None:
         return False
     changes, moved = plan

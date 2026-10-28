@@ -72,7 +72,7 @@ from ..const import (
 from ..utils.time_manager import TimeManager
 from ..ha_energy_reader import (
     read_energy_dashboard_config_outcome, EnergyDashboardConfig, battery_units,
-    energy_counters,
+    battery_units_before_derive, energy_counters, yield_found_units_to_picks,
 )
 from .install_modules import Module, Presence, module_reload_due, module_verdict, presence_of
 from .battery_controls import (  # (#1071, #1195)
@@ -2722,6 +2722,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # none can be derived we still want energy counters + SOC working instead
             # of dropping to the empty legacy path (→ all zeros).
             if dashboard_config and dashboard_config.is_minimally_configured():
+                # (#1226) a pick for all of solar or the battery beats the
+                # sensors SEM found itself
+                yield_found_units_to_picks(
+                    dashboard_config,
+                    solar_pick=self.config.get("solar_production_sensor"),
+                    battery_pick=self.config.get("battery_power_sensor"))
                 self._energy_dashboard_config = dashboard_config
                 self._sensor_reader.set_energy_dashboard_config(dashboard_config)
                 # (#1195) each battery's saved settings follow it to the
@@ -2866,7 +2872,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             from homeassistant.config_entries import ConfigEntryState
             align_battery_slots(
                 self.hass, entry, self, battery_units(dashboard_config),
-                running=getattr(entry, "state", None) is ConfigEntryState.LOADED)
+                running=getattr(entry, "state", None) is ConfigEntryState.LOADED,
+                # (#1226) a first record: the slots stand in the old order
+                before=battery_units_before_derive(dashboard_config))
         except Exception:  # noqa: BLE001 — a settings move never costs the read
             _LOGGER.warning("keeping battery settings with their batteries "
                             "failed (#1195)", exc_info=True)

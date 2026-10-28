@@ -39,6 +39,8 @@ DOCS_SIDE = {
     # (#1188) the dashboard counts a source in kWh and SEM found no power
     # sensor — the next step is adding one, the user's own config
     "power_sensor_not_found",
+    # (#1226) …for one inverter or battery while the others read
+    "power_sensor_not_found_unit",
     # (#935) files from an older SEM install were found and SEM's own were
     # cleaned. The next step is a CHOICE about the user's own history, and
     # the docs are where the two options and their consequences live.

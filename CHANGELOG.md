@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ **The Home diagram can hide the car's charge level** (#1219). Set `show_ev_soc: false` when two cars share one charger.
 - ✨ **Hot water settings are easier to read** (#1145). "Bank by" is now "Extra from surplus", with an example and the entity in use.
 - 🧹 **The options audit counts real duplicates only** (#1213). Heat pump pages, and a shared entity plus its per-battery override, are no longer counted twice.
+- 🐛 **A SlimmeLezer P1 reader now shows grid power** (#1225). Before, it read 0 W. SEM also no longer takes one phase for the whole meter.
+- 🐛 **SEM now finds the power sensor of a second inverter or battery, or a Repair says it found none** (#1226). Before, it read 0 W.
 - 🐛 **Two grid Repairs and other texts are now in your language** (#1227). Before, they were partly English in 14 languages.
 - ✨ **Setup shows what SEM found as live watts, and asks one question when it is unsure of your grid meter** (#1213).
 - 🔧 **SEM no longer guesses a battery or solar sensor when several fit** (#1213). One battery module or one phase is not the whole battery.
