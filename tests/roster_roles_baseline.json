@@ -354,6 +354,14 @@
         "vehicle_range"
       ]
     },
+    "p1_monitor": {
+      "grid_export_power": [
+        "power_production"
+      ],
+      "grid_import_power": [
+        "power_consumption"
+      ]
+    },
     "peblar": {
       "ev_current_control": [
         "charge_current_limit"
@@ -553,9 +561,11 @@
         "storage_rated_capacity"
       ],
       "grid_export_power": [
-        "power_flow_to_grid"
+        "power_flow_to_grid",
+        "power_production"
       ],
       "grid_import_power": [
+        "power",
         "power_flow_from_grid"
       ],
       "grid_power": [
