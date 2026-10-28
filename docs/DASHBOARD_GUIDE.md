@@ -93,7 +93,7 @@ Deep dive into energy production, consumption, and environmental impact.
 
 | Card | Description |
 |------|-------------|
-| **Sankey Diagram** | Energy flow visualization from sources to destinations |
+| **Sankey Diagram** | Energy flow visualization from sources to destinations. A battery that sells shows a Battery → Grid line; regenerate the dashboard once to see it |
 | **Self-Consumption + Autarky** | Gauge cards showing percentage rates |
 | **Energy Distribution** | Donut chart breaking down today's energy by category |
 | **24h Power Curves** | Detailed power graph with solar, home, grid, battery over 24 hours |
