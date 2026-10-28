@@ -163,10 +163,9 @@ EV_ACTIVE_CHARGE_FLOOR_W = 500.0
 #     steers unproven.
 #   * ``power_consumption`` is likewise declared by blebox, connectlife and a
 #     Daikin COMPRESSOR.
-#   * (#1222) Two grid meters DO declare these words: P1 Monitor
-#     (``power_consumption``/``power_production``) and a Tibber Pulse
-#     (``power``/``power_production``). The lexicon takes them for those two
-#     brands only (``brand_any``), so the declared tier finds both in any
+#   * (#1222) Two grid meter integrations DO declare these words for their
+#     pair. The lexicon takes the words for those two only (``brand_any`` in
+#     ``consts/role_lexicon.py``), so the declared tier finds them in any
 #     language.
 #   * ``from_grid_power`` and ``consumption_from_grid`` matched NOTHING in any
 #     cached vocabulary. They are kept rather than deleted because absence from
@@ -183,7 +182,7 @@ IMPORT_PATTERNS: tuple[str, ...] = (
     "pac_to_user",            # growatt_server TLX (declared)
     "grid_import",            # anker_solix, eg4_web_monitor, abb (declared)
     "from_grid_power",        # no declared match found
-    "power_consumption",      # a grid meter in p1_monitor only (declared)
+    "power_consumption",      # a grid meter in one integration (brand_any)
     "consumption_from_grid",  # no declared match found
     "import_power",           # eg4_web_monitor (declared); also easee, a CHARGER
     "grid_imported_power",    # senec (declared)
@@ -193,7 +192,7 @@ EXPORT_PATTERNS: tuple[str, ...] = (
     "pac_to_grid",            # growatt_server TLX (declared)
     "grid_export",            # anker_solix, eg4_web_monitor, abb (declared)
     "to_grid_power",          # anker_solix sub-flows only (battery_to_grid_power)
-    "power_production",       # SOLAR, except p1_monitor and tibber (declared)
+    "power_production",       # SOLAR, except two meters (brand_any)
     "export_power",           # eg4_web_monitor (declared); also easee, a CHARGER
     "grid_exported_power",    # senec (declared)
 )
@@ -4186,7 +4185,7 @@ class SensorReader:
         - Growatt TLX: *_pac_to_user* / *_pac_to_grid*
         - DSMR/P1 (NL/BE): *_power_consumption / *_power_production
           (English names; tier 1 finds core dsmr in any language, #1189,
-          and P1 Monitor and a Tibber Pulse, #1222)
+          and two more meters, #1222)
         - E3DC: *_consumption_from_grid / *_export_to_grid
         - GivEnergy: *_import_power / *_export_power
         - Senec: *_grid_imported_power / *_grid_exported_power

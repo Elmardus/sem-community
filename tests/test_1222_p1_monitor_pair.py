@@ -282,9 +282,45 @@ class TestTheKeyIsWhatFindsIt:
         assert meter.picks[:2] == (None, meter.eid["power_production"])
 
 
+class TestWhichMeterIsTrusted:
+    """(review) A trusted pair skips the counter check, so it must sit on the
+    device the Energy Dashboard counts. Two Pulses (two homes) on one
+    account, or counters with no device (Tibber's own statistics), must not
+    hand SEM a trusted guess."""
+
+    def _second_home(self, meter):
+        for tk, key in (("power", "power"),
+                        ("power_production", "powerProduction")):
+            eid = meter.eid[tk].replace("pulse_home", "pulse_cabin")
+            meter.states[eid] = _state(0, "W", "power")
+            meter.registry.entities[eid] = _entry(
+                eid, "tibber", tk, f"other-home_rt_{key}", "Tibber Pulse Cabin")
+        return {tk: meter.eid[tk].replace("pulse_home", "pulse_cabin")
+                for tk in ("power", "power_production")}
+
+    def test_the_counted_home_wins(self):
+        meter = _tibber_pulse("en", import_w=900, export_w=0)
+        cabin = self._second_home(meter)
+        power = meter.read()
+        assert meter.picks == (meter.eid["power"],
+                               meter.eid["power_production"], "declared")
+        assert cabin["power"] not in meter.picks
+        assert power.grid_power == pytest.approx(-900.0)
+
+    def test_counters_with_no_device_are_checked_first(self):
+        meter = _tibber_pulse("de", import_w=900, export_w=0)
+        meter.reader._get_device_for_entity = lambda eid: None
+        with patch.object(sr_mod.er, "async_get", return_value=meter.registry):
+            imp, exp, on_device = meter.reader._declared_split_grid_power(
+                meter.reader._energy_dashboard_config)
+        assert (imp, exp) == (meter.eid["power"], meter.eid["power_production"])
+        assert on_device is False          # "declared-elsewhere": counters check it
+
+
 class TestOtherBrandsKeepTheirWords:
     """The words are a meter in these two brands only. A heat pump on the
-    counters' own device that says the same keys is not the grid."""
+    counters' own device that says the same keys is not the grid: the
+    shipped roster gives its integration no grid keys."""
 
     def test_a_heat_pump_with_the_same_keys_is_not_declared(self):
         meter = _p1_monitor("nl", import_w=0, export_w=0)
@@ -451,7 +487,7 @@ class TestTheBrandRuleGuard:
                      ROOT / "scripts" / "crawl_integration_roster.py"):
             tree = ast.parse(path.read_text())
             for node in ast.walk(tree):
-                if not isinstance(node, ast.comprehension):
+                if not isinstance(node, (ast.comprehension, ast.For)):
                     continue
                 it = node.iter
                 if isinstance(it, ast.Call) and isinstance(it.func, ast.Attribute) \
@@ -462,4 +498,4 @@ class TestTheBrandRuleGuard:
                     key = it.slice.value
                 else:
                     continue
-                assert key != "any", (path.name, node.lineno)
+                assert key != "any", (path.name, getattr(node, "lineno", it.lineno))
