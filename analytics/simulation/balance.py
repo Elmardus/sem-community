@@ -103,8 +103,10 @@ def cost_hour(import_kwh: float, export_kwh: float, import_rate: float,
     )
 
 
-SUM_KEYS = ("solar", "grid_import", "grid_export", "battery_charge",
-            "battery_discharge", "ev", "home", "loss_kwh", "over_limit_kwh",
+#: ``grid_export_battery`` (#1216): the pack's part of ``grid_export``
+SUM_KEYS = ("solar", "grid_import", "grid_export", "grid_export_battery",
+            "battery_charge", "battery_discharge", "ev", "home", "loss_kwh",
+            "over_limit_kwh",
             "import_cost", "export_revenue", "net_cost",
             "negative_export_kwh", "negative_export_cost", "solar_savings")
 

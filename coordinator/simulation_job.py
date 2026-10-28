@@ -46,8 +46,13 @@ from ..analytics.simulation.battery_sim import (
     real_capacity_kwh,
 )
 from ..consts.battery_permissions import may_assist_ev
-from ..analytics.simulation.hourly_day import CORE_ROLES, HourlyDay
+from ..analytics.simulation.hourly_day import (
+    CORE_ROLES,
+    GRID_EXPORT_BATTERY,
+    HourlyDay,
+)
 from ..analytics.simulation.summary import summarise
+from ..utils.helpers import BATTERY_SALE_SENSOR_KEY, solar_export
 from .day_tag_store import (
     BACKFILL_DAYS,
     BACKFILL_ROLES,
@@ -67,6 +72,8 @@ OFFERED_DAYS = BACKFILL_DAYS
 #: the own settings must give back the real cost within this share of the
 #: money moved (import cost + export revenue), or no what-if is shown
 CALIBRATION_MAX_PCT = 5.0
+#: (#1216) roles the run reads beside the day-tag roles: the pack's sale
+SALE_ROLES = {GRID_EXPORT_BATTERY: BATTERY_SALE_SENSOR_KEY}
 
 
 class SimulationError(Exception):
@@ -144,20 +151,26 @@ def _r(value: float, nd: int = 2) -> float:
 def energy_totals(results: Iterable, sim_cap: float,
                   real_cap: float) -> Dict[str, Dict[str, float]]:
     """Actual against simulated over the days: grid in and out (kWh), money,
-    self-consumption (% of the solar used at home) and battery cycles
-    (throughput ÷ 2 ÷ capacity — a full charge and discharge is one)."""
+    self-consumption (% of the solar used on site) and battery cycles
+    (throughput ÷ 2 ÷ capacity — a full charge and discharge is one).
+
+    (#1216) Self-consumption takes only solar's export away from solar: a
+    pack's sale is not solar sent out. A day with no recorded split of who
+    exported counts all its export as solar's, as before."""
     out = {}
     for side, cap in (("actual", real_cap), ("simulated", sim_cap)):
-        imp = exp = solar = charge = dis = cost = 0.0
+        imp = exp = sale = solar = charge = dis = cost = 0.0
         for r in results:
             f = getattr(r, side)
             imp += float(f.get("grid_import", 0.0))
             exp += float(f.get("grid_export", 0.0))
+            sale += float(f.get(GRID_EXPORT_BATTERY, 0.0) or 0.0)
             solar += float(f.get("solar", 0.0))
             charge += float(f.get("battery_charge", 0.0))
             dis += float(f.get("battery_discharge", 0.0))
             cost += float(getattr(r, f"{side}_cost"))
-        own = 100.0 * max(0.0, solar - exp) / solar if solar > 0 else None
+        own = (100.0 * max(0.0, solar - solar_export(exp, sale)) / solar
+               if solar > 0 else None)
         out[side] = {
             "grid_import_kwh": _r(imp, 1), "grid_export_kwh": _r(exp, 1),
             "cost": _r(cost), "solar_kwh": _r(solar, 1),
@@ -498,7 +511,9 @@ class SimulationJob:
 
     def _entity_ids(self) -> Dict[str, str]:
         out = {}
-        for role, (key, _stat) in BACKFILL_ROLES.items():
+        keys = {role: key for role, (key, _stat) in BACKFILL_ROLES.items()}
+        keys.update(SALE_ROLES)
+        for role, key in keys.items():
             eid = self._entity_id(key)
             if eid:
                 out[role] = eid

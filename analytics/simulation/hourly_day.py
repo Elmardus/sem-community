@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from datetime import date as _date, datetime, tzinfo
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
+from ...utils.helpers import battery_export_part
+
 HOURS = 24
 
 #: flow roles — gross kWh per hour, from a TOTAL counter's ``change``
@@ -45,7 +47,14 @@ EXPORT_RATE = "export_rate"
 FORECAST = "forecast"
 MEAN_ROLES = (SOC, IMPORT_RATE, EXPORT_RATE, FORECAST)
 
-ROLES = FLOW_ROLES + MEAN_ROLES
+#: (#1216) the pack's part of ``grid_export`` (a sale), from SEM's own
+#: sensor of the ``battery_to_grid`` flow (#776). Not a flow of the
+#: balance: it is inside ``grid_export``. An hour without rows reads 0, so
+#: all its export is solar's, as before SEM published the sensor.
+GRID_EXPORT_BATTERY = "grid_export_battery"
+PART_ROLES = (GRID_EXPORT_BATTERY,)
+
+ROLES = FLOW_ROLES + MEAN_ROLES + PART_ROLES
 
 #: Every house has these. A role with no rows at all here means the
 #: recorder had nothing — every hour is missing. The other flow roles may
@@ -92,6 +101,10 @@ class HourlyDay:
     battery_discharge: List[float] = field(default_factory=_zeros)
     ev: List[float] = field(default_factory=_zeros)
     home: List[float] = field(default_factory=_zeros)
+    #: (#1216) the pack's part of ``grid_export``, kWh (``PART_ROLES``)
+    grid_export_battery: List[float] = field(default_factory=_zeros)
+    #: (#1216) the recorder held rows of the sale this day
+    sale_recorded: bool = False
     soc_pct: List[Optional[float]] = field(default_factory=_nones)
     #: None = not recorded; the caller's flat rate stands in
     import_rate: List[Optional[float]] = field(default_factory=_nones)
@@ -102,7 +115,7 @@ class HourlyDay:
     notes: List[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        for role in FLOW_ROLES:
+        for role in FLOW_ROLES + PART_ROLES:
             vals = list(getattr(self, role))
             if len(vals) != HOURS:
                 raise ValueError(f"{role}: {len(vals)} hours, need {HOURS}")
@@ -113,6 +126,7 @@ class HourlyDay:
                 raise ValueError(f"{name}: {len(vals)} hours, need {HOURS}")
             setattr(self, name, [None if v is None else float(v) for v in vals])
         self.tags = [str(t) for t in (self.tags or [])]
+        self.sale_recorded = bool(self.sale_recorded)
         self.missing_hours = sorted({int(h) for h in self.missing_hours})
         self.notes = [str(n) for n in (self.notes or [])]
 
@@ -179,6 +193,20 @@ class HourlyDay:
         """The seven flows of one hour, in kWh."""
         return {role: getattr(self, role)[hour] for role in FLOW_ROLES}
 
+    def sale(self, hour: int) -> float:
+        """(#1216) The pack's part of the hour's export, kWh: never more
+        than the export the meter booked."""
+        return battery_export_part(self.grid_export[hour],
+                                   self.grid_export_battery[hour])
+
+    @property
+    def sale_known(self) -> bool:
+        """(#1216) Is it known who exported this day: the sale sensor has
+        rows, or the pack never discharged. A day before SEM published the
+        sensor is not: the simulated side then counts its own sale as the
+        actual side must, all as solar's, so the two compare."""
+        return self.sale_recorded or self.total("battery_discharge") <= 0.0
+
     def total(self, role: str) -> float:
         return float(sum(getattr(self, role)))
 
@@ -237,6 +265,21 @@ class HourlyDay:
                 if kwh < -STEP_BACK_NOTE_KWH:
                     notes.append(f"{role} counter stepped back {-kwh:.2f} kWh "
                                  f"at {hour:02d}:00 — netted against the day")
+        sale_recorded = False
+        for role in PART_ROLES:
+            # (#1216) a part of a flow, not a flow: no missing hour, no
+            # note — no rows only means no split is known
+            raw = _zeros()
+            for row in rows_by_role.get(role) or []:
+                hour = _hour_of(row.get("start"), day, tz)
+                if hour is None:
+                    continue
+                sale_recorded = True
+                try:
+                    raw[hour] += float(row.get("change") or 0.0)
+                except (TypeError, ValueError):
+                    pass
+            out[role] = _net_step_backs(raw)
         for role in MEAN_ROLES:
             for row in rows_by_role.get(role) or []:
                 hour = _hour_of(row.get("start"), day, tz)
@@ -253,6 +296,7 @@ class HourlyDay:
             soc_pct=means[SOC], import_rate=means[IMPORT_RATE],
             export_rate=means[EXPORT_RATE], forecast_kwh=forecast,
             missing_hours=sorted(missing), notes=notes,
+            sale_recorded=sale_recorded,
             **out,
         )
         # Every day is checked and closed, one with a missing hour too.

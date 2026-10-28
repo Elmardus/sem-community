@@ -33,7 +33,9 @@ from .battery_provenance import (
 )
 
 from ..utils.log_gate import log_on_change
-from ..utils.helpers import battery_export_part, solar_export
+from ..utils.helpers import (
+    BATTERY_SALE_SENSOR_KEY, battery_export_part, solar_export,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -362,6 +364,20 @@ def _stat_bucket_year_month(row: Dict[str, Any]) -> Optional[tuple[int, int]]:
             parsed = dt_util.as_local(parsed)
         return parsed.year, parsed.month
     return None
+
+
+def _sem_stat_entity_id(hass: Optional[HomeAssistant], key: str) -> Optional[str]:
+    """(#1216) The entity id of SEM's own sensor ``key``, by its unique id
+    (``sem_<key>``) — users rename entities. None when it cannot be found."""
+    if hass is None:
+        return None
+    try:
+        from homeassistant.helpers import entity_registry as er
+        entity_id = er.async_get(hass).async_get_entity_id(
+            "sensor", DOMAIN, f"sem_{key}")
+    except Exception:  # noqa: BLE001 — registry absent/mocked (tests, early boot)
+        return None
+    return entity_id if isinstance(entity_id, str) and entity_id else None
 
 
 # Environmental impact constants
@@ -1866,6 +1882,12 @@ class EnergyCalculator:
         entity_ids = list(dict.fromkeys(
             entity_id for ids in category_counters.values() for entity_id in ids
         ))
+        # (#1216) the pack's sale from SEM's own sensor, read beside the
+        # export: the year's export below comes from the recorder, so the
+        # row booked beside it must too, or every sale reads as solar's
+        sale_id = _sem_stat_entity_id(hass, BATTERY_SALE_SENSOR_KEY)
+        if sale_id and sale_id not in entity_ids:
+            entity_ids.append(sale_id)
 
         try:
             stats = await statistics_during_period(
@@ -1881,21 +1903,37 @@ class EnergyCalculator:
 
         # Extract yearly energy: difference between latest and first sum,
         # added up over the category's counters (#1043)
+        def _span(entity_id: str) -> Optional[float]:
+            entity_stats = stats.get(entity_id, [])
+            if len(entity_stats) < 2:
+                return None
+            first_sum = entity_stats[0].get("sum") if entity_stats[0].get("sum") is not None else 0.0
+            last_sum = entity_stats[-1].get("sum") if entity_stats[-1].get("sum") is not None else 0.0
+            return max(0, last_sum - first_sum)
+
         seeded = {}
         for category, ids in category_counters.items():
             yearly_energy = 0.0
             has_stats = False
             for entity_id in ids:
-                entity_stats = stats.get(entity_id, [])
-                if len(entity_stats) < 2:
+                span = _span(entity_id)
+                if span is None:
                     continue
-                first_sum = entity_stats[0].get("sum") if entity_stats[0].get("sum") is not None else 0.0
-                last_sum = entity_stats[-1].get("sum") if entity_stats[-1].get("sum") is not None else 0.0
-                yearly_energy += max(0, last_sum - first_sum)
+                yearly_energy += span
                 has_stats = True
             seeded[category] = yearly_energy
             if has_stats:
                 self._yearly_accumulators[f"{category}_{year_key}"] = yearly_energy
+                if category == "grid_export":
+                    # (#1216) the row beside the export follows it: the
+                    # recorded sale, never more than the export. With no
+                    # history of it the row keeps what SEM saw live.
+                    sale_key = f"{GRID_EXPORT_BATTERY_CATEGORY}_{year_key}"
+                    sale = _span(sale_id) if sale_id else None
+                    if sale is None:
+                        sale = self._yearly_accumulators.get(sale_key, 0.0)
+                    self._yearly_accumulators[sale_key] = battery_export_part(
+                        yearly_energy, sale)
 
         # Derive home consumption from energy balance
         solar = seeded.get("solar", 0)
@@ -2056,6 +2094,9 @@ class EnergyCalculator:
         def _e(series: str) -> float:
             return float(month_energy.get(series, {}).get(month, 0.0) or 0.0)
 
+        # (#1216) the pack's part of the month's export, where SEM recorded it
+        sold = battery_export_part(
+            _e("grid_export"), _e(GRID_EXPORT_BATTERY_CATEGORY))
         if category == "cost_import":
             return _e("grid_import") * imp_rate
         if category == "cost_export":
@@ -2066,14 +2107,17 @@ class EnergyCalculator:
             solar_charged = _e("battery_charge") * (
                 1.0 - self._battery_grid_origin_share
             )
-            solar_direct = max(0.0, _e("solar") - _e("grid_export") - solar_charged)
+            # (#1216) only solar's export is taken away from solar
+            solar_direct = max(0.0, _e("solar") - solar_export(
+                _e("grid_export"), sold) - solar_charged)
             return solar_direct * imp_rate
         if category == "cost_batt_savings":
             # (#770) Full import rate on purpose — the provenance store has no
             # origin record for the pre-tracking past, and unknown origin keeps
             # the legacy credit rather than being charged for a measurement SEM
-            # never took.
-            return _e("battery_discharge") * imp_rate
+            # never took. (#776, #1216) A kWh the pack sold earns its export
+            # revenue, not an avoided import too.
+            return max(0.0, _e("battery_discharge") - sold) * imp_rate
         return 0.0
 
     def _seed_yearly_cost_estimate(self, year_key: str) -> None:
@@ -2095,6 +2139,9 @@ class EnergyCalculator:
         grid_export = float(ya.get(f"grid_export_{year_key}", 0.0) or 0.0)
         batt_charge = float(ya.get(f"battery_charge_{year_key}", 0.0) or 0.0)
         batt_discharge = float(ya.get(f"battery_discharge_{year_key}", 0.0) or 0.0)
+        # (#1216) the pack's part of the year's export, booked beside it
+        sold = battery_export_part(grid_export, float(ya.get(
+            f"{GRID_EXPORT_BATTERY_CATEGORY}_{year_key}", 0.0) or 0.0))
         imp_rate = self._get_avg_import_rate()
         exp_rate = self._get_avg_export_rate()
         # Avoided-import savings split to mirror the live accumulators and avoid
@@ -2106,7 +2153,10 @@ class EnergyCalculator:
         # structurally; the live path has always used the flow-attributed
         # split).
         solar_charged = batt_charge * (1.0 - self._battery_grid_origin_share)
-        solar_direct = max(0.0, solar - grid_export - solar_charged)
+        # (#1216) only solar's export is taken away from solar
+        solar_direct = max(
+            0.0, solar - solar_export(grid_export, sold) - solar_charged)
+        batt_delivered = max(0.0, batt_discharge - sold)
         ca = self._yearly_cost_accumulators
         ca[f"cost_import_{year_key}"] = round(grid_import * imp_rate, 4)
         ca[f"cost_export_{year_key}"] = round(grid_export * exp_rate, 4)
@@ -2116,13 +2166,14 @@ class EnergyCalculator:
         # pre-tracking year has no origin record at all, and unknown origin
         # keeps the legacy credit rather than being charged for a measurement
         # SEM never took. Live accumulation from here on is split properly.
-        ca[f"cost_batt_savings_{year_key}"] = round(batt_discharge * imp_rate, 4)
+        # (#776, #1216) A kWh the pack sold earns its export revenue only.
+        ca[f"cost_batt_savings_{year_key}"] = round(batt_delivered * imp_rate, 4)
         self._yearly_cost_seeded = True
         _LOGGER.info(
             "Yearly COST seeded (estimate @ avg import %.4f / export %.4f): "
             "import=%.2f export=%.2f solar_savings=%.2f batt_savings=%.2f CHF",
             imp_rate, exp_rate, grid_import * imp_rate, grid_export * exp_rate,
-            solar_direct * imp_rate, batt_discharge * imp_rate,
+            solar_direct * imp_rate, batt_delivered * imp_rate,
         )
 
     def _apply_yearly_cost_floor(
@@ -2251,6 +2302,12 @@ class EnergyCalculator:
                 entity_map.setdefault(entity_id, series)
         if not entity_map:
             return None
+        # (#1216) the pack's sale, from SEM's own sensor: the only history
+        # that says who exported. A month before it existed has none, and
+        # all its export stays solar's.
+        sale_id = _sem_stat_entity_id(hass, BATTERY_SALE_SENSOR_KEY)
+        if sale_id:
+            entity_map.setdefault(sale_id, GRID_EXPORT_BATTERY_CATEGORY)
         try:
             target_year = int(year_key)
         except (TypeError, ValueError):

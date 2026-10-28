@@ -598,11 +598,8 @@ class TestDiagnostics:
 _ALLOWED = {
     # fed solar's export since #1191 (the coordinator hands it over)
     ("coordinator/demand_outcome.py", "self_consumed_kwh"): 1,
-    # pre-tracking estimates from recorded statistics, which hold no split
-    # of who exported (left open, see docs/BUG_CLASSES.md class 120)
-    ("coordinator/energy_calculator.py", "_estimate_month_cost"): 1,
-    ("coordinator/energy_calculator.py", "_seed_yearly_cost_estimate"): 1,
-    ("coordinator/simulation_job.py", "energy_totals"): 1,
+    # (#1216) the readers of recorded history load the sale beside the
+    # export and go through the helper: no site named for them any more
 }
 _SOLAR = re.compile(r"solar", re.I)
 _EXPORT = re.compile(r"export|\bexp\b", re.I)
