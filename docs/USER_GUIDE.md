@@ -1374,6 +1374,7 @@ During night charging, the home battery should only power home consumption — n
 - When the meter is over its peak limit, it goes up at once
 - The limit ends when night charging ends, when you unplug the car, or when the car has drawn nothing for 15 minutes. If you turn off **Battery may charge the car**, the limit stays while a car is plugged in
 - Requires a Huawei Solar inverter (or compatible) with a `number` entity for discharge limit control
+- Does your battery's discharge limit also stop it charging? Turn on **Discharge limit also caps charging** (off by default). Then, when the sun covers the house and the car has drawn nothing for 15 minutes, SEM lifts the limit so the sun can charge the battery
 
 ---
 
