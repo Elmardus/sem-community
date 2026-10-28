@@ -13,8 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
-- 🐛 Service-controlled heat pumps now report their commanded SG-Ready state, so a renewal does not cancel a boost (#1231).
+- 🐛 **Service-controlled heat pumps now report their commanded SG-Ready state, so a renewal does not cancel a boost** (#1231).
 - 🐛 **Solar made while Home Assistant was down now counts after a restart after dark** (#1187). Before, that day's solar was lost and home fell to 0.
+- 🐛 **One click on a grid meter in Detected hardware now saves both its import and export sensors** (#1224). Before, export could read 0 W.
+- 🐛 **A SlimmeLezer P1 reader now shows grid power** (#1225). Before, it read 0 W. SEM also no longer takes one phase for the whole meter.
+- 🐛 **SEM now finds the power sensor of a second inverter or battery, or a Repair says it found none** (#1226). Before, it read 0 W.
+- 🐛 **Two grid Repairs and other texts are now in your language** (#1227). Before, they were partly English in 14 languages.
+- ✨ **Setup shows what SEM found as live watts, and asks one question when it is unsure of your grid meter** (#1213).
+- 🔧 **SEM no longer guesses a battery or solar sensor when several fit** (#1213). One battery module or one phase is not the whole battery.
+- 🐛 **A device on its own tariff and meter keeps the kWh it used while Home Assistant was down** (#1228). Before, the house price took them.
+- 🐛 **Solar made while Home Assistant was down now counts after a restart after dark** (#1187). Before, that solar was lost and home fell to 0.
 - 🐛 **A Repair now tells you when SEM finds no grid, solar or battery power sensor** (#1188). Before, that power read 0 W without notice.
 - 🐛 **A DSMR smart meter on a Dutch or German Home Assistant now shows grid power** (#1189). Before, grid power read 0 W.
 - 🐛 **The Energy tab Sankey shows a Battery → Grid line when the battery sells** (#1190). Build the dashboard again to see it.

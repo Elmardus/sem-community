@@ -249,6 +249,8 @@ _DOCS_ANCHORS = {
     "split_grid_rejected": "sem-could-not-find-your-grid-power-meters",
     # (#1188) the dashboard counts a source in kWh; SEM found no power sensor
     "power_sensor_not_found": "sem-found-no-power-sensor",
+    # (#1226) …for one inverter or battery, beside others that read
+    "power_sensor_not_found_unit": "sem-found-no-power-sensor",
     # (#935) files from an install that came before this one
     "previous_install_leftovers": "files-from-a-previous-sem-install",
     "sensor_stale": "a-sensor-stopped-updating-stale",
@@ -460,12 +462,20 @@ def _power_not_found_issue_id(source: str) -> str:
 
 
 def raise_power_sensor_not_found(hass: HomeAssistant, source: str, *,
-                                 energy_entity) -> bool:
+                                 energy_entity, beside: bool = False) -> bool:
     """(#1188) The Energy Dashboard counts this source in kWh, and SEM found
     no power sensor for it, so the source reads 0 W. Until now one log line
     said so. Non-persistent: the reader asks again after every start.
 
+    (#1226) ``beside``: other inverters or batteries of the source are read,
+    and only this one is not. Its own text sends the user to the Energy
+    Dashboard only: the Config card pick stands for the whole source, so it
+    would drop the units that read.
+
     True when the Repair was filed, so the caller tries again when not."""
+    tr_key = "power_sensor_not_found"
+    if beside:
+        tr_key = "power_sensor_not_found_unit"
     try:
         ir.async_create_issue(
             hass,
@@ -474,9 +484,8 @@ def raise_power_sensor_not_found(hass: HomeAssistant, source: str, *,
             is_fixable=False,
             is_persistent=False,
             severity=ir.IssueSeverity.ERROR,
-            translation_key="power_sensor_not_found",
-            learn_more_url=next_step_url("docs", "power_sensor_not_found",
-                                         **_versions(hass)),
+            translation_key=tr_key,
+            learn_more_url=next_step_url("docs", tr_key, **_versions(hass)),
             translation_placeholders={
                 "energy_entity": str(energy_entity or "—"),
             },

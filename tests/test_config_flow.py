@@ -10,6 +10,8 @@ load_management) live on the OptionsFlowHandler now and have their own
 coverage further down this file.
 """
 import pytest
+
+from custom_components.solar_energy_management.consts.core import DEFAULT_OBSERVER_MODE
 from custom_components.solar_energy_management.hardware_detection import (  # noqa: E402
     EVChargerDetector,
 )
@@ -97,7 +99,9 @@ class TestSolarEnergyManagementConfigFlow:
 
         assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "user"
-        assert "summary" in result.get("description_placeholders", {})
+        # (#1213) watts, not sensor names
+        assert set(result["description_placeholders"]) == {
+            "solar", "grid", "battery", "why"}
 
     @pytest.mark.asyncio
     async def test_discovery_no_longer_stands_down_on_a_bare_dashboard(self, mock_hass):
@@ -195,17 +199,14 @@ class TestSolarEnergyManagementConfigFlow:
             "custom_components.solar_energy_management.config_flow.discover_inverter_from_registry",
             return_value=None,
         ):
-            result = await flow.async_step_user(user_input={"observer_mode": False})
+            result = await flow.async_step_user(user_input={})
 
         assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "hardware"
-        # observer_mode value is persisted into self._data so the hardware step
-        # can include it in the created entry
-        assert flow._data.get("observer_mode") is False
 
     @pytest.mark.asyncio
-    async def test_user_step_observer_mode_persisted(self, mock_hass):
-        """observer_mode=True survives into self._data."""
+    async def test_a_new_install_starts_watch_only(self, mock_hass):
+        """(#1213) The switch left the first screen; the default stands."""
         energy_config = _make_energy_dashboard_config()
         flow = _create_flow(mock_hass)
 
@@ -226,9 +227,9 @@ class TestSolarEnergyManagementConfigFlow:
             "custom_components.solar_energy_management.config_flow.discover_inverter_from_registry",
             return_value=None,
         ):
-            await flow.async_step_user(user_input={"observer_mode": True})
+            await flow.async_step_user(user_input={})
 
-        assert flow._data.get("observer_mode") is True
+        assert flow._data.get("observer_mode") is DEFAULT_OBSERVER_MODE is True
 
     @pytest.mark.asyncio
     async def test_ev_charger_step_validation(self, mock_hass):
@@ -547,7 +548,7 @@ class TestSolarEnergyManagementConfigFlow:
 
     @pytest.mark.asyncio
     async def test_energy_dashboard_summary_content(self, mock_hass):
-        """User-step summary lists every detected category."""
+        """(#1213) A battery the dashboard has is shown, not "not found"."""
         energy_config = _make_energy_dashboard_config(
             has_solar=True, has_grid=True, has_battery=True, has_ev=True
         )
@@ -560,15 +561,13 @@ class TestSolarEnergyManagementConfigFlow:
         ):
             result = await flow.async_step_user()
 
-        summary = result["description_placeholders"]["summary"]
-        assert "Solar" in summary
-        assert "Grid" in summary
-        assert "Battery" in summary
-        assert "EV" in summary
+        shown = result["description_placeholders"]
+        assert shown["battery"] != "not found"
+        assert shown["solar"] != "not found"
 
     @pytest.mark.asyncio
     async def test_energy_dashboard_summary_without_optional(self, mock_hass):
-        """Summary excludes categories that are not configured."""
+        """(#1213) No battery in the dashboard says so in plain words."""
         energy_config = _make_energy_dashboard_config(
             has_solar=True, has_grid=True, has_battery=False, has_ev=False
         )
@@ -581,8 +580,4 @@ class TestSolarEnergyManagementConfigFlow:
         ):
             result = await flow.async_step_user()
 
-        summary = result["description_placeholders"]["summary"]
-        assert "Solar" in summary
-        assert "Grid" in summary
-        assert "Battery" not in summary
-        assert "EV" not in summary
+        assert result["description_placeholders"]["battery"] == "not found"

@@ -2155,6 +2155,14 @@ def propose_roles_from_roster(dev_entities, domain: str, *,
         # power limit and measured in amps got a button.
         out[role]["judged"] = state_of is not None
         if out[role]["action"] == "set_option" and state_of is not None:
+            # (#1224) Each runner-up has its own button, so it takes the
+            # same gate; a refusal rides on it with the reason.
+            for alt in out[role].get("alternatives", ()):
+                probe = {"entity": alt["entity"], "action": "set_option"}
+                _gate_proposal(probe, role, state_of, strategy_values)
+                if probe["action"] != "set_option":
+                    alt.update({k: v for k, v in probe.items()
+                                if k != "entity"})
             _gate_proposal(out[role], role, state_of, strategy_values)
     # (#915, 06.09 audit) Half a split pair is not a proposal — PER DEVICE.
     # The crawler enforces PAIRED_ROLES on the whole declared vocabulary, but
@@ -2168,6 +2176,8 @@ def propose_roles_from_roster(dev_entities, domain: str, *,
         pairs = getattr(_lex, "PAIRED_ROLES", ())
     except Exception:  # noqa: BLE001
         pairs = ()
+    device_of = {str(getattr(e, "entity_id", "")): getattr(e, "device_id", None)
+                 for e in dev_entities}
     for pair in pairs:
         present = [r for r in pair if r in out]
         if 0 < len(present) < len(pair):
@@ -2175,6 +2185,57 @@ def propose_roles_from_roster(dev_entities, domain: str, *,
                 if out[r].get("action") == "set_option":
                     out[r]["action"] = "pair_incomplete"
                     out[r]["missing_role"] = [x for x in pair if x not in out]
+            continue
+        if not present:
+            continue
+        # (#1224) Both halves are here, but one may not take a button (not
+        # loaded, wrong unit). The other half's button would save half a
+        # pair, so neither half gets one.
+        blocked = [x for x in pair if out[x].get("action") != "set_option"]
+        if blocked:
+            for r in pair:
+                if out[r].get("action") == "set_option":
+                    out[r]["action"] = "pair_blocked"
+                    out[r]["missing_role"] = blocked
+            continue
+        # (#1224) Each half's button saves the whole pair in one write. The
+        # card used to save only the half that was clicked, and the other
+        # read 0 W. ``pair`` maps each choice of a half to the other half's
+        # choices on the SAME device: one call can hold a whole domain (two
+        # Tibber homes), and half of each is no meter. A choice with no
+        # partner there has no button; a first choice without one is a half.
+        usable = {x: [out[x]["entity"]] + [
+                      a["entity"] for a in out[x].get("alternatives", ())
+                      if a.get("action", "set_option") == "set_option"]
+                  for x in pair}
+        for r in pair:
+            writes = {}
+            for eid in usable[r]:
+                dev = device_of.get(eid)
+                partners = {
+                    out[x]["config_key"]: [
+                        o for o in usable[x]
+                        if o != eid and dev and device_of.get(o) == dev]
+                    for x in pair if x != r}
+                if partners and all(partners.values()):
+                    writes[eid] = partners
+            if writes:
+                out[r]["pair"] = writes
+            alts = out[r].get("alternatives") or []
+            if out[r]["entity"] not in writes:
+                # a runner-up that makes a whole pair leads the row instead,
+                # so its button shows; the roster order still decides which
+                i = next((n for n, a in enumerate(alts)
+                          if a["entity"] in writes), None)
+                if i is None:
+                    out[r]["action"] = "pair_incomplete"
+                    out[r]["missing_role"] = [x for x in pair if x != r]
+                    continue
+                lead = alts[i]
+                alts[i] = {"entity": out[r]["entity"],
+                           "matched_key": out[r]["matched_key"]}
+                out[r]["entity"] = lead["entity"]
+                out[r]["matched_key"] = lead["matched_key"]
     return out
 
 
@@ -2884,6 +2945,18 @@ _SOURCE_ROLE_TO_KEY = {
 }
 
 
+def _pair_role_names() -> frozenset:
+    try:
+        from .consts import role_lexicon as _lex
+    except Exception:  # noqa: BLE001
+        return frozenset()
+    return frozenset(r for pair in getattr(_lex, "PAIRED_ROLES", ())
+                     for r in pair)
+
+
+_PAIR_ROLE_NAMES = _pair_role_names()
+
+
 def propose_energy_sources(hass=None, registry=None) -> Dict[str, Any]:
     """(#915) The solar / grid / battery power sensors, proposed from the
     integrations this box already runs.
@@ -2948,12 +3021,38 @@ def propose_energy_sources(hass=None, registry=None) -> Dict[str, Any]:
             # looking confirmed. Only a role still offering the button.
             if proposed[role].get("action") not in ("set_option", None):
                 continue
+            if role in _PAIR_ROLE_NAMES:
+                # (#1224) half of a split pair comes with its partner on
+                # the same device, or not at all: each half's own first
+                # choice may sit on another meter of the same integration
+                eid = proposed[role]["entity"]
+                partners = (proposed[role].get("pair") or {}).get(eid) or {}
+                fills = {key: eid, **{k: v[0] for k, v in partners.items() if v}}
+                if len(fills) < 2 or any(k in out for k in fills):
+                    continue
+                for k, v in fills.items():
+                    out[k] = {"entity": v, "domain": dom,
+                              "why": "declared as one half of a grid pair"}
+                continue
             out[key] = {"entity": proposed[role]["entity"], "domain": dom,
                         "why": f"declared as {proposed[role]['matched_key']}"}
 
     # Rung 2 — shape. An entity that is a power sensor on an integration the
     # census calls energy-shaped is a candidate even when nothing declared
     # it, which is how a brand that publishes no vocabulary still gets help.
+    #
+    # (#1213) A guess that looks confirmed in the install form is worse than
+    # an empty picker. So a role is proposed only when ONE sensor is left at
+    # its best token: several (an inverter with battery modules, a meter box
+    # with a CT per circuit) means SEM cannot tell, and says nothing. A
+    # per-phase sensor (L1-L3, _a/_b/_c) is one slice of the total, never it.
+    tokens = (("solar", "solar_power_sensor"), ("pv", "solar_power_sensor"),
+              ("grid", "grid_import_power_sensor"),
+              ("meter", "grid_import_power_sensor"),
+              ("batter", "battery_power_sensor"))
+    bad_words = ("today", "daily", "total", "forecast", "l1", "l2", "l3")
+    phase_tail = re.compile(r"_[abc](_|$)")
+    found: Dict[str, Dict[str, list]] = {}
     for dom in sorted(by_domain, key=_domain_rank):
         ents = by_domain[dom]
         if not _census_energy_shaped(ents):
@@ -2965,19 +3064,28 @@ def propose_energy_sources(hass=None, registry=None) -> Dict[str, Any]:
             if str(getattr(e, "original_device_class", "")) != "power":
                 continue
             low = eid.lower()
-            for token, key in (("solar", "solar_power_sensor"),
-                               ("pv", "solar_power_sensor"),
-                               ("grid", "grid_import_power_sensor"),
-                               ("meter", "grid_import_power_sensor"),
-                               ("batter", "battery_power_sensor")):
+            if any(bad in low for bad in bad_words) or phase_tail.search(low):
+                continue
+            for token, key in tokens:
                 if key in out or token not in low:
                     continue
-                if any(bad in low for bad in ("today", "daily", "total",
-                                              "forecast", "l1", "l2", "l3")):
-                    continue
-                out[key] = {"entity": eid, "domain": dom,
-                            "why": "a power sensor on an energy integration"}
+                found.setdefault(key, {}).setdefault(token, []).append(
+                    (dom, eid))
                 break
+    for key in dict.fromkeys(k for _, k in tokens):
+        if key in out:
+            continue
+        # the best token that matched anything decides; two matches there
+        # are two candidates, and no proposal
+        best = next((t for t, k in tokens
+                     if k == key and found.get(key, {}).get(t)), None)
+        if best is None:
+            continue
+        hits = found[key][best]
+        if len(hits) == 1:
+            dom, eid = hits[0]
+            out[key] = {"entity": eid, "domain": dom,
+                        "why": "a power sensor on an energy integration"}
     return out
 
 

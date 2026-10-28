@@ -21,6 +21,9 @@ For developer and architecture details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 1. [Prerequisites](#1-prerequisites)
 2. [Installation via HACS](#2-installation-via-hacs)
 3. [Config Flow](#3-config-flow)
+   - [Step 1: SEM found your system](#step-1-sem-found-your-system)
+   - [When SEM asks one more question](#when-sem-asks-one-more-question)
+   - [Watch-only mode](#watch-only-mode)
 4. [Verification](#4-verification)
 5. [Options Flow](#5-options-flow)
 6. [SOC Zone Strategy](#6-soc-zone-strategy)
@@ -198,20 +201,66 @@ The config flow has three steps. You can change any setting later via the
 
 ![SEM integration detail page](images/sem_integration_detail.png)
 
-### Step 1: Energy Dashboard Detection
+### Step 1: SEM found your system
 
-![Step 1 — Energy Dashboard detection](screenshots/setup-flow/01-step1-energy-dashboard.png)
+![Step 1 — SEM found your system](screenshots/setup-flow/01-step1-energy-dashboard.png)
 
-SEM scans your Energy Dashboard and auto-detects all configured sensors:
-solar production, grid import/export, battery charge/discharge, and EV charger.
+SEM reads your Energy Dashboard and shows what it finds, as live watts:
+solar, grid and battery (with its charge).
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| **Observer mode** | **On** | A new install observes first: SEM reads your system, builds the dashboard, and publishes the decisions it *would* make — without sending a single command to your hardware. Look at those decisions, and when they match what you'd want, turn observer mode off (`switch.sem_observer_mode`) to let SEM act. Leave it on permanently for test rigs, secondary HA instances that mirror a production one, or monitoring-only setups. |
+**What to do:**
 
-> **Tip:** If a sensor you expect is missing from the detection summary,
-> check your Energy Dashboard (**Settings > Dashboards > Energy**) and ensure
-> that sensor type is assigned there first.
+1. Look at the three numbers. Do they match your inverter or energy app?
+2. If yes, press **Submit**. That is all.
+3. If one is wrong, open **Choose sensors myself**, pick the right sensor
+   for that line, then press **Submit**. Only a sensor you change is saved.
+   The others keep following your Energy Dashboard.
+
+You do not need to know a sensor name to pass this step. Nothing here
+changes your hardware.
+
+#### When SEM asks one more question
+
+Most homes see only the screen above. In two cases SEM shows one more
+screen before **Hardware**. You can always get through it: choose **I don't
+know**, or leave the picker empty. SEM then starts anyway and learns the grid
+direction from your energy counters over the next days.
+
+**"SEM guessed your grid meter."** Your Energy Dashboard has no grid power
+sensor, so SEM picked one. Look at your house right now and answer:
+
+![One question — is your house buying or sending?](screenshots/setup-flow/01a-step1-one-question.png)
+
+| Answer | Choose it when |
+|---|---|
+| **Buying from the grid** | your house takes power from the grid |
+| **Sending to the grid** | your house gives power to the grid |
+| **This is my grid meter** | shown instead of the two above when the meter reads almost 0 W, so it cannot tell |
+| **Use the other meter** | shown only when SEM found a second meter. The screen names it and shows its watts |
+| **I don't know** | you cannot tell. Nothing is changed. **This is preselected**, so pressing **Submit** without choosing is safe |
+
+Your answer, not the brand of your meter, decides the direction. If you say
+*Buying* and the meter shows a plus number, SEM turns the sign around.
+
+**"SEM found no grid power sensor."** A picker is shown, empty. Choose your
+grid power sensor (the one in W or kW, not a kWh counter), or press
+**Submit** to skip it. You can set it later: see
+[Sensor source overrides](#sensor-source-overrides).
+
+![Pick your grid meter](screenshots/setup-flow/01b-step1-pick-grid.png)
+
+#### Watch-only mode
+
+A new install starts in **observer mode**: SEM reads your system, builds the
+dashboard and shows the decisions it *would* make, without sending a single
+command to your hardware. It is no longer a switch on this screen. Turn it
+off on the **Configuration** tab (`switch.sem_observer_mode`) when those
+decisions match what you want.
+
+> **Fixing it later:** open the SEM dashboard, tab **Configuration**, section
+> **Sensor sources**. It shows the same live values, with **Grid direction is
+> wrong** and **Battery direction is wrong** buttons that turn a direction
+> around in one tap. See [Sensor source overrides](#sensor-source-overrides).
 
 ### Step 2: EV Charger (optional)
 
@@ -342,6 +391,14 @@ load — check **Settings > System > Logs** (filter for
 `solar_energy_management`).
 
 ### Sensor source overrides
+
+![Configuration tab, Sensor sources: what SEM reads right now](screenshots/setup-flow/04-sensor-sources-check.png)
+
+The top of **Sensor sources** shows what SEM reads right now, in watts: solar,
+grid, battery and what your home uses. Compare it with your meter or energy
+app. If the grid or battery direction is wrong, tap **Grid direction is
+wrong** or **Battery direction is wrong**. One tap turns it around. If the
+sensor itself is wrong, pick another one under **All settings** (below).
 
 SEM derives its grid, solar and battery power sources from HA's Energy
 Dashboard — that stays the primary path, and fixing a wrong mapping there

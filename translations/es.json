@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configuración de Solar Energy Management",
-        "description": "SEM ha detectado los siguientes sensores en el panel Energía de Home Assistant:\n\n{summary}\n\nHaga clic en **Enviar** para continuar. Solo un paso más. Los cargadores VE, la bomba de calor, la tarifa y todos los demás ajustes se configuran después en la nueva pestaña **Configuración** del panel SEM — no es necesario configurarlos ahora.",
-        "data": {
-          "observer_mode": "Modo de prueba (solo lectura — no controla el hardware)"
-        },
-        "data_description": {
-          "observer_mode": "Déjelo DESACTIVADO para una instalación normal. Actívelo solo en un Home Assistant de prueba o preproducción que replique una instancia en producción, para que SEM nunca envíe órdenes al KEBA, al inversor ni a ningún interruptor."
+        "title": "SEM encontró tu instalación",
+        "description": "Estos son los valores ahora mismo:\n\n- Solar: {solar}\n- Red: {grid}\n- Batería: {battery}\n\nVienen de los mismos sensores que tu panel de Energía. Pulsa **Enviar**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Elegir los sensores yo mismo",
+            "description": "Solo si un valor de arriba parece incorrecto.",
+            "data": {
+              "solar_production_sensor": "Potencia solar",
+              "grid_power_sensor": "Potencia de red",
+              "battery_power_sensor": "Potencia de batería",
+              "battery_soc_sensor": "Carga de batería %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -37,7 +43,7 @@
       },
       "hardware": {
         "title": "Hardware",
-        "description": "One final value depends on your installation:\n\n• Home Battery Capacity — the usable kWh of your inverter battery.\n\nSEM also auto-detected your inverter's discharge control entity: {discharge_entity}\n\nLeave the dashboard option ON to have SEM build its Lovelace dashboard for you. **Note: this triggers a Home Assistant restart about 5 seconds after install completes.**\n\nEverything else uses safe defaults that you can tune later from the integration's options.",
+        "description": "¡Último paso! SEM ha detectado automáticamente la entidad de control de descarga de su inversor: {discharge_entity}\n\nDeje la opción del panel ACTIVADA para que SEM cree su panel de Lovelace por usted. **Nota: esto reinicia Home Assistant unos 5 segundos después de terminar la instalación.**\n\nTodo lo demás — incluido su límite de pico de red — usa valores seguros por defecto que puede ajustar justo después de la configuración: el límite de pico con el control deslizante de la pestaña **Control**, todo lo demás en la pestaña **Configuración** del panel de SEM — incluidos cargadores de VE, bomba de calor, tarifa y zonas de batería.",
         "data": {
           "battery_capacity_kwh": "Capacidad de la batería doméstica (kWh)",
           "generate_dashboard_on_install": "Generar ahora el panel SEM (reinicia HA)",
@@ -101,6 +107,50 @@
           "battery_soc_sensor": "Estado de carga en porcentaje — lo leen las cuatro zonas de batería de SEM.",
           "grid_import_power_entity": "Solo si su medidor no tiene un único sensor con signo: el lado de importación, siempre positivo. Rellene ambos o ninguno.",
           "grid_export_power_entity": "El lado de exportación, siempre positivo. SEM calcula exportación menos importación, así que no hay que adivinar ninguna dirección."
+        }
+      },
+      "check_grid": {
+        "title": "Una pregunta",
+        "description": "{why}\n\nAhora mismo tu contador de red muestra **{grid}**. Solar: {solar}. Batería: {battery}.",
+        "data": {
+          "grid_answer": "¿Qué está haciendo tu casa ahora?"
+        },
+        "data_description": {
+          "grid_answer": "Mira tu contador o tu app de energía. \"No lo sé\" está bien: SEM lo aprende en los próximos días."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Elegir los sensores yo mismo",
+            "description": "Solo si un valor de arriba parece incorrecto.",
+            "data": {
+              "solar_production_sensor": "Potencia solar",
+              "grid_power_sensor": "Potencia de red",
+              "battery_power_sensor": "Potencia de batería",
+              "battery_soc_sensor": "Carga de batería %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Elige tu contador de red",
+        "description": "SEM no encontró un sensor de potencia de red. Sin él, SEM no sabe lo que compras o viertes.\n\nElígelo abajo o pulsa **Enviar** para saltar. Puedes ajustarlo más tarde en la pestaña Configuración.\n\nSolar: {solar}. Batería: {battery}.",
+        "data": {
+          "grid_power_sensor": "Potencia de red"
+        },
+        "data_description": {
+          "grid_power_sensor": "Potencia actual en vatios, no un total diario."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Elegir los sensores yo mismo",
+            "description": "Solo si un valor de arriba parece incorrecto.",
+            "data": {
+              "solar_production_sensor": "Potencia solar",
+              "grid_power_sensor": "Potencia de red",
+              "battery_power_sensor": "Potencia de batería",
+              "battery_soc_sensor": "Carga de batería %"
+            }
+          }
         }
       }
     },
@@ -197,7 +247,7 @@
           "battery_discharge_protection_enabled": "Si está ACTIVADO, SEM limita el límite de descarga del inversor durante la carga nocturna del VE para que la batería doméstica alimente solo la casa (no el VE).",
           "battery_max_discharge_power": "Límite superior estricto de descarga de la batería que aplica la función de protección.",
           "electricity_import_rate": "Tarifa diurna / plana (CHF/kWh, IVA incluido). Se utiliza para el seguimiento de costes.",
-          "electricity_off_peak_rate": "Night tariff (CHF/kWh). Set equal to import rate if you don't have a dual tariff.",
+          "electricity_off_peak_rate": "Tarifa valle (por kWh). Póngala igual a la tarifa de importación si no tiene una tarifa doble.",
           "electricity_export_rate": "Tarifa de inyección que paga la comercializadora (CHF/kWh).",
           "demand_charge_rate": "Término de potencia mensual por kW de pico (CHF/kW/mes). Póngalo a 0 si su contrato no tiene término de potencia.",
           "observer_mode": "Si está ACTIVADO, SEM monitoriza y calcula todo pero nunca envía una llamada de servicio al hardware. Úselo en un HA de prueba o preproducción que replique una instalación en producción.",
@@ -259,8 +309,8 @@
           "dynamic_tariff_entity": "Entidad de precio dinámico (se detecta automáticamente si se deja vacía)",
           "dynamic_forecast_entity": "Entidad de previsión de precios (opcional, se detecta automáticamente si se deja vacío)",
           "dynamic_feedin_entity": "Entidad de precio de inyección (opcional, para tarifa de exportación dinámica)",
-          "grid_import_power_entity": "Grid import power sensor (optional, auto-detected from Energy Dashboard)",
-          "grid_export_power_entity": "Grid export power sensor (optional, auto-detected from Energy Dashboard)",
+          "grid_import_power_entity": "Sensor de potencia de importación de red (opcional, detectado automáticamente)",
+          "grid_export_power_entity": "Sensor de potencia de exportación a red (opcional, detectado automáticamente)",
           "tariff_classification_mode": "Modo de clasificación de precios",
           "solar_forecast_source": "Fuente de la previsión solar",
           "grid_co2_entity": "Sensor de intensidad de CO₂ de la red (opcional)",
@@ -1836,7 +1886,7 @@
         "step": {
           "confirm": {
             "title": "Informar de esto a SEM",
-            "description": "Las últimas 3 o más órdenes de corriente enviadas por SEM a **{name}** han sido rechazadas: `{error}`. El cargador NO está bajo el control de SEM en este momento — seguirá haciendo lo último que se le indicó (incluida la carga a plena potencia en modo apagado). Causas más habituales: la entidad de control del cargador fue renombrada por una actualización de la integración origen, o `ev_charger_service` apunta a un servicio con otro esquema de parámetros. Compruebe la entidad de control / el servicio del cargador en la configuración de SEM. Esta incidencia se resuelve automáticamente con la siguiente orden correcta.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "Las últimas 3 o más órdenes de corriente enviadas por SEM a **{name}** han sido rechazadas: `{error}`. El cargador NO está bajo el control de SEM en este momento — seguirá haciendo lo último que se le indicó (incluida la carga a plena potencia en modo apagado). Causas más habituales: la entidad de control del cargador fue renombrada por una actualización de la integración origen, o `ev_charger_service` apunta a un servicio con otro esquema de parámetros. Compruebe la entidad de control / el servicio del cargador en la configuración de SEM. Esta incidencia se resuelve automáticamente con la siguiente orden correcta.\n\nSEM cree que este fallo es suyo. Si puede, abra un informe de error con el botón del aviso — el formulario llega ya rellenado. Si lo prefiere, copie el contexto de abajo en un correo o en una publicación del foro. Este diálogo no envía nada a ningún sitio.\n\n```\n{context}\n```\n\nConfirme para cerrar el aviso."
           }
         }
       }
@@ -1847,7 +1897,7 @@
         "step": {
           "confirm": {
             "title": "Informar de esto a SEM",
-            "description": "SEM ha ordenado a **{name}** que se detenga, pero ningún mecanismo configurado puede abrir realmente el contactor: el coche sigue consumiendo {power} W. El único control que SEM tiene para este cargador es `{entity}`, y su mínimo es superior a 0 A, por lo que escribir 0 A no hace nada (SEM nunca escribe un valor que la entidad rechazaría). Si tienes una batería doméstica, esta potencia sale de ella, a cualquier hora del día o de la noche. Solución: configura para este cargador, en las opciones de SEM, una entidad de arranque/parada (`ev_start_stop_entity`), una entidad de modo de carga o un servicio de parada. Este aviso desaparece en cuanto el cargador deja de consumir.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "SEM ha ordenado a **{name}** que se detenga, pero ningún mecanismo configurado puede abrir realmente el contactor: el coche sigue consumiendo {power} W. El único control que SEM tiene para este cargador es `{entity}`, y su mínimo es superior a 0 A, por lo que escribir 0 A no hace nada (SEM nunca escribe un valor que la entidad rechazaría). Si tienes una batería doméstica, esta potencia sale de ella, a cualquier hora del día o de la noche. Solución: configura para este cargador, en las opciones de SEM, una entidad de arranque/parada (`ev_start_stop_entity`), una entidad de modo de carga o un servicio de parada. Este aviso desaparece en cuanto el cargador deja de consumir.\n\nSEM cree que este fallo es suyo. Si puede, abra un informe de error con el botón del aviso — el formulario llega ya rellenado. Si lo prefiere, copie el contexto de abajo en un correo o en una publicación del foro. Este diálogo no envía nada a ningún sitio.\n\n```\n{context}\n```\n\nConfirme para cerrar el aviso."
           }
         }
       }
@@ -1886,7 +1936,7 @@
         "step": {
           "confirm": {
             "title": "Informar de esto a SEM",
-            "description": "**{name}** tiene un objetivo de carga en porcentaje, pero su vehículo no está informando su estado de carga en este momento, por lo que SEM no puede detenerse *exactamente* en **{target}%**.\n\nAun así no carga a ciegas: desde la última lectura real de esta sesión contabiliza la energía realmente entregada y se detiene en cuanto ese total medido alcanza su objetivo — el exceso es solo lo que el coche haya tomado desde esa lectura. Si en esta sesión no ha llegado ninguna lectura real (o SEM se reinició durante la carga), no hay referencia desde la que contar y la carga continúa hasta que el propio coche reduce potencia, casi lleno.\n\nPara un límite que caiga en el número exacto, configure un **sensor real de SOC del vehículo** para este cargador (Configuración → VE → Entidad de SOC del vehículo). El % de batería del panel es el SOC *estimado* de SEM, que ignora deliberadamente para el límite estricto (puede desviarse). Esta reparación desaparece automáticamente en cuanto vuelva a haber una lectura real de SOC.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "description": "**{name}** tiene un objetivo de carga en porcentaje, pero su vehículo no está informando su estado de carga en este momento, por lo que SEM no puede detenerse *exactamente* en **{target}%**.\n\nAun así no carga a ciegas: desde la última lectura real de esta sesión contabiliza la energía realmente entregada y se detiene en cuanto ese total medido alcanza su objetivo — el exceso es solo lo que el coche haya tomado desde esa lectura. Si en esta sesión no ha llegado ninguna lectura real (o SEM se reinició durante la carga), no hay referencia desde la que contar y la carga continúa hasta que el propio coche reduce potencia, casi lleno.\n\nPara un límite que caiga en el número exacto, configure un **sensor real de SOC del vehículo** para este cargador (Configuración → VE → Entidad de SOC del vehículo). El % de batería del panel es el SOC *estimado* de SEM, que ignora deliberadamente para el límite estricto (puede desviarse). Esta reparación desaparece automáticamente en cuanto vuelva a haber una lectura real de SOC.\n\nSEM cree que este fallo es suyo. Si puede, abra un informe de error con el botón del aviso — el formulario llega ya rellenado. Si lo prefiere, copie el contexto de abajo en un correo o en una publicación del foro. Este diálogo no envía nada a ningún sitio.\n\n```\n{context}\n```\n\nConfirme para cerrar el aviso."
           }
         }
       }
@@ -1953,7 +2003,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM está comprobando dos medidores de red adivinados",
-      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Configuración**, and pick **Todos los ajustes** at the top. Then set **Potencia de red** in section **Fuentes de sensores**. If your meter has one sensor for import and one for export, set **Sensor de importación de red** and **Sensor de exportación a red** in section **Tarifa y precios** instead."
+      "description": "SEM no tiene sensor de potencia de red, así que adivinó por el nombre: **{import_entity}** para la importación de red y **{export_entity}** para la exportación a red. SEM no los usa hasta que coincidan con sus contadores de energía de red, así que por ahora la potencia de red marca 0. Para elegir su medidor: abra el panel de SEM, pestaña ⚙ **Configuración**, y elija **Todos los ajustes** arriba. Luego ajuste **Potencia de red** en la sección **Fuentes de sensores**. Si su medidor tiene un sensor para la importación y otro para la exportación, ajuste en su lugar **Sensor de importación de red** y **Sensor de exportación a red** en la sección **Tarifa y precios**."
     },
     "battery_control_write_not_taken": {
       "title": "Una escritura de control de batería no se aplica: {entity_id}",
@@ -1973,11 +2023,15 @@
     },
     "split_grid_rejected": {
       "title": "SEM no pudo encontrar sus medidores de potencia de red",
-      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Configuración**, and pick **Todos los ajustes** at the top. Then set **Potencia de red** in section **Fuentes de sensores**. If your meter has one sensor for import and one for export, set **Sensor de importación de red** and **Sensor de exportación a red** in section **Tarifa y precios** instead."
+      "description": "SEM no tiene sensor de potencia de red, y lo que adivinó por el nombre no es su medidor de red: **{import_entity}** para la importación, **{export_entity}** para la exportación. No coinciden con sus contadores de energía de red, o falta uno de los dos. SEM prefiere no mostrar potencia de red antes que mostrar una incorrecta. Para elegir su medidor: abra el panel de SEM, pestaña ⚙ **Configuración**, y elija **Todos los ajustes** arriba. Luego ajuste **Potencia de red** en la sección **Fuentes de sensores**. Si su medidor tiene un sensor para la importación y otro para la exportación, ajuste en su lugar **Sensor de importación de red** y **Sensor de exportación a red** en la sección **Tarifa y precios**."
     },
     "power_sensor_not_found": {
       "title": "Sin sensor de potencia para {energy_entity}",
       "description": "El panel de Energía cuenta **{energy_entity}** en kWh, pero SEM no encontró ningún sensor de potencia (W) para él. SEM lee esta potencia como 0 W, por lo que los flujos de energía y el excedente son incorrectos. Para corregirlo, añada el sensor de potencia a esta entrada del panel de Energía. O abra el panel de SEM, pestaña ⚙ **Configuración**, y elija **Todos los ajustes** arriba. Luego configure el sensor en la sección **Fuentes de sensores**. Si no existe ningún sensor de potencia, puede ignorar este aviso."
+    },
+    "power_sensor_not_found_unit": {
+      "title": "Sin sensor de potencia para {energy_entity}",
+      "description": "El panel de Energía cuenta **{energy_entity}** en kWh, pero SEM no encontró ningún sensor de potencia (W) para él. SEM solo suma las demás entradas solares o de batería, por lo que los flujos de energía y el excedente son incorrectos. Para corregirlo, añada el sensor de potencia a esta entrada del panel de Energía. Si no existe ningún sensor de potencia, puede ignorar este aviso."
     },
     "charger_device_gone": {
       "title": "Cargador {name}: falta el dispositivo",
@@ -2063,6 +2117,21 @@
         "per_kwh": "Por kWh",
         "tiered": "Tramos por kWh al año",
         "fixed_monthly": "Fijo al mes"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Compro de la red",
+        "sending": "Vierto a la red",
+        "keep": "Este es mi contador de red",
+        "other": "Usar el otro contador",
+        "unknown": "No lo sé"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "none": "no encontrado",
+        "why_guessed": "Tu panel de Energía no tiene sensor de potencia de red, así que SEM adivinó uno."
       }
     }
   }

@@ -30,7 +30,9 @@ from .units import (
     temperature_state_to_celsius,
 )
 
-from ..ha_energy_reader import battery_units, unit_energy_counters
+from ..ha_energy_reader import (
+    battery_units, unit_energy_counters, unsourced_counters,
+)
 from ..utils.log_gate import log_on_change
 from ..utils.own_entity import is_sem_entity
 from ..consts.core import (
@@ -190,7 +192,28 @@ EXPORT_PATTERNS: tuple[str, ...] = (
     "export_power",           # eg4_web_monitor (declared); also easee, a CHARGER
     "grid_exported_power",    # senec (declared)
 )
-GRID_TRIGGER_HINTS: tuple[str, ...] = tuple(set(IMPORT_PATTERNS + EXPORT_PATTERNS))
+# (#1225) ESPHome's dsmr component — the SlimmeLezer and the P1 readers built
+# on it — names the pair "Power Consumed" / "Power Produced". The names come
+# from the device's firmware, so there is no integration key to declare. The
+# same words name other things: Sinapsi Alfa's "Power Produced" is its SOLAR
+# output, Silla Prism has "Power produced by PV", P1 Monitor has "Power
+# consumed phase L1", and an ESPHome CT monitor may say "Solar Power
+# Produced". So they are asked on that one platform, and only as the WHOLE
+# name the firmware gave the sensor: the registry's ``original_name``, or the
+# object id at the end of ESPHome's unique_id (``<mac>-sensor-power_consumed``).
+# Both stay the same when the user renames the entity_id.
+# platform → (import name, export name), as object ids.
+PLATFORM_SPLIT_GRID_NAMES: dict[str, tuple[str, str]] = {
+    "esphome": ("power_consumed", "power_produced"),
+}
+GRID_TRIGGER_HINTS: tuple[str, ...] = tuple(set(
+    IMPORT_PATTERNS + EXPORT_PATTERNS
+    + tuple(w for pair in PLATFORM_SPLIT_GRID_NAMES.values() for w in pair)))
+
+# (#1225) A phase row is part of the meter, never all of it. A whole-meter
+# row on the same tier wins over it, and a phase row that is still picked
+# (a home with phase rows only) is checked against the counters like a guess.
+_PHASE_ROW = re.compile(r"(?:^|_)(?:phase_?(?:l?[1-3]|[a-c])|l[1-3])(?:_|$)")
 
 # #461 brand-lookup tier: deterministic grid-sign convention per
 # integration. The grid-power sensor's own ``platform`` (HA integration
@@ -709,10 +732,13 @@ class SensorReader:
         #: SEM reads from no power sensor: source → its kWh counter. None when
         #: the dashboard path did not run this cycle — no answer, not "found".
         self._unsourced_power: Optional[dict[str, str]] = None
+        #: (#1226) This cycle's sources of those whose other units read.
+        self._unsourced_beside: set[str] = set()
         #: (#1188) When each source was first seen with no sensor, once HA runs.
         self._unsourced_since: dict[str, float] = {}
-        #: (#1188) The counter each raised Repair names.
-        self._unsourced_raised: dict[str, str] = {}
+        #: (#1188) The counter each raised Repair names (#1226: and whether
+        #: other units of the source read — its text says so).
+        self._unsourced_raised: dict[str, tuple[str, bool]] = {}
         #: (#1188, class 84) The sources this reader has found once. Each
         #: source's first "found" clears what an options reload left: the
         #: Repair outlives the reader.
@@ -1076,10 +1102,10 @@ class SensorReader:
             # auto/counter/solar/restored lock.  Runs only when the lock is
             # set AND we are on the combined/split auto path (manual entity
             # overrides use _audit_manual_grid_sign in _read_from_energy_dashboard).
-            _manual_ent = (
-                self._raw_config.get("grid_import_power_entity")
-                or self._raw_config.get("grid_export_power_entity")
-            )
+            # (#1224) The pair read THIS cycle, not the saved keys: half a
+            # pair beside the dashboard's own answer is set aside, and the
+            # dashboard's sign is the one to check.
+            _manual_ent = str(self._grid_read_source or "").startswith("manual:")
             _ed_for_audit = self._energy_dashboard_config
             if (self._grid_sign_detected
                     and not _manual_ent
@@ -2579,6 +2605,8 @@ class SensorReader:
         # (#1188) Each source the dashboard counts but SEM reads from nothing.
         unsourced: dict[str, str] = {}
         self._unsourced_power = unsourced
+        # (#1226) …of those, the ones whose other units read
+        self._unsourced_beside = beside = set()
 
         # Solar power — sum all inverters if multiple configured.
         # v1.7.0 arch/multi-inverter-battery-primary: also populate
@@ -2618,6 +2646,17 @@ class SensorReader:
             readings.solar_power = self._read_solar_power(ed.solar_power)
         elif ed.solar_energy:
             unsourced["solar"] = ed.solar_energy
+        # (#1226) An inverter the derive found no power sensor for reads 0 W
+        # in the sum of the others. The Config card pick stands for all of
+        # solar only when no per-inverter sum is read, and only when it is
+        # not one inverter's own sensor: setup saves the dashboard's first.
+        missing = unsourced_counters(ed, "solar")
+        pick = self.config.solar_power_sensor
+        if missing and (per_inverter_total is not None or not pick
+                        or pick in ed.solar_power_list):
+            unsourced["solar"] = ", ".join(missing)
+            if ed.solar_power_list:
+                beside.add("solar")
 
         # v1.7.0 / #312: per-PV-string power. Gated on len ≥ 2 — single-
         # string setups get nothing here and downstream readers fall
@@ -2656,26 +2695,36 @@ class SensorReader:
                     "pick to use the dashboard again. (#1103)",
                     grid_override, replaced)
         guessing = False                # (#933) set by the discovery branch only
-        if bool(manual_import) != bool(manual_export) and combined:
-            # (07.09 re-audit) HALF a manual pair, and a combined sensor
-            # exists: prefer the combined one. Reading the import half alone
-            # says "export − import" with export pinned at 0.0 — a house
-            # that exports then reads as one that never does, permanently,
-            # with only a one-time log line. Same resolution as the legacy
-            # path. A house with NO combined sensor keeps today's behaviour:
-            # for a zero-export install the import half IS the whole story,
-            # which is what tests/test_split_grid_integration.py pins.
+        # (#1224) The dashboard's own two-sensor pair is a whole answer too.
+        ed_pair = (f"{ed.grid_power_from} / {ed.grid_power_to}"
+                   if ed.grid_power_from and ed.grid_power_to else None)
+        if bool(manual_import) != bool(manual_export) and (combined or ed_pair):
+            # (07.09 re-audit) HALF a manual pair, and the dashboard (or the
+            # Grid power pick) measures both directions: read that instead.
+            # Reading the import half alone says "export − import" with
+            # export pinned at 0.0 — a house that exports then reads as one
+            # that never does, permanently, with only a one-time log line.
+            # Same resolution as the legacy path. The half is set aside and
+            # the steps below read as if it were not saved, so the
+            # dashboard's pair and its meter sum keep their rank (#1224: one
+            # click on the Config card saved half a pair, and it outranked
+            # the dashboard's own pair). A house with NO whole answer keeps
+            # today's behaviour: for a zero-export install the import half
+            # IS the whole story, which is what
+            # tests/test_split_grid_integration.py pins.
             if not getattr(self, "_half_pair_ed_warned", False):
                 self._half_pair_ed_warned = True
+                used = (grid_override or ed_pair
+                        or (" + ".join(ed.grid_power_list)
+                            if len(ed.grid_power_list) > 1 else combined))
                 _LOGGER.warning(
                     "Only one of grid_import_power_entity / "
                     "grid_export_power_entity is set (%s / %s) — using the "
-                    "combined grid sensor %s instead, so both directions are "
+                    "grid sensor %s instead, so both directions are "
                     "measured rather than one assumed 0",
-                    manual_import, manual_export, combined)
-            readings.grid_power = self._read_sensor(combined, "grid")
-            self._grid_source_key = f"combined:{combined}"
-        elif manual_import or manual_export:
+                    manual_import, manual_export, used)
+            manual_import = manual_export = None
+        if manual_import or manual_export:
             # Manual override — user explicitly set grid power sensors.
             # NO auto-detection runs on this path, so misconfiguration
             # (swapped roles, one side missing, energy counter instead of
@@ -2796,6 +2845,12 @@ class SensorReader:
                         "import=%s (held), export=%s",
                         disc["import"], exp,
                     )
+                    # (#1225) The held import's device evidence says nothing
+                    # about the new half. An export from another device, or a
+                    # phase row, is checked against the counters like a guess.
+                    if disc["confidence"] == "same-device" and conf != "same-device":
+                        disc["confidence"] = "any-device"
+                        self._report_split_grid_confidence(disc)
             if not disc["import"] and not disc["export"]:
                 # (#1188) Nothing at all. Half a pair or a name guess has its
                 # own Repair (split_grid_rejected / split_grid_guessed).
@@ -3001,6 +3056,16 @@ class SensorReader:
         elif ed.battery_charge_energy or ed.battery_discharge_energy:
             unsourced["battery"] = (ed.battery_charge_energy
                                     or ed.battery_discharge_energy)
+        # (#1226) …and a battery the derive found nothing for, beside others
+        missing = unsourced_counters(ed, "battery")
+        pick = self.config.battery_power_sensor
+        own = battery_units(ed) + [
+            e for pair in (ed.battery_power_pairs or []) for e in pair]
+        if missing and (per_battery_total is not None or not pick
+                        or pick in own):
+            unsourced["battery"] = ", ".join(missing)
+            if own:
+                beside.add("battery")
         self._move_lock_learned_on_flip(ed, read_alone,
                                         per_battery=per_battery_total is not None)
         self._drop_locks_on_other_counters(
@@ -4119,6 +4184,8 @@ class SensorReader:
         - E3DC: *_consumption_from_grid / *_export_to_grid
         - GivEnergy: *_import_power / *_export_power
         - Senec: *_grid_imported_power / *_grid_exported_power
+        - SlimmeLezer (ESPHome dsmr): *_power_consumed / *_power_produced
+          (``esphome`` only, end of the id, #1225)
         - Generic: *_grid_import / *_grid_export
 
         Prefers sensors on the same device as the grid energy sensors to avoid
@@ -4161,6 +4228,9 @@ class SensorReader:
             # Two-pass: same-device matches are preferred over any-device matches
             same_device = {"import": None, "export": None}
             any_device = {"import": None, "export": None}
+            # (#1225) phase rows, asked only where no whole-meter row matched
+            same_phase = {"import": None, "export": None}
+            any_phase = {"import": None, "export": None}
 
             # Deterministic candidate order (#485 H6): async_all's
             # iteration order isn't contractual, and any-device picks
@@ -4195,6 +4265,9 @@ class SensorReader:
                 is_import = any(p in eid for p in import_patterns)
                 is_export = any(p in eid for p in export_patterns)
                 if not is_import and not is_export:
+                    is_import, is_export = self._platform_split_grid_name(
+                        state.entity_id, registry)
+                if not is_import and not is_export:
                     continue
 
                 # Check if sensor is on the same device as grid energy
@@ -4203,24 +4276,28 @@ class SensorReader:
                     sensor_device_id = self._get_device_for_entity(state.entity_id)
                     on_same_device = sensor_device_id == grid_device_id
 
-                if is_import:
+                phase = bool(_PHASE_ROW.search(eid.split(".", 1)[-1]))
+                same = same_phase if phase else same_device
+                anyd = any_phase if phase else any_device
+                for side, hit in (("import", is_import), ("export", is_export)):
+                    if not hit:
+                        continue
                     if on_same_device:
-                        same_device["import"] = state.entity_id
-                    elif not any_device["import"]:
-                        any_device["import"] = state.entity_id
-                if is_export:
-                    if on_same_device:
-                        same_device["export"] = state.entity_id
-                    elif not any_device["export"]:
-                        any_device["export"] = state.entity_id
+                        same[side] = state.entity_id
+                    elif not anyd[side]:
+                        anyd[side] = state.entity_id
 
-            # Prefer same-device matches, fall back to any match
-            import_power = same_device["import"] or any_device["import"]
-            export_power = same_device["export"] or any_device["export"]
+            # Prefer same-device matches, fall back to any match. (#1225) A
+            # phase row is asked only where no whole-meter row matched.
+            import_power = (same_device["import"] or same_phase["import"]
+                            or any_device["import"] or any_phase["import"])
+            export_power = (same_device["export"] or same_phase["export"]
+                            or any_device["export"] or any_phase["export"])
 
             # "same-device" only if every resolved side came from the grid device.
             # A mix (one same-device, one any-device) stays "any-device" so
-            # re-discovery can upgrade the any-device side later.
+            # re-discovery can upgrade the any-device side later. A phase row
+            # is not the whole meter, so it never counts as same-device.
             import_is_same = (import_power is None or import_power == same_device["import"])
             export_is_same = (export_power is None or export_power == same_device["export"])
             if import_power or export_power:
@@ -4284,6 +4361,35 @@ class SensorReader:
         # have changed (e.g. a new sensor appeared), so a fresh failure is worth surfacing.
         self._split_grid_discovery_warned = False
         self._last_split_grid_log = None  # next discovery logs at INFO again
+
+    @staticmethod
+    def _platform_split_grid_name(entity_id: str, registry) -> tuple[bool, bool]:
+        """(#1225) ``(is_import, is_export)`` by the whole name one platform
+        gives its meter (``PLATFORM_SPLIT_GRID_NAMES``): the registry's
+        ``original_name`` or the last part of its unique_id."""
+        if registry is None:
+            return False, False
+        try:
+            entry = registry.async_get(entity_id)
+        except Exception:  # noqa: BLE001 — no registry, no platform evidence
+            return False, False
+        names = PLATFORM_SPLIT_GRID_NAMES.get(
+            str(getattr(entry, "platform", "") or "")) if entry else None
+        if not names:
+            return False, False
+        given = set()
+        original = getattr(entry, "original_name", None)
+        if isinstance(original, str):
+            given.add(re.sub(r"[^a-z0-9]+", "_", original.lower()).strip("_"))
+        # ``<mac>-<domain>-<object id>``: the MAC has colons and the domain
+        # no "-", but an object id keeps one ("PV-Power Produced" is
+        # ``pv-power_produced``), so it is everything after the second "-".
+        # Newer HA adds ``@<device id>`` for an ESPHome sub-device.
+        unique_id = getattr(entry, "unique_id", None)
+        parts = unique_id.split("-", 2) if isinstance(unique_id, str) else []
+        if len(parts) == 3:
+            given.add(parts[2].split("@", 1)[0].lower())
+        return names[0] in given, names[1] in given
 
     _FORECAST_PLATFORMS = frozenset({
         "forecast_solar", "open_meteo_solar_forecast", "solcast_solar",
@@ -4553,6 +4659,7 @@ class SensorReader:
         unsourced = self._unsourced_power
         if unsourced is None:
             return
+        beside = getattr(self, "_unsourced_beside", None) or set()
         running = getattr(self.hass, "state", None) is CoreState.running
         now = time.monotonic()
         for source in _ri.POWER_SOURCES:
@@ -4572,15 +4679,18 @@ class SensorReader:
             since = self._unsourced_since.setdefault(source, now)
             if now - since < _ri.UNAVAILABLE_REPAIR_THRESHOLD_S:
                 continue
-            if (self._unsourced_raised.get(source) != counter
+            told = (counter, source in beside)
+            if (self._unsourced_raised.get(source) != told
                     and _ri.raise_power_sensor_not_found(
-                        self.hass, source, energy_entity=counter)):
-                self._unsourced_raised[source] = counter
+                        self.hass, source, energy_entity=counter,
+                        beside=source in beside)):
+                self._unsourced_raised[source] = told
                 _LOGGER.warning(
                     "No %s power sensor: the Energy Dashboard counts %s in kWh, "
-                    "but SEM found no power sensor for it, so %s power reads "
-                    "0 W. Add one in the Energy Dashboard or in SEM's Sensor "
-                    "sources. (#1188)", source, counter, source)
+                    "but SEM found no power sensor for it, so SEM reads it as "
+                    "0 W. Add one in the Energy Dashboard%s. (#1188, #1226)",
+                    source, counter,
+                    "" if source in beside else " or in SEM's Sensor sources")
 
     def _report_split_grid_confidence(self, disc: dict) -> None:
         """(#911) An ``any-device`` adoption is a GUESS — pattern-matched

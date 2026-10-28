@@ -376,6 +376,8 @@ DECLARED_READERS = {
         "the parser that fills it",
     ("ha_energy_reader.py", "_derive_battery_power_if_unrepresented"):
         "the derive adds to it",
+    ("ha_energy_reader.py", "yield_found_units_to_picks"):
+        "(#1226) takes found combined sensors out; it counts with battery_units",
     ("coordinator/sensor_reader.py", "set_energy_dashboard_config"):
         "sign audits exist for combined units only (pairs are never sign-checked)",
     ("coordinator/sensor_reader.py", "read_power"):
@@ -388,8 +390,8 @@ DECLARED_READERS = {
         "the #647 audit checks combined units only",
     ("coordinator/sensor_reader.py", "_drop_locks_on_other_counters"):
         "(#1193) only combined units have saved sign locks to check",
-    ("config_flow.py", "async_step_user"):
-        "the setup summary lists each combined sensor beside the pairs",
+    ("setup_check.py", "build_setup_check"):
+        "(#1213) the setup check adds each combined sensor's watts beside the pairs",
     ("diagnostics.py", "async_get_config_entry_diagnostics"):
         "the raw list, dumped beside the pairs",
     ("coordinator/coordinator.py", "_configured_entity_ids"):
