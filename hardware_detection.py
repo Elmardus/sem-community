@@ -2176,7 +2176,17 @@ def propose_roles_from_roster(dev_entities, domain: str, *,
         pairs = getattr(_lex, "PAIRED_ROLES", ())
     except Exception:  # noqa: BLE001
         pairs = ()
-    device_of = {str(getattr(e, "entity_id", "")): getattr(e, "device_id", None)
+    # (#1223) A row with no device belongs to its config entry, the one unit
+    # HA records for it: DSMR Reader's MQTT sensors have no device, and its
+    # pair was offered as two halves of nothing.
+    def _unit(e):
+        dev = getattr(e, "device_id", None)
+        if dev:
+            return dev
+        entry = getattr(e, "config_entry_id", None)
+        return ("entry", entry) if isinstance(entry, str) and entry else None
+
+    device_of = {str(getattr(e, "entity_id", "")): _unit(e)
                  for e in dev_entities}
     for pair in pairs:
         present = [r for r in pair if r in out]
@@ -2346,8 +2356,8 @@ def _speaks_vehicle(entries) -> bool:
     """A CAR's vocabulary: a vehicle marker, and none of a building's."""
     from .consts import role_lexicon as lex
     words = " ".join(w.lower() for e in entries for w in _role_words(e))
-    return (any(m in words for m in lex.VEHICLE_MARKERS)
-            and not any(m in words for m in lex.HOUSE_MARKERS))
+    return (lex.says_any(words, lex.VEHICLE_MARKERS)
+            and not lex.says_any(words, lex.HOUSE_MARKERS))
 
 
 def _select_options(entry, state_of) -> List[str]:
@@ -3274,7 +3284,7 @@ def _roles_pass(report, registry, brand_units, configured_entities,
         # energy hardware with a charger's word in it — Tesla's energy site
         # reports its wall connector's state — not a charger itself
         words = " ".join(w.lower() for e in ents for w in _role_words(e))
-        if any(m in words for m in lex.GENERATOR_MARKERS):
+        if lex.says_any(words, lex.GENERATOR_MARKERS):
             continue
         apply_charger_discovery_guards(offer, ents)
         missing = _offer_missing(offer)

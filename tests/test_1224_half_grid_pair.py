@@ -153,8 +153,12 @@ class TestAPairIsOneDevice:
         assert IMP_KEY not in out and EXP_KEY not in out
 
     def test_no_device_proves_no_pair(self):
+        # (#1223) a row with no device belongs to its config entry, so one
+        # entry still makes a pair (test_1223); with no entry, nothing does
         ents = [_ent("sensor.dsmr_usage", "dsmr", "current_electricity_usage", None),
                 _ent("sensor.dsmr_delivery", "dsmr", "current_electricity_delivery", None)]
+        for e in ents:
+            e.config_entry_id = None
         out = hd.propose_roles_from_roster(ents, "dsmr")
         assert out["grid_import_power"]["action"] == "pair_incomplete"
         assert out["grid_export_power"]["action"] == "pair_incomplete"

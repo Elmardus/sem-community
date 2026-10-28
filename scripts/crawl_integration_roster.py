@@ -703,12 +703,11 @@ def classify_kind(vocab: Dict[str, Dict[str, dict]], lexicon,
     # keys of inverter with one `ev_odometer`; Midea's cloud is 1095 keys of
     # fridges and dryers with one `inverter`. First-match got both wrong, in
     # opposite directions. Counting distinct markers gets both right.
-    def _hits(markers) -> int:
-        return sum(1 for m in markers if m in blob)
-
-    house = _hits(getattr(lexicon, "HOUSE_MARKERS", ()))
-    appliance, vehicle = _hits(lexicon.APPLIANCE_MARKERS), _hits(
-        lexicon.VEHICLE_MARKERS)
+    # (#1223) ``says`` is the one marker test: a marker ending in ``_`` must
+    # begin a segment, or ``ram_`` finds memory in ``telegram_timestamp``.
+    house = lexicon.count_said(blob, lexicon.HOUSE_MARKERS)
+    appliance = lexicon.count_said(blob, lexicon.APPLIANCE_MARKERS)
+    vehicle = lexicon.count_said(blob, lexicon.VEHICLE_MARKERS)
     # A TIE goes to the house: `camera`, `pedal` and `lightbar` are gadget
     # words that a CAR also has, and on Teslemetry they tied with `grid_`,
     # `inverter` and `_grid_` — three words no gadget has. The house side is
@@ -726,10 +725,11 @@ def classify_kind(vocab: Dict[str, Dict[str, dict]], lexicon,
     # generator with a socket. The list SEM maintains by hand wins outright.
     if domain in _charger_domains():
         return "charger"
-    if (any(m in blob for m in lexicon.CHARGER_MARKERS)
-            and not any(m in blob for m in lexicon.GENERATOR_MARKERS)):
+    if (lexicon.says_any(blob, lexicon.CHARGER_MARKERS)
+            and not lexicon.says_any(blob, lexicon.GENERATOR_MARKERS)):
         return "charger"
-    if not any(a in blob for a in lexicon.ENERGY_ANCHORS):
+    if not (lexicon.says_any(blob, lexicon.ENERGY_ANCHORS)
+            or _declares_a_whole_pair(vocab, lexicon)):
         # A domain SEM already supports has human evidence behind it (a
         # matrix row with a citation); a thin published vocabulary does not
         # override that. Sessy publishes three sensors and one select.
@@ -744,9 +744,25 @@ def _reports_electricity(vocab: Dict[str, Dict[str, dict]], lexicon) -> bool:
     and refuses a fitness watch that happens to charge from the sun."""
     keys = [k for ks in vocab.values() for k in ks]
     blob = " ".join(keys).lower()
-    if not any(a in blob for a in lexicon.STRONG_ENERGY_ANCHORS):
+    if not lexicon.says_any(blob, lexicon.STRONG_ENERGY_ANCHORS):
         return False
     return sum(1 for k in keys if lexicon.UNIT_SHAPED_KEY.search(k)) >= 2
+
+
+def _declares_a_whole_pair(vocab: Dict[str, Dict[str, dict]], lexicon) -> bool:
+    """(#1223) Both halves of a PAIRED_ROLES pair, named by the lexicon's own
+    read rules, are an energy anchor of their own: nothing but a grid meter
+    declares the power it takes from the grid AND the power it sends back.
+    DSMR Reader declares ``current_power_usage``/``current_power_return`` and
+    no word on the anchor list, so it read as "other" and its pair was never
+    proposed. Half a pair anchors nothing, as it proposes nothing."""
+    for pair in lexicon.PAIRED_ROLES:
+        rules = {r: lexicon.READ_ROLE_RULES[r] for r in pair}
+        found = {_match_role(rules, platform, key)
+                 for platform, keys in vocab.items() for key in keys}
+        if all(r in found for r in pair):
+            return True
+    return False
 
 
 def roles_from_vocabulary(vocab: Dict[str, Dict[str, dict]], lexicon,
@@ -781,7 +797,7 @@ def roles_from_vocabulary(vocab: Dict[str, Dict[str, dict]], lexicon,
         # so a house that also knows a car contributes the car's READS too —
         # which is exactly what SEM's `vehicle_soc_entity` wants.
         blob = " ".join(k for keys in vocab.values() for k in keys).lower()
-        if any(m in blob for m in lexicon.VEHICLE_MARKERS):
+        if lexicon.says_any(blob, lexicon.VEHICLE_MARKERS):
             rules.update(lexicon.VEHICLE_ROLE_RULES)
     roles: Dict[str, dict] = {}
     for platform, keys in sorted(vocab.items()):
@@ -827,7 +843,7 @@ def roles_from_vocabulary(vocab: Dict[str, Dict[str, dict]], lexicon,
     # see BATTERY_CONTEXT. This is the two-signal rule one level down: the
     # key earns the role, the vocabulary earns the key.
     blob_all = " ".join(k for keys in vocab.values() for k in keys).lower()
-    if not any(m in blob_all for m in getattr(lexicon, "BATTERY_CONTEXT", ())):
+    if not lexicon.says_any(blob_all, lexicon.BATTERY_CONTEXT):
         for r in [r for r in roles if r.startswith("battery_")]:
             roles.pop(r)
 

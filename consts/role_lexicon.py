@@ -28,6 +28,7 @@ except", which is the shape the next reader can extend.
 
 from __future__ import annotations
 
+import re as _re
 from typing import Any, Dict, Final
 
 #: (#1141, #1144) The key of a number that limits a whole site's current:
@@ -399,6 +400,8 @@ APPLIANCE_MARKERS: Final[tuple] = (
     # …and NOT "ups_": Victron's VE.Bus declares `ups_function`, which is a
     # real inverter's real setting.
     "battery_runtime",
+    # (#1223) A marker ending in `_` must BEGIN a segment (see `says`):
+    # `ram_` is in `telegram_timestamp` and `switching_program_enabled`.
     # NOTHING ELSE GOES IN THIS TUPLE WITHOUT BEING RUN AGAINST THE ROSTER
     # FIRST. Every marker here is a substring of a real vocabulary, and the
     # obvious ones are wrong: `brightness` matched the LED on Zaptec, Peblar,
@@ -407,6 +410,34 @@ APPLIANCE_MARKERS: Final[tuple] = (
     # own solar FORECAST sensors. Each of those silently deleted a working
     # brand's roles. A marker must be a word only a non-energy device says.
 )
+
+
+def says(words: str, marker: str) -> bool:
+    """(#1223, class 67) Does this vocabulary say ``marker``? EVERY test of a
+    marker list goes through here, in the crawler and at runtime.
+
+    A marker that ENDS in ``_`` names a whole segment, so it must also BEGIN
+    one. ``ram_`` is computer memory in ``ram_usage``; in DSMR Reader's
+    ``telegram_timestamp`` and a Stiebel Eltron heat pump's
+    ``switching_program_enabled`` it is four letters of another word, and as
+    a substring it called both of them appliances. A marker without that
+    ``_`` is a stem and may sit inside a compound — ``dehumidifier`` and
+    ``pvinverter`` are the words those brands really use. A leading ``_``
+    (``_grid``) already says where the segment starts. So ``grid_`` no
+    longer finds ``offgrid_`` or ``microgrid_``; measured, no brand's kind
+    or roles moved for it."""
+    if marker.endswith("_") and marker[:1].isalnum():
+        return _re.search(r"(?<![a-z0-9])" + _re.escape(marker), words,
+                          _re.I) is not None
+    return marker in words
+
+
+def says_any(words: str, markers) -> bool:
+    return any(says(words, m) for m in markers)
+
+
+def count_said(words: str, markers) -> int:
+    return sum(1 for m in markers if says(words, m))
 
 #: A battery role needs a BATTERY in the vocabulary. Midea's air conditioners
 #: are "inverter" units and declare `work_mode`; Qvantum's heat pump declares
@@ -445,7 +476,6 @@ STRONG_ENERGY_ANCHORS: Final[tuple] = (
 #: …and the shape of an ELECTRICAL measurement. A brand that declares two of
 #: these alongside a strong anchor is reporting watts, amps or kilowatt-hours,
 #: which no watch and no light strip does.
-import re as _re
 UNIT_SHAPED_KEY: Final = _re.compile(
     r"(^|_)(w|kw|kwh|wh|a|v|hz)$|_(power|current|voltage|energy)(_|$)"
     r"|^(power|current|voltage|energy)_", _re.I)

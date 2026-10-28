@@ -71,6 +71,14 @@
         "current_electricity_usage"
       ]
     },
+    "dsmr_reader": {
+      "grid_export_power": [
+        "current_power_return"
+      ],
+      "grid_import_power": [
+        "current_power_usage"
+      ]
+    },
     "ef_ble": {
       "battery_charge_limit": [
         "charging_grid_power_limit"

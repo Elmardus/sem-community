@@ -267,6 +267,11 @@ English DSMR with phase sensors on had its import read from phase L3; the key re
 heat pump also uses, so they need a one-brand rule (#1222); the crawler reads `ram_` in DSMR Reader's
 `telegram_timestamp` as an appliance and drops its pair (#1223); the card saves a split pair one
 half per click, and half a pair reads export as 0 W (#1224).
+**Instance (#1223) — the pair the roster never got:** DSMR Reader declares `current_power_usage` /
+`current_power_return`, and the lexicon knew both, but the crawler called it an appliance (class 67,
+`ram_` in `telegram_timestamp`) and then "other" (no anchor word). It now has a roster row, and the
+declared tier finds the pair. Its rows have no device, so the pair is `declared-elsewhere` and proves
+itself against the counters first.
 **Instance (#1225) — a pair named by firmware:** a SlimmeLezer P1 reader (ESPHome `dsmr`) names its pair
 `power_consumed`/`power_produced`, so the grid read 0 W. ESPHome is an opaque platform: the names come
 from the device, and there is no key to declare. The same words name Sinapsi Alfa's SOLAR output and
@@ -3055,6 +3060,24 @@ is reached by the `start_stop_entity` property setter, which refuses a reboot fr
 **Guard:** `tests/test_804_no_commands.py::TestASubstringIsNotAWord` — the reporter's own entity id,
 the segment rule, and an oracle that feeds EVERY brand in `_EV_CHARGER_PLATFORMS` a device whose
 only button is a reboot and asserts no role takes it. Refs #804 #915.
+**Third instance — #1223, the crawler's kind markers.** `classify_kind` counted its markers with a
+bare `in` over the whole vocabulary. The appliance marker `ram_` (computer memory) hit DSMR Reader's
+`telegram_timestamp`, so a grid meter with 1380 installs was an appliance and its pair never reached
+the roster. The same four letters hid EDL21 (a meter), a Stiebel Eltron heat pump and OpenTherm
+(`program_`); `p1_` hit Qvantum's `gp1_pump_speed`, `ess_` hit `wireless_`.
+**Closure:** one test for every marker list, `role_lexicon.says`: a marker that ENDS in `_` names a
+whole segment and must also begin one. A stem (`inverter`, `purifier`) still finds a compound
+(`pvinverter`, `airpurifier`) — the corpus is full of those, so a word rule for every marker was
+measured and refused. `grid_` no longer finds `offgrid_`/`microgrid_` (no brand moved). Swept: the crawler (kind, electrical, vehicle and battery context) and the two
+runtime tests in `hardware_detection.py` (`_speaks_vehicle`, the generator check on a charger).
+DSMR Reader also declares no anchor word: a whole PAIRED_ROLES pair, named by the lexicon's own read
+rules, is now an energy anchor (`_declares_a_whole_pair`). Measured on the offline corpus: DSMR
+Reader gains its pair, EDL21 is no longer an appliance, OpenTherm and Stiebel Eltron gain name-only
+rows; no brand loses a role. The Config card's one-click pair (#1224) needed both halves on one
+device; a row with no device now belongs to its config entry. **Guard:**
+`tests/test_1223_dsmr_reader_pair.py` — an oracle over every `word_` marker in every list, and an
+AST lint that outside the lexicon a marker list is only ever an argument of `says_any`/`count_said`.
+Refs #1223.
 
 ### 68. A protection floor read as a target — the knob is not missed, it is INVERTED — GUARDED
 **Symptom:** five brands (Growatt, Sigen, Solis, Sungrow, Sunsynk) declare both halves of the SOC

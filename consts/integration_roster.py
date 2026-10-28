@@ -30,7 +30,7 @@ from typing import Any, Dict, Final
 SCHEMA: Final = 1
 
 
-ROSTER_META: Final[Dict[str, Any]] = {'generated_at': '2026-10-26T22:10:41Z', 'sources': {'core_analytics': 'https://analytics.home-assistant.io/data.json', 'core_index': 'https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/generated/integrations.json', 'custom_installs': 'https://analytics.home-assistant.io/custom_integrations.json', 'hacs': 'https://data-v2.hacs.xyz/integration/data.json', 'website': 'https://www.home-assistant.io/integrations.json'}, 'install_floor': 50, 'candidates': 1365, 'kept': 198, 'with_roles': 65, 'roles_mined': 187}
+ROSTER_META: Final[Dict[str, Any]] = {'generated_at': '2026-10-28T08:33:37Z', 'sources': {'core_analytics': 'https://analytics.home-assistant.io/data.json', 'core_index': 'https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/generated/integrations.json', 'custom_installs': 'https://analytics.home-assistant.io/custom_integrations.json', 'hacs': 'https://data-v2.hacs.xyz/integration/data.json', 'website': 'https://www.home-assistant.io/integrations.json'}, 'install_floor': 50, 'candidates': 1365, 'kept': 201, 'with_roles': 66, 'roles_mined': 189}
 
 #: domain -> what the ecosystem says this integration is.
 ROSTER: Final[Dict[str, Dict[str, Any]]] = {
@@ -59,10 +59,11 @@ ROSTER: Final[Dict[str, Dict[str, Any]]] = {
     'dewarmte': {'name': 'DeWarmte', 'repo': 'ronald-willems/dewarmte-homeassistant', 'origin': 'hacs', 'installs': 52, 'kind': 'other', 'kind_from': 'keyword'},
     'discovergy': {'name': 'inexogy', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 762, 'kind': 'other', 'kind_from': 'keyword'},
     'dsmr': {'name': 'DSMR Smart Meter', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 5745, 'kind': 'energy', 'kind_from': 'vocabulary'},
+    'dsmr_reader': {'name': 'DSMR Reader', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 1380, 'kind': 'energy', 'kind_from': 'vocabulary'},
     'dynamic_energy_cost': {'name': 'Dynamic Energy Cost', 'repo': 'martinarva/dynamic_energy_cost', 'origin': 'hacs', 'installs': 1195, 'kind': 'other', 'kind_from': 'keyword'},
     'easee': {'name': 'Easee EV Charger', 'repo': 'nordicopen/easee_hass', 'origin': 'hacs', 'installs': 3620, 'kind': 'charger', 'kind_from': 'vocabulary_name_only'},
     'ecotracker': {'name': 'Ecotracker', 'repo': 'stefanseeger/ecotracker', 'origin': 'hacs', 'installs': 392, 'kind': 'other', 'kind_from': 'keyword'},
-    'edl21': {'name': 'EDL21', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 664, 'kind': 'appliance', 'kind_from': 'keyword'},
+    'edl21': {'name': 'EDL21', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 664, 'kind': 'other', 'kind_from': 'keyword'},
     'ef_ble': {'name': 'EcoFlow BLE', 'repo': 'rabits/ha-ef-ble', 'origin': 'hacs', 'installs': 1275, 'kind': 'energy', 'kind_from': 'vocabulary'},
     'eg4_web_monitor': {'name': 'EG4 Web Monitor', 'repo': 'joyfulhouse/eg4_web_monitor', 'origin': 'hacs', 'installs': 257, 'kind': 'energy', 'kind_from': 'vocabulary'},
     'elgato': {'name': 'Elgato', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 3779, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
@@ -139,6 +140,7 @@ ROSTER: Final[Dict[str, Dict[str, Any]]] = {
     'omnik_inverter': {'name': 'Omnik Inverter Solar Sensor (No Cloud)', 'repo': 'robbinjanssen/home-assistant-omnik-inverter', 'origin': 'hacs', 'installs': 334, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
     'open_meteo_solar_forecast': {'name': 'Open-Meteo Solar Forecast', 'repo': 'rany2/ha-open-meteo-solar-forecast', 'origin': 'hacs', 'installs': 2525, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
     'openevse': {'name': 'OpenEVSE', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 360, 'kind': 'charger', 'kind_from': 'vocabulary'},
+    'opentherm_gw': {'name': 'OpenTherm Gateway', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 352, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
     'peblar': {'name': 'Peblar', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 765, 'kind': 'charger', 'kind_from': 'vocabulary'},
     'pirateweather': {'name': 'Pirate Weather', 'repo': 'Pirate-Weather/pirate-weather-ha', 'origin': 'hacs', 'installs': 8427, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
     'polestar_api': {'name': 'Polestar API', 'repo': 'pypolestar/polestar_api', 'origin': 'hacs', 'installs': 1034, 'kind': 'vehicle', 'kind_from': 'vocabulary'},
@@ -194,6 +196,7 @@ ROSTER: Final[Dict[str, Dict[str, Any]]] = {
     'solstice_season': {'name': 'Solstice Season', 'repo': 'moerk-o/SolsticeHub', 'origin': 'hacs', 'installs': 77, 'kind': 'energy', 'kind_from': 'keyword'},
     'stiebel_eltron': {'name': 'STIEBEL ELTRON', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 152, 'kind': 'energy', 'kind_from': 'keyword'},
     'stiebel_eltron_http': {'name': 'Stiebel Eltron', 'repo': 'pmq/stiebel-eltron-http', 'origin': 'hacs', 'installs': 59, 'kind': 'energy', 'kind_from': 'keyword'},
+    'stiebel_eltron_isg': {'name': 'Stiebel Eltron ISG', 'repo': 'pail23/stiebel_eltron_isg_component', 'origin': 'hacs', 'installs': 816, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
     'stromligning': {'name': 'Strømligning', 'repo': 'MTrab/stromligning', 'origin': 'hacs', 'installs': 575, 'kind': 'energy', 'kind_from': 'keyword'},
     'subaru': {'name': 'Subaru', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 556, 'kind': 'vehicle', 'kind_from': 'vocabulary'},
     'sungrow': {'name': 'Sungrow iSolarCloud', 'repo': 'KRoperUK/sungrow-hass', 'origin': 'hacs', 'installs': 595, 'kind': 'energy', 'kind_from': 'vocabulary'},
@@ -262,6 +265,10 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
     'dsmr': {
         'grid_export_power': {'platform': 'sensor', 'keys': ('current_electricity_delivery',), 'options': ()},
         'grid_import_power': {'platform': 'sensor', 'keys': ('current_electricity_usage',), 'options': ()},
+    },
+    'dsmr_reader': {
+        'grid_export_power': {'platform': 'sensor', 'keys': ('current_power_return',), 'options': ()},
+        'grid_import_power': {'platform': 'sensor', 'keys': ('current_power_usage',), 'options': ()},
     },
     'ef_ble': {
         'battery_charge_limit': {'platform': 'number', 'keys': ('charging_grid_power_limit',), 'options': ()},
