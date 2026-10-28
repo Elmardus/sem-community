@@ -98,7 +98,7 @@ Deep dive into energy production, consumption, and environmental impact.
 | **Energy Distribution** | Donut chart breaking down today's energy by category |
 | **24h Power Curves** | Detailed power graph with solar, home, grid, battery over 24 hours |
 | **Solar Today vs Yesterday** | Side-by-side comparison chart |
-| **Carbon Avoided** | Daily CO2 savings from self-consumed solar (128g/kWh Swiss grid) |
+| **Carbon Avoided** | The *CO2 Avoided Today* sensor: solar used on site, also into the battery, times the grid's g/kWh |
 | **Trees Saved** | Yearly trees equivalent with growing icon (sprout > tree > pine > forest) |
 | **Self-Consumption Trend** | 30-day line chart of self-consumption and autarky rates |
 | **Solar Forecast** | Today + tomorrow forecast with percentage comparison |

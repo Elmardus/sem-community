@@ -686,6 +686,10 @@ class CostData:
 
     # Environmental impact
     daily_co2_avoided_kg: float = 0.0
+    # (#1221) the kWh and kg/kWh behind ``daily_co2_avoided_kg``; None
+    # until the first cost pass (the card then shows no detail line)
+    daily_co2_solar_used_kwh: Optional[float] = None
+    daily_co2_kg_per_kwh: Optional[float] = None
     yearly_co2_avoided_kg: float = 0.0
     yearly_trees_equivalent: float = 0.0
     lifetime_co2_avoided_kg: float = 0.0
@@ -1396,6 +1400,8 @@ class SEMData:
 
             # Environmental impact
             "daily_co2_avoided": self.costs.daily_co2_avoided_kg,
+            "daily_co2_solar_used_kwh": self.costs.daily_co2_solar_used_kwh,
+            "daily_co2_kg_per_kwh": self.costs.daily_co2_kg_per_kwh,
             "yearly_co2_avoided": self.costs.yearly_co2_avoided_kg,
             "yearly_trees_equivalent": self.costs.yearly_trees_equivalent,
             "lifetime_co2_avoided": self.costs.lifetime_co2_avoided_kg,

@@ -2,7 +2,7 @@
  * SEM Energy Impact Card — Environmental impact display (LitElement)
  *
  * Displays two tiles:
- *   - Carbon Avoided Today (with kWh × g/kWh calculation breakdown)
+ *   - Carbon Avoided Today (the sensor's figure, with its kWh × g/kWh)
  *   - Trees Equivalent (yearly count + yearly/lifetime CO2 and tree stats)
  *
  * Config:
@@ -12,12 +12,11 @@
 
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semTheme, semDefineCard } from '../base/sem-shared.js';
+import { MISSING, isMissing } from '../util/missing-value.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
 
 const ENTITY_SUFFIXES = [
-    'flow_solar_to_home_energy',
-    'flow_solar_to_ev_energy',
     'daily_co2_avoided',
     'yearly_co2_avoided',
     'lifetime_co2_avoided',
@@ -25,9 +24,22 @@ const ENTITY_SUFFIXES = [
     'lifetime_trees_equivalent',
 ];
 
+// (#1221) The two numbers behind today's CO2, published by the sensor
+// itself: the kWh it counts and the kg per kWh it used today.
+const DAY_DETAIL_ATTRS = ['solar_used_kwh', 'co2_kg_per_kwh_today'];
+
 /** Build full entity IDs from a prefix. */
 function buildEntityIds(prefix) {
     return ENTITY_SUFFIXES.map(s => `${prefix}${s}`);
+}
+
+/** "12.3 kWh × 128 g/kWh" from the sensor's attributes, or '' when unknown. */
+function co2DetailLine(st) {
+    if (isMissing(st)) return '';
+    const kwh = st.attributes?.solar_used_kwh;
+    const kg = st.attributes?.co2_kg_per_kwh_today;
+    if (!Number.isFinite(kwh) || !Number.isFinite(kg)) return '';
+    return `${kwh.toFixed(1)} kWh × ${Math.round(kg * 1000)} g/kWh`;
 }
 
 class SEMEnergyImpactCard extends SEMLitBase {
@@ -65,7 +77,7 @@ class SEMEnergyImpactCard extends SEMLitBase {
         const ids = buildEntityIds(this._prefix || DEFAULT_PREFIX);
         let changed = false;
         for (const id of ids) {
-            if (this._prevVals[id] !== hass.states[id]?.state) {
+            if (this._prevVals[id] !== this._readKey(hass, id)) {
                 changed = true;
                 break;
             }
@@ -73,7 +85,7 @@ class SEMEnergyImpactCard extends SEMLitBase {
         if (!changed && !localeChanged) return;
 
         for (const id of ids) {
-            this._prevVals[id] = hass.states[id]?.state;
+            this._prevVals[id] = this._readKey(hass, id);
         }
 
         this._scheduleUpdate();
@@ -83,11 +95,30 @@ class SEMEnergyImpactCard extends SEMLitBase {
         return this._hass;
     }
 
+    // (#1221) What a redraw compares: the state, and for today's CO2 also
+    // the attributes its detail line shows (class 127).
+    _readKey(hass, id) {
+        const st = hass.states[id];
+        if (id !== `${this._prefix || DEFAULT_PREFIX}daily_co2_avoided`) return st?.state;
+        return JSON.stringify([st?.state ?? null,
+            ...DAY_DETAIL_ATTRS.map((n) => st?.attributes?.[n] ?? null)]);
+    }
+
     // ── Helpers ──
 
-    /** Read a numeric entity state by suffix (prepends configured prefix). */
-    _val(suffix, fallback = 0) {
-        return this._state(`${this._prefix || DEFAULT_PREFIX}${suffix}`, fallback);
+    /** A numeric entity state by suffix, or null when the sensor is out. */
+    _val(suffix) {
+        const st = this._stateObj(suffix);
+        return isMissing(st) ? null : parseFloat(st.state);
+    }
+
+    _stateObj(suffix) {
+        return this._hass?.states[`${this._prefix || DEFAULT_PREFIX}${suffix}`];
+    }
+
+    // The unit the sensor shows in (class 33): a user may pick lb or g.
+    _kgUnit(suffix) {
+        return this._unitOf(`${this._prefix || DEFAULT_PREFIX}${suffix}`) || 'kg';
     }
 
     _treeIcon(count) {
@@ -104,24 +135,25 @@ class SEMEnergyImpactCard extends SEMLitBase {
 
         const T = this._theme();
 
-        // CO2 calculation from self-consumed solar energy
-        const solarHome = this._val('flow_solar_to_home_energy');
-        const solarEV   = this._val('flow_solar_to_ev_energy');
-        const selfConsumed = solarHome + solarEV;
-        const co2Today     = (selfConsumed * 0.128).toFixed(1);
-        const co2Detail    = `${selfConsumed.toFixed(1)} kWh × 128 g/kWh`;
+        // (#1221) Today's CO2 is the sensor's own figure. The card used to
+        // work it out again from two flows × 128 g/kWh, which left out solar
+        // that went into the battery and the live grid value.
+        const co2Day    = this._val('daily_co2_avoided');
+        const co2Today  = co2Day == null ? MISSING : `${co2Day.toFixed(2)} ${this._kgUnit('daily_co2_avoided')}`;
+        const co2Detail = co2DetailLine(this._stateObj('daily_co2_avoided'));
 
-        // Trees equivalent
+        // Trees equivalent (a sensor that is out prints the dash, not 0)
         const yearlyTrees   = this._val('yearly_trees_equivalent');
         const lifetimeTrees = this._val('lifetime_trees_equivalent');
         const yearlyCO2     = this._val('yearly_co2_avoided');
         const lifetimeCO2   = this._val('lifetime_co2_avoided');
+        const kg = (v, suffix) => (v == null ? MISSING : `${v.toFixed(0)} ${this._kgUnit(suffix)}`);
 
-        const treesDisplay = yearlyTrees >= 10
-            ? yearlyTrees.toFixed(0)
+        const treesDisplay = yearlyTrees == null ? MISSING
+            : yearlyTrees >= 10 ? yearlyTrees.toFixed(0)
             : yearlyTrees.toFixed(1);
 
-        const treeIcon = this._treeIcon(yearlyTrees);
+        const treeIcon = this._treeIcon(yearlyTrees ?? 0);
 
         return html`
             <style>
@@ -250,7 +282,7 @@ class SEMEnergyImpactCard extends SEMLitBase {
                         ></ha-icon>
                         <div class="tile-content">
                             <span class="tile-label">${this._t('carbon_avoided_today')}</span>
-                            <span class="tile-hero" style="color:#8DC892">${co2Today} kg</span>
+                            <span class="tile-hero" style="color:#8DC892">${co2Today}</span>
                             <span class="tile-detail">${co2Detail}</span>
                         </div>
                     </div>
@@ -266,15 +298,15 @@ class SEMEnergyImpactCard extends SEMLitBase {
                             <span class="tile-hero" style="color:#8DC892">${treesDisplay}</span>
                             <div class="stats">
                                 <div class="stat">
-                                    <span class="stat-val">${yearlyCO2.toFixed(0)} kg</span>
+                                    <span class="stat-val">${kg(yearlyCO2, 'yearly_co2_avoided')}</span>
                                     <span class="stat-lbl">${this._t('co2_yearly')}</span>
                                 </div>
                                 <div class="stat">
-                                    <span class="stat-val">${lifetimeCO2.toFixed(0)} kg</span>
+                                    <span class="stat-val">${kg(lifetimeCO2, 'lifetime_co2_avoided')}</span>
                                     <span class="stat-lbl">${this._t('co2_lifetime')}</span>
                                 </div>
                                 <div class="stat">
-                                    <span class="stat-val">${lifetimeTrees.toFixed(0)}</span>
+                                    <span class="stat-val">${lifetimeTrees == null ? MISSING : lifetimeTrees.toFixed(0)}</span>
                                     <span class="stat-lbl">${this._t('trees_lifetime')}</span>
                                 </div>
                             </div>
