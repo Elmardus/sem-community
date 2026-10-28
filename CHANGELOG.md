@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+# [2.2.0-beta.29] — 28.10.2026
+
 - 🐛 **A battery counter step above the daily limit no longer makes the month, year and lifetime totals grow** (#1218). Before, they grew on every cycle.
 - 🐛 **The Energy Impact card now shows the same CO2 as its sensor** (#1221). Before, it left out solar that went into the battery.
 - 🐛 **A P1 Monitor meter or a Tibber Pulse now shows grid power in any language** (#1222). Before, it could read 0 W.
