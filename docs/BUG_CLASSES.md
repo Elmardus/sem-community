@@ -1887,8 +1887,9 @@ counts all solar used on site, also into the battery, and adds the live grid val
 On a day the battery charged from the sun, the card showed less than the sensor. The card already
 watched the sensor and never read it. **Closure:** the card prints the sensor's state ("—" when it is
 out). The line under it shows two new attributes the sensor publishes, `solar_used_kwh` and
-`co2_kg_per_kwh_today` (the day's average once the live value counts). They are unrecorded, and the
-card draws again when they change (class 127). The sensor's `co2_fallback_kg_per_kwh` read a `0.128`
+`co2_kg_per_kwh_today` (the day's average once the live value counts; the rate now while the kWh
+shows 0.0), at the precision the card shows. They are unrecorded, the card draws again when they
+change (class 127), and the figures take the sensor's own unit (class 33). The sensor's `co2_fallback_kg_per_kwh` read a `0.128`
 literal and now reads `GRID_CO2_KG_PER_KWH` (class 46). **Guard:**
 `dashboard/card/test/energy-impact-co2.test.js` — the real card: the hero is the sensor, not the flows;
 the detail line at the fixed and the live rate; the dash when out; a redraw on an attribute-only

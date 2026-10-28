@@ -176,6 +176,27 @@ test('a configured prefix reads its own sensor', () => {
     assert.equal(inClass(out, 'tile-detail'), '17.7 kWh × 128 g/kWh');
 });
 
+test('a configured prefix draws again on its own attributes', () => {
+    const st = sunnyDay('sensor.sem2_');
+    const el = card(st, { entity_prefix: 'sensor.sem2_' });
+    let scheduled = 0;
+    el._scheduleUpdate = () => { scheduled++; };
+    const day = st['sensor.sem2_daily_co2_avoided'];
+    el.hass = { states: { ...st, 'sensor.sem2_daily_co2_avoided': S(day.state, {
+        ...day.attributes, solar_used_kwh: 17.8 }) }, language: 'en' };
+    assert.equal(scheduled, 1);
+});
+
+test('the figures print the unit the sensor shows in', () => {
+    const st = sunnyDay();
+    st['sensor.sem_daily_co2_avoided'] = S(5.0, {
+        ...st['sensor.sem_daily_co2_avoided'].attributes, unit_of_measurement: 'lb' });
+    st['sensor.sem_yearly_co2_avoided'] = S(908.9, { unit_of_measurement: 'lb' });
+    const out = card(st).render();
+    assert.equal(inClass(out, 'tile-hero'), '5.00 lb');
+    assert.deepEqual(allInClass(out, 'stat-val'), ['909 lb', '1880 kg', '86']);
+});
+
 test('the card draws again when only the detail attributes change', () => {
     const st = sunnyDay();
     const el = card(st);

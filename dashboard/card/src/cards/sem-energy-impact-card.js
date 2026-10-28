@@ -116,6 +116,11 @@ class SEMEnergyImpactCard extends SEMLitBase {
         return this._hass?.states[`${this._prefix || DEFAULT_PREFIX}${suffix}`];
     }
 
+    // The unit the sensor shows in (class 33): a user may pick lb or g.
+    _kgUnit(suffix) {
+        return this._unitOf(`${this._prefix || DEFAULT_PREFIX}${suffix}`) || 'kg';
+    }
+
     _treeIcon(count) {
         if (count >= 50) return 'mdi:forest';
         if (count >= 10) return 'mdi:pine-tree';
@@ -134,7 +139,7 @@ class SEMEnergyImpactCard extends SEMLitBase {
         // work it out again from two flows × 128 g/kWh, which left out solar
         // that went into the battery and the live grid value.
         const co2Day    = this._val('daily_co2_avoided');
-        const co2Today  = co2Day == null ? MISSING : `${co2Day.toFixed(2)} kg`;
+        const co2Today  = co2Day == null ? MISSING : `${co2Day.toFixed(2)} ${this._kgUnit('daily_co2_avoided')}`;
         const co2Detail = co2DetailLine(this._stateObj('daily_co2_avoided'));
 
         // Trees equivalent (a sensor that is out prints the dash, not 0)
@@ -142,7 +147,7 @@ class SEMEnergyImpactCard extends SEMLitBase {
         const lifetimeTrees = this._val('lifetime_trees_equivalent');
         const yearlyCO2     = this._val('yearly_co2_avoided');
         const lifetimeCO2   = this._val('lifetime_co2_avoided');
-        const kg = (v) => (v == null ? MISSING : `${v.toFixed(0)} kg`);
+        const kg = (v, suffix) => (v == null ? MISSING : `${v.toFixed(0)} ${this._kgUnit(suffix)}`);
 
         const treesDisplay = yearlyTrees == null ? MISSING
             : yearlyTrees >= 10 ? yearlyTrees.toFixed(0)
@@ -293,11 +298,11 @@ class SEMEnergyImpactCard extends SEMLitBase {
                             <span class="tile-hero" style="color:#8DC892">${treesDisplay}</span>
                             <div class="stats">
                                 <div class="stat">
-                                    <span class="stat-val">${kg(yearlyCO2)}</span>
+                                    <span class="stat-val">${kg(yearlyCO2, 'yearly_co2_avoided')}</span>
                                     <span class="stat-lbl">${this._t('co2_yearly')}</span>
                                 </div>
                                 <div class="stat">
-                                    <span class="stat-val">${kg(lifetimeCO2)}</span>
+                                    <span class="stat-val">${kg(lifetimeCO2, 'lifetime_co2_avoided')}</span>
                                     <span class="stat-lbl">${this._t('co2_lifetime')}</span>
                                 </div>
                                 <div class="stat">

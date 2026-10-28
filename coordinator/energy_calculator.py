@@ -3979,11 +3979,12 @@ class EnergyCalculator:
         costs.daily_co2_avoided_kg = round(daily_co2, 2)
         # (#1221) The two numbers behind it, for the Energy Impact card: the
         # kWh it counts and the kg per kWh it used today (the day's average
-        # once the live value counts). No kWh yet: the rate a kWh counts at now.
+        # once the live value counts), at the precision the card shows. While
+        # the kWh still shows 0.0, an average says nothing: the rate now.
         costs.daily_co2_solar_used_kwh = round(daily_self_consumed, 1)
         costs.daily_co2_kg_per_kwh = round(
-            daily_co2 / daily_self_consumed if daily_self_consumed > 0
-            else self.grid_co2_kg_now(), 4)
+            daily_co2 / daily_self_consumed if costs.daily_co2_solar_used_kwh > 0
+            else self.grid_co2_kg_now(), 3)
         costs.yearly_co2_avoided_kg = round(max(0.0, yearly_self_consumed * GRID_CO2_KG_PER_KWH
             + self._co2_correction("yearly", year_key)), 1)
         costs.yearly_trees_equivalent = round(

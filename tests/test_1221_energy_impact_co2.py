@@ -19,6 +19,7 @@ import pytest
 from freezegun import freeze_time
 
 from custom_components.solar_energy_management.coordinator.energy_calculator import (
+    CO2_CORRECTION_CATEGORY,
     GRID_CO2_KG_PER_KWH,
     EnergyCalculator,
 )
@@ -96,6 +97,26 @@ class TestTheNumbersBehindTheFigure:
         costs = _hour(calc, home=500.0, grid=-500.0)
         assert costs.daily_co2_solar_used_kwh == 0.0
         assert costs.daily_co2_kg_per_kwh == pytest.approx(rate)
+
+    def test_a_kwh_that_shows_0_0_shows_the_rate_now(self):
+        """40 Wh of sun after a live correction booked earlier today: the
+        day's average would read 1378 g/kWh beside "0.0 kWh"."""
+        from datetime import date
+        calc = _calc()
+        today = date(2026, 10, 28)
+        calc._accumulate(CO2_CORRECTION_CATEGORY, today, "2026_10", "2026", 0.05)
+        costs = _hour(calc, solar=40.0, home=40.0)
+        assert costs.daily_co2_solar_used_kwh == 0.0
+        assert costs.daily_co2_avoided_kg > 0
+        assert costs.daily_co2_kg_per_kwh == pytest.approx(GRID_CO2_KG_PER_KWH)
+
+    def test_the_rate_is_published_at_what_the_card_shows(self):
+        """1 g/kWh: a finer rate moves each cycle with the live value on
+        and writes a state row the card never shows."""
+        calc = _calc()
+        calc.set_grid_co2_intensity(0.09617, live=True)
+        costs = _hour(calc, **SUNNY)
+        assert costs.daily_co2_kg_per_kwh == round(costs.daily_co2_kg_per_kwh, 3)
 
     def test_a_clean_grid_floors_at_zero(self):
         """0 g live: the figure is 0, and so is its rate — never negative."""

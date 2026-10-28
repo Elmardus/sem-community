@@ -2661,8 +2661,8 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         # live-card helper rebuilt from the registry on demand: nothing about
         # it charts, and the diagnostics download carries the full report.
         "detection_report",
-        # (#1221) the Energy Impact card's detail line under the daily CO2
-        # avoided — the state is the record, these move with every 0.1 kWh
+        # (#1221) the Energy Impact card's line under the daily CO2 avoided
+        # (0.1 kWh, 1 g/kWh) — the state is the record, these are its parts
         "solar_used_kwh",
         "co2_kg_per_kwh_today",
     })
