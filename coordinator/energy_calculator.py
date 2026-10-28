@@ -105,10 +105,11 @@ _INTEGRAL_INPUTS = (
 _BATTERY_FLOW_FIELDS = ("solar_to_battery", "grid_to_battery",
                         "battery_to_home", "battery_to_ev", "battery_to_grid")
 
-# Sanity ceiling for one day of a metered category (#628). Solar and EV have
-# physical bounds to check against (kWp × 16 h, chargers × amps × 24 h); grid
-# and battery do not, so this is a pure unit-error trap — a Wh register read as
-# kWh is 1000× out. No residential install imports or exports 1 MWh in a day.
+# Sanity ceiling for one day of a metered category (#628). Solar, battery and
+# EV have physical bounds to check against (kWp × 16 h, 3 × the battery size,
+# chargers × amps × 24 h — see ``_daily_ceiling``); grid does not, so this is a
+# pure unit-error trap — a Wh register read as kWh is 1000× out. No
+# residential install imports or exports 1 MWh in a day.
 MAX_PLAUSIBLE_DAILY_KWH = 1000.0
 
 # Accumulator category for EV charging energy (#666). A named constant, not a
@@ -595,6 +596,9 @@ class EnergyCalculator:
         self._meter_counter_enabled: bool = False
         self._meter_counter_logged: bool = False
         self._meter_baselines: Dict[str, Dict[str, Any]] = {}
+        # (#1218) The day each category's counter was last refused above its
+        # ceiling: one warning a day, not one a cycle.
+        self._ceiling_warned: Dict[str, str] = {}
         # (#628) Which categories' daily values are COUNTER-BACKED this cycle —
         # the precondition for ``_reconcile_home_energy``. Rebuilt from scratch
         # every cycle and never persisted: it describes THIS cycle's reads, not
@@ -1143,10 +1147,12 @@ class EnergyCalculator:
         # sanity net for the metered rows, and home is derived FROM those rows.
         # Capping after the derivation would let one corrupt BMS counter push a
         # bogus figure into the home row for a cycle before the net caught it.
+        # (#1218) A counter's figure never gets here: the corrections refuse
+        # one above the same ceiling, because a cap writes the day alone.
         battery_capacity = self.config.get("battery_capacity_kwh", 15)
-        max_daily_battery = battery_capacity * 3  # 3 full cycles/day is generous limit
+        max_daily_battery = self._daily_ceiling("battery_charge")
         inverter_kwp = self.config.get("system_size_kwp", 10)
-        max_daily_solar = inverter_kwp * 16  # 16 peak sun hours is extreme max
+        max_daily_solar = self._daily_ceiling("solar")
 
         if energy.daily_battery_discharge > max_daily_battery:
             _LOGGER.warning(
@@ -2685,9 +2691,10 @@ class EnergyCalculator:
         )
         target = bl["anchor"] + counter_daily
 
-        # Sanity cap — same physical bound the integrator uses.
+        # Sanity cap — same physical bound the integrator uses
+        # (``_daily_ceiling``, #1218).
         inverter_kwp = self.config.get("system_size_kwp", 10)
-        if target > inverter_kwp * 16:
+        if target > self._daily_ceiling("solar"):
             _LOGGER.warning(
                 "Solar counter reconciliation target %.1f kWh exceeds "
                 "%d kWp × 16h — ignoring this cycle (unit mismatch?)",
@@ -3635,12 +3642,20 @@ class EnergyCalculator:
         )
         target = max(0.0, bl["anchor"] + counter_daily)
 
-        if target > MAX_PLAUSIBLE_DAILY_KWH:
-            _LOGGER.warning(
-                "%s counter reconciliation target %.1f kWh exceeds the %.0f "
-                "kWh/day sanity ceiling — ignoring this cycle (unit mismatch?)",
-                category, target, MAX_PLAUSIBLE_DAILY_KWH,
-            )
+        # (#1218) The row's own ceiling, the one its cap below holds the day
+        # to. Adopted, a target above it moved the month, year and lifetime;
+        # the cap then wrote back only the day, and the next cycle added the
+        # same step again — and its cost, at a rate the step itself raised.
+        ceiling = self._daily_ceiling(category)
+        if target > ceiling:
+            if self._ceiling_warned.get(category) != today_str:
+                self._ceiling_warned[category] = today_str
+                _LOGGER.warning(
+                    "%s counter reconciliation target %.1f kWh exceeds the "
+                    "%.0f kWh/day sanity ceiling — ignoring the counter "
+                    "until it is back below (unit mismatch?)",
+                    category, target, ceiling,
+                )
             return
 
         delta = target - integrated
@@ -3864,6 +3879,23 @@ class EnergyCalculator:
             # max(0.0) — the delta is bidirectional, and a longer period must
             # never be dragged below zero by one day's correction.
             accumulators[key] = max(0.0, accumulators.get(key, 0.0) + delta)
+
+    def _daily_ceiling(self, category: str) -> float:
+        """(#1218) The most one day's row of ``category`` may hold.
+
+        One figure for both places that judge it: the cap at the end of
+        ``calculate_energy`` and the counter corrections before it. The cap
+        writes the day alone; a correction moves the month, year and lifetime
+        with it. A correction may therefore never adopt what the cap would
+        cut. EV has its own (``_max_daily_ev_kwh``).
+        """
+        if category in ("battery_charge", "battery_discharge"):
+            # 3 full cycles/day is generous limit
+            return self.config.get("battery_capacity_kwh", 15) * 3
+        if category == "solar":
+            # 16 peak sun hours is extreme max
+            return self.config.get("system_size_kwp", 10) * 16
+        return MAX_PLAUSIBLE_DAILY_KWH
 
     def _max_daily_ev_kwh(self) -> float:
         """Physical ceiling for one day of fleet EV charging.
