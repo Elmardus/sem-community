@@ -1385,10 +1385,12 @@ path, the hot-water boiler is a simple on/off device controlled by SEM.
 | Legionella target | Target temperature for the periodic Legionella cycle (default 65 °C) |
 
 Mode, priority, and when to stop or force heating are set on the **Control
-tab**, in the boiler's row. Under **Comfort**, "Keep at" plus "Bank by" is a
-second stop (SEM stops at whichever is lower), and "Run now past" forces
-heating below that temperature from the sources you allow there. With no
-thermometer picked, the Comfort section reads the boiler's own temperature.
+tab**, in the boiler's row. Under **Comfort**, "Keep at" plus "Extra from
+surplus" is a second stop (SEM stops at whichever is lower), and "Run now
+past" forces heating below that temperature from the sources you allow there.
+An example under the fields shows how high surplus may heat. The section also
+names the thermometer it reads; with none picked, it reads the boiler's own
+temperature.
 
 **If the temperature sensor is omitted:** SEM operates the boiler "blind" —
 it controls the on/off but relies on the boiler's internal thermostat to
