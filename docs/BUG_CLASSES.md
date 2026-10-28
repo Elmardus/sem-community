@@ -265,9 +265,20 @@ only-restored row (a dead DSMR entry hid the meter that works), a `declared` pai
 guess, and the Config card counts the grid pair SEM reads as in use (no "Use" buttons for it). An
 English DSMR with phase sensors on had its import read from phase L3; the key reads the total. **Still open:** P1 Monitor's keys are common words a
 heat pump also uses, so they need a one-brand rule (#1222); the crawler reads `ram_` in DSMR Reader's
-`telegram_timestamp` as an appliance and drops its pair (#1223); a SlimmeLezer (ESPHome) names its pair
-`power_consumed`/`power_produced`, which no word list holds (#1225); the card saves a split pair one
+`telegram_timestamp` as an appliance and drops its pair (#1223); the card saves a split pair one
 half per click, and half a pair reads export as 0 W (#1224).
+**Instance (#1225) — a pair named by firmware:** a SlimmeLezer P1 reader (ESPHome `dsmr`) names its pair
+`power_consumed`/`power_produced`, so the grid read 0 W. ESPHome is an opaque platform: the names come
+from the device, and there is no key to declare. The same words name Sinapsi Alfa's SOLAR output and
+P1 Monitor's phase rows. **Closure:** `PLATFORM_SPLIT_GRID_NAMES` asks the words on `esphome` only, and only
+as the whole name the firmware gave (`original_name`, or the object id at the end of the unique_id), so
+"Solar Power Produced" and "Power Consumed 3" stay out and a renamed entity_id is still found. **Swept:**
+on the counters' own device the name search kept the LAST match, so a phase row (`grid_import_power_l2`,
+`…_power_consumption_phase_l3`) beat the whole meter and was trusted. A whole-meter row now wins
+(`_PHASE_ROW`); a phase row still picked is `any-device`, so the counters check it. **Guard:**
+`tests/test_1225_slimmelezer_pair.py` (the firmware's rows in kW with phases, a control without the words,
+other brands and other ESPHome names left out, EG4/DSMR phase twins). Setup still says "no grid power
+sensor" for a pair the reader finds later (#1237).
 **Missing-wiring sibling (#744, @Azlinon, 2026-08-11) — the derivation existed but was never called
 for LOADS.** The keyword gap above is one facet; the sharper one is a source where the whole
 derivation is *absent*. The Energy Dashboard's individual-device UI collects only the kWh energy
@@ -293,7 +304,7 @@ channel; energy/reactive sensors excluded; a power-only 400 W load reads ON end-
 payload; and a brand-named *derived* sensor does NOT make a controlless load controllable). **Sweep
 question:** for every power/energy figure a surface derives from an Energy-Dashboard entity, is the
 companion power sensor *derived* when the ED has no `stat_rate`, or assumed present — and does that
-derivation leak into a *control* decision? Refs #250 #274 #597 #600 #744 #1172 #1189.
+derivation leak into a *control* decision? Refs #250 #274 #597 #600 #744 #1172 #1189 #1225.
 
 ### 11. Corrected value overwrites a raw display field (paired-figure basis mismatch) — GUARDED
 **Symptom:** two figures shown side by side on a card disagree in a way that reads as a
