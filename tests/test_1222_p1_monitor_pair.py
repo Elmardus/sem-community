@@ -420,9 +420,19 @@ class TestTheRosterCarriesThePair:
         lexicon = crawler._lexicon()
         vocab = _strings_vocab("tibber")
         roles = crawler.roles_from_vocabulary(vocab, lexicon, "energy", "tibber")
-        assert roles["grid_import_power"]["keys"] == ("power",)
+        # Tibber's own strings.json also declares ``power_flow_from_grid``
+        # (its home-battery flow sensor, a pre-#1222 "any" pattern) beside
+        # the Pulse pair's ``power`` (the new #1222 brand_any match) — both
+        # are real candidate keys, so ``keys`` carries both. ``exact_only``
+        # stays just ``power``: nothing else ends in "_power_flow_from_grid".
+        assert roles["grid_import_power"]["keys"] == (
+            "power", "power_flow_from_grid")
         assert roles["grid_import_power"]["exact_only"] == ("power",)
-        assert roles["grid_export_power"]["keys"] == ("power_production",)
+        # Same shape the other way: Tibber's own ``power_flow_to_grid``
+        # (pre-#1222 "any" pattern) sits beside ``power_production`` (the
+        # new #1222 brand_any match).
+        assert roles["grid_export_power"]["keys"] == (
+            "power_flow_to_grid", "power_production")
 
     def test_the_names_are_has_own(self):
         """The premise, read from the installed core integrations: the keys
