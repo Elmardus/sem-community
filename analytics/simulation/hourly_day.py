@@ -103,6 +103,8 @@ class HourlyDay:
     home: List[float] = field(default_factory=_zeros)
     #: (#1216) the pack's part of ``grid_export``, kWh (``PART_ROLES``)
     grid_export_battery: List[float] = field(default_factory=_zeros)
+    #: (#1216) the recorder held rows of the sale this day
+    sale_recorded: bool = False
     soc_pct: List[Optional[float]] = field(default_factory=_nones)
     #: None = not recorded; the caller's flat rate stands in
     import_rate: List[Optional[float]] = field(default_factory=_nones)
@@ -124,6 +126,7 @@ class HourlyDay:
                 raise ValueError(f"{name}: {len(vals)} hours, need {HOURS}")
             setattr(self, name, [None if v is None else float(v) for v in vals])
         self.tags = [str(t) for t in (self.tags or [])]
+        self.sale_recorded = bool(self.sale_recorded)
         self.missing_hours = sorted({int(h) for h in self.missing_hours})
         self.notes = [str(n) for n in (self.notes or [])]
 
@@ -196,6 +199,14 @@ class HourlyDay:
         return battery_export_part(self.grid_export[hour],
                                    self.grid_export_battery[hour])
 
+    @property
+    def sale_known(self) -> bool:
+        """(#1216) Is it known who exported this day: the sale sensor has
+        rows, or the pack never discharged. A day before SEM published the
+        sensor is not: the simulated side then counts its own sale as the
+        actual side must, all as solar's, so the two compare."""
+        return self.sale_recorded or self.total("battery_discharge") <= 0.0
+
     def total(self, role: str) -> float:
         return float(sum(getattr(self, role)))
 
@@ -254,6 +265,7 @@ class HourlyDay:
                 if kwh < -STEP_BACK_NOTE_KWH:
                     notes.append(f"{role} counter stepped back {-kwh:.2f} kWh "
                                  f"at {hour:02d}:00 — netted against the day")
+        sale_recorded = False
         for role in PART_ROLES:
             # (#1216) a part of a flow, not a flow: no missing hour, no
             # note — no rows only means no split is known
@@ -262,6 +274,7 @@ class HourlyDay:
                 hour = _hour_of(row.get("start"), day, tz)
                 if hour is None:
                     continue
+                sale_recorded = True
                 try:
                     raw[hour] += float(row.get("change") or 0.0)
                 except (TypeError, ValueError):
@@ -283,6 +296,7 @@ class HourlyDay:
             soc_pct=means[SOC], import_rate=means[IMPORT_RATE],
             export_rate=means[EXPORT_RATE], forecast_kwh=forecast,
             missing_hours=sorted(missing), notes=notes,
+            sale_recorded=sale_recorded,
             **out,
         )
         # Every day is checked and closed, one with a missing hour too.

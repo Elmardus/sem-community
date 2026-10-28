@@ -988,7 +988,9 @@ def simulate_day(day: HourlyDay, params: SimParams,
             "soc_end_pct": round(100.0 * soc_end / cap, 6) if cap else None,
             "solar": hour.solar, "home": bal.home_kwh, "ev": hour.ev,
             "grid_import": flow.grid_import, "grid_export": flow.grid_export,
-            "grid_export_battery": flow.battery_export,
+            # (#1216) split only where the actual side can split too
+            "grid_export_battery": (flow.battery_export if day.sale_known
+                                    else 0.0),
             "battery_charge": flow.battery_charge,
             "battery_discharge": flow.battery_discharge,
             "grid_charge": flow.grid_charge,

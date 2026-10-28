@@ -122,6 +122,7 @@ def _day(**kw):
 class TestTheRecordedDay:
     def test_the_sale_is_read_as_a_part_not_a_flow(self):
         day = _day()
+        assert day.sale_recorded and day.sale_known
         assert day.grid_export_battery[6] == pytest.approx(4.0)
         assert day.sale(6) == pytest.approx(4.0)
         assert day.missing_hours == [] and not day.counter_jumped
@@ -197,10 +198,11 @@ class TestTheSimulatedSale:
         flow, _ = _dispatch(normal, _hour(2.0, 0.5), 9.9, self.PARAMS)
         assert flow.grid_export > 0 and flow.battery_export == 0.0
 
+    FORCE = SimParams(capacity_kwh=10.0, reserve_pct=10.0,
+                      battery_mode="force_discharge")
+
     def test_a_force_discharge_what_if_counts_its_sale_apart(self):
-        params = SimParams(capacity_kwh=10.0, reserve_pct=10.0,
-                           battery_mode="force_discharge")
-        res = simulate_day(_day(sale=False), params, CFG)
+        res = simulate_day(_day(), self.FORCE, CFG)
         s = res.simulated
         sold = s[GRID_EXPORT_BATTERY]
         assert sold > 1.0, s
@@ -212,6 +214,34 @@ class TestTheSimulatedSale:
         # the old rule read the sale as solar sent out
         old = 100.0 * max(0.0, s["solar"] - s["grid_export"]) / s["solar"]
         assert e["self_consumption_pct"] > old + 5.0
+
+    def test_a_day_before_the_sensor_compares_on_one_rule(self):
+        """The real pack discharged, the recorder has no sale rows: the
+        actual side cannot split, so the simulated side does not either.
+        Splitting one side only made the what-if look better (review)."""
+        day = _day(sale=False)
+        assert not day.sale_recorded and not day.sale_known
+        res = simulate_day(day, self.FORCE, CFG)
+        assert res.simulated["battery_discharge"] > 1.0
+        assert res.simulated[GRID_EXPORT_BATTERY] == 0.0
+        e = energy_totals([res], 10.0, 10.0)["simulated"]
+        s = res.simulated
+        assert e["self_consumption_pct"] == pytest.approx(
+            100.0 * max(0.0, s["solar"] - s["grid_export"]) / s["solar"],
+            abs=0.05)
+
+    def test_a_day_with_no_discharge_is_known(self):
+        """Nothing left the real pack (or there is none): nobody but the
+        sun exported, so the what-if pack's sale is split."""
+        rows = _role_rows(sale=False)
+        for row in rows["battery_discharge"]:
+            row["change"] = 0.0
+        rows["grid_export"][6]["change"] = 0.0
+        rows["grid_import"][6]["change"] = 0.5
+        day = HourlyDay.from_statistics(rows, date=DATE, tz=TZ)
+        assert not day.sale_recorded and day.sale_known
+        res = simulate_day(day, self.FORCE, CFG)
+        assert res.simulated[GRID_EXPORT_BATTERY] > 1.0
 
 
 # ── the simulation: the job reads the sensor ──────────────────────────
@@ -242,6 +272,23 @@ class _Stats:
 
 def _entity(key):
     return SALE_ENTITY if key == BATTERY_SALE_SENSOR_KEY else f"sensor.sem_{key}"
+
+
+def test_the_job_finds_the_sale_sensor_by_unique_id(monkeypatch):
+    from types import SimpleNamespace
+
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.solar_energy_management.coordinator.simulation_job import (
+        SimulationJob,
+    )
+    monkeypatch.setattr(er, "async_get", lambda hass: _Registry(
+        {f"sem_{BATTERY_SALE_SENSOR_KEY}": SALE_ENTITY,
+         "sem_daily_solar_energy": "sensor.sun"}))
+    job = SimulationJob(MagicMock(), SimpleNamespace(config={}),
+                        read_stats=lambda *a: None)
+    assert job._entity_ids() == {GRID_EXPORT_BATTERY: SALE_ENTITY,
+                                 "solar": "sensor.sun"}
 
 
 @pytest.mark.asyncio
