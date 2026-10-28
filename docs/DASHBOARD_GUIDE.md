@@ -250,6 +250,8 @@ words (entities *and* services), and an *add this charger* button when SEM
 can drive it as-is. When it cannot, the row says why ("wire by hand: fields
 SEM cannot fill"). Cars found on a transport such as MQTT are listed as
 **vehicles**. Nothing here is bound until you confirm it in a picker.
+For a grid meter with two sensors, one **Use this** click saves both import
+and export.
 
 ##### Battery: setpoint model (2.1)
 
