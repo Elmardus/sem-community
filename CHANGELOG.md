@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **One click on a grid meter in Detected hardware now saves both its import and export sensors** (#1224). Before, export could read 0 W.
 - 🐛 **A SlimmeLezer P1 reader now shows grid power** (#1225). Before, it read 0 W. SEM also no longer takes one phase for the whole meter.
 - 🐛 **SEM now finds the power sensor of a second inverter or battery, or a Repair says it found none** (#1226). Before, it read 0 W.
 - 🐛 **Two grid Repairs and other texts are now in your language** (#1227). Before, they were partly English in 14 languages.
