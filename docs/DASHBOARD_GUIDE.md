@@ -494,7 +494,8 @@ free. Cost per kWh and the shares therefore tell one consistent story.
 
 **SEM Energy Impact** · *Energy tab*
 
-CO₂ avoided and its tree-equivalent, for today, this year, and lifetime.
+CO₂ avoided and its tree-equivalent, for today, this year, and lifetime. It
+shows the same figure as its sensor, solar stored in the battery included.
 
 #### sem-energy-plan-card
 
