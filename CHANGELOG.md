@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A learned battery sign now stays with its battery when a battery is removed or replaced** (#1205). Before, the next battery could read discharge as charge.
 - 🐛 **The learned battery sign no longer flips when you go back a version and forward again** (#1208). Homes without an Energy Dashboard keep it too.
 - 🐛 **"Reset sign detection" now stays reset when a "Fix sign" flip was on** (#1209). A reload no longer reads old saved data back.
 - 🐛 **SEM no longer flips the sign of a grid meter with two sensors (import and export)** (#1215). Before, export could read as import.
