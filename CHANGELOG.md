@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **The learned battery sign no longer flips when you go back a version and forward again** (#1208). Homes without an Energy Dashboard keep it too.
 - 🐛 **"Reset sign detection" now stays reset when a "Fix sign" flip was on** (#1209). A reload no longer reads old saved data back.
 - 🐛 **SEM no longer flips the sign of a grid meter with two sensors (import and export)** (#1215). Before, export could read as import.
 - 🐛 **The Simulation tab and cost estimates no longer count a battery sale as solar sent out** (#1216). Before, self-consumption and solar savings read too low.

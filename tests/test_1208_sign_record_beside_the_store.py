@@ -55,7 +55,8 @@ def _ed():
     return _parse_prefs(MagicMock(), prefs, quiet=True)
 
 
-def _reader(raw=1200, flip=False, dashboard=True, answered=True, battery_pick=None):
+def _reader(raw=1200, flip=False, dashboard=True, answered=True, battery_pick=None,
+            brand=None):
     """The real reader. ``raw`` is what the battery sensor shows; + is charge
     on an Inverted sensor. No energy counter reads, so no sign is learned."""
     states = {"sensor.pv_power": "3000", "sensor.grid_power": "0",
@@ -69,7 +70,7 @@ def _reader(raw=1200, flip=False, dashboard=True, answered=True, battery_pick=No
     if battery_pick:
         options["battery_power_sensor"] = battery_pick
     reader = SensorReader(hass, options)
-    reader._entity_owner = lambda eid: (None, None)   # no brand seed
+    reader._entity_owner = lambda eid: (brand, None)   # None: no brand seed
     reader._sign_vote_warmup = 0
     reader.set_dashboard_answered(answered)
     if dashboard:
@@ -186,6 +187,23 @@ def test_a_flip_changed_in_the_older_build_is_moved(flip_before, lock):
         return
     assert reader.read_power().battery_power == pytest.approx(float(shown))
     assert reader._battery_sign_detected[FLEET] is True
+
+
+def test_a_brand_default_is_not_a_lock_in_the_record():
+    """A brand's default sign is set before any lock and is not saved as one,
+    so the record holds no sign without a lock: else the older build's save
+    would look changed, and the flip would be locked against."""
+    this_build = _reader(flip=True, brand="goodwe")   # the table negates goodwe
+    shown = this_build.read_power().battery_power
+    assert this_build._battery_sign_inverted[FLEET] is True
+    assert not this_build._battery_sign_detected.get(FLEET)
+    state, record = this_build.export_sign_state(), this_build.export_battery_basis()
+    assert record["fleet_inverted"] is False
+
+    reader = _reader(flip=True, brand="goodwe")
+    reader.restore_sign_state(_older_build_writes(state), basis=record)
+    assert reader.read_power().battery_power == pytest.approx(shown)
+    assert not reader._battery_sign_detected.get(FLEET)
 
 
 def test_the_record_waits_with_the_move():
@@ -357,5 +375,37 @@ async def test_the_coordinator_saves_the_record_and_starts_from_it(
     assert data["battery_sign_basis"] == {
         "fleet_locked": True, "fleet_inverted": not with_record,
         "user_flip": False}
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+@_needs_real_hass
+@pytest.mark.asyncio
+async def test_the_coordinator_settles_a_home_without_a_dashboard(
+    sem_real_hass, sem_config_entry, hass_storage,
+) -> None:
+    """No Energy Dashboard, and HA says so: the first read settles the move,
+    the lock is kept and the mark is saved."""
+    from custom_components.solar_energy_management.const import DOMAIN
+
+    hass = sem_real_hass
+    entry = sem_config_entry
+    key = f"{DOMAIN}_{entry.entry_id}_energy"
+    hass_storage[key] = {"version": 1, "minor_version": 1, "key": key, "data": {
+        "sign_state": {"grid_detected": False, "grid_inverted": False,
+                       "battery_detected": {FLEET: True},
+                       "battery_inverted": {FLEET: True}}}}
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    assert coordinator._sensor_reader._energy_dashboard_config is None
+    assert coordinator._ed_answered is True
+
+    await coordinator._storage.async_save_energy_now()
+    data = hass_storage[key]["data"]
+    assert data["sign_state"]["battery_basis"] == "sensor"
+    assert data["sign_state"]["battery_inverted"][FLEET] is True
+    assert data["battery_sign_basis"]["fleet_inverted"] is True
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
