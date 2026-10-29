@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from custom_components.solar_energy_management.coordinator.sensor_reader import (
     SensorReader,
 )
-from custom_components.solar_energy_management.coordinator.types import PowerReadings
 
 
 def _state(value, unit="W", device_class=None, state_class="measurement"):
