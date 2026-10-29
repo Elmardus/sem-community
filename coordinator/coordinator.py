@@ -1935,8 +1935,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         """Check energy balance and auto-correct grid sign if persistently negative.
 
         Returns True if the sign was flipped (caller should re-read power).
-        Low-confidence split-grid picks suppress the flip for up to 3 cycles
-        (~9 min) to give late-loading integrations time to register (issue #166).
+
+        (#1215) It acts only where the grid sign is learned: a pair (manual,
+        the dashboard's two sensors, a found pair) has its sign by setup.
+        That also ended the #166 wait for a low-confidence found pair: such a
+        pick is a pair once read, and reads 0 W (no heal) until then.
 
         Two things it must NOT do (#690):
 
@@ -1959,6 +1962,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         if raw_balance < -500:
             # Guard 1 (#690): an explicit user decision is not a fault to heal.
             if getattr(self._sensor_reader, "grid_sign_user_override", False):
+                return False
+            # Guard 3 (#1215): a pair reads export minus import, so there is
+            # no grid sign to flip, and the read never applies the lock to it.
+            # A flip would change nothing but the saved state.
+            if self._sensor_reader.grid_read_is_pair():
                 return False
             self._positive_balance_count = 0
             self._negative_balance_count = getattr(self, '_negative_balance_count', 0) + 1
@@ -1992,18 +2000,6 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     # read, but the contract stays honest and the caller's
                     # cached readings can't keep the reverted sign.
                     return True
-                disc = getattr(self._sensor_reader, "_split_grid_discovery", None)
-                self._sign_flip_suppression_count = getattr(self, '_sign_flip_suppression_count', 0)
-                if disc and disc.get("confidence") == "any-device" and self._sign_flip_suppression_count < 3:
-                    self._sign_flip_suppression_count += 1
-                    _LOGGER.debug(
-                        "Negative balance %.0fW with low-confidence split-grid "
-                        "discovery — suppressing sign flip pending re-discovery "
-                        "(attempt %d/3)",
-                        raw_balance, self._sign_flip_suppression_count,
-                    )
-                    self._negative_balance_count = 0
-                    return False
                 # Auto-correct: flip the grid sign
                 # (#690) Remember the pre-flip lock so a failed attempt can be
                 # reverted cleanly — the flip below stamps `_grid_sign_detected`,
@@ -2023,7 +2019,6 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     power.solar_power, power.grid_power, power.battery_power,
                 )
                 self._negative_balance_count = 0
-                self._sign_flip_suppression_count = 0
                 return True
         else:
             self._negative_balance_count = max(0, getattr(self, '_negative_balance_count', 0) - 1)

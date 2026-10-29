@@ -72,13 +72,22 @@ def build_diagnostics(coord) -> Dict[str, Any]:
         }.get(_conf, "split-lowconf")
     else:
         out["diag_grid_mode"] = "combined"
-    out["diag_grid_sign"] = "negated" if reader._grid_sign_inverted else "normal"
+    # (#1215) what the learned lock does to this read: none on a pair
+    out["diag_grid_sign"] = (
+        "negated" if reader._grid_sign_inverted
+        and not reader.grid_read_is_pair() else "normal")
 
     # #588 — battery sign summary per bid (mirrors diag_grid_sign).
+    # (#1215) …and a one-battery pair takes no lock: its sign is known, as
+    # for the grid
+    _bat_inverted = dict(getattr(reader, "_battery_sign_inverted", {}))
+    _bat_detected = dict(getattr(reader, "_battery_sign_detected", {}))
+    if getattr(reader, "_battery_read_is_pair", False) is True:
+        _fleet = getattr(reader, "_FLEET_BID", "__fleet__")
+        _bat_inverted[_fleet] = False
+        _bat_detected[_fleet] = True
     out["diag_battery_sign"] = format_battery_sign_diag(
-        getattr(reader, "_battery_sign_inverted", {}),
-        getattr(reader, "_battery_sign_detected", {}),
-    )
+        _bat_inverted, _bat_detected)
 
     # #590 — the layered-trace health signal, surfaced as ONE queryable
     # binary sensor (binary_sensor.sem_layer_mismatch). ON when a control OR
