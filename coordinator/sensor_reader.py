@@ -484,8 +484,13 @@ class SensorReader:
         self._battery_pair_lock_said = False
         #: (#1194) A restored fleet battery lock from a store written while
         #: the one-battery read still flipped an "Inverted" sensor. Moved
-        #: once, on the first Energy Dashboard read.
+        #: once, on the first read that can tell (#1208).
         self._battery_lock_on_flipped = False
+        #: (#1208) Whether the last Energy Dashboard read got an answer
+        #: (``set_dashboard_answered``). A read without a dashboard settles
+        #: the move only then: a dashboard SEM could not read may be the one
+        #: an older build read.
+        self._dashboard_answered = False
         #: (#1193) Restored battery locks, by bid, learned while each battery
         #: was judged by entry N of the counter lists and not checked yet.
         #: Each is checked once, on an Energy Dashboard read that uses it.
@@ -985,6 +990,11 @@ class SensorReader:
         self._entities_read = set()
         self._read_cycles = 0
         return ids, cycles
+
+    def set_dashboard_answered(self, answered: bool) -> None:
+        """(#1208) Whether the coordinator's Energy Dashboard read got an
+        answer (``read_energy_dashboard_config_outcome``), also "none"."""
+        self._dashboard_answered = bool(answered)
 
     def set_energy_dashboard_config(self, ed_config) -> None:
         """Set energy dashboard configuration for alternative sensor reading."""
@@ -1624,13 +1634,35 @@ class SensorReader:
                 if not self._battery_sign_detected.get(b)}) else {}),
         }
 
-    def restore_sign_state(self, state) -> None:
+    def export_battery_basis(self) -> Optional[dict]:
+        """(#1208) What the #1194 move would change, as this build saves it:
+        the fleet lock and the user's flip. Saved beside ``sign_state``, not
+        in it: an older build writes ``sign_state`` again from the keys it
+        knows, but keeps the store's other keys. None while a lock from an
+        older store still waits to be moved: it is not this build's yet."""
+        if getattr(self, "_battery_lock_on_flipped", False):
+            return None
+        return self._battery_basis_now()
+
+    def _battery_basis_now(self) -> dict:
+        fleet = self._FLEET_BID
+        locked = bool(self._battery_sign_detected.get(fleet))
+        return {
+            "fleet_locked": locked,
+            "fleet_inverted": locked and bool(
+                self._battery_sign_inverted.get(fleet, False)),
+            "user_flip": bool((getattr(self, "_raw_config", None) or {}).get(
+                "battery_sign_user_flip", False)),
+        }
+
+    def restore_sign_state(self, state, basis=None) -> None:
         """Re-seed locked sign state from storage (setup time).
 
         Only LOCKED entries restore (detected must be True with a bool
         inversion) — votes, warmup counters and unlocked guesses never
         persist, so a half-learned state can't be resurrected. Garbage
-        / legacy shapes are ignored wholesale.
+        / legacy shapes are ignored wholesale. ``basis`` is the record
+        saved beside it (``export_battery_basis``).
         """
         if not isinstance(state, dict):
             return
@@ -1662,7 +1694,12 @@ class SensorReader:
         # one-battery read still flipped an "Inverted" sensor, so its fleet
         # lock, or the user's flip, may judge the flipped value
         # (``_move_lock_learned_on_flip``). ``{}`` is no store (or a reset).
-        self._battery_lock_on_flipped = bool(state) and "battery_basis" not in state
+        # (#1208) An older build run after this one writes the store again
+        # without the mark. If the fleet lock and the flip are still what
+        # this build saved beside it, that build changed nothing to move.
+        self._battery_lock_on_flipped = (
+            bool(state) and "battery_basis" not in state
+            and basis != self._battery_basis_now())
         # (#1193) A store without ``battery_counters`` judged each battery by
         # entry N of the counter lists: every lock it holds is checked
         # (``_drop_locks_on_other_counters``). A newer store names the ones
@@ -3326,6 +3363,10 @@ class SensorReader:
 
         A fleet lock waits while the home reads per battery (that read does
         not use it), so it is still moved if the home goes back to one.
+
+        (#1208) A read without a dashboard was never flipped: it settles the
+        move with nothing to change (``ed`` None, ``read_alone`` False), so
+        the mark is saved and a dashboard added later keeps this sign.
         """
         if not getattr(self, "_battery_lock_on_flipped", False):
             return
@@ -5002,6 +5043,11 @@ class SensorReader:
             readings.battery_power = self._read_sensor(
                 self.config.battery_power_sensor, "battery"
             )
+        # (#1208) No build flipped a battery read without a dashboard: a
+        # saved sign has nothing to move. Settled only on an answer — a
+        # dashboard SEM could not read may be the one an older build read.
+        if getattr(self, "_dashboard_answered", False):
+            self._move_lock_learned_on_flip(None, read_alone=False)
 
         # Battery SOC — use allow_none to distinguish 0% from unavailable.
         # (#875) No sensor configured is the same "nothing measured" as a
