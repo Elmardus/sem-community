@@ -4060,6 +4060,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
                 elif devices:
                     _PENDING_LOAD_TEARDOWN[entry.entry_id] = devices
 
+            # (#1209) Last: SEM's own store. A reload reads the files, so what
+            # this lifetime saved must be on them; and nothing of this
+            # lifetime may write after (a removal deletes the files next).
+            _storage = getattr(coordinator, "_storage", None)
+            if _storage is not None:
+                try:
+                    await _storage.async_close()
+                except Exception:  # noqa: BLE001 — teardown must finish
+                    _LOGGER.warning("could not save SEM's store on unload",
+                                    exc_info=True)
+
         hass.data[DOMAIN].pop(entry.entry_id, None)
 
         # Remove all registered services (quality scale: config-entry-unloading)
@@ -6615,7 +6626,9 @@ async def _async_register_phase_services(
         storage = getattr(coordinator, "_storage", None)
         if storage is not None:
             storage.set_sign_state({})
-            await storage.async_save_energy_delayed()
+            # (#1209) Now, not queued: the queued save lands only once the
+            # cycles stop, so a restart before it read the old signs back.
+            await storage.async_save_energy_now()
         # A re-learn must start clean: drop any prior one-tap user flip
         # (#461 / #588) so the freshly-learned sign isn't silently re-inverted
         # on top. Only touches the entry — and reloads — when a flip was
