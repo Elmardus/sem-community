@@ -416,7 +416,6 @@ def test_the_audit_of_a_battery_that_moved_is_not_pruned_by_count():
 @pytest.mark.parametrize("key", ["b\u00b2", "b01", "b0", "bx", "b"])
 def test_a_damaged_battery_id_stops_nothing(key):
     """Review: a damaged id in the store must not stop the read."""
-    key = key.encode().decode("unicode_escape")
     store = {"battery_detected": {key: True, "b2": True},
              "battery_inverted": {key: True, "b2": False},
              "battery_basis": "sensor", "battery_counters": "own",
@@ -431,19 +430,20 @@ def test_a_damaged_battery_id_stops_nothing(key):
 
 def test_a_split_pair_audit_is_about_its_two_sensors():
     """Review: a two-sensor battery's id is a place too. Another pair at the
-    same id starts with a fresh exclusivity audit, not the last one's flag."""
+    same id starts its own count; it does not take the last pair's votes."""
     r = SensorReader(MagicMock(), {})
-    for _ in range(12):
+    for _ in range(3):
         r._audit_split_pair("b2", "Battery b2", 800.0, "sensor.p1_from",
                             900.0, "sensor.p1_to")
-    assert r._split_pair_audits["b2"].flagged
-    r._audit_split_pair("b2", "Battery b2", 0.0, "sensor.p2_from",
-                        900.0, "sensor.p2_to")
-    assert not r._split_pair_audits["b2"].flagged
-    for _ in range(3):
-        r._audit_split_pair("b2", "Battery b2", 0.0, "sensor.p2_from",
+    assert r._split_pair_audits["b2"].votes == 3
+    for _ in range(4):
+        r._audit_split_pair("b2", "Battery b2", 800.0, "sensor.p2_from",
                             900.0, "sensor.p2_to")
-    assert not r._split_pair_audits["b2"].flagged
+    audit = r._split_pair_audits["b2"]
+    assert audit.votes == 4 and not audit.flagged
+    r._audit_split_pair("b2", "Battery b2", 800.0, "sensor.p2_from",
+                        900.0, "sensor.p2_to")
+    assert r._split_pair_audits["b2"].flagged, "its own five votes"
 
 
 # ── 3. Guard: a new per-battery record must move too ───────────────────────
