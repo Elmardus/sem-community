@@ -1938,6 +1938,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         Low-confidence split-grid picks suppress the flip for up to 3 cycles
         (~9 min) to give late-loading integrations time to register (issue #166).
 
+        (#1215) It acts only where the grid sign is learned: a pair (manual,
+        the dashboard's two sensors, a found pair) has its sign by setup.
+
         Two things it must NOT do (#690):
 
         1. **Fight the user.** A negative balance proves the inputs disagree,
@@ -1959,6 +1962,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         if raw_balance < -500:
             # Guard 1 (#690): an explicit user decision is not a fault to heal.
             if getattr(self._sensor_reader, "grid_sign_user_override", False):
+                return False
+            # Guard 3 (#1215): a pair reads export minus import, so there is
+            # no grid sign to flip, and the read never applies the lock to it.
+            # A flip would change nothing but the saved state.
+            if self._sensor_reader.grid_read_is_pair():
                 return False
             self._positive_balance_count = 0
             self._negative_balance_count = getattr(self, '_negative_balance_count', 0) + 1

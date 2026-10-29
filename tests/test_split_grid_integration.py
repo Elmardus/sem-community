@@ -2015,6 +2015,10 @@ class TestSplitGridStartupRace:
         # auto-vivifies to a truthy child mock, which would stand the self-heal
         # down and make every sign-flip test below pass vacuously.
         coord._sensor_reader.grid_sign_user_override = False
+        # (#1215) Same trap: a truthy mock would read as a pair and stand the
+        # self-heal down. These tests ask what the discovery's confidence
+        # does to a heal that may act, so the read is no pair here.
+        coord._sensor_reader.grid_read_is_pair.return_value = False
         coord._negative_balance_count = 0
         coord._sign_flip_suppression_count = 0
         return coord

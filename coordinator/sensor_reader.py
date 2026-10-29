@@ -1020,6 +1020,7 @@ class SensorReader:
         # Try Energy Dashboard config first, then legacy config
         self._split_pair_seen = set()
         self._battery_power_missing = False   # (#758) per-cycle
+        self._battery_read_is_pair = False    # (#1215) per-cycle
         self._input_reads = {}                # (#818) per-cycle
         self._input_dark = {}                 # (#818) per-cycle
         self._unsourced_power = None          # (#1188) per-cycle
@@ -1726,8 +1727,7 @@ class SensorReader:
         self._restored_grid_source = _UNSET
         if recorded == self._grid_source_key:
             return
-        kind = self._grid_source_key.split(":", 1)[0]
-        if kind not in ("combined", "sum"):
+        if self.grid_read_is_pair():
             # A pair (manual, dashboard pair, discovered) has its sign BY
             # DECLARATION: export minus import, and its read path sets the
             # lock itself. Unlocking it would let the brand seed negate a
@@ -2084,6 +2084,21 @@ class SensorReader:
     #: pair (manual or the Energy Dashboard's from/to) has no lock.
     _AUTO_GRID_SOURCES = ("combined", "sum", "discovered")
 
+    #: (#1215) Grid sources read as a pair: export minus import, both sides
+    #: positive, so the pair sets the sign. No learned lock applies to them.
+    _PAIR_GRID_SOURCES = ("manual", "ed_pair", "discovered")
+    #: …and the ones whose sign SEM learns and keeps as a lock.
+    _LEARNED_GRID_SOURCES = ("combined", "sum")
+
+    def grid_read_is_pair(self) -> bool:
+        """(#1215) Is the grid read from a pair? Then there is no sign to
+        learn or flip: the read never applies the lock, whoever wrote it
+        (the balance self-heal, a saved store, the solar override, the brand
+        seed before a found pair is proven), and the self-heal stands down.
+        The user's own flip and ``grid_sign_invert`` still apply."""
+        kind = (self._grid_source_key or "").split(":", 1)[0]
+        return kind in self._PAIR_GRID_SOURCES
+
     def user_flip_applies(self) -> bool:
         """(#971) Does the persisted one-tap flip apply to THIS cycle's source?
 
@@ -2166,6 +2181,19 @@ class SensorReader:
 
         Returns True if grid_power should be negated.
         """
+        # (#1215) A pair has its sign by setup: nothing to detect, and a lock
+        # is never applied to it. Kept here, at the read, because several
+        # paths write the lock; the restore check alone (#1103) let the
+        # balance self-heal negate a pair and save it.
+        if self.grid_read_is_pair():
+            if self._grid_sign_inverted:
+                self._grid_sign_inverted = False
+                _LOGGER.info(
+                    "grid sign: %s is a pair (export minus import) — a "
+                    "learned negation does not apply to it, dropped (#1215)",
+                    self._grid_source_key)
+            return False
+
         # Deterministic brand seed first (#461): a known meter integration
         # locks the sign immediately. Solar can still override it below.
         self._seed_grid_sign_from_platform()
@@ -2331,6 +2359,18 @@ class SensorReader:
 
         Returns True if battery_power should be negated.
         """
+        # (#1215) One battery read as a two-sensor pair: charge minus
+        # discharge, its sign set by the pair, as for each pair of a fleet
+        # (#553) and the grid's pairs. A lock (a saved one, the brand seed on
+        # its counter's integration) is never applied to it.
+        if getattr(self, "_battery_read_is_pair", False):
+            if self._battery_sign_inverted.get(self._FLEET_BID):
+                self._battery_sign_inverted[self._FLEET_BID] = False
+                _LOGGER.info(
+                    "battery sign: the battery is a two-sensor pair (charge "
+                    "minus discharge) — a learned negation does not apply "
+                    "to it, dropped (#1215)")
+            return False
         ed = self._energy_dashboard_config
         if not ed:
             # #476 item 5: honour a restored fleet lock when the Energy
@@ -3057,6 +3097,7 @@ class SensorReader:
                 charge_w, ed.battery_power_to,
             )
             readings.battery_power = charge_w - discharge_w
+            self._battery_read_is_pair = True   # (#1215) no lock applies
         elif ed.battery_charge_energy or ed.battery_discharge_energy:
             unsourced["battery"] = (ed.battery_charge_energy
                                     or ed.battery_discharge_energy)
@@ -4875,8 +4916,7 @@ class SensorReader:
         # config flow and the Detected-hardware card and then read a flat
         # 0 W grid forever. Same semantics as there: grid = export − import,
         # both sides positive, and the convention is fixed BY DECLARATION so
-        # no sign detection is needed (the solar voter computes the same
-        # sign and therefore never flips it).
+        # no sign detection runs and no lock applies (#1215).
         #
         # (#1192) Each branch names its source, as on the dashboard path: the
         # "Fix grid sign" tap is bound to it (#971), and with no name every tap
