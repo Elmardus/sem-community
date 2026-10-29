@@ -9830,9 +9830,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         try:
             self._finish_manual_battery_modes(
                 battery_items, soc_seen, _bat_count, power_read=power_seen)
-        except Exception:  # noqa: BLE001 — a mode write must not end a cycle
-            _LOGGER.warning("ending a finished manual battery mode failed "
-                            "(#1131)", exc_info=True)
+        except Exception as err:  # noqa: BLE001 — a mode write must not end a cycle
+            # (#762/#1092-class) a persistent fault here logged a full
+            # traceback every cycle; log_on_change makes it a transition.
+            log_on_change(
+                _LOGGER, "manual_battery_mode_finish_failed", logging.WARNING,
+                "ending a finished manual battery mode failed (#1131): %s", err,
+            )
 
         # (#1178) Every battery decides before any command goes out: two
         # batteries on one discharge limit entity need ONE writer, and the

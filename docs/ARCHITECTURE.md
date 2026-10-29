@@ -1280,8 +1280,11 @@ references, the config card renders nothing for a missing entity.
 `hardware_detection.py` is the one crawler. The roles live in it
 (`read_charger_roles`, `_roles_offer`, `_roles_pass`), the words in
 `consts/role_lexicon.py`, services with their fields through `_services_of`.
-No brand code: a lint test refuses a new `_wire_<brand>` or
-`_discover_<brand>`, and the role reader may name no integration.
+No NEW brand code: a lint test refuses a new `_wire_<brand>` or
+`_discover_<brand>`, and the role reader may name no integration. A
+shrinking list of older per-brand functions is still being folded into
+roles, each on its own branch, proven on the rig first
+(`tests/test_hw_wave_no_brand_branches.py`'s `BRAND_PATHS_TODAY`).
 
 | Role | What it reads |
 |---|---|

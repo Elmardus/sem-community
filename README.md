@@ -484,7 +484,7 @@ All SEM entities are removed automatically. Your Energy Dashboard and hardware s
 ## Recent Improvements
 
 ### 2.2 betas — what SEM shows you
-2.2 turns numbers SEM already had into things you can see. Everything is off or read-only until you use it.
+2.2 turns numbers SEM already had into things you can see. Everything is off or read-only until you use it, with one exception: if you already turned on the phase guard, it now sheds ordinary loads too, not only chargers.
 
 - **Controls only where they can act** (#996). A flat tariff gets no price knobs. Wire the entity and the control appears.
 - **Charging sessions are kept** (#1024): the last 400 per charger on the EV tab, with a CSV button. The energy is the charger's own meter.
@@ -495,6 +495,7 @@ All SEM entities are removed automatically. Your Energy Dashboard and hardware s
 - **Yields a charger or the battery to another party that steers it** (#1079). SEM writes nothing to it, or watches and tells you if its own setting does not hold.
 - **A discharge limit can cap charging too** (#1078). A parked car no longer blocks solar from charging that battery.
 - **Starts the car on a negative export price** (#1080). Buys the small gap from the grid when the sun alone is not enough.
+- **The phase guard sheds ordinary loads, not only chargers** (#1048). Only matters if you already turned the phase guard on.
 
 ### v2.1.0 — Forecast-led planning and spending
 2.1 looks ahead. SEM forms an honest expectation of the energy that is coming and plans how to spend it. It also learns hardware it had never met. Everything new that acts is off by default, with two exceptions: the peak slot guard (which also keeps the battery covering the house while a peak is near), and modules — SEM removes the entities of hardware your house does not have.

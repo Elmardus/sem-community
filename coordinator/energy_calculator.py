@@ -2895,11 +2895,18 @@ class EnergyCalculator:
         # ``_energy_state_kwh`` could not classify from its unit string.
         max_daily = self._max_daily_ev_kwh()
         if target > max_daily:
-            _LOGGER.warning(
-                "EV counter reconciliation target %.1f kWh exceeds the fleet's "
-                "%.0f kWh/day ceiling — ignoring this cycle (unit mismatch?)",
-                target, max_daily,
-            )
+            # (#1092-class) once per day per bucket — the sibling home/
+            # solar ceiling check two screens down already debounces this
+            # exact shape; this one warned every cycle until a unit
+            # mismatch cleared.
+            day_str = str(day)
+            if self._ceiling_warned.get(category) != day_str:
+                self._ceiling_warned[category] = day_str
+                _LOGGER.warning(
+                    "EV counter reconciliation target %.1f kWh exceeds the fleet's "
+                    "%.0f kWh/day ceiling — ignoring this cycle (unit mismatch?)",
+                    target, max_daily,
+                )
             return
 
         owned = all_read and self._ev_counter_complete
