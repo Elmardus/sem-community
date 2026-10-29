@@ -376,6 +376,76 @@ def test_a_two_sensor_battery_keeps_the_one_battery_sign_waiting():
     assert after.signs()[FLEET] is True
 
 
+def test_the_one_battery_sign_waits_while_fix_battery_sign_is_on():
+    """Review: "Fix battery sign" is not bound to a sensor. It was set
+    against what the saved sign read, so a sign learned again under it is
+    turned over. The saved one is kept (as before) until the flip is off."""
+    store = {"battery_detected": {FLEET: True},
+             "battery_inverted": {FLEET: False},
+             "battery_basis": "sensor", "battery_counters": "own",
+             "battery_lock_sensors": {FLEET: "sensor.x_power"}}
+    flip = {"battery_sign_user_flip": True}
+    after = _Home(["a"], store=store, config=flip)
+    p = after.cycle(8)
+    assert after.signs() == {FLEET: False}
+    assert p.battery_power == -1500.0
+    assert after.reader.export_sign_state()["battery_lock_sensors"] == {
+        FLEET: "sensor.x_power"}
+    off = _Home(["a"], store=after.reader.export_sign_state())
+    p = off.cycle()
+    assert off.signs() == {}, "with the flip off it is learned again"
+    off.cycle(8)
+    assert off.signs() == {FLEET: True}
+    assert off.cycle().battery_power == -1500.0
+
+
+def test_the_audit_of_a_battery_that_moved_is_not_pruned_by_count():
+    """Review: the #647 prune ran before the move and dropped audits by
+    count, so battery c lost its audit when battery a was removed."""
+    home, _ = _learned(["a", "b", "c"])
+    r = home.reader
+    audits = {b: r._battery_audit_for(b) for b in ("b1", "b2", "b3")}
+    home.ed = _ed(["b", "c"])
+    r.set_energy_dashboard_config(home.ed)
+    assert set(r._battery_sign_audits) == {"b2", "b3"}, "a's goes at once"
+    r._signs_follow_their_battery(home.ed, None)
+    assert r._battery_sign_audits["b2"] is audits["b3"]
+    assert r._battery_sign_audits["b1"] is audits["b2"]
+
+
+@pytest.mark.parametrize("key", ["b\u00b2", "b01", "b0", "bx", "b"])
+def test_a_damaged_battery_id_stops_nothing(key):
+    """Review: a damaged id in the store must not stop the read."""
+    key = key.encode().decode("unicode_escape")
+    store = {"battery_detected": {key: True, "b2": True},
+             "battery_inverted": {key: True, "b2": False},
+             "battery_basis": "sensor", "battery_counters": "own",
+             "battery_lock_sensors": {key: "sensor.c_power",
+                                      "b2": "sensor.b_power"}}
+    after = _Home(["b", "c"], store=store)
+    p = after.cycle()
+    assert p.batteries["b1"].power_w == p.batteries["b2"].power_w == -1500.0
+    assert after.reader._battery_sign_detected.get("b1") is True
+    assert after.reader._battery_sign_detected.get(key) is True, "left alone"
+
+
+def test_a_split_pair_audit_is_about_its_two_sensors():
+    """Review: a two-sensor battery's id is a place too. Another pair at the
+    same id starts with a fresh exclusivity audit, not the last one's flag."""
+    r = SensorReader(MagicMock(), {})
+    for _ in range(12):
+        r._audit_split_pair("b2", "Battery b2", 800.0, "sensor.p1_from",
+                            900.0, "sensor.p1_to")
+    assert r._split_pair_audits["b2"].flagged
+    r._audit_split_pair("b2", "Battery b2", 0.0, "sensor.p2_from",
+                        900.0, "sensor.p2_to")
+    assert not r._split_pair_audits["b2"].flagged
+    for _ in range(3):
+        r._audit_split_pair("b2", "Battery b2", 0.0, "sensor.p2_from",
+                            900.0, "sensor.p2_to")
+    assert not r._split_pair_audits["b2"].flagged
+
+
 # ── 3. Guard: a new per-battery record must move too ───────────────────────
 
 #: Read or written by a battery id in SensorReader, but not moved, and why.

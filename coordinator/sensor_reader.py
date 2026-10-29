@@ -350,6 +350,16 @@ _UNSET = object()
 NO_GRID_SOURCE = "none"
 
 
+def _bid_place(bid) -> Optional[int]:
+    """(#1205) The place a combined battery's id ``b<N>`` names (N - 1), or
+    None for any other key (``__fleet__``, a damaged one)."""
+    if not (isinstance(bid, str) and bid[:1] == "b" and bid[1:].isascii()
+            and bid[1:].isdigit()):
+        return None
+    n = int(bid[1:])
+    return n - 1 if n > 0 and bid == f"b{n}" else None
+
+
 def _fresh_grid_proof() -> dict:
     """A corroboration window with nothing in it yet."""
     return {
@@ -1019,14 +1029,20 @@ class SensorReader:
         if not per_bid:
             return
         try:
-            n_units = len(getattr(ed_config, "battery_power_list", None) or [])
+            listed = list(getattr(ed_config, "battery_power_list", None) or [])
         except TypeError:           # not a sequence — can't tell, keep them all
             return
+        record = getattr(self, "_battery_lock_sensors", None) or {}
         for bid in per_bid:
-            try:
-                stale = int(bid[1:]) > n_units
-            except ValueError:      # not a b<N> key — leave it alone
-                continue
+            if bid in record:
+                # (#1205) an audit is about a sensor, and the next read moves
+                # it with that sensor; only a sensor that is gone is stale
+                stale = record[bid] not in listed
+            else:
+                n = _bid_place(bid)
+                if n is None:       # not a b<N> key — leave it alone
+                    continue
+                stale = n >= len(listed)
             if stale:
                 del self._battery_sign_audits[bid]
 
@@ -1780,11 +1796,7 @@ class SensorReader:
         combined = getattr(ed, "battery_power_list", None)
         units = list(combined) if isinstance(combined, (list, tuple)) else []
         if units and all(isinstance(u, str) and u for u in units):
-            def place(bid):
-                if (isinstance(bid, str) and bid[:1] == "b"
-                        and bid[1:].isdigit() and int(bid[1:]) > 0):
-                    return int(bid[1:]) - 1
-                return None
+            place = _bid_place
             olds = sorted({b for s in stores for b in s
                            if place(b) is not None}, key=place)
             free = list(range(len(units)))
@@ -1827,6 +1839,20 @@ class SensorReader:
         if not alone_from:
             return
         was = record.get(fleet)
+        if was is not None and was != alone_from and bool(
+                (getattr(self, "_raw_config", None) or {}).get(
+                    "battery_sign_user_flip", False)):
+            # "Fix battery sign" was set against what the saved sign read,
+            # and it is not bound to a sensor: a sign learned again under it
+            # would be turned over. It waits, as the #1193 check does.
+            if not getattr(self, "_fleet_sign_wait_said", False):
+                self._fleet_sign_wait_said = True
+                _LOGGER.info(
+                    "Battery sign: the saved sign was learned on %s, the "
+                    "battery is now read from %s. Fix battery sign is on, so "
+                    "SEM keeps it until that is turned off (#1205)",
+                    was, alone_from)
+            return
         record[fleet] = alone_from
         if was is None or was == alone_from:
             return
@@ -3946,6 +3972,13 @@ class SensorReader:
         """
         self._split_pair_seen.add(pair_id)
         audit = self._split_pair_audits.get(pair_id)
+        # (#1205) an id is a place (``b<N>``); another pair at it starts anew
+        sensors = getattr(self, "_split_pair_sensors", None)
+        if sensors is None:
+            sensors = self._split_pair_sensors = {}
+        if sensors.get(pair_id) != (a_entity, b_entity):
+            sensors[pair_id] = (a_entity, b_entity)
+            audit = None
         if audit is None:
             audit = SplitSensorExclusivityAudit()
             self._split_pair_audits[pair_id] = audit
