@@ -644,6 +644,8 @@ class TestPublishDiag625:
         r._battery_sign_detected = over.get("batt_det", {})
         r._manual_grid_mismatch = over.get("mismatch", False)
         r._sensor_unavailable = over.get("unavail", [])
+        # (#1215) a truthy mock would read as a pair: no grid lock shown
+        r.grid_read_is_pair.return_value = over.get("pair", False)
         c._sensor_reader = r
         c.trace_health = MagicMock(return_value=over.get("health", {"ok": True}))
         c._ev_devices = over.get("ev_devices", {})

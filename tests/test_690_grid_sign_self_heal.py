@@ -58,7 +58,6 @@ def _coord(**cfg):
     c = SEMCoordinator.__new__(SEMCoordinator)
     c._sensor_reader = _Reader(**cfg)
     c._negative_balance_count = 0
-    c._sign_flip_suppression_count = 0
     return c
 
 

@@ -1739,14 +1739,9 @@ class SensorReader:
             # A pair (manual, dashboard pair, discovered) has its sign BY
             # DECLARATION: export minus import, and its read path sets the
             # lock itself. Unlocking it would let the brand seed negate a
-            # pair (review N1). Only an inversion carried over from another
-            # source is wrong here — a pair is never negated.
-            if self._grid_sign_inverted:
-                _LOGGER.info(
-                    "grid sign: the saved lock (%s) negated the grid; %s is "
-                    "a pair and is not negated (#1103)",
-                    recorded, self._grid_source_key)
-            self._grid_sign_inverted = False
+            # pair (review N1). (#1215) The read never applies a lock to a
+            # pair, so the lock is left as it is: it is about the meter it
+            # was learned on, and a move back to that meter needs it.
             self._brand_seed_done = True
             return
         _LOGGER.info(

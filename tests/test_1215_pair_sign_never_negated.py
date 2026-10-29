@@ -129,7 +129,6 @@ def _coord(reader):
     c = SEMCoordinator.__new__(SEMCoordinator)
     c._sensor_reader = reader
     c._negative_balance_count = 0
-    c._sign_flip_suppression_count = 0
     return c
 
 
@@ -263,6 +262,21 @@ class TestNoLockNegatesAPair:
         reader._grid_sign_detected = True
         reader._grid_sign_inverted = True
         assert reader.read_power().grid_power == EXPORT_W
+
+    def test_a_restart_onto_the_pair_keeps_the_lock_too(self):
+        """Review, round 2: the restore check (#1103) cleared a lock
+        carried onto a pair the same way."""
+        ed = _make_energy_dashboard_config(
+            solar_power=SOLAR, grid_import_power=METER, battery_power=None)
+        ed.grid_power_from, ed.grid_power_to = IMP, EXP     # restarted on it
+        states = _states()
+        states[METER].state = str(-EXPORT_W)
+        r = _make_reader_with_states(MagicMock(), states, ed)
+        r.restore_sign_state({"grid_detected": True, "grid_inverted": True,
+                              "grid_source": f"combined:{METER}"})
+        assert r.read_power().grid_power == EXPORT_W
+        ed.grid_power_from = ed.grid_power_to = None
+        assert r.read_power().grid_power == EXPORT_W
 
     @pytest.mark.parametrize("kind", ["ed_pair", "manual", "discovered",
                                       "discovered_proven"])
