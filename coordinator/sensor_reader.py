@@ -477,6 +477,9 @@ class SensorReader:
         #: applies); and the log line that a lock does not apply to a pair,
         #: said once per reader for the grid and the battery.
         self._battery_read_is_pair = False
+        #: (#1210) Whether the last read signed each battery on its own
+        #: (``_reads_per_battery``); None before the first read.
+        self._battery_read_per_battery: Optional[bool] = None
         self._pair_lock_said = False
         self._battery_pair_lock_said = False
         #: (#1194) A restored fleet battery lock from a store written while
@@ -1156,12 +1159,8 @@ class SensorReader:
         # #553 — units = combined entities + two-sensor pairs (#551). Pairs
         # are convention-authoritative (the user declared charge/discharge
         # directions in HA), so only combined units go through sign detect.
-        _n_units = len(battery_units(ed))
-        per_battery_mode = (
-            ed is not None
-            and _n_units >= 2
-            and len(readings.batteries) == _n_units
-        )
+        per_battery_mode = self._reads_per_battery(ed, readings)
+        self._battery_read_per_battery = per_battery_mode   # (#1210)
 
         if per_battery_mode:
             from dataclasses import replace
@@ -3943,6 +3942,18 @@ class SensorReader:
                 "import" if lock_says_export else "export",
             )
 
+    def _reads_per_battery(self, ed, readings) -> bool:
+        """(#1210) Whether this read signs each battery on its own (#404).
+
+        One rule for the read and its audit: two or more batteries, each read
+        this cycle. The audit asked which lock was saved instead, so a home
+        that added a second battery kept the one-battery check of its old lock.
+        """
+        if ed is None or readings is None:
+            return False
+        n_units = len(battery_units(ed))
+        return n_units >= 2 and len(readings.batteries) == n_units
+
     def _audit_battery_sign_lock(self, battery_power: float, ed, readings=None) -> None:
         """Observe-only post-lock contradiction check for the battery sign (#589, #647).
 
@@ -3953,18 +3964,22 @@ class SensorReader:
           battery_power > 0  → charging    → charge counter should be rising
           battery_power < 0  → discharging → discharge counter should be rising
 
-        Two install shapes, one check each — mirroring where the sign is
-        actually LOCKED, because auditing at a level nothing locks at is how
-        this check spent its life as a no-op (#647):
+        Two install shapes, one check each — picked by how this cycle READ
+        the battery (``_reads_per_battery``, the read's own rule), so the
+        locks checked are the ones the read applies. Picking by which lock
+        is saved checked an old one-battery lock on a home that had added a
+        second battery, and never its b1/b2 locks (#1210):
 
-        * **single / combined battery** — the ``__fleet__`` lock is set, so the
-          summed counters are audited against the summed power, as in #589.
-          With one battery read from its own sensor, its own counters (#1193).
-        * **per-battery mode** — ``__fleet__`` is never locked; each combined
-          unit locks its OWN ``b<N>`` sign. So each unit is audited against its
-          own counters (``unit_energy_counters``, #1193). Entry idx of the
-          counter lists can be another battery's: they hold the two-sensor
-          batteries too, in dashboard order.
+        * **single / combined battery** — the ``__fleet__`` lock, when set:
+          the summed counters are audited against the summed power, as in
+          #589. With one battery read from its own sensor, its own counters
+          (#1193). A battery read as a two-sensor pair takes no lock (#1215),
+          so it has none to audit.
+        * **per-battery mode** — each combined unit locks its OWN ``b<N>``
+          sign. So each unit is audited against its own counters
+          (``unit_energy_counters``, #1193). Entry idx of the counter lists
+          can be another battery's: they hold the two-sensor batteries too,
+          in dashboard order.
           Summing here would have been worse than useless: one unit signed
           wrong and one signed right cancel to ≈0 W and get skipped as "idle".
 
@@ -3972,10 +3987,24 @@ class SensorReader:
         is declared by the user in the Energy Dashboard — so they have no lock
         to contradict and are not audited.
 
+        An audit this read does not run is dropped (#1210): nothing feeds it
+        again, so a flag it raised would stay on. The lock itself stays saved.
+
         Observe-only by design: never re-flips the sign. Uses its own baselines
         so the voter's ``_battery_charge_baseline`` is never disturbed.
         """
-        if self._battery_sign_detected.get(self._FLEET_BID):
+        per_battery = self._reads_per_battery(ed, readings)
+        if per_battery:
+            run = {f"b{idx + 1}" for idx in range(
+                len(getattr(ed, "battery_power_list", None) or []))}
+        else:
+            run = set() if self._battery_read_is_pair else {self._FLEET_BID}
+        for bid in set(self._battery_sign_audits) - run:
+            del self._battery_sign_audits[bid]
+
+        if not per_battery:
+            if not run or not self._battery_sign_detected.get(self._FLEET_BID):
+                return
             own = self._one_battery_own_counters(ed)       # (#1193)
             if own is not None:
                 charge_entities = [own[0]] if own[0] else []
@@ -3995,8 +4024,6 @@ class SensorReader:
             return
 
         # Per-battery mode: audit each combined unit against its own counters.
-        if readings is None:
-            return
         for idx, entity in enumerate(getattr(ed, "battery_power_list", None) or []):
             bid = f"b{idx + 1}"
             if not self._battery_sign_detected.get(bid):
