@@ -655,7 +655,8 @@ When you have multiple batteries (e.g. Huawei + Growatt, or split Huawei units),
 | **Off** | One clean hand-over to the inverter, then SEM sends nothing to this battery | Manual control or testing |
 
 > **Force Charge and the price.** It does not wait for a cheap hour: at night
-> in an expensive hour it buys from the grid. Open for discussion: #1116.
+> in an expensive hour it buys from the grid. It is a deliberate override —
+> charge now, whatever the price.
 >
 > **The reserve.** The reserve stops SEM's own sales (Force Discharge and the
 > planned sells). In Auto and Self-Consumption SEM does not stop the house

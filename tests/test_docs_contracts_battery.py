@@ -192,9 +192,9 @@ class TestBatteryModeTable:
         price**" and "It does not wait for a cheap hour: at night in an
         expensive hour it buys from the grid."
 
-        Edge case — open for discussion, see #1116.
-
-        Night, no sun, the tariff is EXPENSIVE: it force-charges anyway."""
+        Deliberate override, settled per #1116: charge now, whatever the
+        price. Night, no sun, the tariff is EXPENSIVE: it force-charges
+        anyway."""
         fleet = FleetContext(solar_w=0.0, home_w=500.0, is_night=True,
                              tariff_level="expensive")
         d = decide_battery(_view(mode="force_charge", soc=40.0, fleet=fleet))
