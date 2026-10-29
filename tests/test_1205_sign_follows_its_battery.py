@@ -12,7 +12,7 @@ was read from another sensor (a battery replaced, or the second of two left
 after the first was removed).
 
 Now the store records the sensor each sign was learned on
-(``battery_lock_sensors``), and each Energy Dashboard read moves every sign
+(``battery_learned_on``), and each Energy Dashboard read moves every sign
 to its sensor's place, as the per-battery settings do (#1195). The
 one-battery sign is learned again on another sensor, as the grid's is
 (#1103).
@@ -141,7 +141,7 @@ def test_the_first_battery_removed_hands_its_sign_to_nobody(caplog):
     "negate" and read its discharge as +1500 W charge."""
     home, store = _learned(["a", "b", "c"])
     assert home.signs() == {"b1": True, "b2": False, "b3": False}
-    assert store["battery_lock_sensors"] == {
+    assert store["battery_learned_on"] == {
         "b1": "sensor.a_power", "b2": "sensor.b_power", "b3": "sensor.c_power"}
 
     caplog.set_level(logging.INFO)
@@ -151,7 +151,7 @@ def test_the_first_battery_removed_hands_its_sign_to_nobody(caplog):
     assert p.batteries["b1"].power_w == -1500.0
     assert p.batteries["b2"].power_w == -1500.0
     assert p.battery_power == -3000.0
-    assert after.reader.export_sign_state()["battery_lock_sensors"] == {
+    assert after.reader.export_sign_state()["battery_learned_on"] == {
         "b1": "sensor.b_power", "b2": "sensor.c_power"}
     said = [r.getMessage() for r in caplog.records if "#1205" in r.getMessage()]
     assert any("sensor.a_power" in m and "dropped" in m for m in said)
@@ -213,7 +213,7 @@ def test_a_store_from_an_older_build_is_taken_where_it_stands():
     p = after.cycle()
     assert after.signs() == {"b1": True, "b2": False}
     assert p.batteries["b1"].power_w == -1500.0
-    assert after.reader.export_sign_state()["battery_lock_sensors"] == {
+    assert after.reader.export_sign_state()["battery_learned_on"] == {
         "b1": "sensor.a_power", "b2": "sensor.b_power"}
 
 
@@ -223,7 +223,7 @@ def test_a_read_with_no_combined_battery_moves_nothing(names, pair):
     after = _Home(names, store=store, pair=pair)
     after.cycle()
     assert after.signs() == {"b1": True, "b2": False}
-    assert after.reader.export_sign_state()["battery_lock_sensors"] == {
+    assert after.reader.export_sign_state()["battery_learned_on"] == {
         "b1": "sensor.a_power", "b2": "sensor.b_power"}
 
 
@@ -267,7 +267,7 @@ def test_the_waiting_and_kept_marks_are_saved_at_the_new_place():
              "battery_basis": "sensor", "battery_counters": "own",
              "battery_counters_pending": ["b2"],
              "battery_sign_kept": {"b3": True},
-             "battery_lock_sensors": {"b1": "sensor.a_power",
+             "battery_learned_on": {"b1": "sensor.a_power",
                                       "b2": "sensor.b_power",
                                       "b3": "sensor.c_power"}}
     after = _Home(["c", "b"], store=store,
@@ -277,7 +277,7 @@ def test_the_waiting_and_kept_marks_are_saved_at_the_new_place():
     assert {b for b, d in saved["battery_detected"].items() if d} == {"b2"}
     assert saved["battery_counters_pending"] == ["b2"]
     assert saved["battery_sign_kept"] == {"b1": True}
-    assert saved["battery_lock_sensors"] == {"b1": "sensor.c_power",
+    assert saved["battery_learned_on"] == {"b1": "sensor.c_power",
                                              "b2": "sensor.b_power"}
 
 
@@ -286,7 +286,7 @@ def test_the_waiting_and_kept_marks_are_saved_at_the_new_place():
 def test_a_damaged_record_is_no_record(saved):
     store = {"battery_detected": {"b1": True}, "battery_inverted": {"b1": True},
              "battery_basis": "sensor", "battery_counters": "own",
-             "battery_lock_sensors": saved}
+             "battery_learned_on": saved}
     after = _Home(["a", "b"], store=store)
     after.cycle()
     assert after.signs() == {"b1": True}
@@ -295,7 +295,7 @@ def test_a_damaged_record_is_no_record(saved):
 def test_reset_forgets_the_record():
     home, _ = _learned(["a", "b"])
     home.reader.reset_sign_state()
-    assert home.reader.export_sign_state()["battery_lock_sensors"] == {}
+    assert home.reader.export_sign_state()["battery_learned_on"] == {}
     assert home.reader._battery_lock_sensors == {}
 
 
@@ -306,7 +306,7 @@ def test_the_one_battery_sign_is_learned_again_on_another_sensor(caplog):
     and read its discharge as +1500 W charge."""
     home, store = _learned(["a"])
     assert home.signs() == {FLEET: True}
-    assert store["battery_lock_sensors"] == {FLEET: "sensor.a_power"}
+    assert store["battery_learned_on"] == {FLEET: "sensor.a_power"}
     caplog.set_level(logging.INFO)
     after = _Home(["b"], store=store)
     p = after.cycle()
@@ -336,7 +336,7 @@ def test_the_one_battery_sign_waits_while_each_battery_is_read():
     two.cycle(8)
     store = two.reader.export_sign_state()
     assert store["battery_detected"][FLEET] is True
-    assert store["battery_lock_sensors"][FLEET] == "sensor.a_power"
+    assert store["battery_learned_on"][FLEET] == "sensor.a_power"
     after = _Home(["b"], store=store)
     p = after.cycle()
     assert FLEET not in after.signs()
@@ -347,7 +347,7 @@ def test_the_sensor_read_is_the_pick_when_one_is_set():
     """SEM reads its own pick before the dashboard's sensor: the sign is
     about the pick, and stays while the pick does."""
     _, store = _learned(["a"], config={"battery_power_sensor": "sensor.a_power"})
-    assert store["battery_lock_sensors"][FLEET] == "sensor.a_power"
+    assert store["battery_learned_on"][FLEET] == "sensor.a_power"
     after = _Home(["b"], store=store,
                   config={"battery_power_sensor": "sensor.a_power"})
     p = after.cycle()
@@ -362,7 +362,7 @@ def test_an_older_one_battery_sign_is_taken_where_it_stands():
     p = after.cycle()
     assert after.signs() == {FLEET: True}
     assert p.battery_power == -1500.0
-    assert after.reader.export_sign_state()["battery_lock_sensors"][FLEET] == (
+    assert after.reader.export_sign_state()["battery_learned_on"][FLEET] == (
         "sensor.a_power")
 
 
@@ -371,7 +371,7 @@ def test_a_two_sensor_battery_keeps_the_one_battery_sign_waiting():
     _, store = _learned(["a"])
     after = _Home([], store=store, pair=True)
     after.cycle()
-    assert after.reader.export_sign_state()["battery_lock_sensors"][FLEET] == (
+    assert after.reader.export_sign_state()["battery_learned_on"][FLEET] == (
         "sensor.a_power")
     assert after.signs()[FLEET] is True
 
@@ -383,13 +383,13 @@ def test_the_one_battery_sign_waits_while_fix_battery_sign_is_on():
     store = {"battery_detected": {FLEET: True},
              "battery_inverted": {FLEET: False},
              "battery_basis": "sensor", "battery_counters": "own",
-             "battery_lock_sensors": {FLEET: "sensor.x_power"}}
+             "battery_learned_on": {FLEET: "sensor.x_power"}}
     flip = {"battery_sign_user_flip": True}
     after = _Home(["a"], store=store, config=flip)
     p = after.cycle(8)
     assert after.signs() == {FLEET: False}
     assert p.battery_power == -1500.0
-    assert after.reader.export_sign_state()["battery_lock_sensors"] == {
+    assert after.reader.export_sign_state()["battery_learned_on"] == {
         FLEET: "sensor.x_power"}
     off = _Home(["a"], store=after.reader.export_sign_state())
     p = off.cycle()
@@ -419,7 +419,7 @@ def test_a_damaged_battery_id_stops_nothing(key):
     store = {"battery_detected": {key: True, "b2": True},
              "battery_inverted": {key: True, "b2": False},
              "battery_basis": "sensor", "battery_counters": "own",
-             "battery_lock_sensors": {key: "sensor.c_power",
+             "battery_learned_on": {key: "sensor.c_power",
                                       "b2": "sensor.b_power"}}
     after = _Home(["b", "c"], store=store)
     p = after.cycle()
@@ -535,7 +535,7 @@ async def test_the_integration_starts_with_each_sign_on_its_battery(
             "battery_detected": {"b1": True, "b2": True, "b3": True},
             "battery_inverted": {"b1": True, "b2": False, "b3": False},
             "battery_basis": "sensor", "battery_counters": "own",
-            "battery_lock_sensors": {"b1": "sensor.a_power",
+            "battery_learned_on": {"b1": "sensor.a_power",
                                      "b2": "sensor.b_power",
                                      "b3": "sensor.c_power"}}}}
 
@@ -555,7 +555,7 @@ async def test_the_integration_starts_with_each_sign_on_its_battery(
     assert {b for b, d in saved["battery_detected"].items() if d} == {"b1", "b2"}
     assert {b: saved["battery_inverted"][b] for b in ("b1", "b2")} == {
         "b1": False, "b2": False}
-    assert saved["battery_lock_sensors"] == {"b1": "sensor.b_power",
+    assert saved["battery_learned_on"] == {"b1": "sensor.b_power",
                                              "b2": "sensor.c_power"}
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()

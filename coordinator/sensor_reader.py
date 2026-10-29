@@ -1657,7 +1657,7 @@ class SensorReader:
                 for b in sorted(getattr(self, "_battery_sign_kept", ()))
                 if not self._battery_sign_detected.get(b)}) else {}),
             # (#1205) the sensor each saved sign was learned on
-            "battery_lock_sensors": {
+            "battery_learned_on": {
                 b: s for b, s in sorted(
                     (getattr(self, "_battery_lock_sensors", None) or {}).items())
                 if self._battery_sign_detected.get(b)
@@ -1754,7 +1754,7 @@ class SensorReader:
                 self._battery_sign_kept.add(bid)
         # (#1205) which sensor each was learned on. None from an older build:
         # each sign is then taken where it stands, as before.
-        sensors = state.get("battery_lock_sensors")
+        sensors = state.get("battery_learned_on")
         self._battery_lock_sensors = {
             b: s for b, s in sensors.items()
             if isinstance(b, str) and isinstance(s, str) and s
