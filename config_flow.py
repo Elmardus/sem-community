@@ -259,12 +259,10 @@ def _carry_hidden_wiring(discovered: dict, submitted: dict, target: dict) -> Non
 
 def _drop_stale_service_wiring(before: dict, submitted: dict, target: dict) -> None:
     """Edit: a service the user CHANGED takes no field names or box name
-    from the one it replaced.
-
-    (#1214) Asked of ``target`` after the merge, not of ``submitted``: an
-    emptied field is missing from ``submitted``, and an emptied service
-    keeps no wiring either."""
-    if (target.get("ev_charger_service") or "") == (before.get("ev_charger_service") or ""):
+    from the one it replaced."""
+    if "ev_charger_service" not in submitted:
+        return
+    if (submitted.get("ev_charger_service") or "") == (before.get("ev_charger_service") or ""):
         return
     for k in _HIDDEN_CHARGER_WIRING[0][1]:
         target.pop(k, None)
@@ -1465,6 +1463,9 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # the saved value comes back.
                 updates: dict[str, Any] = {}
                 _merge_form_input(self, updates, user_input)
+                # a field that was never set is not written as None
+                updates = {k: v for k, v in updates.items()
+                           if v is not None or current_config.get(k) is not None}
                 options = dict(reconfigure_entry.options or {})
                 return self.async_update_reload_and_abort(
                     reconfigure_entry,
@@ -1501,19 +1502,19 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # entity id, so the page could not be saved without both.
                 _charger_field(vol.Required(
                     "ev_connected_sensor",
-                    default=current_config.get("ev_connected_sensor", ""),
+                    default=current_config.get("ev_connected_sensor") or "",
                 ), has_charger, current_config): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain=["binary_sensor", "sensor"])
                 ),
                 _charger_field(vol.Required(
                     "ev_charging_sensor",
-                    default=current_config.get("ev_charging_sensor", ""),
+                    default=current_config.get("ev_charging_sensor") or "",
                 ), has_charger, current_config): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain=["binary_sensor", "sensor"])
                 ),
                 _charger_field(vol.Required(
                     "ev_charging_power_sensor",
-                    default=current_config.get("ev_charging_power_sensor", ""),
+                    default=current_config.get("ev_charging_power_sensor") or "",
                 ), has_charger, current_config): _power_sensor_selector(getattr(self, "hass", None)),
                 # (#1214) a suggestion, never a default: HA refills an
                 # emptied field with its default, so it could not be erased
@@ -1975,19 +1976,19 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         return vol.Schema({
             vol.Required(
                 "ev_connected_sensor",
-                default=current_config.get("ev_connected_sensor", "")
+                default=current_config.get("ev_connected_sensor") or ""
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=["binary_sensor", "sensor"])
             ),
             vol.Required(
                 "ev_charging_sensor",
-                default=current_config.get("ev_charging_sensor", "")
+                default=current_config.get("ev_charging_sensor") or ""
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=["binary_sensor", "sensor"])
             ),
             vol.Required(
                 "ev_charging_power_sensor",
-                default=current_config.get("ev_charging_power_sensor", "")
+                default=current_config.get("ev_charging_power_sensor") or ""
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),

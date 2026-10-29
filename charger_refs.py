@@ -333,8 +333,19 @@ def apply_legacy_edit(refs: List[dict], legacy: List[dict],
     return [r for r in out if r is not None]
 
 
+#: (#1214) The roles that drive a charger. A ref follows only to a device
+#: that holds one: a power meter beside the box is not the charger.
+_CONTROL_ENTITY_ROLES = ("ev_current_control_entity", "ev_start_stop_entity",
+                         "ev_charge_mode_entity")
+
+
+def _connector(ref: dict) -> bool:
+    return bool((ref.get("settings") or {}).get("connector"))
+
+
 def follow_device(refs: List[dict], device_of: DeviceOf,
                   live_by_device: Dict[str, Dict[str, Any]],
+                  sure: Iterable[str],
                   log: Callable[[str], None] = _LOGGER.info) -> List[dict]:
     """(#1214) A ref names the device its card's entities sit on.
 
@@ -345,12 +356,19 @@ def follow_device(refs: List[dict], device_of: DeviceOf,
     device's last answer (``found``) still filled each role the user did not
     set.
 
-    When no entity of the card sits on the ref's device and some sit on
-    another one, the ref is made again from the card for that device
-    (``card_to_ref``): the card resolves to the same values, so SEM drives
-    what it drove. A device another ref already names is left alone: two
-    chargers on one device need the ``connector`` setting."""
-    taken = {r.get("device_id") for r in refs if r.get("device_id")}
+    When no entity of the card sits on the ref's device and they sit on
+    another one, which holds one of the card's controls, the ref is made
+    again from the card for that device (``card_to_ref``). The new device
+    must be in ``sure`` (#1147: the crawler saw it whole): a role it offers
+    that the card lacks is then ``cleared``, so a whole card resolves to the
+    same values now and at later starts. A role the user cleared stays
+    cleared. A device another ref names takes a second ref only when both
+    carry the ``connector`` setting (one charger per device, #1054)."""
+    sure = set(sure or ())
+    names: Dict[str, List[bool]] = {}
+    for r in refs:
+        if r.get("device_id"):
+            names.setdefault(r["device_id"], []).append(_connector(r))
     out: List[dict] = []
     for r in refs:
         dev = r.get("device_id")
@@ -363,21 +381,28 @@ def follow_device(refs: List[dict], device_of: DeviceOf,
         on = [device_of(str(card[k])) for k in sorted(CHARGER_ENTITY_KEYS)
               if card.get(k)]
         new = device_of_card(card, device_of)
-        if dev in on or new is None or new == dev:
+        if dev in on or new is None or new == dev or not any(
+                card.get(k) and device_of(str(card[k])) == new
+                for k in _CONTROL_ENTITY_ROLES):
             out.append(r)
             continue
-        if new in taken:
+        others = names.get(new, [])
+        if others and not (_connector(r) and all(others)):
             log(f"charger {r['id']}: its entities sit on device {new}, which "
                 "another charger names; kept on its own device (#1214)")
             out.append(r)
             continue
+        if new not in sure:
+            # not seen whole yet: a later start moves it
+            out.append(r)
+            continue
         log(f"charger {r['id']}: its entities now sit on device {new}, not "
             f"{dev}; its reference follows them (#1214)")
-        taken.discard(dev)
-        taken.add(new)
-        # the user built this card: no plug check is owed (#1152)
-        out.append({**r, **card_to_ref(card, new, live_by_device.get(new)),
-                    PLUG_CHECKED: True})
+        names[dev].remove(_connector(r))
+        names.setdefault(new, []).append(_connector(r))
+        moved = card_to_ref(card, new, live_by_device.get(new))
+        moved["cleared"] = sorted({*moved["cleared"], *(r.get("cleared") or ())})
+        out.append({**r, **moved})
     return out
 
 
@@ -805,7 +830,8 @@ def reconcile(*, data_list: Optional[list], legacy: Optional[list],
     elif legacy is not None and signature(legacy) != sig:
         refs = apply_legacy_edit(refs, legacy, device_of, live_by_device, log)
     # (#1214) at every start: a ref moved before this fix is set right too
-    refs = follow_device(refs, device_of, live_by_device, log)
+    if sure is not None:
+        refs = follow_device(refs, device_of, live_by_device, sure, log)
     ran = {r["id"]: ran.get(r["id"]) or resolve(r) for r in refs}
     refs = refresh_found(refs, live_by_device)
     if refuse is not None:
@@ -954,6 +980,16 @@ def async_reconcile(hass, entry) -> Optional[List[dict]]:
 
     live = live_charger_roles(hass)
     stored = options.get(REFS_KEY)
+    # (#1214) a device a saved charger's entities sit on may give the
+    # crawler no answer (a user's own integration); it can be seen whole too
+    named = set()
+    for c in [*(stored or ()), *(options.get(LEGACY_KEY) or ())]:
+        if not isinstance(c, dict):
+            continue
+        for part in (c, c.get("overrides") or {}, c.get("found") or {}):
+            named.update(_device_of(str(part[k])) for k in CHARGER_ENTITY_KEYS
+                         if part.get(k))
+    named.discard(None)
     # (#1152) only an older ref can hold a plug no check asked about
     unchecked = isinstance(stored, list) and any(
         isinstance(r, dict) and r.get("device_id") and not r.get(PLUG_CHECKED)
@@ -962,7 +998,7 @@ def async_reconcile(hass, entry) -> Optional[List[dict]]:
         data_list=data.get(LEGACY_KEY), legacy=options.get(LEGACY_KEY),
         refs=stored, sig=options.get(SIG_KEY),
         device_of=_device_of, live_by_device=live,
-        refuse=_refuse, sure=sure_devices(hass, live),
+        refuse=_refuse, sure=sure_devices(hass, set(live) | named),
         own=own_save_ids(hass) if unchecked else ())
     refs, resolved = out if out is not None else (None, None)
     new_options = options if out is None else {

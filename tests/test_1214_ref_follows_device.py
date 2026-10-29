@@ -7,13 +7,15 @@ from, and that was the old integration's device, now removed. The old
 device's last answer (``found``) also kept filling each role he did not set.
 
 A ref now names the device its card's entities sit on: when none sits on its
-own device and some sit on another, the ref is made again from the card for
-that device. The card resolves to the same values, so SEM drives what it
-drove.
+own device and they sit on another one that holds a control, the ref is made
+again from the card for that device — once Home Assistant has seen that
+device whole (#1147), so a role it offers that the card lacks is cleared and
+the card resolves to the same values at every later start.
 """
 from __future__ import annotations
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
@@ -55,10 +57,10 @@ def _old_gone(eid: str):
     return NEW_DEV if "abb_terra_charger" in eid else None
 
 
-def _start(refs, resolved, device_of, live):
+def _start(refs, resolved, device_of, live, sure=(NEW_DEV,)):
     return cr.reconcile(data_list=None, legacy=resolved, refs=refs,
                         sig=cr.signature(resolved), device_of=device_of,
-                        live_by_device=live)
+                        live_by_device=live, sure=sure)
 
 
 def test_premise_his_store_names_the_gone_device():
@@ -131,7 +133,7 @@ def test_a_held_role_stays_held():
     """(#1151) ``held`` is worked out at every start; the move keeps it."""
     refs, resolved = _his_store()
     refs[0]["held"] = ["ev_connected_sensor"]
-    moved = cr.follow_device(refs, _old_gone, {})
+    moved = cr.follow_device(refs, _old_gone, {}, {NEW_DEV})
     assert moved[0]["device_id"] == NEW_DEV
     assert moved[0]["held"] == ["ev_connected_sensor"]
     assert moved[0]["overrides"]["ev_connected_sensor"] == MINE["ev_connected_sensor"]
@@ -151,7 +153,84 @@ def test_a_reinstalled_integration_is_followed():
 
 def test_device_less_refs_are_not_asked():
     ref = cr.card_to_ref({"id": "keba", **MINE}, None, None)
-    assert cr.follow_device([ref], _old_gone, {}) == [ref]
+    assert cr.follow_device([ref], _old_gone, {}, {NEW_DEV}) == [ref]
+
+
+# ── (review) a move never lets a later answer change the card ──────────
+
+def test_a_blind_start_does_not_move():
+    """Home Assistant still starting: the new device is not seen whole, so
+    its answer may be part of it. The ref waits."""
+    refs, resolved = _his_store()
+    refs2, out = _start(refs, resolved, _old_gone, {}, sure=())
+    assert refs2[0]["device_id"] == OLD_DEV
+    assert out == resolved
+
+
+def test_a_role_the_new_device_offers_later_does_not_fill_the_card():
+    """The review's case: moved, then a later start's answer holds a
+    start/stop switch the card never had. It must not be driven."""
+    live_new = {**MINE, "ev_start_stop_entity": "switch.abb_terra_charger_enable"}
+    refs, resolved = _his_store()
+    refs2, out2 = _start(refs, resolved, _old_gone, {}, sure=())
+    refs3, out3 = _start(refs2, out2, _old_gone, {NEW_DEV: live_new})
+    refs4, out4 = _start(refs3, out3, _old_gone, {NEW_DEV: live_new})
+    assert refs3[0]["device_id"] == NEW_DEV
+    assert out3 == out4 == resolved
+
+
+def test_a_role_the_user_cleared_stays_cleared():
+    """Reinstalled integration: the user had cleared the switch; the new
+    device offers it again."""
+    switch = "switch.abb_terra_ac_enable"
+    live_old = {**OLD_LIVE, "ev_start_stop_entity": switch}
+    ref = cr.card_to_ref({"id": "ev_charger", **SETTINGS, **live_old},
+                         OLD_DEV, live_old)
+    ref["cleared"] = ["ev_start_stop_entity"]
+    resolved = [cr.resolve(ref, live_old)]
+    assert "ev_start_stop_entity" not in resolved[0], "premise"
+    refs2, out = _start([ref], resolved, lambda e: NEW_DEV, {NEW_DEV: live_old})
+    assert refs2[0]["device_id"] == NEW_DEV
+    assert "ev_start_stop_entity" in refs2[0]["cleared"]
+    assert out == resolved
+
+
+def test_a_meter_is_not_a_charger():
+    """No control on the other device (a power meter beside the box): the
+    ref stays."""
+    refs, resolved = _his_store()
+
+    def device_of(eid):
+        return "shelly_meter" if eid == MINE["ev_charging_power_sensor"] else None
+    refs2, _ = _start(refs, resolved, device_of, {}, sure=("shelly_meter",))
+    assert refs2[0]["device_id"] == OLD_DEV
+
+
+def test_twin_connectors_move_together():
+    two = {k: v.replace("abb_terra_charger", "abb_terra_charger_2")
+           for k, v in MINE.items()}
+    refs, _ = _his_store()
+    refs[0]["settings"]["connector"] = 1
+    resolved = [cr.resolve(refs[0])]
+    twin = {"id": "ev_charger_1", "device_id": OLD_DEV, "overrides": two,
+            "cleared": [], "found": {}, "stored_complete": True,
+            "settings": {"name": "Two", "connector": 2}, cr.PLUG_CHECKED: True}
+    refs, resolved = refs + [twin], resolved + [cr.resolve(twin)]
+
+    def device_of(eid):
+        return NEW_DEV if "abb_terra_charger" in eid else None
+    refs2, out = _start(refs, resolved, device_of, {})
+    assert [r["device_id"] for r in refs2] == [NEW_DEV, NEW_DEV]
+    assert out == resolved
+
+
+def test_the_plug_check_flag_is_not_made_up():
+    """(#1152) A ref not yet asked stays unasked; the check decides."""
+    refs, resolved = _his_store()
+    del refs[0][cr.PLUG_CHECKED]
+    moved = cr.follow_device(refs, _old_gone, {}, {NEW_DEV})
+    assert moved[0]["device_id"] == NEW_DEV
+    assert cr.PLUG_CHECKED not in moved[0]
 
 
 # ── on real Home Assistant: the setup step clears the Repair ─────────────
@@ -160,6 +239,7 @@ def test_device_less_refs_are_not_asked():
 async def test_the_setup_step_clears_his_repair(hass):
     src = MockConfigEntry(domain="abb_terra_charger")
     src.add_to_hass(hass)
+    src.mock_state(hass, ConfigEntryState.LOADED)
     device = dr.async_get(hass).async_get_or_create(
         config_entry_id=src.entry_id, identifiers={("abb_terra_charger", "1")},
         name="ABB Terra Charger")

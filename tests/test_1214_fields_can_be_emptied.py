@@ -149,9 +149,9 @@ def _quiet():
 
 
 @pytest.mark.asyncio
-async def test_edit_empties_the_service_and_its_wiring():
-    """A second charger's page; an emptied service keeps no field name or
-    box name of the one it had."""
+async def test_edit_empties_the_service_and_keeps_the_box_name():
+    """A second charger's page. The box name stays: an Easee's start and
+    stop services are sent to it too (review)."""
     flow = _flow([dict(_KEBA, ev_service_param_name="current",
                        ev_service_device_id="dev_keba")])
     flow._edit_charger_id = "ev_charger"
@@ -164,8 +164,7 @@ async def test_edit_empties_the_service_and_its_wiring():
     })
     charger = flow._data["ev_chargers"][0]
     assert not charger.get("ev_charger_service")
-    assert "ev_service_param_name" not in charger
-    assert "ev_service_device_id" not in charger
+    assert charger["ev_service_device_id"] == "dev_keba"
 
 
 @pytest.mark.asyncio
