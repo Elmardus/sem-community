@@ -895,6 +895,11 @@ class SEMStorage:
         """Save all data immediately (for shutdown)."""
         if self._ended("save of all data"):
             return
+        await self._async_write_all()
+
+    async def _async_write_all(self) -> None:
+        """Write both stores now. Only ``async_save_all`` (which asks
+        ``_ended``) and ``async_close`` (which ends the store first) call it."""
         try:
             # Save energy data immediately
             energy_data = {
@@ -941,18 +946,24 @@ class SEMStorage:
         """
         if getattr(self, "_closed", False):
             return
+        # Ended BEFORE the write: a cycle still running must not queue a
+        # new write on this store while the one below waits for the disk.
+        self._closed = True
         if getattr(self, "_shutdown_listener", None) is not None:
             self._shutdown_listener()
             self._shutdown_listener = None
         if getattr(self, "_loaded", False):   # never write the empty containers of a failed load
-            await self.async_save_all()
-        self._closed = True
+            # also drops a queued write and its final-write hook (HA Store)
+            await self._async_write_all()
 
     def _ended(self, what: str) -> bool:
         """(#1209) After ``async_close`` nothing of this lifetime writes:
         the files belong to the next store, or to nobody after a removal."""
         if getattr(self, "_closed", False):
-            _LOGGER.debug("Skipped the %s: this SEM lifetime has ended", what)
+            # the cycle's own queued save is expected here; any other write
+            # is a change that will not be kept, so say it
+            _LOGGER.log(logging.DEBUG if what == "delayed energy save" else logging.INFO,
+                        "Skipped the %s: this SEM lifetime has ended", what)
             return True
         return False
 

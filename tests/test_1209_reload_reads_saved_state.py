@@ -159,8 +159,6 @@ async def test_an_ended_lifetime_writes_nothing_more(
     assert await hass.config_entries.async_reload(sem_config_entry.entry_id)
     await hass.async_block_till_done()
     new = sem_config_entry.runtime_data
-    assert hass.bus.async_listeners().get(EVENT_HOMEASSISTANT_STOP, 0) == listeners_before, (
-        "each reload left the old store listening for HA stop")
 
     new._storage.set_hints_state({"seen": ["new"]})
     await new._storage.async_save_energy_now()
@@ -176,6 +174,8 @@ async def test_an_ended_lifetime_writes_nothing_more(
     data = hass_storage[_energy_key(sem_config_entry)]["data"]
     assert data.get("hints") == {"seen": ["new"]}, (
         "the old lifetime wrote over the new one's file")
+    assert hass.bus.async_listeners().get(EVENT_HOMEASSISTANT_STOP, 0) == listeners_before, (
+        "each reload left the old store listening for HA stop")
 
 
 @pytest.mark.asyncio
@@ -243,7 +243,7 @@ def test_every_store_writer_stops_once_the_lifetime_ended() -> None:
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "SEMStorage")
     writers, unguarded = [], []
     for fn in cls.body:
-        if not isinstance(fn, ast.AsyncFunctionDef):
+        if not isinstance(fn, (ast.AsyncFunctionDef, ast.FunctionDef)):
             continue
         writes = any(
             isinstance(n, ast.Attribute)
@@ -258,20 +258,114 @@ def test_every_store_writer_stops_once_the_lifetime_ended() -> None:
             isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
             and n.func.attr == "_ended"
             for n in ast.walk(fn))
-        if not asks:
+        if not asks and fn.name != "_async_write_all":
             unguarded.append(fn.name)
     assert {"async_save_energy_delayed", "async_save_energy_now",
-            "async_save_daily", "async_save_all"} <= set(writers), writers
+            "async_save_daily", "_async_write_all"} <= set(writers), writers
     assert not unguarded, f"store writers that write after the close: {unguarded}"
+    # the one writer with no check of its own: only a caller that asked
+    # ``_ended`` (async_save_all) or ended the store first (async_close)
+    callers = {fn.name for fn in cls.body
+               if isinstance(fn, (ast.AsyncFunctionDef, ast.FunctionDef))
+               and any(isinstance(n, ast.Attribute) and n.attr == "_async_write_all"
+                       for n in ast.walk(fn))}
+    assert callers == {"async_save_all", "async_close"}, callers
 
 
-def test_unload_closes_the_store() -> None:
-    """The close is called from ``async_unload_entry`` — every reload,
-    disable and removal goes through it."""
+def test_unload_and_a_failed_setup_end_the_store() -> None:
+    """Every reload, disable and removal goes through ``async_unload_entry``;
+    a setup that fails after the first cycle is never unloaded, so each of
+    its ``ConfigEntryNotReady`` branches ends the store itself."""
     import ast
 
     tree = ast.parse((_ROOT / "__init__.py").read_text(encoding="utf-8"))
-    unload = next(n for n in tree.body
-                  if isinstance(n, ast.AsyncFunctionDef) and n.name == "async_unload_entry")
+    fns = {n.name: n for n in tree.body if isinstance(n, ast.AsyncFunctionDef)}
+
+    def _calls(node, name):
+        return [n for n in ast.walk(node) if isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Name) and n.func.id == name]
+
     assert any(isinstance(n, ast.Attribute) and n.attr == "async_close"
-               for n in ast.walk(unload))
+               for n in ast.walk(fns["_async_end_store"]))
+    assert _calls(fns["async_unload_entry"], "_async_end_store")
+    setup = fns["async_setup_entry"]
+    first_refresh = next(
+        n for n in ast.walk(setup) if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "async_config_entry_first_refresh")
+    late = [h for h in ast.walk(setup) if isinstance(h, ast.ExceptHandler)
+            and h.lineno > first_refresh.lineno
+            and any(isinstance(r, ast.Raise) and isinstance(r.exc, ast.Call)
+                    and getattr(r.exc.func, "id", "") == "ConfigEntryNotReady"
+                    for r in ast.walk(h))]
+    assert len(late) >= 2, "expected the first-refresh and the platform branches"
+    missing = [h.lineno for h in late if not _calls(h, "_async_end_store")]
+    assert not missing, f"ConfigEntryNotReady branches that leave the store open: {missing}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("where", ["first_refresh", "platforms"])
+async def test_a_failed_setup_leaves_no_store_listening(
+    sem_real_hass, sem_config_entry, hass_storage, where,
+) -> None:
+    """HA retries a failed setup with a new store and never unloads the
+    old one: it must not stay behind to write at HA stop."""
+    from unittest.mock import patch
+
+    from homeassistant.config_entries import ConfigEntryState
+
+    from custom_components.solar_energy_management.coordinator.storage import SEMStorage
+
+    hass = sem_real_hass
+    before = hass.bus.async_listeners().get(EVENT_HOMEASSISTANT_STOP, 0)
+    sem_config_entry.add_to_hass(hass)
+    opened = []
+    real_load = SEMStorage.async_load
+
+    async def _load_then_fail(self):
+        await real_load(self)
+        opened.append(self)
+        if where == "first_refresh":
+            raise RuntimeError("#1209 a cycle that fails after the load")
+
+    async def _no_platforms(*_a, **_k):
+        raise RuntimeError("#1209 platforms fail")
+
+    with patch.object(SEMStorage, "async_load", _load_then_fail), patch.object(
+            hass.config_entries, "async_forward_entry_setups",
+            _no_platforms if where == "platforms"
+            else hass.config_entries.async_forward_entry_setups):
+        await hass.config_entries.async_setup(sem_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert sem_config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert opened, "the store was never loaded: the test reached nothing"
+    assert hass.bus.async_listeners().get(EVENT_HOMEASSISTANT_STOP, 0) == before, (
+        "a failed setup left its store listening for HA stop")
+    assert all(st._closed for st in opened)
+
+
+def test_a_write_asked_for_while_the_close_writes_is_skipped() -> None:
+    """The close ends the store before it waits on the disk: a cycle that
+    asks for its queued save in that wait gets nothing armed."""
+    import asyncio
+    from unittest.mock import MagicMock, patch
+
+    from custom_components.solar_energy_management.coordinator.storage import SEMStorage
+
+    hass = MagicMock()
+    with patch("custom_components.solar_energy_management.coordinator.storage.Store"):
+        st = SEMStorage(hass, "e1209")
+    st._energy_store, st._daily_store = MagicMock(), MagicMock()
+    st._loaded = True
+    asked = []
+
+    async def _slow_save(_data):
+        asked.append(await st.async_save_energy_delayed() or "asked")
+
+    st._energy_store.async_save = _slow_save
+    st._daily_store.async_save = MagicMock(side_effect=lambda _d: asyncio.sleep(0))
+    asyncio.run(st.async_close())
+
+    assert asked == ["asked"], "the test never asked during the close's write"
+    st._energy_store.async_delay_save.assert_not_called()

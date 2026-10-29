@@ -2717,6 +2717,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             err,
             exc_info=True
         )
+        # (#1209) the first cycle loads the store before it can fail
+        await _async_end_store(coordinator, "failed setup")
         raise ConfigEntryNotReady(
             f"Could not fetch initial data. Check that all required sensors exist: {err}"
         ) from err
@@ -3378,6 +3380,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
         _LOGGER.error("Failed to setup platforms: %s", err, exc_info=True)
         # Cleanup coordinator data
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        await _async_end_store(coordinator, "failed setup")   # (#1209)
         raise ConfigEntryNotReady(f"Platform setup failed: {err}") from err
 
     # Register services (with duplicate check)
@@ -4046,6 +4049,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
             sim_job = getattr(coordinator, "_simulation_job", None)
             if sim_job is not None:
                 try:
+                    # (#1209) a run still going is kept as cancelled now, not
+                    # by the on-unload hook: that runs after the store ends
+                    sim_job.cancel(persist=False)
                     await sim_job.async_flush()
                 except Exception:  # noqa: BLE001 — teardown must finish
                     _LOGGER.debug("could not save the stopped simulation run")
@@ -4063,13 +4069,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
             # (#1209) Last: SEM's own store. A reload reads the files, so what
             # this lifetime saved must be on them; and nothing of this
             # lifetime may write after (a removal deletes the files next).
-            _storage = getattr(coordinator, "_storage", None)
-            if _storage is not None:
-                try:
-                    await _storage.async_close()
-                except Exception:  # noqa: BLE001 — teardown must finish
-                    _LOGGER.warning("could not save SEM's store on unload",
-                                    exc_info=True)
+            await _async_end_store(coordinator, "unload")
 
         hass.data[DOMAIN].pop(entry.entry_id, None)
 
@@ -4092,6 +4092,20 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
             hass.services.async_remove(DOMAIN, service_name)
 
     return unload_ok
+
+
+async def _async_end_store(coordinator, why: str) -> None:
+    """(#1209) End a lifetime's store: what it holds goes on the file, and
+    nothing of it writes after. For an unload and for a setup that failed
+    after the store was loaded (HA retries with a new store and never
+    unloads this one). Never raises."""
+    storage = getattr(coordinator, "_storage", None)
+    if storage is None:
+        return
+    try:
+        await storage.async_close()
+    except Exception:  # noqa: BLE001 — teardown must finish
+        _LOGGER.warning("could not save SEM's store on %s", why, exc_info=True)
 
 
 async def _async_register_services(
