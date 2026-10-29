@@ -11,8 +11,9 @@ was kept and saved.
 
 Closed at the read: a pair never takes a learned lock, whoever wrote it — the
 self-heal, a saved store, the solar override, the brand seed before a
-discovered pair is proven. The self-heal stands down on a pair. A lock saved
-by the bug is dropped on the first read.
+discovered pair is proven. The self-heal stands down on a pair. The lock is
+not written either (review): it is about the source it was learned on, and a
+home that goes back to that source needs it.
 """
 from __future__ import annotations
 
@@ -86,6 +87,16 @@ def _discovered_pair_reader(**cfg):
     return r
 
 
+def _found_pair_reader(**cfg):
+    """A name-only pick the counters proved (#947)."""
+    r = _make_reader_with_states(MagicMock(), _states(), _ed(), extra_config=cfg)
+    r._split_grid_discovery.update(
+        {"import": IMP, "export": EXP, "confidence": "any-device"})
+    r._split_grid_scan_due = lambda disc: False
+    r._corroborate_split_grid = lambda *a: True
+    return r
+
+
 def _legacy_pair_reader(**cfg):
     """No Energy Dashboard: the Config card's import / export pair."""
     return _make_reader_with_states(
@@ -109,6 +120,7 @@ PAIRS = {
     "ed_pair": _ed_pair_reader,
     "manual": _manual_pair_reader,
     "discovered": _discovered_pair_reader,
+    "discovered_proven": _found_pair_reader,
     "legacy_manual": _legacy_pair_reader,
 }
 
@@ -184,7 +196,7 @@ class TestTheSelfHealLeavesAPairAlone:
 
 class TestNoLockNegatesAPair:
     @pytest.mark.parametrize("kind", sorted(PAIRS))
-    def test_a_lock_the_bug_saved_is_dropped(self, kind):
+    def test_a_lock_the_bug_saved_does_not_apply(self, kind):
         """Homes on the old build saved the flip with the pair's own source,
         so the restore check (#1103) kept it."""
         reader = PAIRS[kind]()
@@ -195,9 +207,25 @@ class TestNoLockNegatesAPair:
                               "grid_source": None if kind == "legacy_manual"
                               else source})
         assert r.read_power().grid_power == EXPORT_W
-        assert r.export_sign_state()["grid_inverted"] is False
+        assert r.grid_sign_diagnostics()["grid_read_is_pair"] is True
 
-    def test_the_dropped_lock_is_said_once(self, caplog):
+    def test_the_card_says_the_pair_is_not_negated(self):
+        """sensor.sem_diag_grid_sign says what the lock does to the read."""
+        from custom_components.solar_energy_management.coordinator.publish_diag import (
+            build_diagnostics,
+        )
+        from .test_620_device_goal_model import TestPublishDiag625
+        coord = TestPublishDiag625()._coord()
+        for make, lock, said in ((_ed_pair_reader, True, "normal"),
+                                 (_combined_reader, True, "negated"),
+                                 (_combined_reader, False, "normal")):
+            r = make()
+            r.read_power()
+            r._grid_sign_inverted = lock
+            coord._sensor_reader = r
+            assert build_diagnostics(coord)["diag_grid_sign"] == said, make
+
+    def test_it_is_said_once(self, caplog):
         r = _ed_pair_reader()
         r.read_power()
         r.restore_sign_state({"grid_detected": True, "grid_inverted": True,
@@ -208,6 +236,26 @@ class TestNoLockNegatesAPair:
         said = [m for m in caplog.messages if "#1215" in m]
         assert len(said) == 1, said
 
+    def test_back_on_the_meter_the_lock_still_applies(self):
+        """Review: the lock is about the one-sensor meter it was learned
+        on. A home that reads a pair for a while and then that meter again
+        (the dashboard changed while SEM runs) needs it as it was. The meter
+        reads in HA's sign (+ = import), so the lock negates it."""
+        ed = _make_energy_dashboard_config(
+            solar_power=SOLAR, grid_import_power=METER, battery_power=None)
+        states = _states()
+        states[METER].state = str(-EXPORT_W)
+        r = _make_reader_with_states(MagicMock(), states, ed)
+        r._grid_sign_detected = True
+        r._grid_sign_inverted = True
+        assert r.read_power().grid_power == EXPORT_W
+        ed.grid_power_from, ed.grid_power_to = IMP, EXP
+        assert r.read_power().grid_power == EXPORT_W
+        assert r.grid_read_is_pair() is True
+        ed.grid_power_from = ed.grid_power_to = None
+        assert r.read_power().grid_power == EXPORT_W
+        assert r.export_sign_state()["grid_inverted"] is True
+
     @pytest.mark.parametrize("kind", sorted(PAIRS))
     def test_a_lock_set_between_reads_is_not_applied(self, kind):
         reader = PAIRS[kind]()
@@ -216,7 +264,8 @@ class TestNoLockNegatesAPair:
         reader._grid_sign_inverted = True
         assert reader.read_power().grid_power == EXPORT_W
 
-    @pytest.mark.parametrize("kind", ["ed_pair", "manual", "discovered"])
+    @pytest.mark.parametrize("kind", ["ed_pair", "manual", "discovered",
+                                      "discovered_proven"])
     def test_the_solar_override_does_not_flip_a_pair(self, kind):
         """The solar voter's override branch writes the lock too. Evidence
         that says "negate" is held; a solar step then reaches the branch."""
@@ -246,7 +295,6 @@ class TestNoLockNegatesAPair:
         assert reader._grid_sign_inverted is True            # the seed's lock
         proven["now"] = True
         assert reader.read_power().grid_power == EXPORT_W
-        assert reader._grid_sign_inverted is False
 
     def test_the_user_flip_still_applies_to_a_pair(self):
         """A tap on the pair is the user's choice (#971) and sits on top."""
@@ -286,7 +334,7 @@ SAVED_NEGATE = {"battery_detected": {FLEET: True},
                 "battery_basis": "sensor", "battery_counters": "own"}
 
 
-def _battery_reader(source, options=None):
+def _battery_reader(source, options=None, one_sensor_w="1200"):
     """The real parser on HA's stored prefs; the battery charges 1200 W.
     The counters have no state, so no sign is learned from them."""
     from custom_components.solar_energy_management.ha_energy_reader import (
@@ -296,7 +344,7 @@ def _battery_reader(source, options=None):
              "device_consumption": []}
     states = {"sensor.pv_power": "3000", "sensor.grid_power": "0",
               "sensor.batt_charge_w": "1200", "sensor.batt_discharge_w": "0",
-              "sensor.batt_power": "1200"}
+              "sensor.batt_power": one_sensor_w}
     hass = MagicMock()
     hass.states.get = lambda eid: (
         MagicMock(state=states[eid], attributes={"unit_of_measurement": "W"})
@@ -323,7 +371,8 @@ class TestNoLockNegatesABatteryPair:
         p = r.read_power()
         assert p.battery_power == pytest.approx(1200.0)
         assert p.battery_charge_power == pytest.approx(1200.0)
-        assert r.export_sign_state()["battery_inverted"][FLEET] is False
+        # not written: it is about the one-sensor battery (see below)
+        assert r.export_sign_state()["battery_inverted"][FLEET] is True
 
     def test_the_brand_seed_does_not_negate_the_pair(self):
         """The seed asks the CHARGE COUNTER's integration (a pair has no
@@ -338,6 +387,35 @@ class TestNoLockNegatesABatteryPair:
         r = _battery_reader(BATTERY_ONE_SENSOR)
         r.restore_sign_state(SAVED_NEGATE)
         assert r.read_power().battery_power == pytest.approx(-1200.0)
+
+    def test_back_on_one_sensor_the_lock_still_applies(self):
+        """Review: the dialog moved to two sensors and back while SEM ran.
+        The one sensor reads in the other sign, so its lock is needed."""
+        from custom_components.solar_energy_management.ha_energy_reader import (
+            _parse_prefs,
+        )
+        r = _battery_reader(BATTERY_ONE_SENSOR, one_sensor_w="-1200")
+        r.restore_sign_state(SAVED_NEGATE)
+        assert r.read_power().battery_power == pytest.approx(1200.0)
+        for source in (BATTERY_PAIR, BATTERY_ONE_SENSOR):
+            r.set_energy_dashboard_config(_parse_prefs(MagicMock(), {
+                "energy_sources": [_SOLAR_SRC, _GRID_SRC, source],
+                "device_consumption": []}, quiet=True))
+            assert r.read_power().battery_power == pytest.approx(1200.0), source
+
+    def test_the_card_says_the_pair_is_not_negated(self):
+        from custom_components.solar_energy_management.coordinator.publish_diag import (
+            build_diagnostics,
+        )
+        from .test_620_device_goal_model import TestPublishDiag625
+        coord = TestPublishDiag625()._coord()
+        for source, said in ((BATTERY_PAIR, "normal"),
+                             (BATTERY_ONE_SENSOR, "negated")):
+            r = _battery_reader(source)
+            r.restore_sign_state(SAVED_NEGATE)
+            r.read_power()
+            coord._sensor_reader = r
+            assert build_diagnostics(coord)["diag_battery_sign"] == said, source
 
     def test_the_user_flip_still_applies_to_the_pair(self):
         r = _battery_reader(BATTERY_PAIR, {"battery_sign_user_flip": True})
@@ -364,11 +442,12 @@ def test_every_grid_source_kind_is_classed():
             m = re.match(r"([a-z_]+):", head.value)
             assert m, head.value
             kinds.add(m.group(1))
-    assert kinds == {"manual", "ed_pair", "discovered", "combined", "sum"}, kinds
     pair = set(SensorReader._PAIR_GRID_SOURCES)
-    learned = set(SensorReader._LEARNED_GRID_SOURCES)
+    learned = {"combined", "sum"}            # a lock applies to these
     assert not pair & learned
-    assert kinds == pair | learned, kinds - (pair | learned)
+    assert kinds == pair | learned, (
+        f"classify {kinds - (pair | learned)} as a pair (_PAIR_GRID_SOURCES) "
+        f"or a source whose sign is learned; gone: {(pair | learned) - kinds}")
 
 
 def test_the_self_heal_asks_the_reader():

@@ -1997,111 +1997,41 @@ class TestSplitGridStartupRace:
             assert reader._split_grid_discovery["confidence"] == "same-device"
             assert reader._split_grid_discovery["import"] == "sensor.electricity_meter_power_consumption"
 
-    def _make_coordinator_for_sign_flip(self, confidence="any-device"):
-        """Create a minimal coordinator with mocked sensor reader for sign-flip tests."""
-        from custom_components.solar_energy_management.coordinator.coordinator import SEMCoordinator
-
-        coord = SEMCoordinator.__new__(SEMCoordinator)
-        coord._sensor_reader = MagicMock()
-        coord._sensor_reader._split_grid_discovery = {
-            "import": "sensor.wrong_power_consumption",
-            "export": None,
-            "confidence": confidence,
-            "warned": False,
+    @pytest.mark.parametrize("confidence", ["any-device", "same-device"])
+    def test_the_self_heal_leaves_a_found_pair_alone(self, confidence):
+        """(#1215) A found pair reads export minus import, so its sign is set
+        by the pair. The self-heal used to wait 3 rounds on an any-device
+        pick (#166) and then flip it; now it never flips a pair, at any
+        confidence. A name-only pick is read once the counters prove it
+        (#947), and reads 0 W (no heal) until then."""
+        from custom_components.solar_energy_management.coordinator.coordinator import (
+            SEMCoordinator,
+        )
+        ed = _make_energy_dashboard_config(
+            solar_power="sensor.solar", grid_import_power=None, battery_power=None)
+        states = {
+            "sensor.solar": _state(1000),
+            "sensor.grid_in_w": _state(0, device_class="power"),
+            "sensor.grid_out_w": _state(2000, device_class="power"),
+            "sensor.grid_import_total": _state(10, "kWh"),
+            "sensor.grid_export_total": _state(20, "kWh"),
         }
-        coord._sensor_reader._grid_sign_inverted = False
-        coord._sensor_reader._grid_sign_detected = False
-        # (#690) MUST be an explicit False: on a bare MagicMock this attribute
-        # auto-vivifies to a truthy child mock, which would stand the self-heal
-        # down and make every sign-flip test below pass vacuously.
-        coord._sensor_reader.grid_sign_user_override = False
-        # (#1215) Same trap: a truthy mock would read as a pair and stand the
-        # self-heal down. These tests ask what the discovery's confidence
-        # does to a heal that may act, so the read is no pair here.
-        coord._sensor_reader.grid_read_is_pair.return_value = False
+        reader = _make_reader_with_states(MagicMock(), states, ed)
+        reader._split_grid_discovery.update({
+            "import": "sensor.grid_in_w", "export": "sensor.grid_out_w",
+            "confidence": confidence})
+        reader._split_grid_scan_due = lambda disc: False
+        reader._corroborate_split_grid = lambda *a: True
+        coord = SEMCoordinator.__new__(SEMCoordinator)
+        coord._sensor_reader = reader
         coord._negative_balance_count = 0
-        coord._sign_flip_suppression_count = 0
-        return coord
-
-    def _make_negative_power(self):
-        """PowerReadings with a deeply negative balance to trigger sign flip.
-
-        Balance = energy_in - energy_out
-               = (solar + grid_import + batt_discharge) - (ev + grid_export + batt_charge)
-               = (5000 + 0 + 0) - (0 + 8000 + 0) = -3000  (< -500 → triggers flip)
-        """
-        power = PowerReadings()
-        power.solar_power = 5000.0
-        power.grid_power = 3000.0  # non-zero so the outer guard passes
-        power.grid_import_power = 0.0
-        power.grid_export_power = 8000.0
-        power.battery_power = 0.0
-        power.battery_charge_power = 0.0
-        power.battery_discharge_power = 0.0
-        power.ev_power = 0.0
-        return power
-
-    def test_self_healing_flip_skipped_for_lowconf_split(self):
-        """Sign flip must NOT fire when split-grid confidence is any-device."""
-        coord = self._make_coordinator_for_sign_flip(confidence="any-device")
-        power = self._make_negative_power()
-
-        # Simulate 18 negative balance cycles (3 minutes)
-        for _ in range(18):
-            coord._check_sign_flip(power)
-
-        # Should be suppressed — no flip
-        assert coord._sensor_reader._grid_sign_inverted is False
-        assert coord._sign_flip_suppression_count == 1
-
-    def test_self_healing_flip_fires_for_same_device(self):
-        """Sign flip fires normally when confidence is same-device."""
-        coord = self._make_coordinator_for_sign_flip(confidence="same-device")
-        power = self._make_negative_power()
-
-        for _ in range(18):
-            coord._check_sign_flip(power)
-
-        assert coord._sensor_reader._grid_sign_inverted is True
-
-    def test_suppression_escape_hatch_after_3_cycles(self):
-        """After 3 suppression cycles (~9 min), flip fires anyway."""
-        coord = self._make_coordinator_for_sign_flip(confidence="any-device")
-        power = self._make_negative_power()
-
-        # 3 suppression cycles × 18 ticks each = 54 ticks
-        for _ in range(54):
-            coord._check_sign_flip(power)
-
-        # 3 suppressions exhausted, but flip hasn't fired yet (counter reset each time)
-        assert coord._sign_flip_suppression_count == 3
-        assert coord._sensor_reader._grid_sign_inverted is False
-
-        # Next 18 ticks should trigger the actual flip (suppression limit reached)
-        for _ in range(18):
-            coord._check_sign_flip(power)
-
-        assert coord._sensor_reader._grid_sign_inverted is True
-        assert coord._sign_flip_suppression_count == 0
-
-    def test_confidence_upgrade_resets_suppression_counter(self):
-        """Upgrading to same-device after suppression cycles allows immediate flip."""
-        coord = self._make_coordinator_for_sign_flip(confidence="any-device")
-        power = self._make_negative_power()
-
-        # One suppression cycle
-        for _ in range(18):
-            coord._check_sign_flip(power)
-        assert coord._sign_flip_suppression_count == 1
-        assert coord._sensor_reader._grid_sign_inverted is False
-
-        # Upgrade confidence
-        coord._sensor_reader._split_grid_discovery["confidence"] = "same-device"
-
-        # Next 18 ticks should flip (same-device skips suppression)
-        for _ in range(18):
-            coord._check_sign_flip(power)
-        assert coord._sensor_reader._grid_sign_inverted is True
+        for _ in range(18 * 4):          # 12 min of a -1000 W balance
+            power = reader.read_power()
+            assert power.solar_power == 1000 and power.grid_power != 0
+            if coord._check_sign_flip(power):
+                power = reader.read_power()
+        assert power.grid_power == 2000           # export stays export
+        assert reader._grid_sign_inverted is False
 
 
 class TestSplitGridCombinedGuard:

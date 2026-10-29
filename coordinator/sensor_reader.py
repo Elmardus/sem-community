@@ -473,6 +473,12 @@ class SensorReader:
         #: once, on the first read. ``_UNSET``: nothing to check (no lock,
         #: or a store from before the lock carried its source).
         self._restored_grid_source = _UNSET
+        #: (#1215) This cycle's battery is one two-sensor pair (no lock
+        #: applies); and the log line that a lock does not apply to a pair,
+        #: said once per reader for the grid and the battery.
+        self._battery_read_is_pair = False
+        self._pair_lock_said = False
+        self._battery_pair_lock_said = False
         #: (#1194) A restored fleet battery lock from a store written while
         #: the one-battery read still flipped an "Inverted" sensor. Moved
         #: once, on the first Energy Dashboard read.
@@ -1357,6 +1363,8 @@ class SensorReader:
             "user_flip_applies": self.user_flip_applies(),
             "auto_detected": self._grid_sign_detected,
             "auto_inverted": self._grid_sign_inverted,
+            # (#1215) a pair takes no lock: auto_inverted is then not applied
+            "grid_read_is_pair": self.grid_read_is_pair(),
             "evidence": round(self._grid_sign_evidence, 1),
             "total_magnitude": round(self._grid_sign_total_mag, 1),
             "samples": self._grid_sign_samples,
@@ -2079,23 +2087,25 @@ class SensorReader:
             )
             self._grid_sign_inverted = implied_inverted
 
-    #: Grid sources whose sign comes from a LOCK (brand seed, counter or
-    #: solar vote) — what the #461 one-tap flip exists to correct. A declared
-    #: pair (manual or the Energy Dashboard's from/to) has no lock.
+    #: Grid sources a one-tap flip from before #971 (no source saved) applies
+    #: to: the auto-found ones. A declared pair (manual or the Energy
+    #: Dashboard's from/to) never takes such a flip. Not the sources a lock
+    #: applies to: no lock applies to a found pair either (#1215).
     _AUTO_GRID_SOURCES = ("combined", "sum", "discovered")
 
     #: (#1215) Grid sources read as a pair: export minus import, both sides
     #: positive, so the pair sets the sign. No learned lock applies to them.
+    #: The other sources (combined, sum) take the lock.
     _PAIR_GRID_SOURCES = ("manual", "ed_pair", "discovered")
-    #: …and the ones whose sign SEM learns and keeps as a lock.
-    _LEARNED_GRID_SOURCES = ("combined", "sum")
 
     def grid_read_is_pair(self) -> bool:
         """(#1215) Is the grid read from a pair? Then there is no sign to
         learn or flip: the read never applies the lock, whoever wrote it
         (the balance self-heal, a saved store, the solar override, the brand
         seed before a found pair is proven), and the self-heal stands down.
-        The user's own flip and ``grid_sign_invert`` still apply."""
+        The lock itself is left as it is: it is about the source it was
+        learned on, and a home that goes back to that source needs it. The
+        user's own flip and ``grid_sign_invert`` still apply."""
         kind = (self._grid_source_key or "").split(":", 1)[0]
         return kind in self._PAIR_GRID_SOURCES
 
@@ -2184,13 +2194,14 @@ class SensorReader:
         # (#1215) A pair has its sign by setup: nothing to detect, and a lock
         # is never applied to it. Kept here, at the read, because several
         # paths write the lock; the restore check alone (#1103) let the
-        # balance self-heal negate a pair and save it.
+        # balance self-heal negate a pair and save it. The lock is not
+        # written (review): it is about another source.
         if self.grid_read_is_pair():
-            if self._grid_sign_inverted:
-                self._grid_sign_inverted = False
+            if self._grid_sign_inverted and not self._pair_lock_said:
+                self._pair_lock_said = True
                 _LOGGER.info(
-                    "grid sign: %s is a pair (export minus import) — a "
-                    "learned negation does not apply to it, dropped (#1215)",
+                    "grid sign: %s is a pair (export minus import) — the "
+                    "learned negation does not apply to it (#1215)",
                     self._grid_source_key)
             return False
 
@@ -2362,14 +2373,16 @@ class SensorReader:
         # (#1215) One battery read as a two-sensor pair: charge minus
         # discharge, its sign set by the pair, as for each pair of a fleet
         # (#553) and the grid's pairs. A lock (a saved one, the brand seed on
-        # its counter's integration) is never applied to it.
-        if getattr(self, "_battery_read_is_pair", False):
-            if self._battery_sign_inverted.get(self._FLEET_BID):
-                self._battery_sign_inverted[self._FLEET_BID] = False
+        # its counter's integration) is never applied to it, nor written: a
+        # saved lock is about the one-sensor battery it was learned on.
+        if self._battery_read_is_pair:
+            if (self._battery_sign_inverted.get(self._FLEET_BID)
+                    and not self._battery_pair_lock_said):
+                self._battery_pair_lock_said = True
                 _LOGGER.info(
                     "battery sign: the battery is a two-sensor pair (charge "
-                    "minus discharge) — a learned negation does not apply "
-                    "to it, dropped (#1215)")
+                    "minus discharge) — the learned negation does not apply "
+                    "to it (#1215)")
             return False
         ed = self._energy_dashboard_config
         if not ed:
