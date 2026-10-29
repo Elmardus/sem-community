@@ -477,9 +477,9 @@ class SensorReader:
         #: applies); and the log line that a lock does not apply to a pair,
         #: said once per reader for the grid and the battery.
         self._battery_read_is_pair = False
-        #: (#1210) Whether the last read signed each battery on its own
-        #: (``_reads_per_battery``); None before the first read.
-        self._battery_read_per_battery: Optional[bool] = None
+        #: (#1210) The battery ids whose sign lock the last read applied
+        #: (``_battery_lock_bids``); None before the first read.
+        self._battery_read_locks: Optional[frozenset] = None
         self._pair_lock_said = False
         self._battery_pair_lock_said = False
         #: (#1194) A restored fleet battery lock from a store written while
@@ -1160,7 +1160,8 @@ class SensorReader:
         # are convention-authoritative (the user declared charge/discharge
         # directions in HA), so only combined units go through sign detect.
         per_battery_mode = self._reads_per_battery(ed, readings)
-        self._battery_read_per_battery = per_battery_mode   # (#1210)
+        # (#1210) the locks this read applies, for the diagnostics sensor
+        self._battery_read_locks = self._battery_lock_bids(ed, per_battery_mode)
 
         if per_battery_mode:
             from dataclasses import replace
@@ -3954,6 +3955,18 @@ class SensorReader:
         n_units = len(battery_units(ed))
         return n_units >= 2 and len(readings.batteries) == n_units
 
+    def _battery_lock_bids(self, ed, per_battery: bool) -> frozenset:
+        """(#1210) The battery ids whose sign lock a read applies.
+
+        Each combined battery's own (``b1`` …) when the read signs each
+        battery, else the one-battery lock. A two-sensor battery's id has
+        none: it is never sign-flipped (#553).
+        """
+        if not per_battery:
+            return frozenset({self._FLEET_BID})
+        return frozenset(f"b{idx + 1}" for idx in range(
+            len(getattr(ed, "battery_power_list", None) or [])))
+
     def _audit_battery_sign_lock(self, battery_power: float, ed, readings=None) -> None:
         """Observe-only post-lock contradiction check for the battery sign (#589, #647).
 
@@ -3994,11 +4007,9 @@ class SensorReader:
         so the voter's ``_battery_charge_baseline`` is never disturbed.
         """
         per_battery = self._reads_per_battery(ed, readings)
-        if per_battery:
-            run = {f"b{idx + 1}" for idx in range(
-                len(getattr(ed, "battery_power_list", None) or []))}
-        else:
-            run = set() if self._battery_read_is_pair else {self._FLEET_BID}
+        run = self._battery_lock_bids(ed, per_battery)
+        if not per_battery and self._battery_read_is_pair:
+            run = frozenset()          # (#1215) a pair read takes no lock
         for bid in set(self._battery_sign_audits) - run:
             del self._battery_sign_audits[bid]
 

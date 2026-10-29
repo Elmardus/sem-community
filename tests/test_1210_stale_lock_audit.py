@@ -19,8 +19,9 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from unittest.mock import MagicMock
 
-from .test_1193_own_battery_counters import FLEET, HOMES, PAIR, _ed, _Home
+from .test_1193_own_battery_counters import FLEET, HOMES, PAIR, _ed, _Home, _w
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -58,7 +59,8 @@ def test_a_wrong_battery_sign_is_caught_beside_an_old_one_battery_lock():
 
 def test_right_battery_signs_beside_an_old_lock_stay_quiet():
     """The old one-battery lock says "negate", which would be wrong for the
-    sum. It is not applied to this read, so it is not judged either."""
+    sum. It is not applied to this read, so it gets no audit of its own (the
+    old code kept one, judged on the read's sum)."""
     home = _Home("two_combined", store=_store(True, False))
     _cycles(home, 8)
     r = home.reader
@@ -74,6 +76,23 @@ def test_the_one_battery_home_still_checks_its_lock():
     home = _Home("one_battery_first", store=store)
     _cycles(home, 8)
     assert home.reader.battery_sign_contradiction_bids == [FLEET]
+
+
+def test_a_dark_battery_does_not_reset_the_other_batterys_count():
+    """The drop must not fire on a cycle where one battery reads nothing: it
+    still counts as read (0 W, #1167), so the home still reads each battery
+    and b1's count goes on. Reset there, a wrong b1 might never reach five."""
+    home = _Home("two_combined", store={
+        "battery_detected": {"b1": True, "b2": True},
+        "battery_inverted": {"b1": True, "b2": False},
+        "battery_basis": "sensor", "battery_counters": "own"})
+    _cycles(home, 3)                              # 1 to start, 2 counted
+    home.states["sensor.sessy2_power"] = MagicMock(state="unavailable",
+                                                   attributes={})
+    _cycles(home, 1)
+    home.states["sensor.sessy2_power"] = _w(-1500)
+    _cycles(home, 2)
+    assert home.reader.battery_sign_contradiction_bids == ["b1"]
 
 
 # ── 2. An audit of the other way of reading is dropped ─────────────────────
@@ -154,6 +173,18 @@ def test_the_diagnostics_sensor_leaves_out_a_lock_the_read_does_not_use():
     one = _Home("one_battery_first", store=_store(False, True))
     _cycles(one, 1)
     assert _diag(one) == "normal"
+
+    # a removed third battery, and a lock on the id a two-sensor battery has
+    gone = _store(False, False)
+    gone["battery_detected"]["b3"] = True
+    gone["battery_inverted"]["b3"] = True
+    three = _Home("two_combined", store=gone)
+    _cycles(three, 1)
+    assert _diag(three) == "b1: normal, b2: normal"
+
+    pair = _Home("pair_first", store=_store(False, False, True))
+    _cycles(pair, 1)
+    assert _diag(pair) == "normal", "b2 is the pair: no lock, b1 alone"
 
 
 def test_the_diagnostics_sensor_before_the_first_read_shows_the_store():
