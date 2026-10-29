@@ -675,6 +675,16 @@ class SEMStorage:
         """Persist sign-detection lock state."""
         self._energy_data["sign_state"] = state
 
+    def get_battery_sign_basis(self) -> Optional[Dict[str, Any]]:
+        """(#1208) The one-battery sign as a build since #1208 last saved it
+        (``SensorReader.export_battery_basis``). A key of its own: an older
+        build writes ``sign_state`` again from the keys it knows, but keeps
+        the store's other keys."""
+        return self._energy_data.get("battery_sign_basis")
+
+    def set_battery_sign_basis(self, basis: Dict[str, Any]) -> None:
+        self._energy_data["battery_sign_basis"] = dict(basis)
+
     # VPP event history persistence (#580) — per-event energy accounting
     # for payment reconciliation (bounded to ~20 records by VppDispatcher).
     def get_vpp_events(self) -> list:

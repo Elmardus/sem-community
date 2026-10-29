@@ -6640,6 +6640,10 @@ async def _async_register_phase_services(
         storage = getattr(coordinator, "_storage", None)
         if storage is not None:
             storage.set_sign_state({})
+            # (#1208) the record beside it, too
+            basis = reader.export_battery_basis() if reader is not None else None
+            if isinstance(basis, dict):
+                storage.set_battery_sign_basis(basis)
             # (#1209) Now, not queued: the queued save lands only once the
             # cycles stop, so a restart before it read the old signs back.
             await storage.async_save_energy_now()

@@ -2805,6 +2805,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     )
             else:
                 _info("Energy Dashboard not configured or incomplete")
+                # (#1208) the reader reads without one: say if that is sure
+                self._sensor_reader.set_dashboard_answered(answered)
 
         except Exception as e:
             _LOGGER.warning("Failed to read Energy Dashboard: %s", e)
@@ -3891,7 +3893,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # ambiguous low-power samples and could lock the wrong sign
             # until the next reload.
             self._sensor_reader.restore_sign_state(
-                self._storage.get_sign_state()
+                self._storage.get_sign_state(),
+                basis=self._storage.get_battery_sign_basis(),   # (#1208)
             )
 
             # (#638 night 2) Restore the measured W/A — in-memory only,
@@ -5581,6 +5584,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 self._storage.set_sign_state(
                     self._sensor_reader.export_sign_state()
                 )
+                # (#1208) …and beside it, in a key an older build keeps
+                basis = self._sensor_reader.export_battery_basis()
+                if basis is not None:
+                    self._storage.set_battery_sign_basis(basis)
                 # Persist the legionella timestamp (#508 I2).
                 _hw = self._surplus_controller._devices.get("hot_water") \
                     if hasattr(self, "_surplus_controller") else None
