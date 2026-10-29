@@ -18,6 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **An emptied charger service now stays empty after Save** (#1214). A charger moved to another integration no longer gets a "device is gone" Repair.
 - 🐛 **SEM now checks each battery's sign on a home that added a second battery** (#1210). Before, a wrong sign there was never flagged.
 
+# [2.2.0] — DD.MM.YYYY
+
+The second stable release of the 2.x line.
+
+- **Try a what-if on your own days** — another battery, more solar, a different price, replayed against real recorded history (Simulation tab).
+- **Every change SEM makes says why** — the Why? card and the logbook give each one a plain sentence, in your language.
+- **Settings and the EV tab show only what you need** — Everyday groups the common controls; All settings holds the rest.
+- **SEM finds your outdoor temperature and grid CO₂ sensor on their own** — car charging, battery nights and CO₂ avoided all use them.
+- **A phase or grid-operator limit sheds ordinary loads too**, not only chargers.
+- **More hardware found on its own**: go-eCharger, ENTSO-e prices, Helios Forecast, NRGkick and OpenEVSE chargers.
+- **A heat pump or load can carry its own tariff and meter**, so its cheap hours follow its own price.
+
+Also fixed since 2.1: grid and battery sign errors on homes with a split meter or a second battery, CO₂ and self-consumption undercounting a battery sale, and a counter step that could grow a month or year total past its real limit.
+
+Needs Home Assistant 2026.2.0 or newer. New features are off until you switch them on, except one: if you had already turned on the phase guard, it now sheds ordinary loads too, not only chargers.
+
 # [2.2.0-beta.29] — 28.10.2026
 
 - 🐛 **A battery counter step above the daily limit no longer makes the month, year and lifetime totals grow** (#1218). Before, they grew on every cycle.
