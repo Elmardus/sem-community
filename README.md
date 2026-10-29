@@ -492,6 +492,9 @@ All SEM entities are removed automatically. Your Energy Dashboard and hardware s
 - **Hints** (#1019): a sentence when something is off, and a weekly note. One setting: off, weekly or all.
 - **Chargers found by what they offer** (#1032): buttons, a charge-mode select, a car's own amps. No brand list needed.
 - **Charge pacing is calm** (#820): on the register's step, at most one write every five minutes, and the inverter's own value is accepted.
+- **Yields a charger or the battery to another party that steers it** (#1079). SEM writes nothing to it, or watches and tells you if its own setting does not hold.
+- **A discharge limit can cap charging too** (#1078). A parked car no longer blocks solar from charging that battery.
+- **Starts the car on a negative export price** (#1080). Buys the small gap from the grid when the sun alone is not enough.
 
 ### v2.1.0 — Forecast-led planning and spending
 2.1 looks ahead. SEM forms an honest expectation of the energy that is coming and plans how to spend it. It also learns hardware it had never met. Everything new that acts is off by default, with two exceptions: the peak slot guard (which also keeps the battery covering the house while a peak is near), and modules — SEM removes the entities of hardware your house does not have.
