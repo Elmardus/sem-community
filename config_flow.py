@@ -259,10 +259,12 @@ def _carry_hidden_wiring(discovered: dict, submitted: dict, target: dict) -> Non
 
 def _drop_stale_service_wiring(before: dict, submitted: dict, target: dict) -> None:
     """Edit: a service the user CHANGED takes no field names or box name
-    from the one it replaced."""
-    if "ev_charger_service" not in submitted:
-        return
-    if (submitted.get("ev_charger_service") or "") == (before.get("ev_charger_service") or ""):
+    from the one it replaced.
+
+    (#1214) Asked of ``target`` after the merge, not of ``submitted``: an
+    emptied field is missing from ``submitted``, and an emptied service
+    keeps no wiring either."""
+    if (target.get("ev_charger_service") or "") == (before.get("ev_charger_service") or ""):
         return
     for k in _HIDDEN_CHARGER_WIRING[0][1]:
         target.pop(k, None)
@@ -1192,9 +1194,11 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="number")
                 ),
+                # (#1214) a suggestion, never a default: HA refills an
+                # emptied field with its default, so it could not be erased
                 vol.Optional(
                     "ev_charger_service",
-                    default=suggestions.get("ev_charger_service", ""),
+                    description={"suggested_value": suggestions.get("ev_charger_service") or None},
                 ): selector.TextSelector(
                     selector.TextSelectorConfig(
                         type=selector.TextSelectorType.TEXT
@@ -1454,9 +1458,19 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["mobile_notification_service"] = "service_not_found"
 
             if not errors:
+                # (#1214) An emptied field is missing from ``user_input``:
+                # recorded as None, or the saved value stays. The page shows
+                # ``{**data, **options}``, so a key the options also hold is
+                # written there too, or the options copy wins the merge and
+                # the saved value comes back.
+                updates: dict[str, Any] = {}
+                _merge_form_input(self, updates, user_input)
+                options = dict(reconfigure_entry.options or {})
                 return self.async_update_reload_and_abort(
                     reconfigure_entry,
-                    data_updates=user_input,
+                    data_updates=updates,
+                    options={**options, **{k: v for k, v in updates.items()
+                                           if k in options}},
                 )
 
         # Get available notification services (notify.* and rest_command.*)
@@ -1501,9 +1515,11 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "ev_charging_power_sensor",
                     default=current_config.get("ev_charging_power_sensor", ""),
                 ), has_charger, current_config): _power_sensor_selector(getattr(self, "hass", None)),
+                # (#1214) a suggestion, never a default: HA refills an
+                # emptied field with its default, so it could not be erased
                 vol.Optional(
                     "ev_charger_service",
-                    default=current_config.get("ev_charger_service", ""),
+                    description={"suggested_value": current_config.get("ev_charger_service") or None},
                 ): selector.TextSelector(
                     selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
                 ),
@@ -1527,9 +1543,11 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "enable_mobile_notifications",
                     default=current_config.get("enable_mobile_notifications", False),
                 ): selector.BooleanSelector(),
+                # (#1214) "None" is the empty value, which HA does not send:
+                # a default put the old service back
                 vol.Optional(
                     "mobile_notification_service",
-                    default=current_config.get("mobile_notification_service", ""),
+                    description={"suggested_value": current_config.get("mobile_notification_service") or None},
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=notify_services,
@@ -1973,9 +1991,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),
+            # (#1214) a suggestion, never a default: HA refills an emptied
+            # field with its default, so it could not be erased
             vol.Optional(
                 "ev_charger_service",
-                default=current_config.get("ev_charger_service", ""),
+                description={"suggested_value": _opt("ev_charger_service") or None},
             ): selector.TextSelector(
                 selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
             ),
@@ -2214,9 +2234,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="number")
                 ),
+                # (#1214) a suggestion: a default refills an emptied field
                 vol.Optional(
                     "ev_charger_service",
-                    default=suggestions.get("ev_charger_service", ""),
+                    description={"suggested_value": suggestions.get("ev_charger_service") or None},
                 ): selector.TextSelector(),
                 vol.Optional(
                     "ev_charger_service_entity_id",
@@ -2435,9 +2456,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="number")
                 ),
+                # (#1214) a suggestion: a default refills an emptied field
                 vol.Optional(
                     "ev_charger_service",
-                    default=charger.get("ev_charger_service", ""),
+                    description={"suggested_value": charger.get("ev_charger_service") or None},
                 ): selector.TextSelector(),
                 vol.Optional(
                     "ev_charger_service_entity_id",
@@ -4559,9 +4581,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             w_txt = f" · {watts:.0f} W" if isinstance(watts, float) else ""
             n = slot.replace("pv", "")
             mapping_lines.append(f"• PV{n}  ←  {src_label}{w_txt}")
+            # (#1214) a suggestion: with a default, an emptied name came
+            # back, so it never went back to the default name
             schema_dict[vol.Optional(
                 f"pv_name_{slot}",
-                default=saved_names.get(slot, ""),
+                description={"suggested_value": saved_names.get(slot) or None},
             )] = selector.TextSelector()
 
         return self.async_show_form(
@@ -4646,9 +4670,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "enable_mobile_notifications",
                     default=suggestions.get("enable_mobile_notifications", False),
                 ): selector.BooleanSelector(),
+                # (#1214) "None" is the empty value, which HA does not send:
+                # a default put the old service back
                 vol.Optional(
                     "mobile_notification_service",
-                    default=suggestions.get("mobile_notification_service", ""),
+                    description={"suggested_value": suggestions.get("mobile_notification_service") or None},
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=notify_services,

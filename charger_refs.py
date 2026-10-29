@@ -333,6 +333,54 @@ def apply_legacy_edit(refs: List[dict], legacy: List[dict],
     return [r for r in out if r is not None]
 
 
+def follow_device(refs: List[dict], device_of: DeviceOf,
+                  live_by_device: Dict[str, Dict[str, Any]],
+                  log: Callable[[str], None] = _LOGGER.info) -> List[dict]:
+    """(#1214) A ref names the device its card's entities sit on.
+
+    The device was set once, when the ref was made. A user who moved a
+    charger to another integration picked the new device's entities, and
+    the ref still named the old device. Once that device was removed, a
+    Repair said "its device is gone" about a charger that runs, and the old
+    device's last answer (``found``) still filled each role the user did not
+    set.
+
+    When no entity of the card sits on the ref's device and some sit on
+    another one, the ref is made again from the card for that device
+    (``card_to_ref``): the card resolves to the same values, so SEM drives
+    what it drove. A device another ref already names is left alone: two
+    chargers on one device need the ``connector`` setting."""
+    taken = {r.get("device_id") for r in refs if r.get("device_id")}
+    out: List[dict] = []
+    for r in refs:
+        dev = r.get("device_id")
+        if dev is None:
+            out.append(r)
+            continue
+        live = live_by_device.get(dev)
+        # a held role is still the card's (#1151); ``held`` is kept below
+        card = resolve(_without(r, {"held"}), live)
+        on = [device_of(str(card[k])) for k in sorted(CHARGER_ENTITY_KEYS)
+              if card.get(k)]
+        new = device_of_card(card, device_of)
+        if dev in on or new is None or new == dev:
+            out.append(r)
+            continue
+        if new in taken:
+            log(f"charger {r['id']}: its entities sit on device {new}, which "
+                "another charger names; kept on its own device (#1214)")
+            out.append(r)
+            continue
+        log(f"charger {r['id']}: its entities now sit on device {new}, not "
+            f"{dev}; its reference follows them (#1214)")
+        taken.discard(dev)
+        taken.add(new)
+        # the user built this card: no plug check is owed (#1152)
+        out.append({**r, **card_to_ref(card, new, live_by_device.get(new)),
+                    PLUG_CHECKED: True})
+    return out
+
+
 def refresh_found(refs: List[dict],
                   live_by_device: Dict[str, Dict[str, Any]]) -> List[dict]:
     """Remember the crawler's latest answer per device (a start where it
@@ -756,6 +804,8 @@ def reconcile(*, data_list: Optional[list], legacy: Optional[list],
         log(f"chargers stored as device references: {[r['id'] for r in refs]}")
     elif legacy is not None and signature(legacy) != sig:
         refs = apply_legacy_edit(refs, legacy, device_of, live_by_device, log)
+    # (#1214) at every start: a ref moved before this fix is set right too
+    refs = follow_device(refs, device_of, live_by_device, log)
     ran = {r["id"]: ran.get(r["id"]) or resolve(r) for r in refs}
     refs = refresh_found(refs, live_by_device)
     if refuse is not None:
