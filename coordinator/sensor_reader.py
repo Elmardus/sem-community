@@ -1697,9 +1697,11 @@ class SensorReader:
         # (#1208) An older build run after this one writes the store again
         # without the mark. If the fleet lock and the flip are still what
         # this build saved beside it, that build changed nothing to move.
+        now = self._battery_basis_now()
         self._battery_lock_on_flipped = (
             bool(state) and "battery_basis" not in state
-            and basis != self._battery_basis_now())
+            and not (isinstance(basis, dict)
+                     and {k: basis.get(k) for k in now} == now))
         # (#1193) A store without ``battery_counters`` judged each battery by
         # entry N of the counter lists: every lock it holds is checked
         # (``_drop_locks_on_other_counters``). A newer store names the ones
@@ -3364,9 +3366,9 @@ class SensorReader:
         A fleet lock waits while the home reads per battery (that read does
         not use it), so it is still moved if the home goes back to one.
 
-        (#1208) A read without a dashboard was never flipped: it settles the
-        move with nothing to change (``ed`` None, ``read_alone`` False), so
-        the mark is saved and a dashboard added later keeps this sign.
+        (#1208) A read without a dashboard was never flipped: with no fleet
+        lock it settles the move with nothing to change (``ed`` None,
+        ``read_alone`` False), so a dashboard added later keeps the flip.
         """
         if not getattr(self, "_battery_lock_on_flipped", False):
             return
@@ -5043,10 +5045,13 @@ class SensorReader:
             readings.battery_power = self._read_sensor(
                 self.config.battery_power_sensor, "battery"
             )
-        # (#1208) No build flipped a battery read without a dashboard: a
-        # saved sign has nothing to move. Settled only on an answer — a
-        # dashboard SEM could not read may be the one an older build read.
-        if getattr(self, "_dashboard_answered", False):
+        # (#1208) No build flipped a battery read without a dashboard, so a
+        # saved flip judged the sensor as it is: settle the move. Only on an
+        # answer (a dashboard SEM could not read may be the one an older
+        # build read), and not over a fleet lock: no build learns one here,
+        # so it came from a dashboard read and waits for the next one.
+        if (getattr(self, "_dashboard_answered", False)
+                and not self._battery_sign_detected.get(self._FLEET_BID)):
             self._move_lock_learned_on_flip(None, read_alone=False)
 
         # Battery SOC — use allow_none to distinguish 0% from unavailable.

@@ -2710,7 +2710,6 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 self.hass, quiet=quiet)
             self._ed_raw_config = dashboard_config
             self._ed_answered = answered
-            self._sensor_reader.set_dashboard_answered(answered)   # (#1208)
 
             # Activate whenever the dashboard is minimally configured (solar + grid),
             # not only when a stat_rate power sensor exists. ha_energy_reader already
@@ -2806,6 +2805,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     )
             else:
                 _info("Energy Dashboard not configured or incomplete")
+                # (#1208) the reader reads without one: say if that is sure
+                self._sensor_reader.set_dashboard_answered(answered)
 
         except Exception as e:
             _LOGGER.warning("Failed to read Energy Dashboard: %s", e)
