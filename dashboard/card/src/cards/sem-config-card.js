@@ -532,7 +532,9 @@ class SEMConfigCard extends SEMLitBase {
                 undefined,  // notifyOnError
                 true,       // returnResponse
             );
-            const cfg = resp?.response?.config || {};
+            // (#1204) a reply with no config is a failed read: keep the copy
+            const cfg = resp?.response?.config;
+            if (!cfg || typeof cfg !== 'object') return;
             this._options = cfg;
             if (resp?.response?.entry_id && !this._entryId) {
                 this._entryId = resp.response.entry_id;
