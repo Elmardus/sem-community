@@ -17,6 +17,11 @@ jobs:
   # ran one test at a time. The part jobs are NOT the required checks: the
   # `test-gate` job below reports "test HA <version>", the names branch
   # protection on develop and main requires.
+  # The parts are split by TIME, from tests/.test_durations: by count, the
+  # slow tests (a real HA instance each) bunched in one part. A test missing
+  # from the file counts as the average. Refresh now and then:
+  #   semtest tests/ -n 4 --store-durations --durations-path=<file>
+  # then sort the keys and round to 2 decimals (keeps git diffs small).
   test:
     runs-on: ubuntu-latest
     name: HA ${{ matrix.ha }} part ${{ matrix.part }}/4
@@ -90,6 +95,7 @@ jobs:
         run: |
           python -m pytest custom_components/solar_energy_management/tests/ \
             -n auto --splits 4 --group ${{ matrix.part }} \
+            --durations-path custom_components/solar_energy_management/tests/.test_durations \
             --cov=custom_components.solar_energy_management \
             --cov-report= \
             -q --tb=short -rfE
