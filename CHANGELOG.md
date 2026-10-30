@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **An emptied charger service now stays empty after Save** (#1214). A charger moved to another integration no longer gets a "device is gone" Repair.
 - 🐛 **SEM now checks each battery's sign on a home that added a second battery** (#1210). Before, a wrong sign there was never flagged.
 - 🐛 **A battery setting saved in the Config tab or Configure dialog stays with its battery when batteries change** (#1204). Before, it could move to another.
-- 🐛 **A solar string, inverter, battery or grid sensor that drops out briefly no longer counts as 0 W** (#1203, #1186). SEM keeps its last reading 3 minutes.
+- 🐛 **A solar string, inverter, battery or grid sensor that drops out briefly no longer counts as 0 W** (#1203, #1186). SEM keeps its last reading.
 
 # [2.2.0-beta.29] — 28.10.2026
 
