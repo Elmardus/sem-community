@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 **The Simulation tab and cost estimates no longer count a battery sale as solar sent out** (#1216). Before, self-consumption and solar savings read too low.
 - 🐛 **An emptied charger service now stays empty after Save** (#1214). A charger moved to another integration no longer gets a "device is gone" Repair.
 - 🐛 **SEM now checks each battery's sign on a home that added a second battery** (#1210). Before, a wrong sign there was never flagged.
+- 🐛 **A battery setting saved in the Config tab or Configure dialog stays with its battery when batteries change** (#1204). Before, it could move to another.
 
 # [2.2.0-beta.29] — 28.10.2026
 
