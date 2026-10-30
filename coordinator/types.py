@@ -756,12 +756,13 @@ class SystemStatus:
     # None while every read of the power it is built from is dark (#1197)
     grid_status: Optional[str] = "idle"  # import, export, idle
     battery_status: Optional[str] = "idle"  # selling, charging, discharging, idle
-    solar_active: bool = False
+    # None, as the status, while its power is dark (#1201)
+    solar_active: Optional[bool] = False
     ev_connected: bool = False
     ev_charging: bool = False
-    battery_charging: bool = False
-    battery_discharging: bool = False
-    grid_export_active: bool = False
+    battery_charging: Optional[bool] = False
+    battery_discharging: Optional[bool] = False
+    grid_export_active: Optional[bool] = False
 
 
 @dataclass
