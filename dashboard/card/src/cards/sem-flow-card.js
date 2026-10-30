@@ -428,7 +428,7 @@ class SEMFlowCard extends SEMLitBase {
         // (#1200) The flows take 0 for a sensor that is out; the labels do
         // not: a node whose sensor is out prints "— W" (`out` below).
         const num = (key) => this._getState(key) ?? 0;
-        let solar = snap ? snapNum(snap.solar_w) : num('solar_power');
+        let solar = snap ? snapNum(snap.solar_w) : (this._getState('solar_power') ?? 0);
         if (this._entities?.solar?.reverse) solar = -solar;
 
         let battery;
@@ -458,7 +458,7 @@ class SEMFlowCard extends SEMLitBase {
             gridExport = num('grid_export_power');
         }
 
-        let ev = snap ? snapNum(snap.ev_w) : num('ev_power');
+        let ev = snap ? snapNum(snap.ev_w) : (this._getState('ev_power') ?? 0);
         if (this._entities?.ev?.invert) ev = -ev;
         // The snapshot's SOC is null while the battery is dark (#699).
         const soc     = snap

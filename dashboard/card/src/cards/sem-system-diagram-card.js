@@ -213,7 +213,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
     _flowSolar() {
         const snap = this._powerSnapshot();
         if (snap) return this._snapNum(snap.solar_w);
-        const s = this._val('solar_power', 0);
+        const s = this._val('solar_power') ?? 0;
         return this._entities?.solar?.reverse ? -s : s;
     }
 
@@ -261,7 +261,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
     _flowEv() {
         const snap = this._powerSnapshot();
         if (snap) return this._snapNum(snap.ev_w);
-        const v = this._val('ev_power', 0);
+        const v = this._val('ev_power') ?? 0;
         return this._entities?.ev?.invert ? -v : v;
     }
 
