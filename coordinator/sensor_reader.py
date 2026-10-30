@@ -350,6 +350,16 @@ _UNSET = object()
 NO_GRID_SOURCE = "none"
 
 
+def _bid_place(bid) -> Optional[int]:
+    """(#1205) The place a combined battery's id ``b<N>`` names (N - 1), or
+    None for any other key (``__fleet__``, a damaged one)."""
+    if not (isinstance(bid, str) and bid[:1] == "b" and bid[1:].isascii()
+            and bid[1:].isdigit()):
+        return None
+    n = int(bid[1:])
+    return n - 1 if n > 0 and bid == f"b{n}" else None
+
+
 def _fresh_grid_proof() -> dict:
     """A corroboration window with nothing in it yet."""
     return {
@@ -499,6 +509,11 @@ class SensorReader:
         #: start value until the sign check locks again. Saved, so a restart
         #: in between keeps it.
         self._battery_sign_kept: set = set()
+        #: (#1205) The sensor each battery id's sign is about: ``b<N>`` the
+        #: combined battery at place N, ``__fleet__`` the sensor the one
+        #: battery is read from. Saved, so a sign follows its battery when
+        #: the batteries move (``_signs_follow_their_battery``).
+        self._battery_lock_sensors: Dict[str, str] = {}
         self._flip_ignored_logged = False
         # #461: accumulated sign-of-correlation evidence. The old ±1 vote
         # locked after three *consecutive* instantaneous matches — and a
@@ -1014,14 +1029,20 @@ class SensorReader:
         if not per_bid:
             return
         try:
-            n_units = len(getattr(ed_config, "battery_power_list", None) or [])
+            listed = list(getattr(ed_config, "battery_power_list", None) or [])
         except TypeError:           # not a sequence — can't tell, keep them all
             return
+        record = getattr(self, "_battery_lock_sensors", None) or {}
         for bid in per_bid:
-            try:
-                stale = int(bid[1:]) > n_units
-            except ValueError:      # not a b<N> key — leave it alone
-                continue
+            if bid in record:
+                # (#1205) an audit is about a sensor, and the next read moves
+                # it with that sensor; only a sensor that is gone is stale
+                stale = record[bid] not in listed
+            else:
+                n = _bid_place(bid)
+                if n is None:       # not a b<N> key — leave it alone
+                    continue
+                stale = n >= len(listed)
             if stale:
                 del self._battery_sign_audits[bid]
 
@@ -1436,9 +1457,9 @@ class SensorReader:
                 counters = (self._one_battery_own_counters(ed)
                             or (ed.battery_charge_energy, ed.battery_discharge_energy))
             else:
-                n = int(bid[1:]) if bid[1:].isdigit() else 0
-                counters = (unit_energy_counters(ed, units[n - 1])
-                            if 0 < n <= len(units) else None)
+                n = _bid_place(bid)              # (#1205) strict
+                counters = (unit_energy_counters(ed, units[n])
+                            if n is not None and n < len(units) else None)
             per_bid[bid] = {
                 "detected": self._battery_sign_detected.get(bid, False),
                 "inverted": self._battery_sign_inverted.get(bid, False),
@@ -1448,6 +1469,9 @@ class SensorReader:
                 "confidence": round(abs(ev) / mag if mag > 0 else 0.0, 3),
                 "brand_seed_done": self._battery_brand_seed_done.get(bid, False),
                 "counters": list(counters) if counters else None,
+                # (#1205) the sensor this sign is about
+                "sensor": (getattr(self, "_battery_lock_sensors", None)
+                           or {}).get(bid),
             }
 
         return {
@@ -1632,6 +1656,12 @@ class SensorReader:
                 b: self._battery_sign_inverted.get(b, False)
                 for b in sorted(getattr(self, "_battery_sign_kept", ()))
                 if not self._battery_sign_detected.get(b)}) else {}),
+            # (#1205) the sensor each saved sign was learned on
+            "battery_learned_on": {
+                b: s for b, s in sorted(
+                    (getattr(self, "_battery_lock_sensors", None) or {}).items())
+                if self._battery_sign_detected.get(b)
+                or b in (getattr(self, "_battery_sign_kept", None) or ())},
         }
 
     def export_battery_basis(self) -> Optional[dict]:
@@ -1722,6 +1752,131 @@ class SensorReader:
                 self._battery_sign_inverted[bid] = inverted
                 self._battery_brand_seed_done[bid] = True
                 self._battery_sign_kept.add(bid)
+        # (#1205) which sensor each was learned on. None from an older build:
+        # each sign is then taken where it stands, as before.
+        sensors = state.get("battery_learned_on")
+        self._battery_lock_sensors = {
+            b: s for b, s in sensors.items()
+            if isinstance(b, str) and isinstance(s, str) and s
+        } if isinstance(sensors, dict) else {}
+
+    #: (#1205) Every record SEM keeps per battery id while it learns a sign.
+    _BID_STATE = (
+        "_battery_sign_detected", "_battery_sign_inverted",
+        "_battery_sign_evidence", "_battery_sign_total_mag",
+        "_battery_sign_samples", "_battery_sign_votes",
+        "_battery_charge_baseline", "_battery_discharge_baseline",
+        "_battery_brand_seed_done", "_battery_sign_audits",
+        "_battery_locks_to_check", "_battery_sign_kept",
+    )
+
+    def _signs_follow_their_battery(self, ed, alone_from: Optional[str]) -> None:
+        """(#1205) Keep each battery's sign with the battery it was learned on.
+
+        A combined battery's sign is kept by its id ``b<N>``, which is its
+        place in ``battery_power_list``, not the battery. When a battery is
+        removed from the Energy Dashboard, or one is added in front, the
+        batteries after it move. Each read moves every sign to the place of
+        the sensor it was learned on (``_battery_lock_sensors``), and drops
+        the sign of a sensor that is gone. A sign with no sensor saved (a
+        store from an older build) is taken where it stands, as before. A
+        read with no combined battery, or with a gap, is no answer.
+
+        The one-battery sign is about the sensor the one battery is read
+        from (``alone_from``). Read from another sensor now, the sign is
+        learned again, as the grid's is (#1103). While no sensor is read
+        alone (each battery on its own, a two-sensor battery) it waits.
+        """
+        record = getattr(self, "_battery_lock_sensors", None) or {}
+        fleet = self._FLEET_BID
+        stores = [s for s in (getattr(self, n, None) for n in self._BID_STATE)
+                  if s is not None]
+        detected = getattr(self, "_battery_sign_detected", None) or {}
+        kept = getattr(self, "_battery_sign_kept", None) or set()
+        # "Fix battery sign" was set against what the saved signs read, and it
+        # is not bound to a sensor: a sign learned again under it would be
+        # turned over. While it is on, a saved sign whose sensor SEM no longer
+        # finds stays where it stands, as the #1193 check waits.
+        flip = bool((getattr(self, "_raw_config", None) or {}).get(
+            "battery_sign_user_flip", False))
+        waiting = {}
+        combined = getattr(ed, "battery_power_list", None)
+        units = list(combined) if isinstance(combined, (list, tuple)) else []
+        if units and all(isinstance(u, str) and u for u in units):
+            place = _bid_place
+            olds = sorted({b for s in stores for b in s
+                           if place(b) is not None}, key=place)
+            free = list(range(len(units)))
+            new_place = {}
+            for old in olds:                 # a saved sensor claims its place
+                if old in record:
+                    j = next((k for k in free if units[k] == record[old]), None)
+                    if j is not None:
+                        free.remove(j)
+                    new_place[old] = j
+            for old in olds:                 # none saved: where it stands
+                wait = (flip and old in record and new_place[old] is None
+                        and (detected.get(old) or old in kept))
+                if old not in record or wait:
+                    j = place(old)
+                    new_place[old] = j if j in free else None
+                    if j in free:
+                        free.remove(j)
+                        if wait:
+                            waiting[old] = record[old]
+            moves = {old: (f"b{j + 1}" if j is not None else None)
+                     for old, j in new_place.items()}
+            if any(new != old for old, new in moves.items()):
+                for old, new in moves.items():
+                    if new != old and (detected.get(old) or old in kept):
+                        _LOGGER.info(
+                            "Battery sign: the batteries in the Energy "
+                            "Dashboard changed. The saved sign of %s %s. "
+                            "(#1205)", record.get(old, old),
+                            f"moves from {old} to {new}" if new
+                            else f"({old}) is dropped: the battery is gone")
+                for s in stores:
+                    if isinstance(s, dict):
+                        held = {b: s.pop(b) for b in moves if b in s}
+                        s.update({moves[b]: v for b, v in held.items()
+                                  if moves[b]})
+                    else:
+                        held = {b for b in moves if b in s}
+                        s.difference_update(held)
+                        s.update(moves[b] for b in held if moves[b])
+            record = {b: s for b, s in record.items() if place(b) is None}
+            record.update({f"b{k + 1}": u for k, u in enumerate(units)})
+            # a waiting sign keeps its sensor: with the flip off it is learned
+            # again on the next read
+            record.update(waiting)
+        self._battery_lock_sensors = record
+        was = record.get(fleet) if alone_from else None
+        if (was is not None and was != alone_from and flip
+                and (detected.get(fleet) or fleet in kept)):
+            waiting[fleet] = was
+        if waiting and not getattr(self, "_sign_wait_said", False):
+            self._sign_wait_said = True
+            _LOGGER.info(
+                "Battery sign: the saved sign of %s was learned on a sensor "
+                "SEM no longer reads (%s). Fix battery sign is on, so SEM "
+                "keeps it until that is turned off (#1205)",
+                ", ".join(sorted(waiting)), ", ".join(
+                    waiting[b] for b in sorted(waiting)))
+        if not alone_from or fleet in waiting:
+            return
+        record[fleet] = alone_from
+        if was is None or was == alone_from:
+            return
+        if detected.get(fleet) or fleet in kept:
+            _LOGGER.info(
+                "Battery sign: the saved sign was learned on %s, the battery "
+                "is now read from %s — learning the sign again (#1205)",
+                was, alone_from)
+        for s in stores:
+            if isinstance(s, dict):
+                s.pop(fleet, None)
+            else:
+                s.discard(fleet)
 
     def _manual_grid_pair(self):
         """(#1103) The manual import/export pair, minus SEM's own sensors.
@@ -1825,6 +1980,7 @@ class SensorReader:
         self._battery_lock_on_flipped = False   # (#1194) nothing left to move
         self._battery_locks_to_check = set()   # (#1193) nothing left to check
         self._battery_sign_kept = set()
+        self._battery_lock_sensors = {}         # (#1205) learned again
         self._battery_sign_evidence.clear()
         self._battery_sign_total_mag.clear()
         self._battery_sign_samples.clear()
@@ -3115,13 +3271,16 @@ class SensorReader:
         # the manual flip service is the escape hatch. Mirrors the SOC override
         # precedence below.
         read_alone = False
+        alone_from = None       # (#1205) the sensor the one battery is read from
         if per_battery_total is not None:
             readings.battery_power = per_battery_total
         elif self.config.battery_power_sensor:
+            alone_from = self.config.battery_power_sensor
             readings.battery_power = self._read_sensor(
                 self.config.battery_power_sensor, "battery"
             )
         elif ed.battery_power:
+            alone_from = ed.battery_power
             # (#1194) As it is, like each battery of a fleet and like the grid.
             # HA's battery sign is + while discharging; a sensor the user
             # marked "Inverted" in HA's battery dialog reads + while charging,
@@ -3158,6 +3317,8 @@ class SensorReader:
             unsourced["battery"] = ", ".join(missing)
             if own:
                 beside.add("battery")
+        # (#1205) first each sign to its battery's place, then the moves below
+        self._signs_follow_their_battery(ed, alone_from)
         self._move_lock_learned_on_flip(ed, read_alone,
                                         per_battery=per_battery_total is not None)
         self._drop_locks_on_other_counters(
@@ -3822,6 +3983,13 @@ class SensorReader:
         """
         self._split_pair_seen.add(pair_id)
         audit = self._split_pair_audits.get(pair_id)
+        # (#1205) an id is a place (``b<N>``); another pair at it starts anew
+        sensors = getattr(self, "_split_pair_sensors", None)
+        if sensors is None:
+            sensors = self._split_pair_sensors = {}
+        if sensors.get(pair_id) != (a_entity, b_entity):
+            sensors[pair_id] = (a_entity, b_entity)
+            audit = None
         if audit is None:
             audit = SplitSensorExclusivityAudit()
             self._split_pair_audits[pair_id] = audit
