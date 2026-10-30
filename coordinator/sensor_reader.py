@@ -5255,7 +5255,8 @@ class SensorReader:
                     known += 1
                 continue
             known += 1
-            val = self._read_sensor(soc_entity, "battery_soc")
+            # (#1202) a unit that gives no number is not a 0 % unit
+            val = self._read_sensor(soc_entity, "battery_soc", allow_none=True)
             if val is not None and val >= 0:
                 soc_values.append(val)
         self._soc_units_configured = len(battery_power_entities)
@@ -5555,20 +5556,28 @@ class SensorReader:
         Args:
             entity_id: HA entity ID to read.
             name: Human label for logging.
-            allow_none: If True, return None when sensor is unavailable
-                        instead of 0.0.  Use for sensors where 0 is a
-                        valid reading (e.g. battery_soc: 0% vs unavailable).
+            allow_none: If True, return None when the sensor gives no
+                        number instead of 0.0.  Use for sensors where 0 is
+                        a valid reading (e.g. battery_soc: 0% vs unavailable).
         """
         if not entity_id:
             return None if allow_none else 0.0
         _note_read(self, entity_id)      # (#1140) its sensor Repairs have an owner
 
         state = self.hass.states.get(entity_id)
-        if not state or state.state in ("unknown", "unavailable", None):
+        # (#1202) Dark is "gives no number", not two words. A state that is
+        # text ("none") or no finite number ("nan", "inf") took a 0.0 here
+        # with no dark mark: SEM steered on it and showed 0 W and Idle.
+        # (#641) The unit rule is the shared one in units.py.
+        value = None if state is None else power_state_to_watts(state)
+        if value is None:
+            raw = None if state is None else state.state
             # (#762) edge-logged: one line when it goes silent, one when it
             # comes back (below) — not 359 repeats per outage day.
             log_on_change(_LOGGER, f"avail:{entity_id}", logging.DEBUG,
-                          f"Sensor {entity_id} ({name}) unavailable")
+                          f"Sensor {entity_id} ({name}) unavailable"
+                          if raw in (None, "unknown", "unavailable") else
+                          f"Sensor {entity_id} ({name}) gives no number: {raw!r}")
             # Track unavailability for transition detection
             self._sensor_unavailable.add(entity_id)
             # (#758) Battery POWER is the one reading whose 0.0 fallback is a
@@ -5602,67 +5611,52 @@ class SensorReader:
                     self._sensor_repair_raised.add(entity_id)
             return None if allow_none else 0.0
 
+        if name in _DEGRADABLE_POWER_INPUTS:
+            # (#818) The denominator for ``_all_dark``: this read reached
+            # a live state. Counted here, after the dark branch has
+            # returned, so the two tallies can never double-count — and
+            # (#1164 review, #1202) only for a number: "none" or "nan" is
+            # no reading.
+            self._input_reads[name] = self._input_reads.get(name, 0) + 1
+
+        # Detect transition from unavailable → available. Demoted
+        # to DEBUG so a flapping upstream sensor (e.g. Huawei
+        # modbus over WiFi, common to bounce every 10-30 s) does
+        # not spam INFO for every sensor on every recovery cycle.
+        # Symmetric with the DEBUG unavailability log a few lines
+        # above — recovery isn't user-actionable. Quality-scale
+        # feedback 2026-06-06: "should handle unavailability
+        # gracefully instead of spamming".
+        if entity_id in self._sensor_unavailable:
+            self._sensor_unavailable.discard(entity_id)
+            # (#762) SAME gate key as the outage line: the alternation
+            # resets the gate, so the NEXT outage logs again instead of
+            # being suppressed as "unchanged".
+            log_on_change(
+                _LOGGER, f"avail:{entity_id}", logging.DEBUG,
+                "Sensor %s (%s) recovered — now reading %.1f",
+                entity_id, name, value,
+            )
+            # (HA Repairs) Reset the outage clock.
+            self._sensor_unavailable_since.pop(entity_id, None)
+        # (HA Repairs) Clear the Repair we filed for this outage — or
+        # (#933) one a predecessor filed: the Repair is persistent and our
+        # sets are not, so the first live read of this reader's life
+        # clears it once, as a recovery does.
+        if (entity_id in self._sensor_repair_raised
+                or entity_id not in self._sensor_repair_reconciled):
+            self._sensor_repair_raised.discard(entity_id)
+            self._sensor_repair_reconciled.add(entity_id)
+            from . import repair_issues as _ri
+            _ri.clear_sensor_unavailable(self.hass, entity_id)
+
+        # W3 — observe-only frozen-sensor detection (does NOT alter value).
+        # Wrapped so the audit can NEVER break the read.
         try:
-            # #641 — one shared rule (this copy was ``.lower() == "kw"``, no
-            # strip; four other spellings lived elsewhere). The bare ``float()``
-            # is kept and runs FIRST because it is load-bearing: a non-numeric
-            # state must raise into the ``except`` below (which owns the #259
-            # warning and the allow_none/0.0 choice), whereas units.py returns
-            # its default silently. The parse is therefore deliberately done
-            # twice, and ``default`` below is belt-and-braces (unreachable once
-            # the bare ``float()`` has succeeded on the same string).
-            value = float(state.state)
-            value = power_state_to_watts(state, default=value)
-            if name in _DEGRADABLE_POWER_INPUTS:
-                # (#818) The denominator for ``_all_dark``: this read reached
-                # a live state. Counted here, after the unavailable branch has
-                # returned, so the two tallies can never double-count — and
-                # (#1164 review) after the parse, so a state that is no
-                # number ("none") is no reading.
-                self._input_reads[name] = self._input_reads.get(name, 0) + 1
-
-            # Detect transition from unavailable → available. Demoted
-            # to DEBUG so a flapping upstream sensor (e.g. Huawei
-            # modbus over WiFi, common to bounce every 10-30 s) does
-            # not spam INFO for every sensor on every recovery cycle.
-            # Symmetric with the DEBUG unavailability log a few lines
-            # above — recovery isn't user-actionable. Quality-scale
-            # feedback 2026-06-06: "should handle unavailability
-            # gracefully instead of spamming".
-            if entity_id in self._sensor_unavailable:
-                self._sensor_unavailable.discard(entity_id)
-                # (#762) SAME gate key as the outage line: the alternation
-                # resets the gate, so the NEXT outage logs again instead of
-                # being suppressed as "unchanged".
-                log_on_change(
-                    _LOGGER, f"avail:{entity_id}", logging.DEBUG,
-                    "Sensor %s (%s) recovered — now reading %.1f",
-                    entity_id, name, value,
-                )
-                # (HA Repairs) Reset the outage clock.
-                self._sensor_unavailable_since.pop(entity_id, None)
-            # (HA Repairs) Clear the Repair we filed for this outage — or
-            # (#933) one a predecessor filed: the Repair is persistent and our
-            # sets are not, so the first live read of this reader's life
-            # clears it once, as a recovery does.
-            if (entity_id in self._sensor_repair_raised
-                    or entity_id not in self._sensor_repair_reconciled):
-                self._sensor_repair_raised.discard(entity_id)
-                self._sensor_repair_reconciled.add(entity_id)
-                from . import repair_issues as _ri
-                _ri.clear_sensor_unavailable(self.hass, entity_id)
-
-            # W3 — observe-only frozen-sensor detection (does NOT alter value).
-            # Wrapped so the audit can NEVER corrupt the read: an exception here
-            # would otherwise hit the outer except → a wrong 0.0.
-            try:
-                self._audit_sensor_freshness(entity_id, name, state, value)
-            except Exception:  # noqa: BLE001 — freshness must never break a read
-                pass
-            return value
-        except (ValueError, TypeError) as e:
-            _LOGGER.debug(f"Could not parse {entity_id} ({name}): {e}")
-            return None if allow_none else 0.0
+            self._audit_sensor_freshness(entity_id, name, state, value)
+        except Exception:  # noqa: BLE001 — freshness must never break a read
+            pass
+        return value
 
     # (#851) A solar reading at or below this (W) counts as "producing
     # nothing". Generous enough for an inverter idling on standby draw,
@@ -6977,26 +6971,18 @@ class SensorReader:
         return None
 
     def sensors_ready(self) -> bool:
-        """Check if required sensors are available."""
-        # Check at least solar or grid sensor is configured and available
+        """Check if required sensors are available.
+
+        (#1202) Available is "gives a number", the rule ``_read_sensor`` uses:
+        a state that is text or "nan" is no reading."""
         if self._energy_dashboard_config:
             ed = self._energy_dashboard_config
-            if ed.solar_power:
-                state = self.hass.states.get(ed.solar_power)
-                if state and state.state not in ("unknown", "unavailable"):
-                    return True
-            if ed.grid_power:
-                state = self.hass.states.get(ed.grid_power)
-                if state and state.state not in ("unknown", "unavailable"):
-                    return True
+            entities = (ed.solar_power, ed.grid_power)
         else:
-            if self.config.solar_power_sensor:
-                state = self.hass.states.get(self.config.solar_power_sensor)
-                if state and state.state not in ("unknown", "unavailable"):
-                    return True
-            if self.config.grid_power_sensor:
-                state = self.hass.states.get(self.config.grid_power_sensor)
-                if state and state.state not in ("unknown", "unavailable"):
-                    return True
-
+            entities = (self.config.solar_power_sensor,
+                        self.config.grid_power_sensor)
+        for entity in entities:
+            if entity and power_state_to_watts(
+                    self.hass.states.get(entity)) is not None:
+                return True
         return False
