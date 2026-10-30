@@ -131,8 +131,9 @@ balance when what it should be is not knowable (daylight, grid, battery, solar a
 not changed); the #1065 hold lives in memory, so a restart between sunrise and the inverter waking
 shows the dusk value again, and the W3 Repair text at dawn still says the stale value is used while
 a held report reads 0 W; multi-unit partial-availability sums silently under-report
-(audit W6; the lifetime seed's half closed by #1043, see class 52) — one dark unit of N is still 0 W
-in home AND in the published total; the flow figures still integrate the dark cycle's raw inputs
+(audit W6; the lifetime seed's half closed by #1043, see class 52) — one dark unit of N (**closed by
+#1186**, class 58 round 3: each unit keeps its own last read for the grace in the published total and
+the rows, and home holds the house); the flow figures still integrate the dark cycle's raw inputs
 (the daily rows hold them for the grace — #1177, class 58);
 the steering home itself still reads a dark battery as idle (safe for the EV budget — the meter
 answers — but the discharge limit home/n is wide for the gap; holding it needs the battery charge
@@ -2931,7 +2932,39 @@ the clock change, the cost, the battery's shares, the PROD hour (home never goes
 PV), the real reader's flags, and an AST pin that `calculate_energy` reads none of the six fields off
 `power`. **Left open:** past the grace a dark input still books 0 W (what it read is not known); the
 daily flows and the solar savings built on them; one dark unit of N, and one dark half of a split
-grid pair (class 5 W6).
+grid pair (class 5 W6, **closed in round 3**).
+**Round 3 — one dark unit of N (#1186, #1203):** with two inverters, two batteries or a grid meter
+split into import and export sensors, the hold above ran only when EVERY read was dark. One dark unit
+was 0 W in the published total and in the daily rows, while its own entity held its value (class 163),
+so for the grace the unit and the total did not add up. A dark string's daily energy booked 0 W the
+same way. **Closure:** `SensorReader._hold_dark_units` — each unit of a total read from two or more
+sensors keeps its own last live read for the grace, on its own clock. `PowerReadings.held_w` is what
+the held units add, in SEM's sign: a side is kept as read and turned with its total (`_negate_total`,
+the one place a grid or battery total is turned over); each battery of a fleet is taken after its own
+sign check, and a pair unit with one dark side puts back its last net in place of the live side, not on
+top of it. An input with every read dark is left to its flag. `to_dict` and `_integral_watts` read it
+through `shown_w`; `_hold_shown_home` holds the house while a unit is held (#1047's rule); a partly held
+input counts as held for its flow shares. Each string keeps its last read for its daily energy
+(`solar_power_per_string_held`); `calculate_power_flows` passes the strings on BEFORE its all-idle
+return, because with every input dark each reads 0 W and the held strings were dropped there (the
+one-Modbus-link home, #1177's PROD shape). Steering keeps the 0 W (#988, #1047). The #988 solar gate
+and the #902 battery gate refute a TOTAL, but took away one read: with two inverters, or a two-sensor
+battery, the refuted value was published as a reading; now every read goes unless a battery unit is
+still read. Review (#1203): an input its flag holds stamps no unit, so a value a gate threw out is
+never a last read; only a finite read is stamped; a held unit that adds under 1 W holds nothing (the
+shown home froze for it); while the battery is held, the per-battery charge split takes the last live
+shares (`_charging_units`), as its flow shares do.
+**Guard:** `tests/test_1186_dark_unit_of_a_total.py` — every shape through the real reader (two
+inverters, two batteries, a pair inside a fleet, one battery with two sensors, declared, manual,
+config-path and discovered grid pairs, two grid meters): the grace edge, no renewal, never-read, a live
+0, not a number, the unit's return, every unit dark, an unproven guess holds nothing, the sign after a
+grid invert and a battery flip; `to_dict`; the rows; the shown home; the strings; both gates; and AST
+pins that every total is turned over by `_negate_total` and every grid side read is a unit (each with a
+probe); strings that ARE the dashboard's solar sources add up to the solar row through the real reader,
+flow and energy calculators (one dark, past the grace, every unit dark); and the review edges (a value
+either gate threw out, "nan"/"inf", a 0 W unit, the charge share). **Left open:** past the grace a dark
+unit books 0 W; the strings read low for up to one more grace when a partly held input goes all dark,
+or when the #988 gate refutes a 0 W total the strings also read (#1261).
 
 ### 59. A limit smoothed like a preference — GUARDED
 **Symptom:** the guard says 10 A, the wire carries 14 → 12 → 12 → 10 over two minutes. **Root
@@ -6455,7 +6488,7 @@ Refs #1171 #1167 #553 #551 #1071 #1089 #531 #1193 #1194 #1195.
 ### 163. A rule the fleet total keeps, missing on each unit's own entity — a dark unit shows the reader's 0 W — GUARDED
 **Symptom:** with two batteries, `sensor.sem_battery_b2_power` showed 0 W while battery 2's own power sensor was unavailable, and `sensor.sem_battery_b2_status` said Idle (#1170, found while fixing #1167). An idle pack reads 0 W too, so the two looked the same. The SOC entity beside it already said unknown (#694).
 **Root shape:** the reader's fallback for a dark read is 0.0, and only the FLEET total was taught to say so: `battery_power_all_unavailable` (every read dark) makes `to_dict` publish None, and the entity holds its last value for `SENSOR_DARK_READ_GRACE_S` before it shows unavailable (#818/#875, 03.09). Each unit's key was published from the same 0.0 with no flag asked. #1167 gave each unit its own `BatteryPower.power_read`; nothing published by it. The fleet's flag cannot stand in: while one unit still answers, the total is published, and the dark unit's own number is still the fallback.
-**Where it lives:** `coordinator/types.py` `SEMData.to_dict`, per-battery block — power and status (**fixed**: None when `power_read` is not True, which also covers one dark side of a two-sensor pair); `sensor.py` `SEMSolarSensor`, whose grace held numbers only (**fixed**: a unit's status, `_HELD_TEXT_KEY`, is held on the same clock as its power, so a blink does not flip it to unavailable and the #1084 decision attributes stay); the battery card's per-battery row and fleet power cell, which read an unavailable power as 0 and an empty status as idle (**fixed**: "— W", and the dash as status when neither is known). Per-battery SOC already had its rule (#694); capacity is a size, not a reading. Per-PV-string power (#1196, **fixed**: `_read_pv_strings` sets `solar_power_per_string_read` per string, a V+I pair needs both halves; `to_dict` publishes None while it is not set; `semDiscoverPVStrings` keeps a dark string with no watts, skips a registry-only `restored` entity, and the solar, flow and diagram cards print "— kW" through `semPVStringKW`). **Open:** the fleet `battery_status` said Idle while every battery sensor was dark (#1197, **fixed**: the status and `grid_status` are None while their fleet power is dark, held on its clock, then unknown; the card that stopped drawing on it is class 165); the tab header printed 0 for every unavailable figure (#1198, fixed: class 164). The fleet total and home still count the dark unit as 0 W (class 5, W6), so for the grace the held unit row and the total do not add up; a dark string's daily energy books 0 W too (#1203), as a dark inverter of two does (#1186). Per-charger power has no fleet rule to copy (its #910 hold, class 5).
+**Where it lives:** `coordinator/types.py` `SEMData.to_dict`, per-battery block — power and status (**fixed**: None when `power_read` is not True, which also covers one dark side of a two-sensor pair); `sensor.py` `SEMSolarSensor`, whose grace held numbers only (**fixed**: a unit's status, `_HELD_TEXT_KEY`, is held on the same clock as its power, so a blink does not flip it to unavailable and the #1084 decision attributes stay); the battery card's per-battery row and fleet power cell, which read an unavailable power as 0 and an empty status as idle (**fixed**: "— W", and the dash as status when neither is known). Per-battery SOC already had its rule (#694); capacity is a size, not a reading. Per-PV-string power (#1196, **fixed**: `_read_pv_strings` sets `solar_power_per_string_read` per string, a V+I pair needs both halves; `to_dict` publishes None while it is not set; `semDiscoverPVStrings` keeps a dark string with no watts, skips a registry-only `restored` entity, and the solar, flow and diagram cards print "— kW" through `semPVStringKW`). **Open:** the fleet `battery_status` said Idle while every battery sensor was dark (#1197, **fixed**: the status and `grid_status` are None while their fleet power is dark, held on its clock, then unknown; the card that stopped drawing on it is class 165); the tab header printed 0 for every unavailable figure (#1198, fixed: class 164). The fleet total and home counted the dark unit as 0 W (class 5, W6), so for the grace the held unit row and the total did not add up; a dark string's daily energy booked 0 W too (#1203), as a dark inverter of two did (#1186) — both **fixed** (class 58 round 3). Per-charger power has no fleet rule to copy (its #910 hold, class 5).
 **Closure:** a unit's key is a reading only when the unit's own flag says it was read; the entity layer, not `to_dict`, owns the hold, so a unit's power and status hold and blank on the fleet's clock.
 **Guard:** `tests/test_1170_dark_battery_unit_power.py` — through the real reader: a dark, unknown, not-a-number and impossible (#902) unit and a half-dark two-sensor pair publish None for power and status while the live unit and the fleet total stay numbers; a real 0 W still reads 0 W and idle (the twin); the user sign flip leaves the dark unit None; a unit never marked read publishes none. Through the real `SEMSolarSensor`: the dark unit's power and status hold their last value with `stale_s`, blank together after the grace, and never show 0 W or idle; never-read is unavailable; another text sensor is not held (the twin). A declared list of every per-battery and per-PV-string key `to_dict` publishes, each with its dark rule or its filed issue: a new key of these units fails until declared, and the fixture must publish every declared key. `dashboard/card/test/battery-dark-power.test.js` — the real card: "— W" and a dash status cell for the dark row, the live row unchanged, a real 0 W idle pack, a power with no status, the fleet cell. 14 of the 18 Python tests and 2 of the 5 card tests fail on the old code. `tests/test_1196_dark_pv_string_power.py` — the same for a string through the real reader on both paths (dark, unknown, not a number, missing, half a V+I pair; a live 0 W and a string asleep at night still 0 W) and the real `SEMSolarSensor`; the declared list now names the string rule. `dashboard/card/test/pv-string-dark.test.js` — discovery keeps the dark string, the three cards print "— kW" and a real 0 W as before, a source scan that every `.watts` read goes through a formatter that knows null, and the config card counts strings by the same rule. 13 of its 18 Python and 12 of 18 card tests fail on the old code.
 **Sweep question:** for every per-unit entity beside a fleet total, does the unit keep the rule the total keeps when its own source is dark — or does it publish the reader's fallback?
