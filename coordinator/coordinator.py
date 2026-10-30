@@ -235,7 +235,13 @@ def plan_decision_core(plan) -> tuple:
     prose summaries, allocation reasons) re-derive from live numbers on
     every build and must not hold a restamp hostage. Anything unreadable
     degrades to a non-equal constant — a broken shape restamps, never
-    silences."""
+    silences.
+
+    (#1184) Every field a plan gate acts on is the decision: the sale
+    blocks and their kWh (the rate a gate sells at) are compared too. A
+    sale left out moved unseen on a kept stamp. The forecast sale's times
+    are compared to the minute and its kWh to 0.1: its start is a float
+    anchored to the night, and a few seconds are the same sale."""
     if not isinstance(plan, dict):
         return ("<no-plan>",)
     try:
@@ -261,12 +267,20 @@ def plan_decision_core(plan) -> tuple:
                     for b in (arb.get("charge_blocks") or [])
                     if isinstance(b, dict))),
                 tuple(sorted(
-                    (str(b.get("start")), str(b.get("end")))
+                    (str(b.get("start")), str(b.get("end")),
+                     round(float(b.get("kwh") or 0.0), 1))
                     for b in (arb.get("discharge_blocks") or [])
                     if isinstance(b, dict))),
             )
         else:
             arb_core = None
+        fsell = plan.get("forecast_sell")
+        fsell_core = tuple(sorted(
+            (str(b.get("start"))[:16], str(b.get("end"))[:16],
+             round(float(b.get("kwh") or 0.0), 1))
+            for b in ((fsell.get("blocks") or [])
+                      if isinstance(fsell, dict) else [])
+            if isinstance(b, dict)))
         return (
             blocks, demands, whys,
             str(plan.get("takeover")),
@@ -274,6 +288,7 @@ def plan_decision_core(plan) -> tuple:
             round(float(plan.get("total_cost") or 0.0), 2),
             str(plan.get("battery_fleet_partial")),
             arb_core,
+            fsell_core,
         )
     except Exception:  # noqa: BLE001 — an unreadable plan restamps, safely
         return ("<unreadable>", id(plan))
@@ -307,7 +322,10 @@ def plan_day_remaining_kwh(owner) -> float:
 # (#1068) The keys ``plan_decision_core`` deliberately ignores: they are the
 # sky, not the decision. An identical repack keeps its stamp (#775) but must
 # not keep a stale sky — PROD 08.10 showed "0 W grid 10–17" all afternoon.
-TRAJECTORY_KEYS = ("slots", "self_consumption", "summary", "forecast_sell")
+# (#1184) Never a key a plan gate acts on: ``forecast_sell`` sat here, so a
+# kept stamp sold at the new build's times. ``slots`` stays — a gate reads
+# only its span, and every build of one period ends it at the night end.
+TRAJECTORY_KEYS = ("slots", "self_consumption", "summary")
 
 
 def keep_decision_take_trajectory(prev: dict, fresh: dict, now_iso: str) -> dict:
