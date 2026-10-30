@@ -669,7 +669,6 @@ class SEMPerBatterySelect(CoordinatorEntity, SelectEntity):
         otherwise write the per-battery ``battery_modes`` list."""
         if option not in self.options:
             return
-        self._value = option
         if self._idx is None:
             from . import persist_global_option
             persist_global_option(
@@ -678,10 +677,12 @@ class SEMPerBatterySelect(CoordinatorEntity, SelectEntity):
             )
             _LOGGER.info("Updated battery mode to %s", option)
         else:
+            # (#1204) refused when this battery is gone (reload due)
             from . import persist_per_battery_option
             persist_per_battery_option(
                 self.hass, self._entry, self.coordinator,
                 self._idx, "battery_modes", option, self._count,
             )
             _LOGGER.info("Updated battery %d mode to %s", self._idx, option)
+        self._value = option
         self.async_write_ha_state()

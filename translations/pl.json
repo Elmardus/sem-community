@@ -1846,6 +1846,9 @@
     "set_option_invalid_payload": {
       "message": "set_option wymaga słownika 'options' mapującego klucze konfiguracji na nowe wartości."
     },
+    "battery_list_changed": {
+      "message": "Baterie w panelu Energia się zmieniły i tej baterii już nie ma. Załaduj stronę ponownie i spróbuj jeszcze raz."
+    },
     "set_option_no_entry": {
       "message": "Nie znaleziono wpisu ConfigEntry SEM — najpierw zainstaluj SEM przez Ustawienia → Urządzenia i usługi."
     },

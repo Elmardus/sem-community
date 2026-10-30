@@ -1846,6 +1846,9 @@
     "set_option_invalid_payload": {
       "message": "set_option nécessite un dictionnaire 'options' associant des clés de configuration à de nouvelles valeurs."
     },
+    "battery_list_changed": {
+      "message": "Les batteries du tableau de bord Énergie ont changé et cette batterie n'y est plus. Rechargez la page et réessayez."
+    },
     "set_option_no_entry": {
       "message": "Aucune ConfigEntry SEM trouvée — installez d'abord SEM via Paramètres → Appareils et services."
     },
