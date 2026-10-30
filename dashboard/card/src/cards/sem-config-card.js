@@ -21,7 +21,7 @@
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semTheme, semDefineCard, semCardSurfaceCSS } from '../base/sem-shared.js';
 import { priceLevelKey } from '../util/price-level.js';
-import { socDisplay } from '../util/missing-value.js';
+import { readNumber, socDisplay } from '../util/missing-value.js';
 import { chargerAddPlan, detectRowLabelKey, isCo2IntensityEntity, isOutdoorTemperatureCandidate, isPowerEntity, nearMissAction, proposalWrite, watchOnlyHelpKey, writeIsSaved } from '../util/detect-rows.js';
 import { roleSource, showsRoleLegend } from '../util/role-source.js';
 import { batteryListEdit } from '../util/battery-slot-edit.js';
@@ -668,11 +668,9 @@ class SEMConfigCard extends SEMLitBase {
     _bin(suffix) {
         return this._hass?.states[`binary_sensor.sem_${suffix}`]?.state === 'on';
     }
-    _valNum(suffix, fallback = 0) {
-        const e = this._hass?.states[`${this._prefix}${suffix}`];
-        if (!e || e.state === 'unavailable' || e.state === 'unknown') return fallback;
-        const n = parseFloat(e.state);
-        return Number.isNaN(n) ? fallback : n;
+    // (#1200) null for a sensor that is out, so it prints "—", not 0
+    _valNum(suffix, fallback = null) {
+        return readNumber(this._hass?.states[`${this._prefix}${suffix}`]) ?? fallback;
     }
     _switchOn(suffix) {
         const e = this._hass?.states[`switch.sem_${suffix}`];
@@ -688,8 +686,9 @@ class SEMConfigCard extends SEMLitBase {
         const s = this._hass?.states[entityId];
         if (!s) return;
         const step = parseFloat(s.attributes.step) || 1;
-        const min = parseFloat(s.attributes.min) ?? 0;
-        const max = parseFloat(s.attributes.max) ?? 100;
+        // `??` lets NaN through (#1200): a missing bound is 0 or 100
+        const min = Number.isFinite(parseFloat(s.attributes.min)) ? parseFloat(s.attributes.min) : 0;
+        const max = Number.isFinite(parseFloat(s.attributes.max)) ? parseFloat(s.attributes.max) : 100;
         const cur = parseFloat(s.state) || 0;
         let next = cur + dir * step;
         next = Math.max(min, Math.min(max, next));

@@ -12,7 +12,7 @@
 
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semDefineCard } from '../base/sem-shared.js';
-import { allOut } from '../util/missing-value.js';
+import { allOut, fmtValue, readNumber } from '../util/missing-value.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
 
@@ -91,10 +91,9 @@ class SEMChargerStatusCard extends SEMLitBase {
         this._prefix = config.entity_prefix || DEFAULT_PREFIX;
     }
 
-    _val(suffix, fallback = 0) {
-        const e = this._hass?.states[`${this._prefix}${suffix}`];
-        if (!e || e.state === 'unavailable' || e.state === 'unknown') return fallback;
-        return parseFloat(e.state) ?? fallback;
+    // (#1200) null for a sensor that is out: the tile prints "—", not 0.
+    _val(suffix, fallback = null) {
+        return readNumber(this._hass?.states[`${this._prefix}${suffix}`]) ?? fallback;
     }
 
     _valStr(suffix) {
@@ -137,17 +136,17 @@ class SEMChargerStatusCard extends SEMLitBase {
                 </div>
                 <div class="charger-metrics">
                     <div class="metric">
-                        <span class="metric-value">${power.toFixed(0)}</span>
+                        <span class="metric-value">${fmtValue(power, 0)}</span>
                         <span class="metric-unit">W</span>
                         <span class="metric-label">${this._t('power')}</span>
                     </div>
                     <div class="metric">
-                        <span class="metric-value">${session.toFixed(1)}</span>
+                        <span class="metric-value">${fmtValue(session, 1)}</span>
                         <span class="metric-unit">kWh</span>
                         <span class="metric-label">${this._t('session')}</span>
                     </div>
                     <div class="metric">
-                        <span class="metric-value">${solar.toFixed(0)}</span>
+                        <span class="metric-value">${fmtValue(solar, 0)}</span>
                         <span class="metric-unit">%</span>
                         <span class="metric-label">${this._t('solar')}</span>
                     </div>
