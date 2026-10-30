@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Cards now show "—", not 0, for a sensor that is out** (#1200). EV power, battery health, costs and peak no longer look like real zeros.
 - 🐛 **Battery, grid and solar on/off sensors no longer say Off while their power sensor is out** (#1201). They show unknown after 3 minutes.
 - 🐛 **A power sensor showing text such as "none" or "nan" now reads as out, not 0 W** (#1202). SEM no longer acts on it.
 - 🐛 **A learned battery sign now stays with its battery when one is removed or replaced** (#1205). Before, the next battery could read discharge as charge.
