@@ -108,6 +108,8 @@ SEM is in the default HACS store — no custom repository needed.
 
 (Or click the button above to jump straight to it in HACS.)
 
+**Home Assistant 2026.11 or newer:** HACS is built in there as **Settings → Marketplace**. Search for **Solar Energy Management** there and install it; the steps are the same. Your HACS installs move to the Marketplace by themselves when you update Home Assistant.
+
 ### Beta Releases
 
 Want to help test new features before they go stable? Enable beta updates in HACS:
@@ -115,6 +117,8 @@ Want to help test new features before they go stable? Enable beta updates in HAC
 1. Open **HACS** > **Integrations** > find **Solar Energy Management**
 2. Click the three-dot menu > **Redownload** > enable **Show beta versions**
 3. Select the latest beta and install
+
+On Home Assistant 2026.11 or newer, do the same in **Settings → Marketplace**: open **Solar Energy Management** and turn on beta versions.
 
 Beta releases are tested on real hardware before publishing but may contain rough edges. Your feedback helps us ship stable releases faster — report issues on [GitHub](https://github.com/traktore-org/sem-community/issues).
 
@@ -795,8 +799,9 @@ needing access to the board.
 
 ### Current phase
 
-Soaking 2.0 on real hardware: bug fixes are reviewed and merged as usual;
-feature PRs are parked until the stable release is cut.
+2.2.0 is the current stable release. Bug fixes are reviewed and merged as
+usual. New features come in beta releases first, and stay off until you turn
+them on.
 
 ## License
 
