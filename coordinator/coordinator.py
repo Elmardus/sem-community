@@ -4343,8 +4343,9 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             else:
                 self._update_session_tracking(power, book_flows)
 
-            # Step 4.5: Battery session tracking
-            self._update_battery_session_tracking(power, book_flows)
+            # Step 4.5: Battery session tracking. (#1185) The books' watts:
+            # its total and its split by source come from the same read.
+            self._update_battery_session_tracking(book_power, book_flows)
 
             # Step 4.6: EV taper detection and intelligence (#106)
             ev_intelligence = self._update_ev_intelligence(power, energy)

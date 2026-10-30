@@ -142,6 +142,34 @@ class TestTheBooksSplitTheHeldWatts:
         assert calc.book_flows is flows
         assert calc.book_power is p
 
+    def test_a_shown_house_alone_keeps_the_cycles_own_flows(self):
+        """(#1185 review) The #1105 battery stop shows the house held while
+        every input reads live: a held house beside them left 1564 W of
+        live import in no flow."""
+        calc, _ = _calc()
+        _turn(calc, grid_power=-50.0, battery_power=-1450.0)
+        p, flows = _turn(calc, grid_power=-1614.0, battery_power=-1450.0,
+                         home_shown_w=1500.0)
+        assert calc.book_flows is flows and calc.book_power is p
+        assert flows.grid_to_home == pytest.approx(1614.0)
+
+    def test_the_copy_holds_no_unit_of_its_own(self):
+        """(#1186) The held unit is in the copy's total; ``shown_w`` on it
+        must not add the unit a second time."""
+        from custom_components.solar_energy_management.coordinator.types import (
+            shown_w,
+        )
+        calc, _ = _calc()
+        _turn(calc, **LIVE)
+        calc._last_update = None
+        p = PowerReadings(solar_power=2000.0, grid_power=2000.0)
+        p.calculate_derived()
+        p.held_w = {"solar": 1000.0}
+        p.home_shown_w = 1000.0
+        calc.calculate_energy(p, FlowCalculator().calculate_power_flows(p))
+        assert shown_w(calc.book_power, "solar_power") == pytest.approx(3000.0)
+        assert p.held_w == {"solar": 1000.0}, "the read is left as it was"
+
     def test_steering_keeps_the_zero(self):
         calc, _ = _calc()
         _turn(calc, **LIVE)
@@ -238,9 +266,10 @@ class TestTheCycleHandsTheBooksOver:
                        "_record_demand_outcomes", "SEMData(power_flows=)"):
             assert target in uses, f"{target} gets no book flows: {uses}"
 
-    def test_the_night_audit_gets_the_held_watts(self):
-        assert "_record_demand_outcomes(book_power=)" in _uses(
-            _cycle_tree(), "book_power")
+    def test_the_night_audit_and_battery_session_get_the_held_watts(self):
+        uses = _uses(_cycle_tree(), "book_power")
+        assert "_record_demand_outcomes(book_power=)" in uses
+        assert "_update_battery_session_tracking" in uses
 
     def test_the_walker_sees_a_use(self):
         """The pins above would pass on a walker that sees nothing."""
@@ -351,28 +380,104 @@ class TestTheBooksSplitOnlyByTheirOwnFlows:
 
     @staticmethod
     def _first_read(src):
+        """The method the first read of ``power_flows`` goes to, and
+        whether that statement binds ``power_flows`` again."""
         tree = ast.parse(textwrap.dedent(src))
-        reads = sorted(
-            (n.lineno, n.col_offset) for n in ast.walk(tree)
-            if isinstance(n, ast.Name) and n.id == "power_flows"
-            and isinstance(n.ctx, ast.Load))
         parent = {id(c): n for n in ast.walk(tree) for c in ast.iter_child_nodes(n)}
-        first = next(n for n in ast.walk(tree)
-                     if isinstance(n, ast.Name) and n.id == "power_flows"
-                     and isinstance(n.ctx, ast.Load)
-                     and (n.lineno, n.col_offset) == reads[0])
-        call = parent[id(first)]
-        return getattr(call.func, "attr", None) if isinstance(call, ast.Call) else None
+        first = min(
+            (n for n in ast.walk(tree)
+             if isinstance(n, ast.Name) and n.id == "power_flows"
+             and isinstance(n.ctx, ast.Load)),
+            key=lambda n: (n.lineno, n.col_offset))
+        call, stmt = parent[id(first)], first
+        while not isinstance(stmt, ast.stmt):
+            stmt = parent[id(stmt)]
+        bound = isinstance(stmt, ast.Assign) and any(
+            isinstance(n, ast.Name) and n.id == "power_flows"
+            for t in stmt.targets for n in ast.walk(t))
+        name = getattr(call.func, "attr", None) if isinstance(call, ast.Call) else None
+        return name, bound
 
     def test_the_first_read_builds_the_books_flows(self):
         from custom_components.solar_energy_management.coordinator.energy_calculator import (
             EnergyCalculator,
         )
         assert self._first_read(inspect.getsource(
-            EnergyCalculator.calculate_energy)) == "_book_flows"
+            EnergyCalculator.calculate_energy)) == ("_book_flows", True)
 
     def test_the_pin_sees_an_earlier_read(self):
         probe = ("def f(self, power, power_flows):\n"
                  "    x = self._battery_flows(power_flows)\n"
                  "    power_flows = self._book_flows(power, power_flows, {})\n")
-        assert self._first_read(probe) == "_battery_flows"
+        assert self._first_read(probe) == ("_battery_flows", False)
+
+    def test_the_pin_sees_flows_not_bound_back(self):
+        probe = ("def f(self, power, power_flows):\n"
+                 "    p, f = self._book_flows(power, power_flows, {})\n")
+        assert self._first_read(probe) == ("_book_flows", False)
+
+
+@pytest.mark.unit
+@pytest.mark.usefixtures("clock")
+class TestTheBatterySessionStaysInsideItsTotal:
+    """(#1185 review) The session took its total from the raw read and its
+    split from the books: with one battery of two dark (#1186) the solar
+    part grew three times faster than the total."""
+
+    def _session(self):
+        from types import MethodType, SimpleNamespace
+
+        from custom_components.solar_energy_management.coordinator.coordinator import (
+            SEMCoordinator,
+        )
+        from custom_components.solar_energy_management.coordinator.types import (
+            BatterySessionData,
+        )
+        me = SimpleNamespace(
+            _battery_session=BatterySessionData(),
+            _battery_session_idle_count=0, _battery_session_opposite_count=0,
+            update_interval=timedelta(seconds=STEP_S),
+            _energy_calculator=SimpleNamespace(_import_rate=RATE))
+        track = MethodType(SEMCoordinator._update_battery_session_tracking, me)
+        return me, track
+
+    def _books(self, calc, **power):
+        units = power.pop("held_w", None)
+        shown = power.pop("home_shown_w", None)
+        calc._last_update = None
+        p = PowerReadings(**power)
+        p.calculate_derived()
+        if units:
+            p.held_w = units
+        p.home_shown_w = shown
+        calc.calculate_energy(p, FlowCalculator().calculate_power_flows(p))
+        return calc.book_power, calc.book_flows
+
+    def test_one_dark_battery_of_two(self):
+        calc, _ = _calc()
+        me, track = self._session()
+        track(*self._books(calc, solar_power=4000.0, battery_power=3000.0))
+        for _ in range(3):
+            track(*self._books(calc, solar_power=4000.0, battery_power=1000.0,
+                               held_w={"battery": 2000.0}, home_shown_w=1000.0))
+        s = me._battery_session
+        assert s.energy_kwh == pytest.approx(_kwh(3000.0, 4))
+        assert s.solar_energy_kwh == pytest.approx(s.energy_kwh)
+
+    def test_a_dark_battery_is_no_idle_cycle(self):
+        """Inside the grace the session books the held charge, as the
+        daily row does; past it the battery reads 0 W, as before."""
+        calc, _ = _calc()
+        me, track = self._session()
+        track(*self._books(calc, solar_power=4000.0, battery_power=3000.0))
+        track(*self._books(calc, solar_power=4000.0, battery_power=0.0,
+                           battery_power_all_unavailable=True,
+                           home_shown_w=1000.0))
+        assert me._battery_session.energy_kwh == pytest.approx(_kwh(3000.0, 2))
+        assert me._battery_session_idle_count == 0
+        self.clock.tick(timedelta(seconds=GRACE + 1))
+        track(*self._books(calc, solar_power=4000.0, battery_power=0.0,
+                           battery_power_all_unavailable=True,
+                           home_shown_w=1000.0))
+        assert me._battery_session.energy_kwh == pytest.approx(_kwh(3000.0, 2))
+        assert me._battery_session_idle_count == 1

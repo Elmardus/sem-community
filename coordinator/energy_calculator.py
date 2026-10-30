@@ -867,20 +867,25 @@ class EnergyCalculator:
 
         The cycle's flows come from the reader's watts, where a dark input
         is 0 W (#818): right for steering, wrong for the books (class 58).
-        The rows book the held watts (``_integral_watts``), so while one of
-        them differs from the read, the flows are built again from a copy of
-        the readings with the held watts in. The daily flows, the solar
-        savings and the splits by source then keep a dark input's share for
-        the grace, as the rows do. With nothing held, the cycle's own
-        readings and flows are used as they are.
+        While an input is held (``_integral_held``), the rows book its held
+        watts, so the flows are built again from a copy of the readings
+        with the booked watts in — the held input's and the shown house
+        (#1047). The daily flows, the solar savings and the splits by source
+        then keep a dark input's share for the grace, as the rows do. The
+        copy's held units are in its totals, so it holds none of its own.
+
+        With no input held, the cycle's own readings and flows are used as
+        they are — also while the house alone is shown held (the #1105
+        battery stop): its sources are all live, and a held house beside
+        them would leave live import in no flow.
         """
-        if power_flows is None:
-            return power, None
+        if power_flows is None or not self._integral_held:
+            return power, power_flows
         held = {f: w for f, w in held_w.items()
                 if w != float(getattr(power, f, 0.0) or 0.0)}
         if not held:
             return power, power_flows
-        readings = dataclasses.replace(power, **held)
+        readings = dataclasses.replace(power, held_w={}, **held)
         return readings, FlowCalculator.calculate_power_flows(readings)
 
     def _battery_flows(self, power_flows: "Optional[PowerFlows]"):
@@ -908,6 +913,7 @@ class EnergyCalculator:
         power_flows: "Optional[PowerFlows]" = None,
     ) -> EnergyTotals:
         """Calculate energy totals by integrating power over time."""
+        self.book_power = self.book_flows = None   # (#1185) this cycle's only
         now = dt_util.now()
         today = now.date()  # Midnight-based reset — matches HA Energy Dashboard
         # EV: deadline-based reset (#279 follow-up). The per-charger counter

@@ -2970,19 +2970,26 @@ built from the reader's 0 W. So the daily flows (solar to home, to the battery, 
 built on them, the car's daily split (#1046), a charge's origin with its source dark (#770), an
 own-tariff device's grid share (#812), the EV and battery session splits, the flow entities and the
 night audit's solar (#755) all lost the dark share; on the one-Modbus-link home every input reads 0 W
-and the cycle's flows are empty. **Closure:** `EnergyCalculator._book_flows` — while a booked watt
-differs from the read, the same allocator (`FlowCalculator.calculate_power_flows`, now static) runs
-again on a copy of the readings with the held watts in; with nothing held the cycle's own flows are
-used as they are. `calculate_energy` splits only by these; the coordinator hands `book_flows` /
-`book_power` to the flow rows, both session splits, the flow entities and the night audit. The health
-check and the battery-night recorder (its own hold, #800) keep the raw flows: each checks them against
-the raw power. Steering never read the flows. **Guard:** `tests/test_1185_dark_read_flows.py` —
-savings, flow rows, every input dark, one unit of two, the grace edge, nothing held, steering keeps 0,
-the car's split, the charge origin, the tariff share (the held import over the held house), the night
-audit, the real reader through the flow rows (they add up to the solar row), and AST pins: in
-`calculate_energy` the first read of `power_flows` is `_book_flows`; in the cycle the raw flows go only
-to the books, the health check and the night recorder (each with a probe). **Left open:** past the
-grace a dark input still books 0 W.
+and the cycle's flows are empty. **Closure:** `EnergyCalculator._book_flows` — while an input is held
+(`_integral_held`), the same allocator (`FlowCalculator.calculate_power_flows`, now static) runs again
+on a copy of the readings with the booked watts in (the held input's and the shown house); the copy's
+held units are in its totals, so it holds none of its own. With no input held, the cycle's own flows
+are used as they are — also while the house alone is shown held (#1105 battery stop): a held house
+beside live sources left live import in no flow (review). `calculate_energy` splits only by these;
+the coordinator hands `book_flows` to the flow rows, both session splits, the flow entities and the
+night audit, and `book_power` to the night audit and the battery session (its total and its split
+come from the same read, and a dark blip is no idle cycle inside the grace). The health check and the
+battery-night recorder (its own hold, #800) keep the raw flows: each checks them against the raw
+power. Steering never read the flows. **Guard:** `tests/test_1185_dark_read_flows.py` — savings, flow
+rows, every input dark, one unit of two, the grace edge, nothing held, a shown house alone, the copy's
+units, steering keeps 0, the car's split, the charge origin, the tariff share (the held import over the
+held house), the night audit, the battery session (one dark battery of two; a dark blip), the real
+reader through the flow rows (they add up to the solar row), and AST pins: in `calculate_energy` the
+first read of `power_flows` is `_book_flows`, bound back; in the cycle the raw flows go only to the
+books, the health check and the night recorder (each with a probe). **Left open:** past the grace a
+dark input still books 0 W; a held solar that went stale beside a live battery discharge still covers
+the house in the split, so the discharge falls back to full savings and the house is paid twice for
+up to the grace (#1269).
 
 ### 59. A limit smoothed like a preference — GUARDED
 **Symptom:** the guard says 10 A, the wire carries 14 → 12 → 12 → 10 over two minutes. **Root
