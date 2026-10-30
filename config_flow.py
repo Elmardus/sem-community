@@ -1051,9 +1051,10 @@ class SolarEnergyManagementConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     def _why(words, check) -> str:
-        if check.ask != ASK_GUESSED:
-            return ""
-        why = words["why_guessed"]
+        # (#1213 review) "Use the other meter" can appear even when the
+        # grid reading itself was not guessed — the hint must not be
+        # gated on ASK_GUESSED, or the option names nothing to pick.
+        why = words["why_guessed"] if check.ask == ASK_GUESSED else ""
         if check.other_grid:
             # the "use the other meter" answer must name what it pins
             why += f"\n→ {check.other_grid}, {fmt_w(check.other_grid_w)}"
