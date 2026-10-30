@@ -1847,7 +1847,7 @@
       "message": "set_option kräver en 'options'-dict som mappar konfigurationsnycklar till nya värden."
     },
     "battery_list_changed": {
-      "message": "Batterierna i energipanelen har ändrats och det här batteriet finns inte längre. Ladda om sidan och försök igen."
+      "message": "Batterierna i energipanelen har ändrats, så den här batteriinställningen sparades inte. Kontrollera den och försök igen."
     },
     "set_option_no_entry": {
       "message": "Ingen SEM ConfigEntry hittades — installera SEM via Inställningar → Enheter och tjänster först."

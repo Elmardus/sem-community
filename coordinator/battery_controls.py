@@ -299,6 +299,10 @@ def lists_in_current_order(written: Mapping, read_units: Any,
     return out
 
 
+#: (#1204) No home has this many batteries; a larger slot is a damaged edit.
+_MAX_BATTERY_SLOTS = 64
+
+
 def battery_slot_edits(options: Mapping, saved: Mapping) -> dict:
     """(#1204) ``set_option`` options with each one-battery edit made whole.
 
@@ -316,13 +320,30 @@ def battery_slot_edits(options: Mapping, saved: Mapping) -> dict:
             continue
         slot = edit.get("slot")
         value = edit.get("value")
-        if (not isinstance(slot, int) or isinstance(slot, bool) or slot < 0
-                or isinstance(value, bool)
+        if (not isinstance(slot, int) or isinstance(slot, bool)
+                or not 0 <= slot < _MAX_BATTERY_SLOTS or isinstance(value, bool)
                 or not (value is None or isinstance(value, (str, int, float)))):
             raise ValueError(key)
         out[key] = put_battery_slot(saved, key, slot, value if value != "" else None,
                                     edit.get(BATTERY_SLOT_UNITS_KEY))
     return out
+
+
+def _has_record(saved: Mapping) -> bool:
+    record = saved.get(BATTERY_SLOT_UNITS_KEY)
+    return isinstance(record, list) and all(isinstance(u, str) for u in record)
+
+
+def _slots_stand_in(saved: Mapping, units: list, before: Any) -> list | None:
+    """The battery order the saved slots are in: the record, else (#1226)
+    ``before`` where it differs from ``units``, else None (as they stand)."""
+    if _has_record(saved):
+        return saved[BATTERY_SLOT_UNITS_KEY]
+    if (isinstance(before, (list, tuple))
+            and all(isinstance(u, str) and u for u in before)
+            and list(before) != units):
+        return list(before)
+    return None
 
 
 def realign_battery_slots(saved: Any, units: Any,
@@ -358,14 +379,8 @@ def realign_battery_slots(saved: Any, units: Any,
     if not all(isinstance(u, str) and u for u in units):
         return None     # a gap would move every later battery: no answer
     units = list(units)
-    record = saved.get(BATTERY_SLOT_UNITS_KEY)
-    if not (isinstance(record, list) and all(isinstance(u, str) for u in record)):
-        record = None
-    first = record is None
-    if (first and isinstance(before, (list, tuple))
-            and all(isinstance(u, str) and u for u in before)
-            and list(before) != units):
-        record = list(before)
+    first = not _has_record(saved)
+    record = _slots_stand_in(saved, units, before)
     if record == units:
         return None
     if record is None:
@@ -414,9 +429,15 @@ def align_battery_slots(hass: Any, entry: Any, coordinator: Any, units: Any,
     if running and not moved:
         # the options listener must not reload for a record alone
         coordinator._skip_options_reload = dict(new_options)
-        if not isinstance(getattr(coordinator, "battery_control_units", None), tuple):
-            # (#1204) the controls built with no record hold these places
-            coordinator.battery_control_units = tuple(changes[BATTERY_SLOT_UNITS_KEY])
+    if not running:
+        # (#1204) the controls are built after this, from the new places
+        coordinator.battery_control_units = tuple(changes[BATTERY_SLOT_UNITS_KEY])
+    elif not moved and not isinstance(
+            getattr(coordinator, "battery_control_units", None), tuple):
+        # (#1204) built with no record, the controls hold the places the
+        # slots stood in until now (no reload follows a first record)
+        coordinator.battery_control_units = tuple(
+            _slots_stand_in(merged, list(units), before) or units)
     limits = "battery_discharge_control_entities"
     old_limits, new_limits = merged.get(limits), changes.get(limits, merged.get(limits))
     if not running and isinstance(old_limits, list):

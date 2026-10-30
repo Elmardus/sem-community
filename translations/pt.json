@@ -1847,7 +1847,7 @@
       "message": "set_option requer um dicionário 'options' que associe chaves de configuração a novos valores."
     },
     "battery_list_changed": {
-      "message": "As baterias do painel de energia mudaram e esta bateria já não existe. Recarregue a página e tente novamente."
+      "message": "As baterias do painel de energia mudaram, por isso esta definição da bateria não foi guardada. Verifique-a e tente novamente."
     },
     "set_option_no_entry": {
       "message": "Não foi encontrada nenhuma ConfigEntry do SEM — instale primeiro o SEM em Definições → Dispositivos e serviços."

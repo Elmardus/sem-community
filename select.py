@@ -21,6 +21,7 @@ from .coordinator.install_modules import Module, keeps, presence_of
 from .coordinator.battery_controls import (   # (#1071)
     captured_battery_control_slugs,
     discover_battery_control_slugs,
+    slot_today,
 )
 
 type SEMConfigEntry = ConfigEntry[SEMCoordinator]
@@ -638,9 +639,15 @@ class SEMPerBatterySelect(CoordinatorEntity, SelectEntity):
             return None
         if self._idx is None:
             return cfg.get("battery_mode") or DEFAULT_BATTERY_MODE
+        # (#1204) this select's battery, also after the batteries changed
+        # and before the reload rebuilds it
+        idx = slot_today(self._idx, getattr(
+            self.coordinator, "battery_control_units", None), cfg)
+        if idx is None:
+            return None
         lst = cfg.get("battery_modes")
-        if isinstance(lst, list) and self._idx < len(lst) and lst[self._idx]:
-            return lst[self._idx]
+        if isinstance(lst, list) and idx < len(lst) and lst[idx]:
+            return lst[idx]
         return DEFAULT_BATTERY_MODE
 
     def _handle_coordinator_update(self) -> None:

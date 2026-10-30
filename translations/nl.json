@@ -1847,7 +1847,7 @@
       "message": "set_option vereist een 'options'-dict die configuratiesleutels aan nieuwe waarden koppelt."
     },
     "battery_list_changed": {
-      "message": "De batterijen in het Energiedashboard zijn veranderd en deze batterij is er niet meer. Laad de pagina opnieuw en probeer het nog eens."
+      "message": "De batterijen in het Energiedashboard zijn veranderd, dus deze batterij-instelling is niet opgeslagen. Controleer hem en probeer het nog eens."
     },
     "set_option_no_entry": {
       "message": "Geen SEM ConfigEntry gevonden — installeer SEM eerst via Instellingen → Apparaten en diensten."

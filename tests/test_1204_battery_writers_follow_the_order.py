@@ -163,6 +163,7 @@ def test_set_option_whole_list_is_todays_order():
     {"value": "number.a"},
     {"slot": 0, "value": ["number.a"]},
     {"slot": 0, "value": True},
+    {"slot": 100_000_000, "value": "number.a"},
 ])
 def test_set_option_damaged_edit_is_refused(edit):
     with pytest.raises(ValueError):
@@ -213,6 +214,48 @@ def test_a_select_of_a_gone_battery_writes_nothing():
     with pytest.raises(ServiceValidationError) as err:
         _persist(options, (A, B), 1, "auto")
     assert err.value.translation_key == "battery_list_changed"
+
+
+def test_a_change_at_setup_is_the_order_the_controls_are_built_in():
+    """Review finding: the #274 retry moves the lists during the first
+    refresh, after the capture and before the platforms build (no reload).
+    The controls are built in the new order, so that is the order they
+    write in."""
+    from custom_components.solar_energy_management.coordinator.battery_controls import (
+        align_battery_slots,
+    )
+    hass = MagicMock()
+    entry = SimpleNamespace(entry_id="e", data={}, options={
+        BATTERY_SLOT_UNITS_KEY: [A, B], "battery_modes": ["force_charge", "off"]})
+    coordinator = SimpleNamespace(config={}, battery_control_units=(A, B))
+    assert align_battery_slots(hass, entry, coordinator, [C, A, B], running=False)
+    assert coordinator.battery_control_units == (C, A, B)
+
+
+def test_a_first_record_while_running_keeps_the_order_the_slots_stood_in():
+    """No record at setup; a running read writes the first one. With no
+    older order the controls hold the places as they stand; with a #1226
+    order the lists moved from it (no reload), so the controls write by it."""
+    from custom_components.solar_energy_management.coordinator.battery_controls import (
+        align_battery_slots,
+    )
+    for before, built in ((None, (A, B)), ([B], (B,))):
+        entry = SimpleNamespace(entry_id="e", data={}, options={"battery_modes": ["off"]})
+        coordinator = SimpleNamespace(config={}, _skip_options_reload=None)
+        assert align_battery_slots(MagicMock(), entry, coordinator, [A, B],
+                                   running=True, before=before)
+        assert coordinator.battery_control_units == built, before
+
+
+def test_the_select_shows_its_own_battery_before_the_reload():
+    from custom_components.solar_energy_management.select import SEMPerBatterySelect
+    sel = SEMPerBatterySelect.__new__(SEMPerBatterySelect)
+    sel._idx = 1
+    sel.coordinator = SimpleNamespace(battery_control_units=(A, B), config={
+        BATTERY_SLOT_UNITS_KEY: [C, A, B], "battery_modes": [None, "force_charge", "off"]})
+    assert sel._stored_mode() == "off"
+    sel.coordinator.config[BATTERY_SLOT_UNITS_KEY] = [A]
+    assert sel._stored_mode() is None            # gone: shows what it showed
 
 
 @pytest.mark.asyncio
@@ -267,7 +310,7 @@ async def _save(flow, config_entry):
 
 @pytest.mark.asyncio
 async def test_the_dialog_saves_each_battery_at_its_place_today(mock_hass, config_entry):
-    """Opened on A and B; while it was open a combined battery C was added
+    """Opened on A and B; after the last page a combined battery C was added
     in front (the alignment moved the lists and gave C its own limit from
     the card). The save puts A's and B's answers at their new places and
     keeps C's."""
@@ -278,33 +321,65 @@ async def test_the_dialog_saves_each_battery_at_its_place_today(mock_hass, confi
         _coordinator(("b1", "b2"), (A, B)))
     first = await _call(flow, config_entry, "settings_battery_limit")
     assert first["description_placeholders"]["sensor"] == A
+    second = await _call(flow, config_entry, "settings_battery_limit",
+                         {FIELD: "number.a_new", END_FIELD: "number.a_end"})
+    assert second["description_placeholders"]["sensor"] == B
+    await _call(flow, config_entry, "settings_battery_limit",
+                {FIELD: "number.b_new", END_FIELD: "number.b_end"})
     config_entry.options = {
         BATTERY_SLOT_UNITS_KEY: [C, A, B],
         LIMITS: ["number.c_limit", "number.a_limit", "number.b_limit"],
         ENDS: [None, "number.a_end", "number.b_end"]}
-    second = await _call(flow, config_entry, "settings_battery_limit",
-                         {FIELD: "number.a_limit", END_FIELD: "number.a_end"})
-    # the page still edits B: the draft's order, not today's b2 (A)
-    assert second["description_placeholders"]["sensor"] == B
-    await _call(flow, config_entry, "settings_battery_limit",
-                {FIELD: "number.b_new", END_FIELD: "number.b_end"})
     data = await _save(flow, config_entry)
-    assert data[LIMITS] == ["number.c_limit", "number.a_limit", "number.b_new"]
+    assert data[LIMITS] == ["number.c_limit", "number.a_new", "number.b_new"]
     assert data[ENDS] == [None, "number.a_end", "number.b_end"]
     assert data[BATTERY_SLOT_UNITS_KEY] == [C, A, B]
 
 
 @pytest.mark.asyncio
-async def test_the_dialog_drops_a_battery_removed_while_it_was_open(mock_hass, config_entry):
+async def test_the_pages_follow_a_change_between_them(mock_hass, config_entry):
+    """C added in front after the first page: the answer for A goes with A,
+    and the next pages are today's (b2 is A now, with that answer)."""
+    flow = _flow(mock_hass, config_entry, {
+        BATTERY_SLOT_UNITS_KEY: [A, B],
+        LIMITS: ["number.a_limit", "number.b_limit"]},
+        _coordinator(("b1", "b2", "b3"), (A, B)))
+    await _call(flow, config_entry, "settings_battery_limit")
+    config_entry.options = {
+        BATTERY_SLOT_UNITS_KEY: [C, A, B],
+        LIMITS: ["number.c_limit", "number.a_limit", "number.b_limit"]}
+    second = await _call(flow, config_entry, "settings_battery_limit",
+                         {FIELD: "number.a_new"})
+    assert second["description_placeholders"]["sensor"] == A
+    marker = next(m for m in second["data_schema"].schema if m.schema == FIELD)
+    assert marker.description["suggested_value"] == "number.a_new"
+    third = await _call(flow, config_entry, "settings_battery_limit",
+                        {FIELD: "number.a_new"})
+    assert third["description_placeholders"]["sensor"] == B
+    await _call(flow, config_entry, "settings_battery_limit", {FIELD: "number.b_new"})
+    data = await _save(flow, config_entry)
+    assert data[LIMITS] == ["number.c_limit", "number.a_new", "number.b_new"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("left, want", [
+    ([B], ["number.b_limit"]),          # A, the page answered, removed
+    ([A], ["number.a_new"]),            # B, the page to come, removed
+])
+async def test_the_dialog_drops_a_battery_removed_while_it_was_open(
+        mock_hass, config_entry, left, want):
+    """The reload after the removal is still due (the slugs are two): the
+    pages stop at the one battery left, and its slot is its own."""
     flow = _flow(mock_hass, config_entry, {
         BATTERY_SLOT_UNITS_KEY: [A, B], LIMITS: ["number.a_limit", "number.b_limit"]},
         _coordinator(("b1", "b2"), (A, B)))
     await _call(flow, config_entry, "settings_battery_limit")
-    config_entry.options = {BATTERY_SLOT_UNITS_KEY: [B], LIMITS: ["number.b_limit"]}
-    await _call(flow, config_entry, "settings_battery_limit", {FIELD: "number.a_new"})
-    await _call(flow, config_entry, "settings_battery_limit", {FIELD: "number.b_new"})
+    config_entry.options = {BATTERY_SLOT_UNITS_KEY: left,
+                            LIMITS: ["number.a_limit" if left == [A] else "number.b_limit"]}
+    done = await _call(flow, config_entry, "settings_battery_limit", {FIELD: "number.a_new"})
+    assert done["step_id"] == "settings_ev"
     data = await _save(flow, config_entry)
-    assert data[LIMITS] == ["number.b_new"]
+    assert data[LIMITS] == want
 
 
 @pytest.mark.asyncio
@@ -353,6 +428,19 @@ _KNOWN_WRITERS = {
 }
 
 
+def _innermost_functions(tree):
+    """Each node with the innermost function around it (None at module level)."""
+    out = []
+
+    def visit(node, fn):
+        for child in ast.iter_child_nodes(node):
+            inner = child if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else fn
+            out.append((child, inner))
+            visit(child, inner)
+    visit(tree, None)
+    return out
+
+
 def _list_key_writes():
     keys = set(PER_BATTERY_LIST_KEYS)
     found = {}
@@ -361,10 +449,8 @@ def _list_key_writes():
         if rel.startswith(("tests/", "dashboard/", "scripts/", "tools/")) or "/node_modules/" in rel:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        for fn in ast.walk(tree):
-            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            for node in ast.walk(fn):
+        for node, fn in _innermost_functions(tree):
+            if True:
                 key = None
                 if (isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store)
                         and isinstance(node.slice, ast.Constant)):
@@ -377,7 +463,7 @@ def _list_key_writes():
                       and isinstance(node.args[0], ast.Constant)):
                     key = node.args[0].value
                 if key in keys:
-                    found.setdefault((rel, fn.name), node.lineno)
+                    found.setdefault((rel, fn.name if fn else "<module>"), node.lineno)
     return found
 
 
@@ -386,12 +472,24 @@ def test_every_writer_of_a_per_battery_list_is_known():
     battery order (``put_battery_slot`` / ``lists_in_current_order``) and
     be listed here with the reason."""
     found = _list_key_writes()
-    assert found, "the scan finds nothing: it is broken"
-    # the innermost function is the one named (a nested helper counts too)
-    unknown = {k: v for k, v in found.items()
-               if k not in _KNOWN_WRITERS
-               and not any(k[0] == f and k[1] != n for f, n in _KNOWN_WRITERS)}
-    assert not unknown, f"a new per-battery list writer: {unknown}"
+    assert set(found) == set(_KNOWN_WRITERS), (
+        f"new per-battery list writers: {set(found) - set(_KNOWN_WRITERS)}; "
+        f"gone: {set(_KNOWN_WRITERS) - set(found)}")
+
+
+def test_the_scan_sees_a_new_writer():
+    """Its twin: a function the list does not name is caught, also in a
+    file that has a known writer."""
+    src = (
+        "def async_step_brand_new(self):\n"
+        "    self._data['battery_modes'] = ['auto']\n"
+        "def adopt_shared_battery_settings():\n"
+        "    def helper():\n"
+        "        return {'battery_reserve_socs': [20]}\n")
+    hits = {(fn.name if fn else None) for node, fn in _innermost_functions(ast.parse(src))
+            if isinstance(node, (ast.Subscript, ast.Dict))
+            and "battery_" in ast.unparse(node)}
+    assert hits == {"async_step_brand_new", "helper"}
 
 
 def _calls(rel, fn_name):
@@ -405,7 +503,10 @@ def _calls(rel, fn_name):
 def test_each_writer_follows_the_order():
     assert "put_battery_slot" in _calls("__init__.py", "persist_per_battery_option")
     assert "battery_slot_edits" in _calls("__init__.py", "async_set_option")
-    assert "lists_in_current_order" in _calls("config_flow.py", "async_step_notifications")
+    assert "lists_in_current_order" in _calls("config_flow.py", "_battery_draft_follows")
+    assert "_battery_draft_follows" in _calls("config_flow.py", "async_step_notifications")
+    assert "_battery_draft_follows" in _calls(
+        "config_flow.py", "async_step_settings_battery_limit")
 
 
 # ── Real setup: the card's save after the dashboard changed ───────────────
