@@ -32,37 +32,84 @@ from .types import CostData, EnergyFlows, EnergyTotals, PowerFlows, PowerReading
 _LOGGER = logging.getLogger(__name__)
 
 
-def home_member_totals(devices) -> dict:
-    """(#872) The controlled loads that are genuinely members of the HOME row.
+def sem_ev_chargers(coordinator) -> list:
+    """(#1044) SEM's own EV chargers — both discovery shapes, deduped by
+    identity.
 
-    EV chargers are not. SEM's home row is defined as::
+    The multi-charger dict AND the legacy ``_ev_device`` single-charger
+    slot (the walk ``_push_observer_mode_to_devices`` does, for the reason it
+    gives). ``getattr`` throughout: the filing seam runs on bare stubs in
+    tests, and a stub with no chargers simply has none.
+    """
+    devs = [d for d in (getattr(coordinator, "_ev_devices", None) or {}).values()
+            if d is not None]
+    single = getattr(coordinator, "_ev_device", None)
+    if single is not None and not any(d is single for d in devs):
+        devs.append(single)
+    return devs
+
+
+def chargers_outside_home(chargers, power) -> list:
+    """(#1044) The chargers whose draw this cycle's ``ev_power`` holds.
+
+    ``home`` takes ``ev_power`` out, so these are already out of it. A
+    charger is in ``ev_power`` when its own sensor was summed, or when one
+    fleet sensor (Energy Dashboard or the top-level sensor) was read for
+    the whole EV side. A charger the reader never read — a second box with
+    no sensor of its own, a late-found box with no power sensor (#1125
+    hands over the one it has) — is still inside ``home``, and stays a
+    member.
+    """
+    if getattr(power, "ev_power_fleet_entity", None):
+        return [c for c in (chargers or ()) if c is not None]
+    read = getattr(power, "ev_power_entities", None) or frozenset()
+    return [c for c in (chargers or ())
+            if c is not None and getattr(c, "power_entity_id", None) in read]
+
+
+def home_members(devices, chargers) -> list:
+    """(#1044) The devices whose draw is INSIDE the home row.
+
+    The one answer for every reader that adds devices up against ``home``:
+    the true-baseload mirror and its W twin, and the partition check below.
+    ``chargers`` are SEM's own EV chargers that ``ev`` holds
+    (``chargers_outside_home``); they are not inside it::
 
         home = max(0, solar + grid_import + batt_discharge
                       - ev - grid_export - batt_charge)
 
-    so the EV has already been subtracted out of the total these members are
-    compared against. Counting a charger here puts its energy on one side of
-    a comparison that removed it from the other, and every install charging a
-    car reports a permanent "double count" that no amount of looking can
-    resolve — the message even names a stale id, sending the user hunting for
-    something that does not exist (#872, RienduPre: members 3.34 kWh against
-    a 1.81 kWh home row, repeating for hours, every member live and real;
-    without his ``ev_charger=1.10`` the sum is 2.24 and sits inside the band).
+    and ``ev`` is read from those chargers' power sensors. #872 drew this
+    line for the partition check alone; the baseload (#773) never drew it, so
+    it took the car out of ``home`` a second time — RienduPre (#1044): a
+    49 kWh night session, 6.29 kWh of home, a true baseload of −49.69 kWh.
+
+    Matched by IDENTITY, not by type: a load the user put under current
+    control (a heater on an amps number, a second box added as a load) is a
+    ``CurrentControlDevice`` too, and its draw is not in ``ev`` — it stays.
+    """
+    outside = {id(c) for c in (chargers or ()) if c is not None}
+    return [d for d in (devices or ()) if id(d) not in outside]
+
+
+def home_member_totals(devices, chargers) -> dict:
+    """(#872) The controlled loads that are genuinely members of the HOME row.
+
+    EV chargers are not — see ``home_members``, which decides it. Counting a
+    charger here puts its energy on one side of a comparison that removed it
+    from the other, and every install charging a car reports a permanent
+    "double count" that no amount of looking can resolve — the message even
+    names a stale id, sending the user hunting for something that does not
+    exist (#872, RienduPre: members 3.34 kWh against a 1.81 kWh home row,
+    repeating for hours, every member live and real; without his
+    ``ev_charger=1.10`` the sum is 2.24 and sits inside the band).
 
     Chargers are checked against the EV day instead, which is the row they
     are actually members of.
-
-    A device whose type cannot be read is KEPT: unknown shape means "part of
-    the house", and dropping members on a missing attribute would quietly
-    disable the check this function feeds.
     """
     out = {}
-    for dev in devices or []:
+    for dev in home_members(devices, chargers):
         device_id = getattr(dev, "device_id", None)
         if not device_id:
-            continue
-        dtype = getattr(dev, "device_type", None)
-        if getattr(dtype, "value", None) == "current_control":
             continue
         out[device_id] = float(getattr(dev, "daily_energy_kwh", 0.0) or 0.0)
     return out
@@ -572,7 +619,9 @@ class HealthCheck:
     # the 2 kWh band would pass.
     _BASELOAD_EST_TOL_KWH = 0.5
 
-    def check_baseload_drift(self, history: list) -> list[str]:
+    def check_baseload_drift(
+        self, history: list, charger_ids: Iterable[str] = (),
+    ) -> list[str]:
         """(#773) Does the leftover behave like a house?
 
         Compares the newest SEALED, USABLE day against the median of the
@@ -593,12 +642,21 @@ class HealthCheck:
         "imbalance" alone sends the user hunting through every sensor they
         own. The device day totals sealed alongside each day exist for
         exactly this.
+
+        (#1044) ``charger_ids`` are SEM's own EV chargers. They are not terms
+        of the baseload (``home_members``), so they are never named as its
+        mover. And on an install that has one, a day sealed before the fix
+        (no ``home_members_only`` stamp) subtracted the car from ``home`` a
+        second time — a gap, not a reference: it ages out of the window.
         """
         if not history:
             return []
+        chargers = {str(c) for c in (charger_ids or ())}
 
         def _usable(r) -> bool:
             if not isinstance(r, dict) or r.get("baseload_kwh") is None:
+                return False
+            if chargers and not r.get("home_members_only"):
                 return False
             est = r.get("estimated_kwh")
             if est is None:
@@ -640,7 +698,7 @@ class HealthCheck:
         device_ids = set(latest.get("devices") or {})
         for r in reference:
             device_ids |= set(r.get("devices") or {})
-        for did in device_ids:
+        for did in device_ids - chargers:
             movers[did] = float(
                 (latest.get("devices") or {}).get(did, 0.0) or 0.0
             ) - _term_median(
@@ -719,6 +777,7 @@ class HealthCheck:
         per_device_daily: Mapping[str, float] | None = None,
         per_device_evidence: Mapping[str, str] | None = None,
         baseload_history: list | None = None,
+        charger_ids: Iterable[str] | None = None,
     ) -> list[str]:
         """Run all health checks and return violations list.
 
@@ -749,7 +808,8 @@ class HealthCheck:
                 per_device_evidence=per_device_evidence,
             )
         if baseload_history:
-            violations += self.check_baseload_drift(baseload_history)
+            violations += self.check_baseload_drift(
+                baseload_history, charger_ids or ())
 
         if violations:
             self._violation_count += len(violations)

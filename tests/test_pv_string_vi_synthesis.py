@@ -94,7 +94,7 @@ class TestSensorReaderVISynthesis:
         # to return whatever the caller stashed in ``_mock_values``.
         sr._mock_values = {}
 
-        def mock_read(entity_id, _purpose):
+        def mock_read(entity_id, _purpose, **_kw):
             return float(sr._mock_values.get(entity_id, 0.0))
 
         sr._read_sensor = mock_read

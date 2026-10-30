@@ -13,7 +13,7 @@ Architecture:
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,6 +21,23 @@ _LOGGER = logging.getLogger(__name__)
 MIN_TRAINING_DAYS = 3
 MAX_HISTORY_DAYS = 90
 EWMA_ALPHA = 0.3  # Higher = more weight on recent data
+
+# (#1082) Temperature. Home load rises when it is cold (heating, light,
+# people inside). The weekday × hour profile already holds the USUAL load
+# at the usual temperature of each hour; what the temperature adds is the
+# difference between today's cold and that usual cold. Measured in degree
+# hours below a base: HDD = max(0, base − T). One slope, W per degree,
+# learned from the hours where the load and the cold both differed from
+# their usual — a decaying least squares, so it follows the season.
+HDD_BASE_C = 15.0
+#: per-hour decay of the slope's sums (~6 days half-life)
+TEMP_DECAY = 0.995
+#: the slope is used only after this much spread in degree hours (sum of
+#: squared differences) — a few days of real weather change
+TEMP_MIN_SXX = 40.0
+#: plausible slope band, W per degree below the base (0 = load does not
+#: follow the cold; a big heat-pump house is a few hundred)
+TEMP_SLOPE_MAX_W = 1500.0
 
 
 class HourlyProfile:
@@ -110,6 +127,22 @@ class ConsumptionPredictor:
         self._consumption_profile = HourlyProfile()
         self._solar_profile = HourlyProfile()
         self._ev_profile = HourlyProfile()  # Daily EV consumption per weekday
+        # (#1082) the usual degree hours of each (weekday, hour), and the
+        # load-per-degree slope's decaying sums
+        self._hdd_profile = HourlyProfile()
+        self._t_sxx = 0.0
+        self._t_sxy = 0.0
+        self._t_samples = 0
+        # set by the coordinator each cycle: the hour's temperature (°C) by
+        # time, and whether the plans may use the temperature term (soak)
+        self._temp_at: Optional[Callable[[datetime], Optional[float]]] = None
+        self._temp_use = False
+        self._last_temp_path: str = "no_temperature"
+        # (#1132) The same, per car: each charger's own closed EV day. The
+        # fleet profile above learns the TOTAL of all chargers, which is one
+        # car's use only on a one-charger install.
+        self._car_ev_profiles: Dict[str, HourlyProfile] = {}
+        self._last_car_ev_observation_day: Dict[str, int] = {}
         self._last_observation_hour: Optional[int] = None
         self._last_ev_observation_day: Optional[int] = None
         self._training_status = "cold_start"
@@ -138,7 +171,8 @@ class ConsumptionPredictor:
         # Coverage-based estimate: 100% after 30 days
         return min(100.0, round(days / 30 * 100, 1))
 
-    def observe(self, dt: datetime, consumption_w: float, solar_w: float) -> None:
+    def observe(self, dt: datetime, consumption_w: float, solar_w: float,
+                temp_c: Optional[float] = None) -> None:
         """Record an hourly observation.
 
         Call this once per hour (or on each coordinator cycle — it deduplicates
@@ -158,6 +192,8 @@ class ConsumptionPredictor:
             return
         self._last_observation_hour = hour_key
 
+        if temp_c is not None:
+            self._learn_temperature(dow, hour, consumption_w, temp_c)
         self._consumption_profile.update(dow, hour, consumption_w)
         self._solar_profile.update(dow, hour, solar_w)
         self._last_observation_path = "recorded"
@@ -194,7 +230,7 @@ class ConsumptionPredictor:
                 fallback_count += 1
                 predictions.append(0.0)
             else:
-                predictions.append(value)
+                predictions.append(max(0.0, value + self.temperature_delta_w(dt)))
         if fallback_count == 0:
             self._last_consumption_prediction_path = "trained_full"
         elif fallback_count < 24:
@@ -296,6 +332,64 @@ class ConsumptionPredictor:
         self._last_surplus_window_path = "no_contiguous_window"
         return ""
 
+    # ── (#1082) temperature ────────────────────────────────────────
+    def set_temperature(self, temp_at: Optional[Callable[[datetime], Optional[float]]],
+                        use: bool) -> None:
+        """The hour's temperature by time (forecast ahead, measured now),
+        and whether the plans may use it (the soak flag)."""
+        self._temp_at = temp_at
+        self._temp_use = bool(use)
+
+    @staticmethod
+    def _hdd(temp_c: float) -> float:
+        return max(0.0, HDD_BASE_C - float(temp_c))
+
+    def _learn_temperature(self, dow: int, hour: int, load_w: float, temp_c: float) -> None:
+        """One hour's lesson: how far the load and the cold were from their
+        usual for this weekday and hour. Learns whether or not the plans
+        use it, so the slope is ready when the soak flag flips."""
+        hdd = self._hdd(temp_c)
+        usual_load = self._consumption_profile.predict(dow, hour)
+        usual_hdd = self._hdd_profile.predict(dow, hour)
+        if usual_load is not None and usual_hdd is not None:
+            dx = hdd - usual_hdd
+            dy = float(load_w) - usual_load
+            self._t_sxx = self._t_sxx * TEMP_DECAY + dx * dx
+            self._t_sxy = self._t_sxy * TEMP_DECAY + dx * dy
+            self._t_samples += 1
+        self._hdd_profile.update(dow, hour, hdd)
+
+    @property
+    def temperature_slope_w(self) -> Optional[float]:
+        """W of home load per degree below the base, or None until the
+        weather has varied enough to tell. Never below 0, never above the
+        plausible band (one odd week cannot make a giant slope)."""
+        if self._t_sxx < TEMP_MIN_SXX:
+            return None
+        return min(TEMP_SLOPE_MAX_W, max(0.0, self._t_sxy / self._t_sxx))
+
+    def temperature_delta_w(self, dt: datetime) -> float:
+        """What the temperature adds (or takes) at ``dt`` against the usual
+        for that weekday and hour, in W. 0 when the flag is off, the slope
+        is not known yet, the hour has no temperature, or no usual exists."""
+        if not self._temp_use or self._temp_at is None:
+            self._last_temp_path = "off" if not self._temp_use else "no_temperature"
+            return 0.0
+        slope = self.temperature_slope_w
+        if slope is None:
+            self._last_temp_path = "learning"
+            return 0.0
+        try:
+            t = self._temp_at(dt)
+        except Exception:  # noqa: BLE001 — a missing forecast hour is no temperature
+            t = None
+        usual_hdd = self._hdd_profile.predict(dt.weekday(), dt.hour)
+        if t is None or usual_hdd is None:
+            self._last_temp_path = "no_temperature"
+            return 0.0
+        self._last_temp_path = "applied"
+        return slope * (self._hdd(t) - usual_hdd)
+
     def observe_ev(self, dt: datetime, daily_ev_kwh: float) -> None:
         """Record daily EV consumption for weekday-based prediction.
 
@@ -319,6 +413,37 @@ class ConsumptionPredictor:
             "EV predictor: observed %.1f kWh on %s (dow=%d)",
             daily_ev_kwh, dt.strftime("%A"), dow,
         )
+
+    def observe_car_ev(self, dt: datetime, charger_id: str,
+                       daily_ev_kwh: float) -> None:
+        """(#1132) Record one car's own EV day, once per calendar day.
+
+        Called when that charger's own EV day closes, with the kWh it
+        delivered. Same weekday bin as ``observe_ev``.
+        """
+        if not charger_id or daily_ev_kwh is None or daily_ev_kwh <= 0:
+            return
+        day_key = dt.toordinal()
+        if self._last_car_ev_observation_day.get(charger_id) == day_key:
+            return
+        self._last_car_ev_observation_day[charger_id] = day_key
+        profile = self._car_ev_profiles.setdefault(charger_id, HourlyProfile())
+        profile.update(dt.weekday(), 12, float(daily_ev_kwh))
+        _LOGGER.debug("EV predictor: %s observed %.1f kWh on %s",
+                      charger_id, daily_ev_kwh, dt.strftime("%A"))
+
+    def predict_car_ev_consumption_tomorrow(self, from_dt: datetime,
+                                            charger_id: str) -> float:
+        """(#1132) One car's predicted EV use tomorrow, from its own days.
+
+        0.0 when that car has no days yet; the caller then falls back to
+        the car's own daily target, never to the fleet total.
+        """
+        profile = self._car_ev_profiles.get(charger_id)
+        if profile is None:
+            return 0.0
+        value = profile.predict((from_dt + timedelta(days=1)).weekday(), 12)
+        return 0.0 if value is None else round(value, 1)
 
     def predict_ev_consumption_tomorrow(self, from_dt: datetime) -> float:
         """Predict tomorrow's EV consumption in kWh.
@@ -361,6 +486,12 @@ class ConsumptionPredictor:
             "training_status": self._training_status,
             "consumption_samples": self._consumption_profile.total_samples(),
             "consumption_unique_days": self._consumption_profile.unique_days(),
+            # (#1082)
+            "temperature_path": self._last_temp_path,
+            "temperature_slope_w_per_k": (None if self.temperature_slope_w is None
+                                          else round(self.temperature_slope_w, 1)),
+            "temperature_samples": self._t_samples,
+            "temperature_in_plans": self._temp_use,
         }
 
     def get_state(self) -> Dict[str, Any]:
@@ -369,7 +500,12 @@ class ConsumptionPredictor:
             "consumption": self._consumption_profile.get_state(),
             "solar": self._solar_profile.get_state(),
             "ev": self._ev_profile.get_state(),
+            "ev_per_car": {cid: prof.get_state()
+                           for cid, prof in self._car_ev_profiles.items()},
             "training_status": self._training_status,
+            # (#1082)
+            "hdd": self._hdd_profile.get_state(),
+            "t_sxx": self._t_sxx, "t_sxy": self._t_sxy, "t_samples": self._t_samples,
         }
 
     def restore_state(self, state: Dict[str, Any]) -> None:
@@ -379,4 +515,18 @@ class ConsumptionPredictor:
         self._consumption_profile.restore_state(state.get("consumption", {}))
         self._solar_profile.restore_state(state.get("solar", {}))
         self._ev_profile.restore_state(state.get("ev", {}))
+        self._car_ev_profiles = {}
+        for cid, prof_state in (state.get("ev_per_car") or {}).items():
+            prof = HourlyProfile()
+            prof.restore_state(prof_state)
+            self._car_ev_profiles[str(cid)] = prof
         self._training_status = state.get("training_status", "cold_start")
+        # (#1082) absent in a store from before: starts learning from zero
+        self._hdd_profile.restore_state(state.get("hdd", {}))
+        try:
+            self._t_sxx = float(state.get("t_sxx", 0.0) or 0.0)
+            self._t_sxy = float(state.get("t_sxy", 0.0) or 0.0)
+            self._t_samples = int(state.get("t_samples", 0) or 0)
+        except (TypeError, ValueError):
+            self._t_sxx = self._t_sxy = 0.0
+            self._t_samples = 0

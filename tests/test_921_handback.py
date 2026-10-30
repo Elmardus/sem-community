@@ -96,6 +96,10 @@ class TestTheUnloadHookOrder:
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+                # (#820 review 4) the pacer read moved to its async, record-
+                # reading twin; the order is the same
+                if name == "async_pending_pacing_release":
+                    name = "pending_pacing_release"
                 if name in ("async_release_export_guard", "pending_pacing_release"):
                     first.setdefault(name, node.lineno)
         assert first["async_release_export_guard"] < first["pending_pacing_release"]

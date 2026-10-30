@@ -8,7 +8,7 @@
     that, some sort of pause SEM charging."
 
 The first design of this made SEM *hold* the charger stopped — a new intent
-that re-asserted DISABLE every cycle. A review took it apart, and Guido's
+that re-asserted DISABLE every cycle. A review took it apart, and the
 answer was better than the fix: **set the mode to Off, and set it back when
 the timer is done.**
 

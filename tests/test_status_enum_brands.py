@@ -60,6 +60,21 @@ class TestOhme:
     def test_locked(self): assert C("pending_approval") == "locked"
 
 
+class TestPeblar:
+    """(#1038) core cp_state, peblar/const.py PEBLAR_CP_STATE_TO_HOME_ASSISTANT."""
+    def test_charging(self): assert C("charging") == "charging"
+    @pytest.mark.parametrize("s", ["suspended", "no_ev_connected"])
+    def test_not(self, s): assert C(s) == "not_charging"
+    @pytest.mark.parametrize("s", ["error", "fault", "invalid"])
+    def test_a_fault_falls_back(self, s): assert C(s) == "unknown"
+    def test_cable(self):
+        from custom_components.solar_energy_management.coordinator.charger_adapters.status_enum import (
+            is_cable_present,
+        )
+        assert is_cable_present("suspended") is True
+        assert is_cable_present("no_ev_connected") is False
+
+
 class TestOCPP:
     def test_charging(self): assert C("Charging") == "charging"
     @pytest.mark.parametrize("s", ["Available", "Preparing", "SuspendedEV",

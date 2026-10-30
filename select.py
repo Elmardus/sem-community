@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.config_entries import ConfigEntry
@@ -13,11 +12,17 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .utils.device_names import charger_display_name  # (#1053)
 from .coordinator import SEMCoordinator
 from .coordinator.charge_pause import (   # (#980)
     DEFAULT_PAUSE_DURATION, PAUSE_DURATIONS,
 )
 from .coordinator.install_modules import Module, keeps, presence_of
+from .coordinator.battery_controls import (   # (#1071)
+    captured_battery_control_slugs,
+    discover_battery_control_slugs,
+    slot_today,
+)
 
 type SEMConfigEntry = ConfigEntry[SEMCoordinator]
 
@@ -64,41 +69,18 @@ from .consts.battery_modes import BATTERY_MODES, DEFAULT_BATTERY_MODE
 _GLOBAL_BATTERY_MODE_KEY = "battery_mode"
 
 
-_BATTERY_SLUG_RE = re.compile(r"^sensor\.sem_battery_(b\d+)_power$")
-
-
 def _battery_slugs(coordinator: SEMCoordinator) -> list[str]:
-    """Short per-battery slugs (``b1`` …) for multi-battery installs.
+    """Short per-battery slugs (``b1`` …) for multi-battery installs; empty on
+    single-battery installs.
 
-    Primary source is the Energy Dashboard ``battery_power_list`` order
-    (same as the per-battery sensors in ``sensor.py``). But that depends
-    on ``_energy_dashboard_config`` being populated at platform-setup
-    time, which can lag the first refresh — so we FALL BACK to the
-    persisted per-battery power sensors in the entity registry
-    (``sensor.sem_battery_b<N>_power``). The registry survives restarts,
-    so once a multi-battery install has its sensors the control entities
-    are created deterministically on every boot. Empty on single-battery
-    installs (no per-battery control entities created).
-    """
-    sr = getattr(coordinator, "_sensor_reader", None)
-    ed = getattr(sr, "_energy_dashboard_config", None) if sr is not None else None
-    batt_list = list(getattr(ed, "battery_power_list", []) or []) if ed is not None else []
-    if len(batt_list) > 1:
-        return [f"b{i + 1}" for i in range(len(batt_list))]
-
-    # Fallback: discover from the persisted per-battery power sensors.
-    try:
-        reg = er.async_get(coordinator.hass)
-        slugs = sorted({
-            m.group(1)
-            for ent in reg.entities.values()
-            if (m := _BATTERY_SLUG_RE.match(ent.entity_id))
-        })
-        _LOGGER.debug("battery slugs (registry fallback): %s", slugs)
-        return slugs if len(slugs) > 1 else []
-    except Exception as exc:  # noqa: BLE001 — discovery must never break setup
-        _LOGGER.debug("battery slug discovery failed: %s", exc)
-        return []
+    (#1071) The answer ``async_setup_entry`` captured before the platforms
+    load, so select.py, number.py and the coordinator's
+    ``_per_battery_config`` all follow ONE decision. Discovers only when
+    nothing was captured (a platform built outside the normal setup)."""
+    captured = captured_battery_control_slugs(coordinator)
+    if captured is not None:
+        return list(captured)
+    return list(discover_battery_control_slugs(coordinator))
 
 
 def _has_battery(coordinator: SEMCoordinator) -> bool:
@@ -128,6 +110,15 @@ SELECT_TYPES = [
         options=list(PAUSE_DURATIONS.keys()),
         entity_category=EntityCategory.CONFIG,
         icon="mdi:timer-pause-outline",
+    ),
+    # (#1019) Hints: one control for five categories. SEM cannot decide
+    # for a person whether they want messages, so it asks once — off by
+    # default; "weekly" is the Sunday note only; "all" is all five.
+    SelectEntityDescription(
+        key="hints",
+        options=["off", "weekly", "all"],
+        entity_category=EntityCategory.CONFIG,
+        icon="mdi:message-badge-outline",
     ),
 ]
 
@@ -165,9 +156,9 @@ async def async_setup_entry(
     ev_chargers = full_config.get("ev_chargers", [])
     per_charger_keys: set[str] = set()
     if len(ev_chargers) >= 1:
-        for charger_cfg in ev_chargers:
+        for _cidx, charger_cfg in enumerate(ev_chargers):
             cid = charger_cfg.get("id", "ev_charger")
-            cname = charger_cfg.get("name", "EV Charger")
+            cname = charger_display_name(hass, charger_cfg, _cidx)  # (#1053)
             target_key = f"charger_{cid}_ev_target_type"
             mode_key = f"charger_{cid}_charge_mode"
             per_charger_keys.update({target_key, mode_key})
@@ -223,9 +214,10 @@ async def async_setup_entry(
                     cname,
                 ))
 
-    # Per-battery mode selects (#523). Multi-battery installs (Energy
-    # Dashboard battery_power_list ≥ 2) get one ``select.sem_battery_<bid>_mode``
-    # each; single-battery installs create none and keep today's behaviour.
+    # Per-battery mode selects (#523). Multi-battery installs (two or more
+    # Energy Dashboard batteries, two-sensor ones too — ``battery_units``,
+    # #1171) get one ``select.sem_battery_<bid>_mode`` each; single-battery
+    # installs create none and keep today's behaviour.
     batt_slugs = _battery_slugs(coordinator)
     batt_modes_cfg = full_config.get("battery_modes") or []
     per_battery_keys: set[str] = set()
@@ -340,6 +332,8 @@ class SEMSelectEntity(CoordinatorEntity, SelectEntity):
             return "kwh"
         if self.entity_description.key == "pause_duration":
             return DEFAULT_PAUSE_DURATION
+        if self.entity_description.key == "hints":
+            return "off"
         return "auto"
 
     @property
@@ -481,7 +475,7 @@ class SEMPerChargerSelect(CoordinatorEntity, SelectEntity):
             # (#885 matrix, decision 3) ALL modes are always listed. #277 Q1
             # hid ``solar_plus_cheap`` on tariff-less installs so nobody
             # picked an option that silently degrades — but hiding made it
-            # undiscoverable, and Guido looked for it and could not find
+            # undiscoverable: a user looked for it and could not find
             # it. The protection moves to the CARD: it reads
             # ``tariff_available`` below and renders the option disabled
             # with the reason, which keeps both properties (cannot be
@@ -636,6 +630,38 @@ class SEMPerBatterySelect(CoordinatorEntity, SelectEntity):
         opts = self.options
         return self._value if self._value in opts else (opts[0] if opts else None)
 
+    def _stored_mode(self):
+        """The mode in the store this select writes: the scalar for the one
+        global select, else this battery's ``battery_modes`` slot. Unset is
+        ``auto`` (what ``_per_battery_config`` runs)."""
+        cfg = getattr(self.coordinator, "config", None)
+        if not isinstance(cfg, dict):
+            return None
+        if self._idx is None:
+            return cfg.get("battery_mode") or DEFAULT_BATTERY_MODE
+        # (#1204) this select's battery, also after the batteries changed
+        # and before the reload rebuilds it
+        idx = slot_today(self._idx, getattr(
+            self.coordinator, "battery_control_units", None), cfg)
+        if idx is None:
+            return None
+        lst = cfg.get("battery_modes")
+        if isinstance(lst, list) and idx < len(lst) and lst[idx]:
+            return lst[idx]
+        return DEFAULT_BATTERY_MODE
+
+    def _handle_coordinator_update(self) -> None:
+        """(#1131) The config is the truth; the select follows it.
+
+        ``_value`` changed only on the user's own pick, so SEM putting a
+        finished Force charge back on Auto (or the set_option service) left
+        the select showing a mode nothing ran. Same rule as the charger mode
+        select (#980)."""
+        value = self._stored_mode()
+        if isinstance(value, str) and value in self.options and value != self._value:
+            self._value = value
+        super()._handle_coordinator_update()
+
     @property
     def available(self) -> bool:
         return self.coordinator.last_update_success
@@ -650,7 +676,6 @@ class SEMPerBatterySelect(CoordinatorEntity, SelectEntity):
         otherwise write the per-battery ``battery_modes`` list."""
         if option not in self.options:
             return
-        self._value = option
         if self._idx is None:
             from . import persist_global_option
             persist_global_option(
@@ -659,10 +684,13 @@ class SEMPerBatterySelect(CoordinatorEntity, SelectEntity):
             )
             _LOGGER.info("Updated battery mode to %s", option)
         else:
+            # (#1204) refused when this battery is gone (reload due)
             from . import persist_per_battery_option
             persist_per_battery_option(
                 self.hass, self._entry, self.coordinator,
                 self._idx, "battery_modes", option, self._count,
+                read_units=getattr(self.coordinator, "battery_control_units", None),
             )
             _LOGGER.info("Updated battery %d mode to %s", self._idx, option)
+        self._value = option
         self.async_write_ha_state()

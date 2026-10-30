@@ -28,7 +28,7 @@ TECHNICAL_TERMS = {
     "SOC", "EV", "ROI", "CO₂", "HT", "NT", "W", "kW", "kWh",
     "Sol>Bat", "Sol>EV", "Sol>Grid", "Sol>Home",
     "Grid>Bat", "Grid>EV", "Grid>Home",
-    "Bat>EV", "Bat>Home", "Batt",
+    "Bat>EV", "Bat>Grid", "Bat>Home", "Batt",
     "SEM", "NORMAL",
 }
 

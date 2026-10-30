@@ -22,6 +22,7 @@ import time
 
 from .charger_adapters.base import ChargerAdapter
 from .charger_types import ChargerDecision, ChargerPower, commanded_power_w
+from .decision_log import log_of
 from ..utils.log_gate import log_on_change
 
 _LOGGER = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ async def actuate(
     *,
     observer: bool = False,
     controller=None,
+    yielded: bool = False,
 ) -> None:
     """Apply a per-charger decision through the reconciler.
 
@@ -108,6 +110,36 @@ async def actuate(
     # ``_observe`` still publishes the DECISION surface (would_decisions);
     # the two are complements, not alternatives — one says what SEM decided,
     # the other what would have hit the wire.
+    # (#1084) The decision log records in the reconciler's apply loop —
+    # what is really written (or withheld by observer), not the decision. A
+    # write the reconciler holds back makes no row. Hand it the log here,
+    # the one place every charger cycle passes.
+    _log = log_of(controller)
+    if _log is not None:
+        try:
+            reconciler.decision_log = _log
+        except Exception:  # noqa: BLE001 — a read-only stub is not a failure
+            pass
+    # (#1079) Another party steers this charger and the user said SEM
+    # yields. Stamped on the device every cycle in BOTH directions, so the
+    # send seam holds it back too; the reconciler is not run at all: it
+    # would call a steered box's changes "drift" and fight them. Observer
+    # mode, when on, still takes its own path below. Nothing is stopped or
+    # started here, and the box's failsafe is left as it is.
+    _ydev = getattr(adapter, "_device", None)
+    if _ydev is not None:
+        try:
+            _ydev.external_yield = bool(yielded) and not observer
+        except AttributeError:  # a frozen test double
+            pass
+    if yielded and not observer:
+        log_on_change(
+            _LOGGER, f"yield:ev:{decision.charger_id}", logging.INFO,
+            "YIELD · %s is steered by another party, SEM sends nothing "
+            "(wanted %s: %s)", decision.charger_id, decision.intent.value,
+            decision.reason,
+        )
+        return
     if observer:
         _observe(decision, adapter, controller=controller)
         # Belt and braces. Retiring the gate above means the seam in

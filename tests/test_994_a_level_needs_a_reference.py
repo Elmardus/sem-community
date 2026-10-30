@@ -795,14 +795,18 @@ class TestTheCalendarAsksTheThingThatDecides:
 
     def test_a_schedule_helper_is_not_silenced(self):
         """A schedule-helper install has NO rules — reading the rule table
-        made this entire input mode answer None forever."""
+        made this entire input mode answer None forever. (#1040) The state
+        speaks for NOW; another hour needs the helper's week
+        (tests/test_1040_calendar_schedule_field.py)."""
         p = self._cal(rules=[], schedule="schedule.tariff",
                       states={"schedule.tariff": SimpleNamespace(state="on")})
-        assert p.get_price_level_at(self.MON) == PriceLevel.NORMAL
+        assert p.get_price_level() == PriceLevel.NORMAL
 
     def test_a_schedule_helper_that_is_gone_says_nothing(self):
         p = self._cal(rules=[], schedule="schedule.tariff", states={})
         assert p.get_price_level_at(self.MON) is None
+        # (#1040) asked about NOW too — another hour is unknown anyway.
+        assert p.get_price_level() is None
 
     def test_a_mis_cased_rule_word_still_means_high_tariff(self):
         """``_get_tariff_at`` returned the word verbatim and the decision
@@ -988,11 +992,14 @@ class TestAnInputSemCannotReadIsNotAnInputSayingNo:
                   if state is not None else {})
         p = self._cal(rules=[], schedule="schedule.t", states=states)
         assert p.get_price_level_at(self.MON) is None
+        # (#1040) asked about NOW too — another hour is unknown anyway.
+        assert p.get_price_level() is None
 
     def test_a_schedule_helper_that_reads_still_answers(self):
+        # (#1040) for now; another hour needs the helper's week.
         p = self._cal(rules=[], schedule="schedule.t",
                       states={"schedule.t": SimpleNamespace(state="on")})
-        assert p.get_price_level_at(self.MON) == PriceLevel.NORMAL
+        assert p.get_price_level() == PriceLevel.NORMAL
 
     @pytest.mark.parametrize("state", ["unavailable", "unknown"])
     def test_an_unreadable_holiday_sensor_is_not_a_working_day(self, state):

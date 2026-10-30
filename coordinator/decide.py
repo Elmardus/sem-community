@@ -37,13 +37,15 @@ from abc import ABC, abstractmethod
 from dataclasses import replace
 from typing import Dict, Optional
 
-from ..consts.core import DEFAULT_MAX_CHARGING_CURRENT
+from ..consts.core import DEFAULT_MAX_CHARGING_CURRENT, DEFAULT_PEAK_HYSTERESIS
+from . import reason_codes as RC
 from .watts_per_amp import amps_that_fit, predict_watts
 from .charger_types import (
     ChargerDecision,
     ChargerIntent,
     ChargerView,
     FleetContext,
+    rewrite,
 )
 from .energy_reclaim import ev_reclaims_battery_charge
 from .price_signal import (
@@ -245,6 +247,21 @@ def reclaimed_pack_w(view: ChargerView) -> float:
                - self_consumption_surplus_w(view, allow_reclaim=False))
 
 
+def _boost_floor_for(view: ChargerView) -> Optional[float]:
+    """(#1025) The running battery boost's floor when the boost is for THIS
+    charger and the pack's SOC has been read, else None."""
+    f = view.fleet
+    boosted = getattr(f, "boost_charger_id", None)
+    floor = getattr(f, "boost_floor_soc", None)
+    if boosted is None or floor is None:
+        return None
+    if boosted != getattr(getattr(view, "power", None), "charger_id", None):
+        return None
+    if not getattr(f, "battery_soc_known", True):
+        return None
+    return float(floor)
+
+
 def _battery_assist_split(view: ChargerView) -> tuple[float, float]:
     """(#885) The Zone 3/4 budget, kept SPLIT into its two parts:
     ``(surplus, assist)`` — what the sun is giving and what the pack is.
@@ -297,8 +314,12 @@ def _battery_assist_split(view: ChargerView) -> tuple[float, float]:
     if not getattr(f, "battery_may_assist_ev", True):
         return surplus, 0.0
 
+    # (#1025) A battery boost for THIS charger — the user's one-off "into
+    # the car down to N %". It has its own floor, so the buffer's zone does
+    # not apply; an unread SOC still offers nothing.
+    boost_floor = _boost_floor_for(view)
     zone = fleet_soc_zone(f)
-    if zone < 3:
+    if zone < 3 and boost_floor is None:
         return surplus, 0.0
     # Solar gate: assist only SUPPLEMENTS real solar. Below the
     # configured surplus threshold (default 1200 W) the battery is
@@ -314,7 +335,7 @@ def _battery_assist_split(view: ChargerView) -> tuple[float, float]:
     # measured, floored and permissioned before it gets here. Master switch
     # OFF by default: this is the first non-inert behaviour in the arc.
     #
-    # (03.09, Guido: "why do I have to switch it on since I chose the option
+    # (03.09: "why do I have to switch it on since I chose the option
     # on the EV charger") The CONSENT is the charger's mode: *Solar + battery*
     # already says the pack may feed this car. The master switch was the
     # release train's inertness device for the arc, not a user concept; it
@@ -325,7 +346,8 @@ def _battery_assist_split(view: ChargerView) -> tuple[float, float]:
         # (#892) a morning window the user opened is consent AND budget: the
         # pack is spent into the car on purpose, bounded by the drain floor
         # decide_battery enforces — so the solar gate does not apply.
-        _window = bool(getattr(f, "ev_morning_window_open", False))
+        _window = (bool(getattr(f, "ev_morning_window_open", False))
+                   or boost_floor is not None)
         _consent = (getattr(view, "mode", None) == "solar_plus_battery"
                     or bool(getattr(f, "forecast_spending_enabled", False))
                     or _window)
@@ -335,7 +357,9 @@ def _battery_assist_split(view: ChargerView) -> tuple[float, float]:
             return surplus, 0.0
     potential = battery_assist_potential_w(
         f.battery_soc,
-        f.buffer_soc,
+        # (#1025) a boost draws the pack to ITS floor — the user's explicit
+        # one-off, below the buffer if they said so.
+        f.buffer_soc if boost_floor is None else boost_floor,
         f.auto_start_soc,
         f.battery_assist_max_power_w,
         # (#878) The budget was the KEY — "may the car have any of the pack?"
@@ -343,7 +367,8 @@ def _battery_assist_split(view: ChargerView) -> tuple[float, float]:
         # being covered overnight. The sell sink has taken the same floor
         # since #778; this one was still stopping at the static buffer, so
         # the two sinks disagreed about the same pack.
-        dynamic_floor_soc=getattr(f, "dynamic_floor_pct", None),
+        dynamic_floor_soc=(getattr(f, "dynamic_floor_pct", None)
+                           if boost_floor is None else None),
     )
     # (#878) ONE battery, one allowance. The potential above is derived from
     # fleet-wide values — SOC, buffer, floor, cap — so every charger computes
@@ -401,8 +426,10 @@ def _relabel(decision: ChargerDecision, mode: str, prefix: str) -> ChargerDecisi
     mode was ignored. The relabel keeps the inner detail but names
     the configured mode and why it delegated.
     """
-    return replace(
+    # (#1174) a new label, not a new decision: the inner why stands
+    return rewrite(
         decision, mode=mode, reason=f"{prefix} — {decision.reason}",
+        reason_code=decision.reason_code,
     )
 
 
@@ -576,7 +603,7 @@ def _assist_blocked_why(f) -> str:
     caller's gate IS this function being non-empty. A further reason adds a
     branch here and reaches every reader at once.
 
-    KNOWN GAP, deliberately not closed here (#983 review, for Guido): #878 gave
+    KNOWN GAP, deliberately not closed here (#983 review, needs a decision): #878 gave
     ``battery_assist_potential_w`` an effective floor of
     ``max(buffer_soc, dynamic_floor_pct)``, so a pack at 75 % with a 70 %
     buffer and an 80 % overnight floor delivers ZERO assist while this resolver
@@ -631,6 +658,7 @@ class OffMode(ModeStrategy):
             commanded_amps=0,
             budget_w=0.0,
             reason="off mode — hands-off, SEM sends nothing to this charger (#898)",
+            reason_code=RC.CHARGER_OFF,
         )
 
 
@@ -642,12 +670,17 @@ class AlwaysMaxMode(ModeStrategy):
     """Charge at hardware max. Grid backfill expected."""
 
     def decide(self, view: ChargerView) -> ChargerDecision:
-        if not view.power.connected:
+        # (#1153) Every mode idles on a car that is ABSENT, not on one that
+        # is merely not known: a charger with no plug sensor shows a car
+        # only while it draws, so "disconnected" there would never start it
+        # again. The offers it gets are bounded by ChargeStability.
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=view.power.charger_id,
                 mode="always_max",
                 intent=ChargerIntent.IDLE,
                 reason="always_max mode but EV disconnected",
+                reason_code=RC.CHARGER_NO_CAR,
             )
         return ChargerDecision(
             charger_id=view.power.charger_id,
@@ -656,6 +689,7 @@ class AlwaysMaxMode(ModeStrategy):
             commanded_amps=0,  # adapter resolves from device.max_current
             budget_w=0.0,  # not budget-limited
             reason="always_max mode — charge at hardware maximum",
+            reason_code=RC.CHARGER_MAX,
         )
 
 
@@ -681,11 +715,12 @@ class SolarOnlyMode(ModeStrategy):
         f = view.fleet
         cid = view.power.charger_id
 
-        if not view.power.connected:
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=cid, mode="solar_only",
                 intent=ChargerIntent.IDLE,
                 reason="solar_only mode but EV disconnected",
+                reason_code=RC.CHARGER_NO_CAR,
             )
 
         # (#634) The "At least" floor is a mode-independent GUARANTEE: at
@@ -707,6 +742,7 @@ class SolarOnlyMode(ModeStrategy):
                     f"solar_only: solar={_cw(f.solar_w)}W < "
                     f"{_cw(f.min_solar_w)}W threshold"
                 ),
+                reason_code=RC.CHARGER_LOW_SUN,
             )
 
         # Compute surplus available to EV. Bare surplus subtracts
@@ -795,6 +831,7 @@ class SolarOnlyMode(ModeStrategy):
                     f"{_pack_term}) "
                     f"< min={min_w}W (={min_amps}A) — idle{_vetoed}"
                 ),
+                reason_code=RC.CHARGER_LOW_SUN,
             )
 
         max_amps = int(cfg.get("ev_max_current", DEFAULT_MAX_CHARGING_CURRENT)) \
@@ -814,6 +851,7 @@ class SolarOnlyMode(ModeStrategy):
                 f"→ {amps}A (solar={_cw(f.solar_w)}W, home={_cw(f.home_w)}W, "
                 f"batt_chg={_cw(f.battery_charge_w)}W){_vetoed}"
             ),
+            reason_code=RC.CHARGER_SUN,
         )
 
 
@@ -846,6 +884,7 @@ def night_top_up_decision(view: "ChargerView", mode_name: str,
                 f"{mode_name} {phase}: target reached "
                 f"(remaining={view.target_kwh:.2f} kWh)"
             ),
+            reason_code=RC.CHARGER_MIN_DONE,
         )
 
     # (#638) The planning layer placed this charge in a later window.
@@ -872,6 +911,10 @@ def night_top_up_decision(view: "ChargerView", mode_name: str,
             charger_id=cid, mode=mode_name,
             intent=ChargerIntent.IDLE,
             reason=f"{mode_name} {phase}: waiting for the planned window{detail}",
+            reason_code=(RC.CHARGER_PLAN_WAIT_UNTIL if view.plan.until is not None
+                         else RC.CHARGER_PLAN_WAIT),
+            reason_params=({"time": f"{view.plan.until:%H:%M}"}
+                           if view.plan.until is not None else {}),
         )
 
     cfg = view.config if isinstance(view.config, dict) else {}
@@ -899,6 +942,7 @@ def night_top_up_decision(view: "ChargerView", mode_name: str,
                 f"{mode_name} {phase}: deadline floor {amps}A{tag}, "
                 f"remaining {view.target_kwh:.1f} kWh"
             ),
+            reason_code=RC.CHARGER_DEADLINE,
         )
 
     # Plain night top-up. (#630) Run at the peak-managed headroom rate
@@ -918,6 +962,7 @@ def night_top_up_decision(view: "ChargerView", mode_name: str,
             + (" (peak-managed)" if amps != min_amps else "")
             + f", remaining {remaining_str} kWh"
         ),
+        reason_code=RC.CHARGER_TOP_UP,
     )
 
 
@@ -933,11 +978,12 @@ class MinPlusSolarMode(ModeStrategy):
         f = view.fleet
         cid = view.power.charger_id
 
-        if not view.power.connected:
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=cid, mode="min_plus_solar",
                 intent=ChargerIntent.IDLE,
                 reason="min_plus_solar but EV disconnected",
+                reason_code=RC.CHARGER_NO_CAR,
             )
 
         if f.is_night:
@@ -962,11 +1008,12 @@ class MinPlusSolarMode(ModeStrategy):
         drift class is exactly two copies of this arithmetic."""
         f = view.fleet
         cid = view.power.charger_id
-        if not view.power.connected:
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=cid, mode=mode_name,
                 intent=ChargerIntent.IDLE,
                 reason=f"{mode_name} day: EV disconnected",
+                reason_code=RC.CHARGER_NO_CAR,
             )
         zone = fleet_soc_zone(f)
         # Zone 1: battery priority — never charge EV from anywhere
@@ -989,6 +1036,7 @@ class MinPlusSolarMode(ModeStrategy):
                     f"(SOC={f.battery_soc:.0f}% < {_knob}="
                     f"{_edge:.0f}%) — battery priority"
                 ),
+                reason_code=RC.CHARGER_BATTERY_FIRST,
             )
         # Zone 2: pure solar (same as solar_only).
         if zone == 2:
@@ -1061,6 +1109,7 @@ class MinPlusSolarMode(ModeStrategy):
                     f"{view.night_deliverable_kwh:.1f} kWh night-deliverable) "
                     f"→ {amps}A (budget={_cw(budget_w)}W, floor={min_amps}A)"
                 ),
+                reason_code=RC.CHARGER_MIN_TODAY,
             )
         if surplus_amps >= min_amps:
             amps = min(max_amps, surplus_amps)
@@ -1080,6 +1129,7 @@ class MinPlusSolarMode(ModeStrategy):
                     f"{mode_name} day Zone {zone}: budget={_cw(budget_w)}W "
                     f"→ {amps}A (solar surplus + capped battery assist)"
                 ),
+                reason_code=RC.CHARGER_SUN_BATTERY,
             )
         remaining_str = f"{remaining:.1f}" if remaining is not None else "?"
         # The idle tail differs per mode: min_plus_solar reassures about the
@@ -1098,6 +1148,7 @@ class MinPlusSolarMode(ModeStrategy):
                 f"{mode_name} day Zone {zone}: budget={_cw(budget_w)}W "
                 f"below {min_amps}A min {tail}"
             ),
+            reason_code=RC.CHARGER_LOW_SUN,
         )
 
 
@@ -1127,11 +1178,12 @@ class SolarPlusBatteryMode(ModeStrategy):
         f = view.fleet
         cid = view.power.charger_id
 
-        if not view.power.connected:
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=cid, mode="solar_plus_battery",
                 intent=ChargerIntent.IDLE,
                 reason="solar_plus_battery but EV disconnected",
+                reason_code=RC.CHARGER_NO_CAR,
             )
 
         if f.is_night:
@@ -1147,6 +1199,7 @@ class SolarPlusBatteryMode(ModeStrategy):
                     "this mode never grid-charges (#346 contract, same "
                     "as solar_only)"
                 ),
+                reason_code=RC.CHARGER_NO_NIGHT,
             )
 
         return _MIN_PLUS_SOLAR._decide_day(
@@ -1166,11 +1219,12 @@ class SolarPlusCheapMode(ModeStrategy):
         f = view.fleet
         cid = view.power.charger_id
 
-        if not view.power.connected:
+        if view.power.car_absent:
             return ChargerDecision(
                 charger_id=cid, mode="solar_plus_cheap",
                 intent=ChargerIntent.IDLE,
                 reason="solar_plus_cheap but EV disconnected",
+                reason_code=RC.CHARGER_NO_CAR,
             )
 
         # Day during expensive tariff window → fall back to pure
@@ -1279,10 +1333,17 @@ def clamp_to_peak_slot(result, view):
     cascade ("lower-priority chargers see only the surplus this one didn't
     take"). One budget, one accumulator, same shape.
 
-    Never a proactive idle: the clamp floors at the effective minimum, because
-    stopping cars on a transient is the flap this project spent months
-    killing. The hard stop stays with #747's EMERGENCY, which runs after and
-    wins.
+    (#1069) When the room left cannot carry the effective minimum, the
+    answer is a PAUSE, not the minimum: an IDLE stamped ``peak_paused``. It
+    used to floor at 6 A, so against a limit near 6 A (≈ 4.1 kW, a §14a
+    4.2 kW cap) the car sat over the limit and flipped with every cycle's
+    room. The pause is transient (``bridgeable``): the stability layer holds
+    the car for the user's disable delay before it stops and waits the
+    enable delay before a restart — one rule for surplus and peak. A car
+    that is not drawing is offered a restart only with room for its minimum
+    PLUS the peak hysteresis, so the restart cannot land straight back on
+    the edge. The hard stop stays with #747's EMERGENCY, which runs after
+    and wins.
     """
     _allowed = getattr(view.fleet, "peak_slot_allowed_w", None)
     if _allowed is None or result.intent not in (
@@ -1296,6 +1357,10 @@ def clamp_to_peak_slot(result, view):
     if getattr(view.fleet, "grid_import_known", True):
         _others_w = max(0.0, float(view.fleet.grid_import_w)
                         - min(_this_w, float(view.fleet.grid_import_w)))
+        # (#1069) SEM's own forced battery charge is in that reading, and it
+        # yields to the car next cycle — room for the car, not a rival.
+        _others_w -= min(_others_w, max(0.0, float(
+            getattr(view.fleet, "battery_forced_grid_w", 0.0) or 0.0)))
     else:
         # (#906) The meter is blind this cycle: ``grid_import_w`` is the
         # reader's 0.0, so "grid minus this charger" would read the whole
@@ -1313,6 +1378,23 @@ def clamp_to_peak_slot(result, view):
             * float(view.config.get("ev_voltage") or 230))
     _max_a = int(view.config.get("ev_max_current")
                  or DEFAULT_MAX_CHARGING_CURRENT)
+    # (#1069) Room for the minimum, or a pause. A car already drawing keeps
+    # going while its minimum fits; a stopped car needs the minimum plus the
+    # peak hysteresis, so a restart does not land back on the edge.
+    _min_w = predict_watts(view.wpa_table, _min_a, _wpa)
+    _drawing = _this_w >= 0.5 * _min_w
+    _hyst_w = 0.0 if _drawing else 1000.0 * float(
+        view.config.get("peak_hysteresis", DEFAULT_PEAK_HYSTERESIS) or 0.0)
+    if _ev_allow_w < _min_w + _hyst_w:
+        return rewrite(
+            result, intent=ChargerIntent.IDLE, commanded_amps=0,
+            budget_w=0.0, capped_by_limit=True, peak_paused=True,
+            bridgeable=True,
+            reason=(f"{result.reason} [peak slot guard: "
+                    f"{_ev_allow_w:.0f}W room, {_min_a}A needs "
+                    f"{_min_w + _hyst_w:.0f}W — pausing]"),
+            reason_code=RC.CHARGER_PEAK_PAUSE, reason_params={},
+        )
     _cap_a = max(_min_a, amps_that_fit(
         view.wpa_table, _ev_allow_w, _wpa, _max_a))
     # Speak only when it BITES: an allowance at or above the hardware
@@ -1321,13 +1403,14 @@ def clamp_to_peak_slot(result, view):
     if _cap_a < _max_a and (
             result.intent is ChargerIntent.CHARGE_MAX
             or result.commanded_amps > _cap_a):
-        return replace(
+        return rewrite(
             result, intent=ChargerIntent.CHARGE_AT_AMPS,
             commanded_amps=_cap_a,
             budget_w=predict_watts(view.wpa_table, _cap_a, _wpa),
             capped_by_limit=True,   # (#905) lands in one cycle
             reason=(f"{result.reason} [peak slot guard: "
                     f"{_ev_allow_w:.0f}W headroom → {_cap_a}A]"),
+            reason_code=RC.CHARGER_PEAK_SLOW, reason_params={},
         )
     return result
 
@@ -1354,12 +1437,13 @@ def decide(view: ChargerView) -> ChargerDecision:
     if view.mode == "off":
         return _OFF.decide(view)
 
-    if view.soc_ceiling_reached and view.power.connected:
+    if view.soc_ceiling_reached and not view.power.car_absent:
         # Max SOC/target is a STRUCTURAL stop — never bridge it.
         return ChargerDecision(
             charger_id=view.power.charger_id, mode=view.mode,
             intent=ChargerIntent.IDLE, bridgeable=False,
             reason=f"{view.mode}: max SOC/target reached — stop charging (#548)",
+            reason_code=RC.CHARGER_FULL,
         )
 
     strategy = MODE_STRATEGIES.get(view.mode)
@@ -1382,11 +1466,14 @@ def decide(view: ChargerView) -> ChargerDecision:
     if result.intent is ChargerIntent.IDLE and not view.fleet.is_night:
         bridgeable, why = _idle_bridgeable(view)
         if bridgeable:
-            result = replace(result, bridgeable=True)
+            result = rewrite(result, bridgeable=True,
+                             reason_code=result.reason_code)
         else:
-            result = replace(
+            # (#1174) a label on the idle, not a new why
+            result = rewrite(
                 result, bridgeable=False,
                 reason=f"{result.reason} [structural: {why}]",
+                reason_code=result.reason_code,
             )
 
     # (#864) The PREVENTIVE peak bound — the slot budget, applied to the
@@ -1414,24 +1501,26 @@ def decide(view: ChargerView) -> ChargerDecision:
     if peak in ("shedding", "emergency") and result.intent in (
             ChargerIntent.CHARGE_AT_AMPS, ChargerIntent.CHARGE_MAX):
         if peak == "emergency":
-            return replace(
+            return rewrite(
                 result, intent=ChargerIntent.IDLE, commanded_amps=0,
                 budget_w=0.0, bridgeable=False,
                 # (#940) senior to the contactor's minimum ON: the peak
                 # defence is a guarantee, and it opens the relay this cycle.
                 safety_stop=True,
                 reason=f"{result.reason} [peak EMERGENCY — EV sheds first]",
+                reason_code=RC.CHARGER_PEAK_STOP, reason_params={},
             )
         min_a = effective_min_amps(dict(view.config), 6)
         if (result.intent is ChargerIntent.CHARGE_MAX
                 or result.commanded_amps > min_a):
             wpa = (float(view.config.get("ev_phases") or 3)
                    * float(view.config.get("ev_voltage") or 230))
-            return replace(
+            return rewrite(
                 result, intent=ChargerIntent.CHARGE_AT_AMPS,
                 commanded_amps=min_a,
                 budget_w=predict_watts(view.wpa_table, min_a, wpa),
                 capped_by_limit=True,   # (#905) a shed order is not a preference
                 reason=f"{result.reason} [peak SHEDDING — clamped to {min_a}A]",
+                reason_code=RC.CHARGER_PEAK_SLOW, reason_params={},
             )
     return result

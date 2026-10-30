@@ -59,6 +59,27 @@ LOAD_PRIORITY_BASE: Final = 100
 # sensor IS present, ``calibrate_rated_power()`` learns the real draw from here.
 DEFAULT_DEVICE_RATED_POWER: Final = 1000
 
+# #1067 — a load's rating is the power it HOLDS, not one reading. A
+# compressor or motor start reads several times the running draw for a
+# few seconds (a 200 W dehumidifier read ~1.4 kW once), and the rating
+# only ever goes up, so one start pinned it for life. Live and from
+# history, a level counts only once the sensor stayed at or above it
+# for this long. A gap between live readings longer than
+# ``RATED_POWER_SAMPLE_GAP_S`` starts the hold again; it must stay above
+# the longest update interval the options allow (60 s).
+RATED_POWER_HOLD_S: Final = 120.0
+RATED_POWER_SAMPLE_GAP_S: Final = 90.0
+# The rule a saved rating was learned under. A store without it (or with
+# an older one) holds ratings learned from single readings: each is
+# checked once more against the recorder before it is trusted (#1067).
+RATED_POWER_RULE: Final = 2
+# A start reads at most this many times what the load then holds. The
+# re-check lowers a saved rating only to a level at least this share of
+# it: a load left on but idle (a boiler at 4 W under a 2.5 kW rating) is
+# not a start peak, and must not take the place of its rating. Generous
+# on purpose: a rating set too low heals after one hold, a kept peak never.
+RATED_POWER_START_PEAK_RATIO: Final = 20.0
+
 # Battery Discharge Protection
 DEFAULT_BATTERY_DISCHARGE_PROTECTION_ENABLED: Final = True  # Enable discharge protection during night charging
 DEFAULT_BATTERY_MAX_DISCHARGE_POWER: Final = 5000  # Watts - Maximum allowed discharge (caps 1:1 home consumption matching)
@@ -71,6 +92,14 @@ DEFAULT_BATTERY_DISCHARGE_CONTROL_ENTITY: Final = ""
 # the existing dark-read path — instead of steering a cycle.
 BATTERY_SOC_MAX_STEP_PCT: Final = 25.0   # pp between two reads; a LUNA moves single digits per MINUTE
 BATTERY_SOC_STEP_CONFIRM_READS: Final = 3  # a rejected level that persists this many reads IS the truth
+# (#996) A runtime capability miss (no forecast integration, no export-limit
+# entity) is remembered across restarts only once it has held: this many
+# reads in a row AND at least CAPABILITY_MISS_HOLD_S. Same confirm-streak
+# shape as the SOC step above — a Solcast forecast that is unavailable for
+# one cycle must not drop the forecast rows at the next restart. A hit is
+# remembered at once.
+CAPABILITY_MISS_CONFIRM_READS: Final = 6
+CAPABILITY_MISS_HOLD_S: Final = 600.0
 BATTERY_POWER_PLAUSIBLE_MAX_W: Final = 100_000.0  # no home battery; 22.8 MW was 2 000x the hardware
 
 # (#988) How much energy must be leaving the house with no source other than
@@ -87,7 +116,7 @@ SOLAR_ZERO_REFUTED_W: Final = 200.0
 # Huawei modbus blinks ~137x/day (p50 29 s, p99 114 s; 238 s the longest
 # seen 03.09) — since #818/#875 every blink blanked the dashboard. The
 # coordinator's own honesty (inputs_degraded, *_unavailable) is untouched;
-# this is the SURFACE holding, and saying so. (Guido, 03.09: "it was very
+# this is the SURFACE holding, and saying so. (03.09: "it was very
 # stable before.")
 SENSOR_DARK_READ_GRACE_S: Final = 180
 
@@ -325,7 +354,9 @@ DEFAULT_SURPLUS_CONTROL_ENABLED: Final = True
 DEFAULT_TARIFF_MODE: Final = "static"  # static, dynamic
 DEFAULT_CHEAP_PRICE_THRESHOLD: Final = 0.15  # CHF/kWh
 DEFAULT_EXPENSIVE_PRICE_THRESHOLD: Final = 0.35  # CHF/kWh
-DEFAULT_ELECTRICITY_NT_RATE: Final = 0.3387  # CHF/kWh nighttime incl. VAT (default flat rate = HT)
+DEFAULT_ELECTRICITY_IMPORT_RATE: Final = 0.3387  # CHF/kWh daytime (HT) incl. VAT
+# (#1040) No off-peak default: an unsaved off-peak rate IS the import rate
+# (coordinator._cfg_tariff_rates). DEFAULT_ELECTRICITY_NT_RATE had no reader.
 DEFAULT_DEMAND_CHARGE_RATE: Final = 4.32  # CHF/kW/month incl. VAT (default residential base tariff)
 
 # ============================================
@@ -341,7 +372,6 @@ DEFAULT_HEAT_PUMP_FORCE_ON_THRESHOLD: Final = 5000  # Watts
 DEFAULT_HOT_WATER_ENABLED: Final = False
 DEFAULT_HOT_WATER_PRIORITY: Final = 6
 DEFAULT_HOT_WATER_POWER: Final = 2000  # Watts
-DEFAULT_HOT_WATER_MAX_TEMP: Final = 60.0  # Degrees
 
 # ============================================
 # PV PERFORMANCE (Phase 5)
@@ -385,3 +415,50 @@ RECORDER_MAX_STATE_ATTRS_BYTES: Final = 16384
 # refuted a 90 % rule that had moved it by 255 bytes).
 RECORDER_ATTR_HEADROOM_BYTES: Final = 1384
 RECORDER_ATTR_BUDGET_BYTES: Final = RECORDER_MAX_STATE_ATTRS_BYTES - RECORDER_ATTR_HEADROOM_BYTES
+
+# (#1068) Soak flag, not a setting: the plan's day follows measured yield.
+# Off until the PROD soak proves it; then the default flips and the key
+# retires. Set with the set_option service, never a GUI control.
+CONF_INTRADAY_FORECAST: Final = "intraday_forecast"
+DEFAULT_INTRADAY_FORECAST: Final = False
+
+# (#1088) Grid CO2 intensity: an optional pick when the crawler's unit-based
+# find is not the source the user means. Unset = the crawler's first find.
+CONF_GRID_CO2_ENTITY: Final = "grid_co2_entity"
+# (#1088) Soak flag, not a setting: CO2 avoided counts each kWh at the
+# grid's live intensity instead of the fixed Swiss average. Off until the
+# PROD soak; then the default flips and the key retires (set_option only).
+CONF_CO2_LIVE_INTENSITY: Final = "co2_live_intensity"
+DEFAULT_CO2_LIVE_INTENSITY: Final = False
+
+# (#1082) Outdoor temperature: an optional pick (a sensor or a weather
+# entity) when the crawler's find is not the thermometer the user means.
+# Unset = the crawler's outdoor sensor, else the HA weather entity. The key
+# is the one SEM always read; it now has a picker in the GUI.
+CONF_OUTDOOR_TEMPERATURE_ENTITY: Final = "outdoor_temperature_entity"
+# (#1082) Soak flag, not a setting: the home-load forecast adds what the
+# temperature explains (degree hours). It LEARNS from day one either way;
+# the flag only lets the plans use it. Off until the PROD soak.
+CONF_TEMPERATURE_LOAD_FORECAST: Final = "temperature_load_forecast"
+DEFAULT_TEMPERATURE_LOAD_FORECAST: Final = False
+
+# (#1083) Soak flag, not a setting: tag each finished day (sunny / grey /
+# car / cheap / data gap) for the replay tool. It only records. Off until the
+# PROD soak; set with the set_option service, never a GUI control.
+CONF_DAY_TAGS: Final = "day_tags"
+DEFAULT_DAY_TAGS: Final = False
+
+# (#1083) The Simulation tab switch: shows the tab, turns day tagging on and
+# backfills 90 days of tags. A person's choice — persisted like the other
+# switch flags (``persisted_flags``).
+CONF_SIMULATION_TAB: Final = "simulation_tab"
+
+# (#1021) The grid operator's reduce-load relay (§14a EnWG, ripple control).
+# Unset = inert. Any binary_sensor / input_boolean the user picks.
+CONF_SHED_SIGNAL_ENTITY: Final = "shed_signal_entity"
+# kW cap while the relay is on, or a sensor entity publishing it (EEBus LPC
+# through an integration). Unreadable → 4.2 kW, the legal floor.
+CONF_SHED_SIGNAL_LIMIT: Final = "shed_signal_limit"
+DEFAULT_SHED_SIGNAL_LIMIT: Final = 4.2
+# Per device: this load sits behind the operator's relay (CH ripple control).
+CONF_BEHIND_OPERATOR_RELAY: Final = "behind_operator_relay"

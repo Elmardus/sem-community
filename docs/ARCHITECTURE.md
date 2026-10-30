@@ -616,7 +616,7 @@ SEM tracks the number of hours since the water last reached the Legionella targe
 5. Variable-power devices get proportional current allocation
 6. When surplus drops: LIFO deactivation (lowest priority first)
 
-The surplus controller is always-on and runs every coordinator update (~10s). Price-responsive mode is automatic when `tariff_mode == "dynamic"`; it may only DAMP the distributable pool (`price_damped_pool`, #953) — it used to add a virtual +3 kW / +10 kW *after* the coordinator had bounded the pool by the sun (#620/#938), which is how a "Solar only" load came to run from the grid. The two remaining terms that still join the pool carry their own physics: the feed-in-limit add-back is derived from the already-bounded surplus, and the #576 battery reclaim is bounded by `solar_bounded_reclaim` before it is handed to `update()`.
+The surplus controller is always-on and runs every coordinator update (~10s). Price-responsive mode is automatic when `tariff_mode == "dynamic"`; it may only DAMP the distributable pool (`price_damped_pool`, #953) — it used to add a virtual +3 kW / +10 kW *after* the coordinator had bounded the pool by the sun (#620/#938), which is how a "Solar only" load came to run from the grid. The two remaining terms that still join the pool carry their own physics: the feed-in-limit add-back is derived from the already-bounded surplus, and the #576 battery reclaim is bounded by `solar_bounded_reclaim` before it is handed to `update()`. The first term is signed since #1102: the import (the mean of two minutes; while a car may charge — three minutes after a plug-in or out, a moving offer or a falling draw, or while it draws over 500 W — the lowest of two minutes, against the car's highest draw of the same two minutes: `sustained_import`, `sustained_car_draw`; none on a dark meter) comes off before the loads' own draw is added back — less the share the chargers' draw explains (a charger leaves a running load above it its sun, #885) and a 100 W deadband for zero-export inverters. The reclaim then takes off only the import the first term could not (`import_absorbed_by_loads_w`), so the two terms are `draw + export + charge − import` whether a load runs or not. Only loads the walk debits are added back (not mode Off, not relay-locked); only Surplus-mode loads are steered. A load on a paid source (cheap-hours grid, Tier-2 battery) takes only the sun that is left in the walk. The deficit pass keeps its order (lowest first, the next one up when the lowest cannot stop) and gives back exactly what the walk took from each, and the battery's slot keeps a deficit made above it (`reclaim_handed_back`).
 
 ---
 
@@ -1228,6 +1228,138 @@ ha_energy_reader.py             — Read HA Energy Dashboard config
 load_management.py              — LoadManagementCoordinator (peak tracking)
 hardware_detection.py           — Auto-discover inverter/battery/charger
 ```
+
+### Replay and day tags (#1083)
+
+`analytics/day_tags.py` tags a finished day (sunny / mixed / grey, snow,
+car, negative / cheap, gap); `coordinator/day_tag_store.py` writes the
+tags nightly behind the `day_tags` soak flag. `tools/replay/` (never
+shipped) replays recorded PROD days through a tree's real code and
+compares a branch with develop — the proof step for logic changes.
+Details and limits: `docs/REPLAY.md`.
+
+### Simulation model (#1083)
+
+`analytics/simulation/` is pure and ships: `hourly_day.HourlyDay` (24
+hours of kWh, mean SOC and prices), `battery_sim.simulate_day` (SEM's real
+`decide_battery` and night plan, hour by hour), `balance` (SEM's energy
+balance and cost rule) and `summary` (per day and day type, always
+`modelled: true`). `coordinator/simulation_job.py` feeds it hourly
+statistics, one day at a time, behind the `simulation_tab` switch (off by
+default). `tools/replay/hourly.py` feeds it the replay corpus; `tools/`
+imports `analytics/`, never the reverse. User limits:
+`docs/KNOWN_LIMITATIONS.md`.
+
+---
+
+## 2.2 — what the house can use, and one crawler
+
+### Capabilities (#996)
+
+`coordinator/install_modules.py` — the `Module` enum that already carried the
+four hardware modules gained five **capabilities**: `DYNAMIC_TARIFF`,
+`EXPORT_LIMIT`, `SOLAR_FORECAST`, `PV_SIZE`, `INVESTMENT`. Same three states
+(present / absent / unknown), same consumers: `kept_descriptions` skips the
+entities, `absent_entity_ids` lets the dashboard generator prune their
+references, the config card renders nothing for a missing entity.
+
+- Tariff, plant size and investment are read from SEM's own options and are
+  never unknown.
+- Export limit and forecast are **entity-registry facts**: an enabled entity
+  of a forecast integration exists, or the export-limit entity exists on the
+  inverter's device. A live reading that is unavailable is not a miss, so an
+  outage can never remove a control.
+- A miss is stored only after six reads over ten minutes while Home
+  Assistant is running. A read before that falls back to the stored answer,
+  or unknown. The coordinator compares the live answer with what it built
+  every cycle and reloads once when a capability appears. A turn to absent
+  takes effect at the next setup.
+
+### Charger roles — one crawler (#1032)
+
+`hardware_detection.py` is the one crawler. The roles live in it
+(`read_charger_roles`, `_roles_offer`, `_roles_pass`), the words in
+`consts/role_lexicon.py`, services with their fields through `_services_of`.
+No NEW brand code: a lint test refuses a new `_wire_<brand>` or
+`_discover_<brand>`, and the role reader may name no integration. A
+shrinking list of older per-brand functions is still being folded into
+roles, each on its own branch, proven on the rig first
+(`tests/test_hw_wave_no_brand_branches.py`'s `BRAND_PATHS_TODAY`).
+
+| Role | What it reads |
+|---|---|
+| companion device | a device with no charger role, next to a charger of the same integration, joins it |
+| start/stop pair | a start button plus a stop button or switch |
+| the car's own charge control | a car's charging-amps number and its charge switch |
+| a charger that only reports | wired to the one car with that control; with two cars SEM asks |
+| a select read by its options | a stop and a charge option → charge mode; 1 / 3 / auto → phases |
+| services by their fields | per-phase current fields → a phase-capable current control |
+
+What the roles find goes where the near-miss offers already go: the setup
+wizard and the add-charger step pre-fill from them, from one reader. A field
+the roles cannot fill stays empty. Nothing is saved without the user; a
+charger that is configured, or already driven through its services, gets no
+offer. Brands are test fixtures: `tests/integrations_rig/` replays real
+integration output (core test data at the pinned Home Assistant, HACS
+integrations vendored at a pinned commit). `docs/hardware_proof.md` is what
+the crawler found for every unconfirmed matrix row.
+
+### Session energy from the charger's meter (#1024)
+
+`ev_control._update_session_tracking` is the one writer of a session record.
+The total is the charger's session counter, else the rise of its lifetime
+counter, else this charger's own measured power. The power flows give only
+the split into solar, grid and battery, scaled to that total, and the cost
+follows the split. `session_history.py` serves the list (websocket
+`solar_energy_management/session_history`) and the CSV (service
+`export_session_history`). The record carries `energy_source`.
+
+### PV health (#1022)
+
+`analytics/pv_health.py` is pure. The coordinator feeds it the forecast
+ledger's settled days, the sensor reader's dark seconds for the solar input,
+and the outdoor temperature when a source exists (`_outdoor_temperature_or_none`;
+the 15 °C fallback never claims snow). One colour on `sensor.sem_pv_health`.
+
+### Hints (#1019)
+
+`coordinator/hints.py` is a pure engine. Timed hints key off SEM's own night
+flag (`utils/time_manager.py`, `is_night_mode`), never a wall-clock hour, so
+the compressed-sun simulation drives them. One message per event key, the
+sent keys persisted in storage. Delivery: `notifications.notify_hint` — the
+`sem_hints` phone channel and the `solar_energy_management_notification`
+event with `category: hint`.
+
+### External control (#1079)
+
+`coordinator/external_control.py` is pure logic: `ExternalControlBook`
+tracks, per charger or for the battery, whether another party (an
+aggregator, a grid operator) currently steers it, from a user-picked
+indicator entity. Three modes: `none` (today's behaviour), `yield` (SEM
+writes nothing to the device while the indicator is active — it never
+stops or starts it, and the device's measured draw still counts in the
+home's accounting), `observe` (SEM keeps control; a Repair fires when it
+sees a write it did not make). The coordinator calls `update()` once a
+cycle and reads `book.yielding(key)` wherever a device's actuator decides
+whether to write — every write path, not only the main decide/actuate
+pass: a startup restore (`actuate_battery.restore_discharge_limit_on_startup`)
+and `charge_pacing.py`'s writer both check it too, found missing in
+review the same day the feature shipped. A restart never reads as
+"steered" (an unreadable indicator changes nothing), and a flickering
+indicator holds active for `HOLD_S` (300 s) past its last true reading.
+
+### Charge pacing writer (#820)
+
+`coordinator/charge_pacing.py`, `ChargePacingWriter.apply`: the cap goes
+through the one clamp (`power_control.clamp_to_entity_range`, step grid from
+zero, the entity's min as the floor), a deadband (one step, 100 W or 5 %), and
+a 5-minute interval. A write is **taken** when the register changed since the
+write and sits within a step or 10 % of it; **refused** when it has not moved
+for three cycles and 90 s. The inverter's own number is accepted and not
+rewritten. The record (cap, the value to restore, the accepted value) is
+persisted; adoption after a restart proves the register before trusting it,
+and the unload release reads the record, so a lifetime spent in observer
+mode still hands the register back.
 
 ---
 

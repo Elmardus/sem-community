@@ -11,6 +11,8 @@
 
 import { LitElement, html, css, svg, nothing } from 'lit';
 import { semTheme } from './sem-shared.js';
+import { stateLabel } from '../util/state-label.js';
+import { allOut, readNumber } from '../util/missing-value.js';
 
 export { html, css, svg, nothing };
 
@@ -80,15 +82,14 @@ export class SEMLitBase extends LitElement {
         // Skip transient unavailable states caused by coordinator refresh —
         // async_request_refresh() briefly marks all entities unavailable before
         // new data arrives (~600ms). Rendering during this window causes visual flashes.
-        if (watched.length > 0 && !localeChanged) {
-            const firstState = hass.states[watched[0]]?.state;
-            if (firstState === 'unavailable' || firstState === 'unknown') return;
-        }
+        // (#1197) Only when every watched entity is out: one that is out on
+        // its own (solar power while the inverter is dark) must not stop the
+        // card drawing.
+        if (!localeChanged && allOut(hass.states, watched)) return;
 
         let changed = false;
         for (const id of watched) {
-            const newState = hass.states[id]?.state;
-            if (this._prevVals[id] !== newState) {
+            if (this._prevVals[id] !== this._watchedValue(hass, id)) {
                 changed = true;
                 break;
             }
@@ -97,14 +98,31 @@ export class SEMLitBase extends LitElement {
 
         // Update value cache
         for (const id of watched) {
-            this._prevVals[id] = hass.states[id]?.state;
+            this._prevVals[id] = this._watchedValue(hass, id);
         }
 
         this._scheduleUpdate();
     }
 
+    // (#1055 follow-up) The state, plus the attributes the card shows from
+    // `watchedAttributes` ({ entity_id: [attribute, ...] }). A flag that
+    // lives in an attribute — "no grid limit" — changes without the state.
+    _watchedValue(hass, id) {
+        const st = hass.states[id];
+        const names = this.constructor.watchedAttributes?.[id];
+        if (!names) return st?.state;
+        return JSON.stringify([st?.state ?? null, ...names.map((n) => st?.attributes?.[n] ?? null)]);
+    }
+
     get hass() {
         return this._hass;
+    }
+
+    // (#1128) Open HA's more-info dialog. Here, not in each card: the Solar
+    // card called it without a copy of its own, so its clicks did nothing.
+    _fireMoreInfo(entityId) {
+        if (!entityId) return;
+        this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId }, bubbles: true, composed: true }));
     }
 
     // ── Debounced update — batches rapid state changes into single render ──
@@ -135,6 +153,17 @@ export class SEMLitBase extends LitElement {
             : key;
     }
 
+    // (#1053) A sensor whose state is a word SEM chose for its code
+    // (`manual`, `negated`, `force_on`). Read it here, never with _val():
+    // util/state-label.js maps the word to a label in the user's language.
+    // Reads the state itself: some cards' _val() returns a number.
+    _valLabel(suffix) {
+        const e = this._hass?.states?.[`${this._prefix || 'sensor.sem_'}${suffix}`];
+        const raw = (e && e.state !== 'unavailable' && e.state !== 'unknown')
+            ? e.state : '';
+        return stateLabel(suffix, raw, (k) => this._t(k));
+    }
+
     // Map a raw forecast source id (sensor.sem_forecast_source) to its
     // brand name. Shared so the Home hero and the Config tab agree —
     // the Config tab used to show the raw 'forecast_solar' / 'FORECAST_SOLAR'
@@ -146,18 +175,19 @@ export class SEMLitBase extends LitElement {
             solcast: 'Solcast',
             forecast_solar: 'Forecast.Solar',
             open_meteo: 'Open-Meteo',
+            helios: 'Helios',
             custom: this._t('custom') || 'Custom',
         };
         return LABELS[raw] || raw;
     }
 
     // ── Entity state readers ──
-    _state(entityId, fallback = 0) {
+    // (#1200) null for a sensor that is out or gives no number, so a card
+    // prints "—", not 0. A sum that wants 0 passes it.
+    _state(entityId, fallback = null) {
         const frozen = this._frozenEntities[entityId];
         if (frozen) return frozen.value;
-        const e = this._hass?.states[entityId];
-        if (!e || e.state === 'unavailable' || e.state === 'unknown') return fallback;
-        return parseFloat(e.state) ?? fallback;
+        return readNumber(this._hass?.states[entityId]) ?? fallback;
     }
 
     _stateStr(entityId) {
@@ -309,6 +339,12 @@ export class SEMLitBase extends LitElement {
         if (window._semDebug) {
             console.log(`[SEM DEBUG] ${this.tagName} connectedCallback`);
         }
+        // #1058: HA takes a tab's cards off the page when you leave the tab
+        // and puts the SAME cards back when you return. Lit does not render a
+        // card that comes back, and hass does not change if nothing changed
+        // while you were away — so the card showed what it drew before you
+        // left, and updated() (where some cards start a timer) never ran.
+        if (this.hasUpdated) this.requestUpdate();
         // Wait for semLocalize via event (instant) instead of polling
         if (!this._localizeReady && typeof semLocalize !== 'function') {
             this._onLocalizeReady = () => {

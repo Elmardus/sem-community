@@ -46,6 +46,7 @@ CARD_KEYS = [
     "energy_plan_all_night", "energy_plan_all_night_short", "energy_plan_home",
     "energy_plan_est",
     "energy_plan_legend_battery", "energy_plan_legend_grid",
+    "energy_plan_legend_sun",
     "energy_plan_legend_cheap", "energy_plan_fleet_partial",
     "energy_plan_shadow_note", "energy_plan_kind_ev", "energy_plan_kind_load",
     "energy_plan_today", "energy_plan_tomorrow", "energy_plan_prices_final",
@@ -242,7 +243,7 @@ def test_the_projection_carries_the_arbitrage_advice():
 
 
 def test_the_idle_answer_carries_its_why():
-    """(Guido, 08-08: uncapping a device made the plan 'disappear') — the
+    """(08-08: uncapping a device made the plan 'disappear') — the
     quiet answer was CORRECT but unexplained on the card: the why lived
     only in diagnose. The projection now carries it."""
     attrs = _energy_plan_attrs(

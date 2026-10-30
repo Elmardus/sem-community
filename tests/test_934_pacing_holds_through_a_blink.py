@@ -151,8 +151,15 @@ RESTORE_VALUE = 5000.0
 
 def _coordinator(*, observer=False):
     hass = MagicMock()
-    hass.services.async_call = AsyncMock()
-    hass.states.get = MagicMock(return_value=SimpleNamespace(state=str(RESTORE_VALUE)))
+    # (#820) the register takes the writes it is sent: the pacer now checks
+    # the register, not its memory, so a register that never moved would be
+    # a refusal — a different test.
+    register = SimpleNamespace(state=str(RESTORE_VALUE))
+
+    async def _set_value(domain, service, data, blocking=False):
+        register.state = str(data["value"])
+    hass.services.async_call = AsyncMock(side_effect=_set_value)
+    hass.states.get = MagicMock(return_value=register)
     cfg = {
         "battery_charge_pacing_enabled": True,
         "battery_charge_power_limit_entity": "number.batt_charge_limit",
@@ -167,6 +174,7 @@ def _coordinator(*, observer=False):
         battery_capacity_kwh=21.0,
         _planning_evidence={"forecast_trust_d1": 0.9},
         _observer_mode=observer,
+        external_yielding=lambda key: False,
         _charge_pacing_writer=None,
         _today_pacing_ledger=lambda: _ledger(),
     )
@@ -257,7 +265,10 @@ class TestPacingHoldsThroughABlink:
         call = hass.services.async_call.await_args
         assert call.args[0] == "number" and call.args[1] == "set_value"
         assert call.args[2]["entity_id"] == "number.batt_charge_limit"
-        assert call.args[2]["value"] == pytest.approx(RESTORE_VALUE)
+        # (#820) a release gives the larger of the capture and the pack's
+        # full charge power (the config's 10 kW here)
+        assert call.args[2]["value"] == pytest.approx(
+            max(RESTORE_VALUE, fake.config["battery_max_charge_power_w"]))
         assert fake._charge_pacing_writer.engaged is False
         hass.services.async_call.reset_mock()
         # Still dark: nothing more to restore, nothing written.
@@ -309,3 +320,16 @@ class TestPacingHoldsThroughABlink:
         assert st["soc"] == pytest.approx(40.0)
         assert st["cap_w"] is not None
         hass.services.async_call.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_sustained_outage_forgets_full_power_and_weak_day():
+    """(#820 review, 22.10) No decision, no memory of one: a dark SOC across
+    midnight carried yesterday's full power into the next day."""
+    fake, _hass = _coordinator()
+    fake._pacing_full_latched = True
+    fake._pacing_weak_latched = True
+    await SEMCoordinator._run_charge_pacing(
+        fake, _held(stale_s=SENSOR_DARK_READ_GRACE_S + 1))
+    assert fake._pacing_full_latched is False
+    assert fake._pacing_weak_latched is False

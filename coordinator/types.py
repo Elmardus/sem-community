@@ -132,6 +132,15 @@ class PowerReadings:
     # per-charger flow attribution that closes the #316 family.
     ev_power_per_charger: "Dict[str, float]" = field(default_factory=dict)
 
+    # (#1044) WHAT ``ev_power`` was read from this cycle — the per-charger
+    # sensors summed, or the one fleet sensor read instead (Energy
+    # Dashboard or the top-level sensor). ``home`` takes ``ev_power`` out,
+    # so these say which of SEM's chargers are already out of ``home``
+    # (``health_check.chargers_outside_home``). Both empty: no EV sensor
+    # was read, and every charger's draw is still inside ``home``.
+    ev_power_entities: "frozenset" = frozenset()
+    ev_power_fleet_entity: Optional[str] = None
+
     # Per-charger EV plug / charging state (#584). The boolean mirror of
     # ``ev_power_per_charger`` — populated by ``sensor_reader`` for
     # multi-charger setups from each charger's ``ev_connected_sensor`` /
@@ -162,6 +171,15 @@ class PowerReadings:
     # inverter setups; downstream readers must fall back to
     # ``solar_power``.
     solar_power_per_string: "Dict[str, float]" = field(default_factory=dict)
+    #: (#1196) True for a string whose own sensor (both halves of a V+I pair)
+    #: gave a number this cycle. A dark string's watts above are the reader's
+    #: 0.0 for the sums, which is also what a string reads at night. A slot
+    #: missing here was not read.
+    solar_power_per_string_read: "Dict[str, bool]" = field(default_factory=dict)
+    #: (#1203) A dark string's last live watts, by slot, while that read is
+    #: no older than ``SENSOR_DARK_READ_GRACE_S`` — the window its entity
+    #: shows it. Only its daily energy books them; its watts above stay 0.0.
+    solar_power_per_string_held: "Dict[str, float]" = field(default_factory=dict)
 
     # v1.7.0 arch/multi-inverter-battery-primary.
     #
@@ -198,6 +216,11 @@ class PowerReadings:
     # morning verdict) has to know which of the two it is looking at. The
     # SOC twin above is ``battery_soc_unavailable``; this is the power side.
     battery_power_unavailable: bool = False
+    #: (#1164) …and the other half: True only when a battery power sensor
+    #: answered with a number this cycle and none was dark. A battery wired
+    #: by SOC alone has no power sensor, so its 0.0 is not "unavailable"
+    #: either — it is no reading at all. Off unless the reader says so.
+    battery_power_read: bool = False
 
     # (#818) Two questions about the same outage, deliberately separate.
     #
@@ -221,8 +244,30 @@ class PowerReadings:
     #: that was fine. The reader knows the names; now they travel.
     dark_inputs: tuple = ()
     solar_power_unavailable: bool = False
+    #: (#1022) minutes every solar read came back dark today — the PV
+    #: health sensor's downtime figure. Adds up in the reader, resets at
+    #: midnight.
+    solar_downtime_min_today: float = 0.0
     grid_power_unavailable: bool = False
     battery_power_all_unavailable: bool = False
+    #: (#1047) The home figure SEM SHOWS this cycle, when it is not
+    #: ``home_consumption_power``: while a balance input above reads dark,
+    #: home is built from that input's 0.0 fallback, so the coordinator
+    #: shows the last home value instead (``_hold_shown_home``). ``None``
+    #: means "show ``home_consumption_power``". Never read by steering —
+    #: decide and budgets keep ``home_consumption_power``. The daily home
+    #: row books this one while it is set (#1177).
+    home_shown_w: Optional[float] = None
+    #: (#1186) What the dark units of a total add back to the figure SEM
+    #: SHOWS and books, by input ("solar", "grid", "battery"), in SEM's sign.
+    #: A total read from two or more sensors (inverters, batteries, the two
+    #: sides of a split grid meter) keeps each unit's last live read on its
+    #: own, for ``SENSOR_DARK_READ_GRACE_S``. An input is listed only while
+    #: a unit is held and some read of it is live; when every read is dark
+    #: its ``*_unavailable`` flag owns the hold. Never read by steering: the
+    #: input keeps the reader's 0 W for the dark unit. Read it through
+    #: ``shown_w``.
+    held_w: Dict[str, float] = field(default_factory=dict)
     # (#910) True for a cycle in which a charger's power read was a blink
     # held at its last accepted value (status still charging).
     ev_power_held: bool = False
@@ -415,6 +460,10 @@ class PowerFlows:
     # holds at the read level (sum ≈ ``solar_power``); the integrator
     # owns the persistence of per-string kWh.
     solar_per_string: "Dict[str, float]" = field(default_factory=dict)
+    #: (#1203) …and a dark string's held watts
+    #: (``PowerReadings.solar_power_per_string_held``), for its daily energy
+    #: only.
+    solar_per_string_held: "Dict[str, float]" = field(default_factory=dict)
 
 
 @dataclass
@@ -455,6 +504,14 @@ class EnergyTotals:
     yearly_grid_export_negative: float = 0.0
     monthly_grid_export_negative_cost: float = 0.0
     yearly_grid_export_negative_cost: float = 0.0
+    #: (#1191) The battery's part of the export — a sale. Booked beside
+    #: ``grid_export``, never instead of it, from each cycle's
+    #: ``battery_to_grid`` flow. 0.0 (all export is solar's) where no flows
+    #: said otherwise. ``utils.helpers.solar_export`` takes it out of the
+    #: export.
+    daily_grid_export_battery: float = 0.0
+    monthly_grid_export_battery: float = 0.0
+    yearly_grid_export_battery: float = 0.0
     daily_battery_charge: float = 0.0
     daily_battery_discharge: float = 0.0
 
@@ -635,8 +692,22 @@ class CostData:
     yearly_export_revenue: float = 0.0
     yearly_net_cost: float = 0.0
 
+    # (#1077) What a kWh is worth: solar used at home over selling it
+    # (import value − export value), exported kWh at the market price
+    # before the fee, and the feed-in fees. 0 until a value field is set.
+    daily_self_consumption_value: float = 0.0
+    yearly_self_consumption_value: float = 0.0
+    daily_export_value: float = 0.0
+    yearly_export_value: float = 0.0
+    daily_feed_in_fees: float = 0.0
+    yearly_feed_in_fees: float = 0.0
+
     # Environmental impact
     daily_co2_avoided_kg: float = 0.0
+    # (#1221) the kWh and kg/kWh behind ``daily_co2_avoided_kg``; None
+    # until the first cost pass (the card then shows no detail line)
+    daily_co2_solar_used_kwh: Optional[float] = None
+    daily_co2_kg_per_kwh: Optional[float] = None
     yearly_co2_avoided_kg: float = 0.0
     yearly_trees_equivalent: float = 0.0
     lifetime_co2_avoided_kg: float = 0.0
@@ -682,14 +753,16 @@ class PerformanceMetrics:
 @dataclass
 class SystemStatus:
     """System status indicators."""
-    grid_status: str = "idle"  # import, export, idle
-    battery_status: str = "idle"  # charging, discharging, idle
-    solar_active: bool = False
+    # None while every read of the power it is built from is dark (#1197)
+    grid_status: Optional[str] = "idle"  # import, export, idle
+    battery_status: Optional[str] = "idle"  # selling, charging, discharging, idle
+    # None, as the status, while its power is dark (#1201)
+    solar_active: Optional[bool] = False
     ev_connected: bool = False
     ev_charging: bool = False
-    battery_charging: bool = False
-    battery_discharging: bool = False
-    grid_export_active: bool = False
+    battery_charging: Optional[bool] = False
+    battery_discharging: Optional[bool] = False
+    grid_export_active: Optional[bool] = False
 
 
 @dataclass
@@ -737,6 +810,10 @@ class LoadManagementData:
     shed_sheddable_w: float = 0.0
     shed_futile: bool = False
     uncontrolled_w: float = 0.0
+    # (#1048) the phase guard's shed path: this cycle's verdict and the
+    # surplus-owned loads held for a phase (device → phase)
+    phase_shed_path: str = "clear"
+    phase_held: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -795,6 +872,11 @@ class TariffSensorData:
     """Tariff data for coordinator sensors."""
     tariff_current_import_rate: float = 0.0
     tariff_current_export_rate: float = 0.0
+    #: (#1077) where the tiered feed-in fee stands: kWh exported this year,
+    #: the fee on the next kWh, and where the next tier starts (None: none)
+    tariff_export_ytd_kwh: float = 0.0
+    tariff_feed_in_fee_rate: float = 0.0
+    tariff_next_fee_tier_kwh: Optional[float] = None
     #: (#994) the default is the ABSENCE of a level, not a
     #: confident middle one — a cycle that could not classify must
     #: not publish "normal".
@@ -898,7 +980,6 @@ class HotWaterSensorData:
     hot_water_temperature_sensor: Optional[str] = None
     hot_water_current_temperature: Optional[float] = None
     hot_water_solar_target: Optional[float] = None
-    hot_water_max_temperature: Optional[float] = None
     hot_water_legionella_target: Optional[float] = None
     hot_water_hours_since_legionella: Optional[float] = None
     hot_water_legionella_cycle_active: bool = False
@@ -1003,7 +1084,14 @@ class SessionData:
     battery_energy_kwh: float = 0
     solar_share_pct: float = 0
     cost_chf: float = 0
+    #: (#1088) CO2 of the session's grid energy, kg — each grid kWh at the
+    #: grid's intensity when it was drawn (energy-weighted)
+    co2_kg: float = 0
     avg_power_w: float = 0
+    #: (#1024) where the total came from: charger_meter | lifetime_delta |
+    #: sem_estimate — and the meter state behind it (session_energy.step).
+    energy_source: str = "sem_estimate"
+    meter: dict = field(default_factory=dict)
 
 
 
@@ -1052,6 +1140,37 @@ class BatterySessionData:
             "avg_power_w": int(round((self.avg_power_w or 0) / 10.0) * 10),
             "energy_kwh": round(self.energy_kwh or 0.0, 2),
         }
+
+#: (#1186) Each power field the shown figure is built for, and its input.
+SHOWN_FIELDS = {
+    "solar_power": "solar",
+    "grid_power": "grid",
+    "grid_import_power": "grid",
+    "grid_export_power": "grid",
+    "battery_power": "battery",
+    "battery_charge_power": "battery",
+    "battery_discharge_power": "battery",
+}
+
+
+def shown_w(power, name: str):
+    """(#1186) A power field as SEM shows and books it: the reading plus
+    what its held units add (``PowerReadings.held_w``). The halves are cut
+    from the shown net, as ``calculate_derived`` cuts them from the read
+    one. With nothing held it is the field itself."""
+    held = getattr(power, "held_w", None)
+    unit = SHOWN_FIELDS.get(name)
+    if not isinstance(held, dict) or unit not in held:
+        return getattr(power, name, 0.0)
+    if unit == "solar":
+        return float(getattr(power, name, 0.0) or 0.0) + float(held[unit])
+    net = float(getattr(power, f"{unit}_power", 0.0) or 0.0) + float(held[unit])
+    if name in ("grid_power", "battery_power"):
+        return net
+    if name in ("grid_export_power", "battery_charge_power"):
+        return max(0.0, net)
+    return max(0.0, -net)
+
 
 def _w(value):
     """(#829) Whole watts at the publish seam — a watt is a watt.
@@ -1148,23 +1267,37 @@ class SEMData:
         # The cards are unaffected: they read the #699 power_snapshot,
         # which carries the last self-consistent SET, and the diagram
         # card holds for 60 s on top of that (#237/#444). Home is NOT in
-        # this list — it must never report unknown, and its own hold
-        # (#237/#444) already covers it.
+        # this list — it must never report unknown. Its #237/#444 hold
+        # covers a DIP only; a dark charging battery makes home JUMP, so
+        # the shown figure is held separately (``home_shown_w``, #1047).
         _solar_dark = getattr(self.power, "solar_power_unavailable", False)
         _grid_dark = getattr(self.power, "grid_power_unavailable", False)
         _batt_dark = getattr(self.power, "battery_power_all_unavailable", False)
+        # (#1186) A dark unit of a total is shown at its last live read for
+        # the grace (``shown_w``), as its own entity shows it.
+        def _shown(name):
+            return _w(shown_w(self.power, name))
+
         data = {
             # Power readings
-            "solar_power": None if _solar_dark else _w(self.power.solar_power),
-            "grid_power": None if _grid_dark else _w(self.power.grid_power),
-            "grid_active_power": None if _grid_dark else _w(-self.power.grid_power),  # positive=import, negative=export (K-Flow convention)
-            "battery_power": None if _batt_dark else _w(self.power.battery_power),
+            "solar_power": None if _solar_dark else _shown("solar_power"),
+            "grid_power": None if _grid_dark else _shown("grid_power"),
+            "grid_active_power": None if _grid_dark else _w(-shown_w(self.power, "grid_power")),  # positive=import, negative=export (K-Flow convention)
+            "battery_power": None if _batt_dark else _shown("battery_power"),
             "ev_power": _w(self.power.ev_power),
-            "home_consumption_power": _w(self.power.home_consumption_power),
-            "grid_import_power": _w(self.power.grid_import_power),
-            "grid_export_power": _w(self.power.grid_export_power),
-            "battery_charge_power": _w(self.power.battery_charge_power),
-            "battery_discharge_power": _w(self.power.battery_discharge_power),
+            # (#1047) the shown figure: held while an input it is built
+            # from reads dark, so a dropout is not a jump in the house
+            "home_consumption_power": _w(
+                self.power.home_consumption_power
+                if self.power.home_shown_w is None else self.power.home_shown_w),
+            # (#1047) The split halves are their input, cut in two — they
+            # cannot be more certain than it (the grid_active_power rule).
+            # Published as numbers, they read 0 W beside a battery entity
+            # still holding 3.9 kW.
+            "grid_import_power": None if _grid_dark else _shown("grid_import_power"),
+            "grid_export_power": None if _grid_dark else _shown("grid_export_power"),
+            "battery_charge_power": None if _batt_dark else _shown("battery_charge_power"),
+            "battery_discharge_power": None if _batt_dark else _shown("battery_discharge_power"),
             "battery_soc": None if self.power.battery_soc_unavailable else self.power.battery_soc,
             "battery_temperature": self.power.battery_temperature,
             "inverter_temperature": self.power.inverter_temperature,
@@ -1193,6 +1326,8 @@ class SEMData:
             "daily_total_consumption": self.energy.daily_total_consumption,
             "daily_grid_import_energy": self.energy.daily_grid_import,
             "daily_grid_export_energy": self.energy.daily_grid_export,
+            # (#1191) the battery's part of that export; diagnostics only
+            "daily_grid_export_battery_kwh": self.energy.daily_grid_export_battery,
             "daily_grid_export_negative_kwh": self.energy.daily_grid_export_negative,
             "daily_grid_export_negative_cost": self.energy.daily_grid_export_negative_cost,
             "daily_battery_charge_energy": self.energy.daily_battery_charge,
@@ -1278,8 +1413,15 @@ class SEMData:
             # multi-string discovery populated these. Single-string
             # / single-inverter setups skip the keys and the fleet
             # ``sensor.sem_solar_power`` stays authoritative.
+            # (#1196) A string whose own sensor was not read this cycle
+            # publishes None, as a dark battery unit does (#1170): its 0.0 is
+            # the reader's fallback, which is also what a string reads at
+            # night. The entity holds its last value for the dark-read
+            # grace, then shows unavailable.
             **{
-                f"pv_string_{sid}_power": w
+                f"pv_string_{sid}_power": (
+                    w if (self.power.solar_power_per_string_read or {}).get(sid)
+                    is True else None)
                 for sid, w in (self.power.solar_power_per_string or {}).items()
             },
             **{
@@ -1303,9 +1445,18 @@ class SEMData:
             "yearly_battery_savings": self.costs.yearly_battery_savings,
             "yearly_export_revenue": self.costs.yearly_export_revenue,
             "yearly_net_cost": self.costs.yearly_net_cost,
+            # (#1077) the value layer's books
+            "daily_self_consumption_value": self.costs.daily_self_consumption_value,
+            "yearly_self_consumption_value": self.costs.yearly_self_consumption_value,
+            "daily_export_value": self.costs.daily_export_value,
+            "yearly_export_value": self.costs.yearly_export_value,
+            "daily_feed_in_fees": self.costs.daily_feed_in_fees,
+            "yearly_feed_in_fees": self.costs.yearly_feed_in_fees,
 
             # Environmental impact
             "daily_co2_avoided": self.costs.daily_co2_avoided_kg,
+            "daily_co2_solar_used_kwh": self.costs.daily_co2_solar_used_kwh,
+            "daily_co2_kg_per_kwh": self.costs.daily_co2_kg_per_kwh,
             "yearly_co2_avoided": self.costs.yearly_co2_avoided_kg,
             "yearly_trees_equivalent": self.costs.yearly_trees_equivalent,
             "lifetime_co2_avoided": self.costs.lifetime_co2_avoided_kg,
@@ -1397,6 +1548,9 @@ class SEMData:
             "shed_sheddable_w": self.load_management.shed_sheddable_w,
             "shed_futile": self.load_management.shed_futile,
             "uncontrolled_w": self.load_management.uncontrolled_w,
+            # (#1048) the phase guard's half of the shed path
+            "phase_shed_path": self.load_management.phase_shed_path,
+            "phase_held": self.load_management.phase_held,
 
             # Timestamp
             "last_update": self.last_update,
@@ -1441,6 +1595,9 @@ class SEMData:
             # Tariff (Phase 1)
             "tariff_current_import_rate": self.tariff.tariff_current_import_rate,
             "tariff_current_export_rate": self.tariff.tariff_current_export_rate,
+            "tariff_export_ytd_kwh": self.tariff.tariff_export_ytd_kwh,
+            "tariff_feed_in_fee_rate": self.tariff.tariff_feed_in_fee_rate,
+            "tariff_next_fee_tier_kwh": self.tariff.tariff_next_fee_tier_kwh,
             "tariff_price_level": self.tariff.tariff_price_level,
             "tariff_provider": self.tariff.tariff_provider,
             "tariff_is_dynamic": self.tariff.tariff_is_dynamic,
@@ -1496,7 +1653,6 @@ class SEMData:
             "hot_water_temperature_sensor": self.hot_water.hot_water_temperature_sensor,
             "hot_water_current_temperature": self.hot_water.hot_water_current_temperature,
             "hot_water_solar_target": self.hot_water.hot_water_solar_target,
-            "hot_water_max_temperature": self.hot_water.hot_water_max_temperature,
             "hot_water_legionella_target": self.hot_water.hot_water_legionella_target,
             "hot_water_hours_since_legionella": self.hot_water.hot_water_hours_since_legionella,
             "hot_water_legionella_cycle_active": self.hot_water.hot_water_legionella_cycle_active,
@@ -1575,7 +1731,7 @@ class SEMData:
         # Per-battery flat-dict unpack (Phase A of #TBD fleet/per-battery
         # card mirror). Mirrors the per-charger pattern above. Powered
         # by ``PowerReadings.batteries`` (populated by sensor_reader
-        # only when ``battery_power_list`` length > 1 — single-battery
+        # only with two or more battery units — single-battery
         # installs leave it empty and produce zero per-battery keys,
         # preserving today's fleet-sensor behaviour). Status is
         # derived from the sign of power_w (positive = charging,
@@ -1583,17 +1739,30 @@ class SEMData:
         # ``_BATTERY_STATUS_DEADBAND_W`` mirrors the session-tracking
         # dead-band so the per-battery status doesn't toggle on
         # inverter rebalance noise.
+        # (#1170) A unit whose own power sensor was not read this cycle
+        # publishes None, as the fleet total does when every read is dark
+        # (``battery_power_all_unavailable``). The unit's flag is its own
+        # ``power_read`` (#1167): dark, not a number, impossible, or one side
+        # of a two-sensor pair dark (half a number). Its 0.0 is the reader's
+        # fallback, which is also what an idle pack reads. The entity holds
+        # its last value for the dark-read grace, then shows unavailable. The
+        # status is built from the same number, so it is None too (held on
+        # the same clock, sensor.py ``_HELD_TEXT_KEY``).
         try:
             _STATUS_DEADBAND_W = 50.0
             for bid, bp in self.power.batteries.items():
-                if bp.power_w > _STATUS_DEADBAND_W:
+                read = getattr(bp, "power_read", False) is True
+                if not read:
+                    status = None
+                elif bp.power_w > _STATUS_DEADBAND_W:
                     status = "charging"
                 elif bp.power_w < -_STATUS_DEADBAND_W:
                     status = "discharging"
                 else:
                     status = "idle"
                 data.update({
-                    f"battery_{bid}_power": round(bp.power_w, 1),
+                    f"battery_{bid}_power": (round(bp.power_w, 1)
+                                             if read else None),
                     # None while unresolved → the entity shows unknown, not
                     # a fabricated 0% (#694).
                     f"battery_{bid}_soc": (round(bp.soc_pct, 1)

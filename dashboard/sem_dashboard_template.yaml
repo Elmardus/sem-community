@@ -3,7 +3,8 @@
 # ============================================================
 # Version: 6.1 (2026-04)
 #
-# 8 views: Home, Energy, Battery, EV, Control, Configuration, Costs, System
+# 9 views: Home, Energy, Battery, EV, Control, Configuration, Costs, System,
+# Simulation (only while the Simulation tab switch is on, #1083)
 # Dark glassmorphism theme, mobile-first responsive design
 #
 # Required HACS cards: NONE (#617 — zero-prerequisite dashboard).
@@ -27,6 +28,7 @@
 #   sem-solar-summary-card   — solar yield summary
 #   sem-weather-card         — weather + clock header
 #   sem-chart-card           — cost / savings charts (vendored Chart.js, offline-capable)
+#   sem-why-card             — why SEM changed a device, row by row (#1084)
 #   sem-period-selector-card — period selector for Costs tab
 #   sem-load-priority-card   — drag-and-drop device priority (inlined SortableJS)
 # ============================================================
@@ -141,6 +143,7 @@ views:
                     children:
                       - sensor.sem_flow_battery_to_home_energy
                       - sensor.sem_flow_battery_to_ev_energy
+                      - sensor.sem_flow_battery_to_grid_energy
               - entities:
                   - entity_id: sensor.sem_flow_solar_to_home_energy
                     color: "#ff9800"
@@ -187,6 +190,11 @@ views:
                     name: Bat>EV
                     children:
                       - sensor.sem_daily_ev_energy
+                  - entity_id: sensor.sem_flow_battery_to_grid_energy
+                    color: "#4db6ac"
+                    name: Bat>Grid
+                    children:
+                      - sensor.sem_daily_grid_export_energy
               - entities:
                   - entity_id: sensor.sem_daily_home_energy
                     color: "#5BC8D8"
@@ -212,6 +220,17 @@ views:
                 entity: sensor.sem_autarky_rate
                 name: Autarky
                 color: '#8DC892'
+
+          # ── PV health (#1022): one line — does the plant do what the
+          # forecast said? A core tile card (zero prerequisites, #617): the
+          # state is the colour, tap opens the numbers (7-day ratio, dark
+          # minutes, snow) as attributes.
+          - type: tile
+            entity: sensor.sem_pv_health
+            name: PV health
+            icon: mdi:solar-panel
+            tap_action:
+              action: more-info
 
           # ── 24h Power Curves (sem-chart-card replaces apexcharts) ──
           - type: custom:sem-chart-card
@@ -311,10 +330,16 @@ views:
           # night shading, the now marker and the Today|Tomorrow toggle all
           # render from the plan entity — one timeline, one data source.
           # Self-hides until a plan is stamped; live chips while actuation is
-          # on. Placed between the schedule and load management on Guido's
-          # call (2026-08-05) — it belongs with the control surfaces, not
+          # on. Placed between the schedule and load management by
+          # decision (2026-08-05) — it belongs with the control surfaces, not
           # the diagnostics.
           - type: custom:sem-energy-plan-card
+
+          # ── Why? (#1084) ── each command SEM changed on a device, the
+          # reason in plain words and the numbers behind it. Below the plan
+          # (what SEM means to do), above the devices it acted on.
+          - type: custom:sem-why-card
+            entity_prefix: sensor.sem_
 
           # ── Load Priority (drag-and-drop device management) ──
           - type: custom:sem-title-card
@@ -407,9 +432,9 @@ views:
             entity_prefix: sensor.sem_
 
           # (#638: Tonight's Plan moved to the Control tab, between
-          # Today's Schedule and Load Management — Guido, 2026-08-05.)
+          # Today's Schedule and Load Management — decision 2026-08-05.)
 
-          # (2026-08-09 System-tab challenge, Guido: the grid card is
+          # (2026-08-09 System-tab challenge: the grid card is
           # GONE — all six of its sections had grown better homes and it
           # was read-only echo: hero + today totals → Home/Energy/Costs,
           # peak + load control + surplus + tariff → the Control card's
@@ -425,3 +450,22 @@ views:
           - type: custom:sem-chart-card
             preset: forecast
             title: Forecast vs Actual
+
+  # ============================================================
+  # VIEW 8: SIMULATION — replay recorded days (#1083)
+  # Shown only while the Simulation tab switch is on: the generator's
+  # _prune_sleeping_tabs drops this view otherwise. Keep it last.
+  # ============================================================
+  - title: Simulation
+    path: simulation
+    icon: mdi:flask-outline
+    type: panel
+    cards:
+      - type: vertical-stack
+        cards:
+          - type: custom:sem-tab-header
+            tab: simulation
+
+          - type: custom:sem-simulation-card
+            entity_prefix: sensor.sem_
+            header: false   # the tab header above already shows it

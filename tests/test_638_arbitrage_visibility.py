@@ -1,12 +1,12 @@
-"""(#638 C7, Guido's PROD card 16.08 08:05) The arbitrage advisor is an
+"""(#638 C7, the PROD card 16.08 08:05) The arbitrage advisor is an
 INSTRUMENT, and an instrument's readout is not a user's answer.
 
 The advisor runs on every stamp by design — it reads every page of the
 ledger, so an economically-absurd advice is the first symptom of a lying
 book. That is worth keeping. What is NOT defensible is printing its
 verdict on the dashboard of an install where arbitrage *cannot happen*:
-Guido's battery is in ``auto``, the global toggle is off (#533 stands),
-and his card still said
+PROD's battery is in ``auto``, the global toggle is off (#533 stands),
+and the card still said
 
     Battery arbitrage — no room to buy into: battery 6.3/15.0 kWh full…
 
@@ -49,7 +49,7 @@ class TestTheOneAccessor:
     payload and the card had no way to ask."""
 
     def test_a_default_install_cannot_arbitrage(self):
-        # Guido's PROD: one battery, mode auto, global toggle off.
+        # PROD: one battery, mode auto, global toggle off.
         assert _enabled(global_toggle=False, modes=["auto"]) is False
 
     def test_a_battery_in_allow_arbitrage_opens_the_valve(self):
@@ -99,4 +99,4 @@ class TestTheCardHidesAClosedFeature:
         body = card.split("_renderArb(arb)", 1)[1].split("_renderIdle", 1)[0]
         assert "arb.enabled" in body, (
             "the card must not render the advisor's verdict on an install "
-            "where arbitrage cannot act (Guido's PROD, 16.08)")
+            "where arbitrage cannot act (PROD, 16.08)")

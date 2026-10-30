@@ -25,11 +25,12 @@
 import { SEMLitBase, html, css, svg, nothing } from '../base/sem-lit-base.js';
 import {
     semFormatPower, semFormatTime, semCalcDuration, semDefineCard, SEM_DEVICE_ACCENT,
-    semDiscoverPVStrings, semPVStringsCSS, semPVStringStatesKey, semTheme,
+    semDiscoverPVStrings, semPVStringKW, semPVStringsCSS, semPVStringStatesKey, semTheme,
 } from '../base/sem-shared.js';
 import { nightArcPos } from '../util/night-arc.js';
 import { formatTemperatureLabel } from '../util/temperature.js';
-import { socDisplay } from '../util/missing-value.js';
+import { MISSING, allOut, fmtValue, isMissing, readNumber, socDisplay } from '../util/missing-value.js';
+import { chargerIdsFrom, evNodeSoc, evNodeSocLabel, socFromState } from '../util/ev-node-soc.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
 
@@ -132,6 +133,10 @@ class SEMSystemDiagramCard extends SEMLitBase {
         // without a battery drew a permanent "— W / sensor unavailable"
         // battery node. Generator injects show_battery:false from has_battery.
         this._showBattery = config.show_battery !== false;
+        // The EV node's state of charge (util/ev-node-soc.js, #1211). Default
+        // true; false hides it for two cars that share one charger, where the
+        // figure can be the other car's (docs/KNOWN_LIMITATIONS.md).
+        this._showEvSoc = config.show_ev_soc !== false;
     }
 
     /** Resolve a logical suffix to an entity id (#455).
@@ -156,6 +161,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
             grid_export_power: e.grid?.production,
             ev_power: e.ev?.entity || e.individual?.[0]?.entity,
             battery_soc: e.battery?.state_of_charge,
+            ev_soc: e.ev?.state_of_charge,
             battery_temperature: e.battery?.temperature,
             home_consumption_power: e.home?.entity,
             charging_state: e.inverter?.entity,
@@ -207,14 +213,14 @@ class SEMSystemDiagramCard extends SEMLitBase {
     _flowSolar() {
         const snap = this._powerSnapshot();
         if (snap) return this._snapNum(snap.solar_w);
-        const s = this._val('solar_power');
+        const s = this._val('solar_power') ?? 0;
         return this._entities?.solar?.reverse ? -s : s;
     }
 
     _flowBattery() {
         const e = this._entities;
         if (e?.battery?.charge || e?.battery?.discharge) {
-            return this._val('battery_charge_power') - this._val('battery_discharge_power');
+            return this._val('battery_charge_power', 0) - this._val('battery_discharge_power', 0);
         }
         // Only trust the snapshot's battery term while the battery source is
         // actually reporting. ``battery_soc`` is null exactly when it isn't
@@ -225,7 +231,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
         if (snap && snap.battery_soc !== null && snap.battery_soc !== undefined) {
             return this._snapNum(snap.battery_w);
         }
-        const raw = this._val('battery_power');
+        const raw = this._val('battery_power', 0);
         return e?.battery?.reverse ? -raw : raw;
     }
 
@@ -247,15 +253,15 @@ class SEMSystemDiagramCard extends SEMLitBase {
             };
         }
         return {
-            gridImport: this._val('grid_import_power'),
-            gridExport: this._val('grid_export_power'),
+            gridImport: this._val('grid_import_power', 0),
+            gridExport: this._val('grid_export_power', 0),
         };
     }
 
     _flowEv() {
         const snap = this._powerSnapshot();
         if (snap) return this._snapNum(snap.ev_w);
-        const v = this._val('ev_power');
+        const v = this._val('ev_power') ?? 0;
         return this._entities?.ev?.invert ? -v : v;
     }
 
@@ -304,13 +310,13 @@ class SEMSystemDiagramCard extends SEMLitBase {
 
         if (this._isFrozen() && !localeChanged) return;
 
-        // Skip transient unavailable states caused by coordinator refresh —
-        // matches sem-battery-card.js:89-92. ~600ms window after every cycle.
-        // #455: routed through _eid; in entities mode an unmapped solar key
-        // resolves to null and the skip never blocks updates.
-        const solarEid = this._eid('solar_power');
-        const solarState = solarEid ? hass?.states[solarEid]?.state : undefined;
-        if ((solarState === 'unavailable' || solarState === 'unknown') && !localeChanged) {
+        // Skip transient unavailable states caused by coordinator refresh.
+        // (#1197) Only when every SEM entity it reads is out: the solar power
+        // alone is out while the inverter is dark, and the diagram must keep
+        // drawing the battery, grid and home. In entities mode (#455) it
+        // reads the user's own entities, which do not go out with SEM.
+        if (!localeChanged && this._mode !== 'entities'
+                && allOut(hass?.states, WATCHED_SUFFIXES.map(s => this._eid(s)))) {
             return;
         }
 
@@ -333,6 +339,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
         if (this._showEv) {
             key += '|' + (hass?.states['binary_sensor.sem_ev_connected']?.state || '');
             key += '|' + (hass?.states['binary_sensor.sem_ev_charging']?.state || '');
+            key += '|' + this._evSocLabel(hass);
         }
         const sun = hass?.states['sun.sun'];
         key += '|' + (sun?.attributes?.elevation ?? '')
@@ -373,14 +380,47 @@ class SEMSystemDiagramCard extends SEMLitBase {
 
     // ── Suffix-scoped state readers (matches sem-battery-card.js:116-122;
     //    #455: routed through _eid so entities mode resolves too) ──
-    _val(suffix, fallback = 0) {
+    // (#1200) null for a sensor that is out: it prints "—", not 0. A flow
+    // that wants 0 passes it.
+    _val(suffix, fallback = null) {
         const eid = this._eid(suffix);
         return eid ? this._state(eid, fallback) : fallback;
+    }
+
+    // (#1200) The state as the sensor gives it, or "—" when it gives none.
+    _rawOrMissing(suffix) {
+        const eid = this._eid(suffix);
+        const st = eid ? this._hass?.states[eid] : undefined;
+        return isMissing(st) ? MISSING : st.state;
     }
 
     _valStr(suffix) {
         const eid = this._eid(suffix);
         return eid ? this._stateStr(eid) : '';
+    }
+
+    // The EV node's state of charge (util/ev-node-soc.js). Entities mode reads
+    // the user's own `ev.state_of_charge`; otherwise the SEM charger sensors,
+    // and only while exactly one charger is set up (one car can be meant).
+    _evSocLabel(hass) {
+        const states = hass?.states;
+        if (!states || !this._showEvSoc) return '';
+        if (this._mode === 'entities') {
+            const eid = this._eid('ev_soc');
+            return eid ? evNodeSocLabel({ soc: socFromState(states[eid]) }) : '';
+        }
+        return evNodeSocLabel(evNodeSoc(states, this._prefix, this._evChargerIds(states)));
+    }
+
+    // Charger discovery walks every entity, so it runs only when their number
+    // (or the prefix) changes — the same trade the EV card makes.
+    _evChargerIds(states) {
+        const sig = `${this._prefix}|${Object.keys(states).length}`;
+        if (sig !== this._evIdsSig) {
+            this._evIdsSig = sig;
+            this._evIds = chargerIdsFrom(Object.keys(states), this._prefix);
+        }
+        return this._evIds;
     }
 
     // #727 — the display unit HA attached to a suffix's entity ('' if none).
@@ -465,6 +505,22 @@ class SEMSystemDiagramCard extends SEMLitBase {
 
     // ── Observers: compact toggle + visibility ──
     firstUpdated() {
+        if (this.isConnected) this._observe();
+    }
+
+    // #1058: HA takes a tab's cards off the page when you leave the tab and
+    // puts the SAME cards back when you return. firstUpdated() runs once, so
+    // what disconnectedCallback() stops is started again here: the watchers,
+    // and a number count it stopped half way.
+    connectedCallback() {
+        super.connectedCallback();
+        if (!this.hasUpdated) return;
+        this._observe();
+        if (this._targets) this._startTickIfIdle();
+    }
+
+    _observe() {
+        this._unobserve();
         this._resizeObserver = new ResizeObserver(entries => {
             if (this._resizeTimeout) clearTimeout(this._resizeTimeout);
             this._resizeTimeout = setTimeout(() => {
@@ -489,11 +545,15 @@ class SEMSystemDiagramCard extends SEMLitBase {
         this._intersectionObserver.observe(this);
     }
 
-    disconnectedCallback() {
-        super.disconnectedCallback();
+    _unobserve() {
         if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
         if (this._intersectionObserver) { this._intersectionObserver.disconnect(); this._intersectionObserver = null; }
         clearTimeout(this._resizeTimeout);
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        this._unobserve();
         if (this._counterRaf) { cancelAnimationFrame(this._counterRaf); this._counterRaf = null; }
     }
 
@@ -538,7 +598,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
         const sunEntity = this._hass?.states['sun.sun'];
         const elevation = sunEntity ? (parseFloat(sunEntity.attributes?.elevation) || -90) : -90;
         const isNight = elevation < 0;
-        const solar = this._val('solar_power');
+        const solar = this._val('solar_power', 0);
         const a = sunEntity?.attributes;
         let pos = 0.5;
         if (a) {
@@ -726,10 +786,15 @@ class SEMSystemDiagramCard extends SEMLitBase {
             evStateText = this._t('connected') || 'Verbunden';
             evStateFill = 'rgba(141,200,146,0.6)';
         }
+        // The car's state of charge, when one car can honestly be meant
+        // (util/ev-node-soc.js): "Connected · 64%", or just "64%" while it is
+        // not plugged in. Nothing while it is unknown. Drawn bold and fully
+        // opaque after the faded status, so it reads like the battery's level.
+        const evSocText = this._showEv ? this._evSocLabel(this._hass) : '';
 
         // Daily kWh chips
         const todayLbl = this._t('today');
-        const solarKwh   = `${todayLbl} ${this._valStr('daily_solar_energy')} kWh`;
+        const solarKwh   = `${todayLbl} ${this._rawOrMissing('daily_solar_energy')} kWh`;
         // #568 — the Home glance uses the raw provider full-day forecast
         // (forecast_today_kwh), matching every sibling card (solar / summary /
         // system / schedule). It previously read the performance-corrected
@@ -737,10 +802,10 @@ class SEMSystemDiagramCard extends SEMLitBase {
         // One decimal to match those cards.
         const forecast   = this._val('forecast_today_kwh');
         const solarFcst  = forecast > 0 ? `☀ ${forecast.toFixed(1)} kWh ${this._t('forecast') || 'Forecast'}` : '';
-        const evKwh      = `${todayLbl} ${this._valStr('daily_ev_energy')} kWh`;
-        const homeKwh    = `${todayLbl} ${this._val('daily_home_energy').toFixed(1)} kWh`;
-        const battKwh    = `+${this._val('daily_battery_charge_energy').toFixed(1)} / -${this._val('daily_battery_discharge_energy').toFixed(1)} kWh`;
-        const gridKwh    = `↓${this._val('daily_grid_import_energy').toFixed(1)} / ↑${this._val('daily_grid_export_energy').toFixed(1)} kWh`;
+        const evKwh      = `${todayLbl} ${this._rawOrMissing('daily_ev_energy')} kWh`;
+        const homeKwh    = `${todayLbl} ${fmtValue(this._val('daily_home_energy'), 1)} kWh`;
+        const battKwh    = `+${fmtValue(this._val('daily_battery_charge_energy'), 1)} / -${fmtValue(this._val('daily_battery_discharge_energy'), 1)} kWh`;
+        const gridKwh    = `↓${fmtValue(this._val('daily_grid_import_energy'), 1)} / ↑${fmtValue(this._val('daily_grid_export_energy'), 1)} kWh`;
 
         // Inverter status. #564 — this is the INVERTER node, so show the
         // inverter's own temperature (sensor.sem_inverter_temperature). It
@@ -775,17 +840,30 @@ class SEMSystemDiagramCard extends SEMLitBase {
                 if (this._mode === 'prefix') unavailable.push(suffix);
                 continue;
             }
-            const entity = this._hass?.states[eid];
-            if (!entity || entity.state === 'unavailable' || entity.state === 'unknown') unavailable.push(suffix);
+            // (#1200) a state that gives no number is out too (#1202)
+            if (isMissing(this._hass?.states[eid])) unavailable.push(suffix);
         }
 
+        // (#1200) A node whose sensor is out prints "— W": the flows above
+        // take its 0, the label does not. Home is a sum of the others when
+        // its own sensor is out, so it is out when one of them is.
+        const outSet = new Set(unavailable);
+        const solarOut = outSet.has('solar_power');
+        const gridOut = outSet.has('grid_import_power') && outSet.has('grid_export_power');
+        const evOut = outSet.has('ev_power');
+        const homeSnap = this._powerSnapshot()?.home_w;
+        const homeOut = (homeSnap === null || homeSnap === undefined)
+            && isMissing(this._hass?.states[this._eid('home_consumption_power')])
+            && (solarOut || gridOut);
+
         // Animated display strings
-        const dispSolar = semFormatPower(this._solarDisp ?? 0);
+        const dispSolar = semFormatPower(solarOut ? null : (this._solarDisp ?? 0));
         const battArrow = battCharge > 10 ? '↑ ' : battDischarge > 10 ? '↓ ' : '';
         const dispBatt  = battArrow + semFormatPower(this._battDisp ?? 0);
-        const dispHome  = semFormatPower(this._homeDisp ?? 0);
-        const dispEv    = semFormatPower(this._evDisp ?? 0);
-        const dispGrid  = this._gridDispMode
+        const dispHome  = semFormatPower(homeOut ? null : (this._homeDisp ?? 0));
+        const dispEv    = semFormatPower(evOut ? null : (this._evDisp ?? 0));
+        const dispGrid  = gridOut ? semFormatPower(null)
+            : this._gridDispMode
             ? `${this._gridDispMode} ${semFormatPower(this._gridDisp ?? 0)}`
             : semFormatPower(0);
         const gridSingleFill = this._gridDispMode === '↑' ? '#8353d1' : '#488fc2';
@@ -813,9 +891,9 @@ class SEMSystemDiagramCard extends SEMLitBase {
                             <div class="pv-chip"
                                  title="${s.entityId}"
                                  data-entity="${s.entityId}"
-                                 @click=${() => this._fireMoreInfo?.(s.entityId)}>
+                                 @click=${() => this._fireMoreInfo(s.entityId)}>
                                 <span class="pv-chip-label">${s.name}</span>
-                                <span class="pv-chip-value">${(Math.abs(s.watts)/1000).toFixed(2)} kW</span>
+                                <span class="pv-chip-value">${semPVStringKW(s.watts)}</span>
                             </div>
                         `)}
                     </div>
@@ -1099,7 +1177,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
                           font-weight="800" fill="#8DC892">${dispEv}</text>
                     <text x="${L.E.cx}" y="${L.E.labelY + fv * 1.0 + fl}"
                           text-anchor="middle" font-family="${F}" font-size="${fl}"
-                          fill="${evStateFill}" opacity="0.6">${evStateText}</text>
+                          fill="${evStateFill}" fill-opacity="0.6">${evStateText}${evSocText ? svg`${evStateText ? ' · ' : ''}<tspan fill="#8DC892" fill-opacity="1" font-weight="800">${evSocText}</tspan>` : nothing}</text>
                     <text x="${L.E.cx}" y="${L.E.labelY + fv * 1.0 + fl + fs + 2}" class="clickable"
                           @click=${() => this._showMoreInfo('daily_ev_energy')}
                           text-anchor="middle" font-family="${F}" font-size="${fs + 1}"
@@ -1576,7 +1654,7 @@ class SEMSystemDiagramCard extends SEMLitBase {
         const totalDx = tx - sx, totalDy = ty - sy;
         const dist = Math.sqrt(totalDx * totalDx + totalDy * totalDy);
         const waves = Math.max(2, Math.round(dist / 30));
-        const solar = this._val('solar_power');
+        const solar = this._val('solar_power', 0);
         const amp = 6 + Math.min(8, solar / 1000);
         const angle = Math.atan2(totalDy, totalDx);
         const perpX = -Math.sin(angle), perpY = Math.cos(angle);
@@ -1652,7 +1730,8 @@ class SEMSystemDiagramCard extends SEMLitBase {
                 && info.device_type !== 'battery')
             .map(([id, info]) => {
                 const powerEntity = info.power_entity ? this._hass.states[info.power_entity] : null;
-                const power = powerEntity ? parseFloat(powerEntity.state) || 0 : (info.current_power || 0);
+                // (#1200) null while the load's own entity is out: "— W"
+                const power = powerEntity ? readNumber(powerEntity) : (info.current_power || 0);
                 return { id, ...info, power, name: this._localizedDeviceName(id, info) };
             })
             .sort((a, b) => b.power - a.power)
@@ -1713,13 +1792,6 @@ class SEMSystemDiagramCard extends SEMLitBase {
                         </div>`;
                 })}
             </div>`;
-    }
-
-    _fireMoreInfo(entityId) {
-        this.dispatchEvent(new CustomEvent('hass-more-info', {
-            bubbles: true, composed: true,
-            detail: { entityId },
-        }));
     }
 
     _renderDeviceStrip(H) {

@@ -1,7 +1,7 @@
 /**
  * Turning the forecast-evidence cells from statistics into explanations.
  *
- * Guido, 30.08, reading the live card: *"1D and 2D these are placeholders"*
+ * 30.08, reading the live card: *"1D and 2D these are placeholders"*
  * (they are not — they are HORIZONS) and *"the forecast accuracy is showing
  * 119d settled, we might want to use this as well"* (it already is — the
  * ledger's p20 of those 119 ratios scales the refill, and having measured
@@ -18,6 +18,7 @@ const PROVIDER_NAMES = {
     solcast: 'Solcast',
     forecast_solar: 'Forecast.Solar',
     open_meteo: 'Open-Meteo',
+    helios: 'Helios',
 };
 
 /**

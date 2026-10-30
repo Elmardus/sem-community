@@ -39,6 +39,7 @@ _LOGGER = logging.getLogger(__name__)
 #:   __init__.py             -> f"sem_seen_version_{entry_id}"
 #:   coordinator/coordinator.py (#949) -> f"sem.pacing.{entry_id}"
 #:   coordinator/coordinator.py (#955) -> f"sem.export_guard.{entry_id}"
+#:   coordinator/coordinator.py (#1180) -> f"sem.charge_target.{entry_id}"
 _PER_ENTRY_STORE_FORMATS: tuple[str, ...] = (
     f"{DOMAIN}_{{entry_id}}_energy",
     f"{DOMAIN}_{{entry_id}}_daily",
@@ -53,6 +54,8 @@ _PER_ENTRY_STORE_FORMATS: tuple[str, ...] = (
     # record of it is a leftover. Found by enumerating the Store() calls
     # rather than re-reading the list, which is why the guard below exists.
     "sem.parked.{entry_id}",
+    # (#1180) coordinator/coordinator.py — the charge target SEM found
+    "sem.charge_target.{entry_id}",
 )
 
 #: Per-entry stores whose key carries a SECOND scope (a battery id), so they

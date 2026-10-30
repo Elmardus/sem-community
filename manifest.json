@@ -14,7 +14,7 @@
     "http",
     "lovelace"
   ],
-  "documentation": "https://github.com/traktore-org/sem-community",
+  "documentation": "https://github.com/traktore-org/sem-community/blob/develop/docs/SETUP_GUIDE.md#3-config-flow",
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/traktore-org/sem-community/issues",
@@ -23,5 +23,5 @@
   ],
   "quality_scale": "platinum",
   "requirements": [],
-  "version": "2.1.0"
+  "version": "2.2.0"
 }

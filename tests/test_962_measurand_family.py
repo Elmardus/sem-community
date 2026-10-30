@@ -38,8 +38,6 @@ from unittest.mock import MagicMock, patch
 from custom_components.solar_energy_management.hardware_detection import (
     _EV_CHARGER_PLATFORMS,
     _MEASURAND_ROLES,
-    EV_INTEGRATION_PATTERNS,
-    EVChargerDetector,
     _measures_the_quantity,
     _reject_capability_sensor,
     apply_charger_discovery_guards,
@@ -379,35 +377,6 @@ class TestWhatCountsAsACapability:
 
 
 class TestTheOtherTwoPaths:
-    def test_the_glob_prefill_demotes_a_capability(self):
-        """``get_best_match`` is the config-flow prefill, not a binding — so
-        it demotes rather than corrects, and must still not offer the
-        nameplate when a measurement is there."""
-        hass = MagicMock()
-        hass.states.async_entity_ids.return_value = [
-            "sensor.ev_charger_power_offered",
-            "sensor.ev_charger_power_active_import",
-        ]
-        state = MagicMock()
-        state.state = "1234"
-        hass.states.get.return_value = state
-        with patch(
-            "custom_components.solar_energy_management.hardware_detection."
-            "entity_registry.async_get", return_value=MagicMock()
-        ):
-            best = EVChargerDetector(hass).get_best_match("ev_charging_power")
-        assert best == "sensor.ev_charger_power_active_import"
-
-    def test_the_ocpp_glob_rows_rank_the_measurand_above_the_offer(self):
-        rows = EV_INTEGRATION_PATTERNS["ocpp"]["patterns"]
-        prio = {pat: p for pat, _d, p in rows["ev_current"]}
-        assert prio["sensor.ocpp_*_current_import"] > \
-            prio["sensor.ocpp_*_current_offered"]
-        session = {pat: p for pat, _d, p in rows["ev_session_energy"]}
-        assert session["sensor.ocpp_*_session_energy"] > \
-            session["sensor.ocpp_*_energy_active_import_interval"]
-        assert "sensor.ocpp_*_energy_active_import_register" not in session
-
     def test_the_near_miss_offer_falls_away_with_its_control(self):
         """The offer is built AROUND a control; if a guard takes it, the
         honest answer is "please report", not a charger with no throttle."""

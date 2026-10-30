@@ -14,19 +14,13 @@ KEY_CHARGE_POWER = "charge_power"
 KEY_SESSION_ENERGY = "total_charge_power_session"
 KEY_OPERATION_MODE = "charger_operation_mode"
 KEY_RESUME = "resume_charging"
-# (#915) The INSTALLATION's own power reading. The real integration exposes a
-# site total beside the per-charger one, and `_discover_zaptec` names it in
-# its docstring as the thing that must NOT seed a charger. Here it is the
-# fixture's whole point: with it, an installation device is a device SEM can
-# describe (a power sensor and a current number) and still cannot MAP —
-# which is the near-miss that the "Add this charger" offer answers.
-KEY_INSTALL_POWER = "total_charge_power"
 
 INSTALL_ID = "sim-installation-1"
 CHARGER_ID = "sim-charger-1"
 
-# Dutch, owner-prefixed — @coppe218's registry, which is what broke detection.
-DEFAULT_PREFIX = "Guido Coppes"
+# Dutch, owner-prefixed — the shape of @coppe218's registry (placeholder
+# name), which is what broke detection.
+DEFAULT_PREFIX = "Jan Jansen"
 
 NAMES_NL = {
     KEY_AVAILABLE_CURRENT: "Beschikbare stroom",
@@ -39,7 +33,6 @@ NAMES_NL = {
     KEY_SESSION_ENERGY: "Sessie energie",
     KEY_OPERATION_MODE: "Laadmodus",
     KEY_RESUME: "Hervat laden",
-    KEY_INSTALL_POWER: "Totaal laadvermogen",
 }
 
 VOLTAGE = 230.0

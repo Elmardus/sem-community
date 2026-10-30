@@ -25,8 +25,10 @@ def _diag_sensor(presence):
 
 def test_the_diagnostic_sensor_carries_the_verdict():
     s = _diag_sensor({m: Presence.ABSENT for m in Module} | {Module.EV: Presence.PRESENT})
-    assert s.extra_state_attributes["install_modules"] == {
-        "battery": "absent", "ev": "present", "heat_pump": "absent", "hot_water": "absent"}
+    modules = s.extra_state_attributes["install_modules"]
+    assert modules["ev"] == "present"
+    assert set(modules) == {m.value for m in Module}
+    assert set(modules.values()) == {"absent", "present"}
 
 
 def test_no_verdict_no_attribute():

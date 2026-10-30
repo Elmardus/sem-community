@@ -1,0 +1,73 @@
+{
+ "devices": {
+  "blue_current:blue_current": {
+   "manufacturer": null,
+   "model": null,
+   "name": "blue_current"
+  }
+ },
+ "domain": "blue_current",
+ "entities": [
+  {
+   "attributes": {
+    "device_class": "restart"
+   },
+   "capabilities": {},
+   "device": "blue_current:blue_current",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.101_reboot",
+   "original_device_class": "restart",
+   "platform": "blue_current",
+   "state": "unknown",
+   "translation_key": "reboot",
+   "unique_id": "reboot_101",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "restart"
+   },
+   "capabilities": {},
+   "device": "blue_current:blue_current",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.101_reset",
+   "original_device_class": "restart",
+   "platform": "blue_current",
+   "state": "unknown",
+   "translation_key": "reset",
+   "unique_id": "reset_101",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "blue_current:blue_current",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.101_stop_charge_session",
+   "original_device_class": null,
+   "platform": "blue_current",
+   "state": "unknown",
+   "translation_key": "stop_charge_session",
+   "unique_id": "stop_charge_session_101",
+   "unit_of_measurement": null
+  }
+ ],
+ "services": {
+  "start_charge_session": [
+   "charging_card_id",
+   "device_id"
+  ]
+ },
+ "source": {
+  "files": [
+   "tests/components/blue_current/snapshots/test_button.ambr"
+  ],
+  "kind": "core-snapshot",
+  "note": "Home Assistant's own test output for this integration at the tag; the device grouping comes from unique_id",
+  "repo": "home-assistant/core",
+  "tag": "2026.8.2"
+ }
+}

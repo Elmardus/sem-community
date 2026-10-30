@@ -20,7 +20,7 @@ Go to **Settings > Dashboards > Energy**. You must have at least a solar product
 
 **2. HACS installed**
 
-SEM is distributed through HACS. If you have not installed HACS, follow the [HACS installation guide](https://hacs.xyz/docs/use/download/download/) first.
+SEM is distributed through HACS. If you have not installed HACS, follow the [HACS installation guide](https://hacs.xyz/docs/use/download/download/) first. On Home Assistant 2026.11 or newer, HACS is built in as **Settings → Marketplace**, so there is nothing to install.
 
 **3. No EV charger? That is fine**
 
@@ -36,6 +36,8 @@ EV charger setup is optional. SEM works as a monitoring and battery management s
    custom repository needed) and click **Download**.
 4. When prompted, restart Home Assistant: **Settings > System > Restart**.
 
+On Home Assistant 2026.11 or newer, open **Settings > Marketplace** instead of HACS in step 1. The other steps are the same.
+
 ![SEM on the HACS page](images/sem_hacs_page.png)
 
 **What you should see:** After restart, "Solar Energy Management" appears as an available integration and HACS shows it as installed.
@@ -50,13 +52,15 @@ EV charger setup is optional. SEM works as a monitoring and battery management s
 
 The wizard has 2 steps.
 
-### Step 2a: Confirm sensors (Observer Mode)
+### Step 2a: SEM found your system
 
-SEM displays a summary of the sensors it found in your Energy Dashboard — solar power, grid power, and battery power. Review them to confirm they look correct.
+SEM shows the solar, grid and battery power it found in your Energy Dashboard, in watts.
 
-If you want SEM to monitor only and not control any hardware, enable **Observer Mode**. You can change this later.
+- They match your inverter or app: press **Submit**.
+- One is wrong: open **Choose sensors myself**, pick the right sensor, press **Submit**.
+- SEM may ask one question about your grid meter ("buying or sending right now?"). Answer it, or choose **I don't know**. Nothing breaks if you skip it.
 
-Click **Submit**.
+SEM starts in watch-only mode: it commands no hardware. Turn that off later on the **Configuration** tab. Details and screenshots: [Step 1](SETUP_GUIDE.md#step-1-sem-found-your-system), [the grid question](SETUP_GUIDE.md#when-sem-asks-one-more-question), [watch-only mode](SETUP_GUIDE.md#watch-only-mode). Wrong sensor later: [Sensor source overrides](SETUP_GUIDE.md#sensor-source-overrides).
 
 ### Step 2b: Hardware
 
@@ -71,6 +75,10 @@ Click **Submit**. SEM starts at a 5 kW target peak limit with load shedding
 [Load Management Settings](USER_GUIDE.md#load-management-settings).
 
 EV charger configuration is available after install via the **Configuration tab** or **Settings > Devices & Services > Solar Energy Management > Configure**.
+
+SEM pre-fills a charger from what its integration offers — buttons, a
+charge-mode select, a car's own charging amps — and you confirm. A field it
+cannot fill stays empty.
 
 **What you should see:** A success message and the integration listed under **Devices & Services**.
 
@@ -142,6 +150,8 @@ Once installed, SEM runs without manual intervention:
 - **The battery's overnight floor is measured** (2.1) — SEM learns what your house uses at night and spends only what tonight can spare
 - **The pack fills across the day** (2.1) — charge pacing follows the forecast so the battery lands full at sunset, not by 11:30
 - **The 15-minute peak is guarded** (2.1) — on a demand tariff SEM keeps every slot's average under your limit, across all devices
+- **Sessions are kept** (2.2) — every finished charge, per charger, on the EV tab with a CSV button. The energy is the charger's own meter
+- **PV health** (2.2) — one tile on the Energy tab says green, yellow, orange or red from a week of yield against forecast
 
 The controls that matter most:
 
@@ -150,6 +160,7 @@ The controls that matter most:
 | `select.sem_charger_<id>_charge_mode` | `Min + Solar` | Per-charger charging mode: **Solar only** / **Solar + battery** (surplus plus the home battery, down to the level the house still needs overnight) / **Solar + cheapest hours** / **Min + Solar** (grid minimum 6A + surplus) / **Always max** / **Off** (hands-off — SEM sends nothing). Pick based on your needs; see [Charging Modes](SETUP_GUIDE.md#8-ev-charging-modes) in the Setup Guide. |
 | `number.sem_battery_assist_min_surplus` | 1200 W | **Solar Gate**: minimum real solar surplus to enable battery assist for the EV. Set to 0 W to allow battery support everywhere (previous behaviour). Prevents battery drain into the car at night. |
 | `switch.sem_observer_mode` | **ON** (new installs) | Monitor-only — turn it OFF to let SEM control hardware |
+| `select.sem_hints` | `off` | Hints (2.2): a sentence when something is off, and a weekly note. **Weekly note** or **All hints** to turn on |
 
 Everything else is automatic.
 

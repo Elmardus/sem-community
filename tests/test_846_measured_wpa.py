@@ -1,6 +1,6 @@
 """#846 — SEM measures the result of every command it issues.
 
-Guido, 26.08, watching PROD: *"the A to the charger is a choice of SEM,
+26.08, watching PROD: *"the A to the charger is a choice of SEM,
 therefore the math is not correcting itself. The idea is from EVCC: fire,
 check, adjust."*
 

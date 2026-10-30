@@ -7,7 +7,8 @@ Supports:
 - Custom rules with per-day time windows
 - Swiss provider presets (EKZ, BKW, CKW)
 - Optional holiday entity (binary_sensor) for holiday-as-NT
-- HA Schedule helper entity as alternative input
+- HA Schedule helper entity as alternative input — the one the options
+  form offers (#1040); its blocks are the peak (HT) hours
 """
 import logging
 from datetime import datetime, time, timedelta
@@ -16,7 +17,9 @@ from typing import Any, Dict, List, Optional
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .tariff_provider import LEVEL_FLAT, TariffProvider, TariffData, PriceLevel
+from .tariff_provider import (
+    LEVEL_FLAT, LEVEL_NO_PRICES, TariffProvider, TariffData, PriceLevel,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,6 +77,54 @@ def _day_numbers(value: object) -> List[int]:
     return out
 
 
+# The Schedule helper's day keys, in ``datetime.weekday()`` order.
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday",
+             "saturday", "sunday")
+
+
+def _block_edge(value: object) -> Optional[time]:
+    """One edge of a Schedule helper block as a ``time``, or ``None``.
+
+    (#1040) ``schedule.get_schedule`` hands back ``time`` objects in
+    process and ISO strings over JSON. The end of the day is ``time.max``
+    — ``"23:59:59.999999"`` in JSON — or ``"24:00:00"`` in YAML.
+    """
+    if isinstance(value, time):
+        return value
+    text = str(value or "").strip()
+    if text.startswith("24:00") and not text[5:].strip(":0."):
+        return time.max
+    try:
+        return time.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def timetable_from_schedule(week: object) -> Optional[List[tuple]]:
+    """(#1040) A Schedule helper's week as ``(weekday, start, end)`` blocks.
+
+    ``None`` when the answer is not a week we understand — not a dict, or
+    a block we cannot read — so "could not read" is never mistaken for
+    "no peak hours" (#925). A block the helper itself would refuse (end
+    not after start) is skipped.
+    """
+    if not isinstance(week, dict):
+        return None
+    blocks: List[tuple] = []
+    for day, key in enumerate(_WEEKDAYS):
+        for block in (week.get(key) or []):
+            if not isinstance(block, dict):
+                return None
+            start = _block_edge(block.get("from"))
+            end = _block_edge(block.get("to"))
+            if start is None or end is None:
+                return None
+            if end <= start:
+                continue
+            blocks.append((day, start, end))
+    return blocks
+
+
 def _tariff_word(value: object) -> str:
     """A rule's tariff word, normalised: ``ht`` or ``nt``.
 
@@ -113,6 +164,14 @@ class CalendarTariffProvider(TariffProvider):
         self.holiday_entity = holiday_entity
         self.schedule_entity = schedule_entity
         self.currency = currency
+        # (#1040) The Schedule helper's state only says what NOW is. The
+        # day strip, the next change and the battery break-even ask about
+        # other hours, so the helper's week is read into this table by
+        # ``async_refresh_service_prices``. ``None`` = not read yet.
+        self._timetable: Optional[List[tuple]] = None
+        self._timetable_stamp: Any = None
+        self._timetable_read_at: Optional[datetime] = None
+        self._timetable_failed_at: Optional[datetime] = None
 
         # Parse rules into (days, start_time, end_time, tariff) tuples
         self._rules: List[tuple] = []
@@ -139,6 +198,74 @@ class CalendarTariffProvider(TariffProvider):
             _LOGGER.info(
                 "Calendar tariff using schedule entity: %s", schedule_entity,
             )
+
+    # How often the helper's week is read again when nothing signals a change.
+    TIMETABLE_REFRESH = timedelta(minutes=15)
+
+    async def async_refresh_service_prices(self) -> bool:
+        """(#1040) Read the Schedule helper's week via ``schedule.get_schedule``.
+
+        Same hook as the Nord Pool curve: the coordinator calls it on the
+        event loop once per cycle and this method throttles itself. It
+        reads again when the helper's state was written (an edit, or an
+        on/off change) and every ``TIMETABLE_REFRESH`` otherwise.
+
+        Returns True when a fresh week was stored. A failed read keeps the
+        last good week.
+        """
+        if not self.schedule_entity or self.hass is None:
+            return False
+        # Only a Schedule helper has a week. A hand-written binary_sensor
+        # or input_boolean answers by state alone.
+        if not str(self.schedule_entity).startswith("schedule."):
+            return False
+        services = getattr(self.hass, "services", None)
+        if services is None or not services.has_service("schedule", "get_schedule"):
+            return False
+        state = self.hass.states.get(self.schedule_entity)
+        if state is None:
+            return False
+        now = dt_util.now()
+        stamp = getattr(state, "last_updated", None)
+        if (
+            self._timetable is not None
+            and stamp == self._timetable_stamp
+            and self._timetable_read_at is not None
+            and now - self._timetable_read_at < self.TIMETABLE_REFRESH
+        ):
+            return False
+        if (
+            self._timetable_failed_at is not None
+            and now - self._timetable_failed_at < self.TIMETABLE_REFRESH
+        ):
+            return False
+        try:
+            resp = await services.async_call(
+                "schedule", "get_schedule",
+                {"entity_id": self.schedule_entity},
+                blocking=True, return_response=True,
+            )
+        except Exception as err:  # noqa: BLE001 — a helper we cannot read must not stop the cycle
+            self._timetable_failed_at = now
+            _LOGGER.warning(
+                "Calendar tariff: cannot read schedule %s: %s",
+                self.schedule_entity, err,
+            )
+            return False
+        week = timetable_from_schedule(
+            resp.get(self.schedule_entity) if isinstance(resp, dict) else None)
+        if week is None:
+            self._timetable_failed_at = now
+            _LOGGER.warning(
+                "Calendar tariff: schedule %s returned no week",
+                self.schedule_entity,
+            )
+            return False
+        self._timetable = week
+        self._timetable_stamp = stamp
+        self._timetable_read_at = now
+        self._timetable_failed_at = None
+        return True
 
     @staticmethod
     def _parse_time(s: str) -> time:
@@ -180,14 +307,12 @@ class CalendarTariffProvider(TariffProvider):
 
         # HA Schedule helper mode
         if self.schedule_entity:
-            state = self.hass.states.get(self.schedule_entity)
-            if state and state.state not in ("unknown", "unavailable"):
-                # Schedule helper: "on" = HT period, "off" = NT period
-                return "ht" if state.state == "on" else "nt"
+            word = self._schedule_word(when)
             # (#994) A helper that will not read is not a helper saying NT.
             # It used to answer "off" → NT → CHEAP, all day, on an input
-            # nobody could see.
-            return self.default_tariff
+            # nobody could see. Readers ask ``_known_at`` before trusting
+            # this fallback.
+            return word if word is not None else self.default_tariff
 
         # Rule-based evaluation
         dow = when.weekday()  # 0=Mon, 6=Sun
@@ -211,15 +336,83 @@ class CalendarTariffProvider(TariffProvider):
 
         return self.default_tariff
 
+    # How far a caller's "now" may lag ours and still be "now".
+    _NOW_SLACK = timedelta(seconds=60)
+
+    def _state_covers(self, when: datetime, state: Any) -> bool:
+        """(#1040) Does the helper's state speak for ``when``?
+
+        "on"/"off" is true from now until the helper's ``next_event``; it
+        says nothing about any other hour.
+        """
+        now = dt_util.now()
+        try:
+            nxt = (getattr(state, "attributes", None) or {}).get("next_event")
+            if isinstance(nxt, str):
+                nxt = dt_util.parse_datetime(nxt)
+            if not isinstance(nxt, datetime):
+                nxt = None
+            if nxt is not None and when >= nxt:
+                return False    # past the next edge, the state is old news
+            # A caller's "now" was taken a moment before ours, never after.
+            if timedelta(0) <= now - when <= self._NOW_SLACK:
+                return True
+            return nxt is not None and now <= when
+        except (TypeError, ValueError):     # naive vs aware, bad timestamp
+            return False
+
+    def _schedule_word(self, when: datetime) -> Optional[str]:
+        """(#1040) ``ht``/``nt`` from the Schedule helper, or ``None``.
+
+        The state answers for its own window, the helper's week for every
+        other hour. Before the week is read, other hours are unknown — the
+        state copied to every hour gave one block all day on the strip and
+        no spread for the battery break-even (class 86).
+        """
+        state = self.hass.states.get(self.schedule_entity)
+        if not state or state.state in ("unknown", "unavailable"):
+            return None
+        if self._state_covers(when, state):
+            return "ht" if state.state == "on" else "nt"
+        if self._timetable is not None:
+            return self._timetable_word(when)
+        return None
+
+    def _known_at(self, when: datetime) -> bool:
+        """(#1040) Can this calendar say anything about ``when``?"""
+        if not self.schedule_entity:
+            return True
+        return self._schedule_word(when) is not None
+
+    def _timetable_word(self, when: datetime) -> str:
+        """(#1040) ``ht`` inside one of the helper's blocks, else ``nt``.
+
+        Same rule as the helper itself: start included, end excluded, and
+        a block ending at 24:00 runs to midnight.
+        """
+        dow = when.weekday()
+        now_t = when.time()
+        for day, start, end in (self._timetable or []):
+            if day != dow or now_t < start:
+                continue
+            if now_t < end or end == time.max:
+                return "ht"
+        return "nt"
+
     def _is_high_tariff(self, when: Optional[datetime] = None) -> bool:
         """Check if given time is in high tariff period."""
         now = when or dt_util.now()
         return _tariff_word(self._get_tariff_at(now)) == "ht"
 
     def get_current_import_rate(self) -> float:
-        return self.peak_rate if self._is_high_tariff() else self.off_peak_rate
+        # (#1077) as a value; all value fields at 0 = the rate itself
+        return self._import_value(
+            self.peak_rate if self._is_high_tariff() else self.off_peak_rate)
 
     def get_current_export_rate(self) -> float:
+        return self._export_value(self.export_rate)
+
+    def get_current_spot_export_rate(self) -> float:
         return self.export_rate
 
     def _rates_differ(self) -> bool:
@@ -260,14 +453,26 @@ class CalendarTariffProvider(TariffProvider):
             return False        # cannot ask → cannot claim a peak hour
         if self.holiday_entity and self._is_holiday():
             return False
-        # A Schedule helper decides moment by moment and publishes no
-        # timetable anyone can scan. Its existence IS the claim that high
-        # tariff happens; reading the rule table instead silenced this
-        # entire input mode, because a schedule-helper install has no
-        # rules at all.
+        # A Schedule helper install has no rules at all, so reading the
+        # rule table silenced this entire input mode. Until its week is
+        # read, the helper's existence is the claim that high tariff
+        # happens.
         if self.schedule_entity:
             st = self.hass.states.get(self.schedule_entity)
-            return bool(st) and st.state not in ("unknown", "unavailable")
+            if not st or st.state in ("unknown", "unavailable"):
+                return False
+            # The state is the freshest word on its own window — a week read
+            # before an edit must not say "no peak today" while it is on.
+            if st.state == "on" and self._state_covers(now, st):
+                return True
+            if self._timetable is None:
+                return True     # ``_known_at`` limits it to the state's window
+            # (#1040) With the week read, ask about THIS day (class 104):
+            # a helper with no block on Sunday has one price on Sunday.
+            # The week, not the state, is what decides every hour but now —
+            # and a probe a few seconds before a block starts must not read
+            # the state's "off" as "no block today".
+            return any(dow == now.weekday() for dow, _s, _e in self._timetable)
         if not self._rules:
             return self.default_tariff == "ht"
         # Otherwise: ask the function that DECIDES, at every boundary the
@@ -286,7 +491,9 @@ class CalendarTariffProvider(TariffProvider):
                    for p in probes)
 
     def _comparison_stands(self, when: Optional[datetime] = None) -> bool:
-        return self._rates_differ() and self._ht_can_occur(when)
+        now = when or dt_util.now()
+        return (self._rates_differ() and self._known_at(now)
+                and self._ht_can_occur(now))
 
     def get_price_level(self) -> Optional[PriceLevel]:
         """(#994) ``None`` when nothing was compared."""
@@ -295,7 +502,12 @@ class CalendarTariffProvider(TariffProvider):
         return PriceLevel.NORMAL if self._is_high_tariff() else PriceLevel.CHEAP
 
     def get_price_at(self, when: datetime) -> Optional[float]:
-        return self.peak_rate if self._is_high_tariff(when) else self.off_peak_rate
+        # (#1040) An hour nobody can speak for has no price; the battery
+        # break-even falls back to the configured rates.
+        if not self._known_at(when):
+            return None
+        return self._import_value(
+            self.peak_rate if self._is_high_tariff(when) else self.off_peak_rate)
 
     def get_price_level_at(self, when: datetime) -> "PriceLevel | None":
         # Same calendar rule get_price_level applies now: NT = CHEAP (#638),
@@ -310,9 +522,12 @@ class CalendarTariffProvider(TariffProvider):
         now = dt_util.now()
         is_ht = self._is_high_tariff(now)
 
+        # (#1077) the same values the current rate is published in
+        peak_v = self._import_value(self.peak_rate)
+        off_v = self._import_value(self.off_peak_rate)
         data = TariffData(
-            current_import_rate=self.peak_rate if is_ht else self.off_peak_rate,
-            current_export_rate=self.export_rate,
+            current_import_rate=peak_v if is_ht else off_v,
+            current_export_rate=self.get_current_export_rate(),
             price_level=self.get_price_level(),
             currency=self.currency,
             provider="calendar",
@@ -320,17 +535,20 @@ class CalendarTariffProvider(TariffProvider):
             classifier_path=("calendar_schedule" if self._comparison_stands()
                              else "calendar_no_comparison"),
             # A calendar always HAS its two rates and its rule table; when
-            # it declines, the day simply holds one price.
-            level_absence=LEVEL_FLAT,
+            # it declines, the day simply holds one price. (#1040) A
+            # Schedule helper that cannot be read is not one price — it is
+            # no answer.
+            level_absence=(LEVEL_FLAT if self._known_at(now)
+                           else LEVEL_NO_PRICES),
             # (#994) with no HT rule REACHABLE TODAY the day has ONE price;
             # reporting the rate table's two would tell every consumer —
             # and ``variation_known``, which reads exactly these two fields
             # — to wait for an hour this day can never reach.
-            today_min_price=(self.off_peak_rate if self._comparison_stands()
+            today_min_price=(off_v if self._comparison_stands()
                              else self.get_current_import_rate()),
-            today_max_price=(self.peak_rate if self._comparison_stands()
+            today_max_price=(peak_v if self._comparison_stands()
                              else self.get_current_import_rate()),
-            today_avg_price=((self.peak_rate + self.off_peak_rate) / 2
+            today_avg_price=((peak_v + off_v) / 2
                              if self._comparison_stands()
                              else self.get_current_import_rate()),
         )
@@ -347,15 +565,21 @@ class CalendarTariffProvider(TariffProvider):
             if next_change:
                 data.next_expensive_window_start = next_change
 
+        self._value_fields(data)
         return data
 
     def _find_next_transition(self, from_dt: datetime, to_tariff: str) -> Optional[datetime]:
         """Find the next time the tariff changes to the specified type."""
-        # Check every 15 minutes for the next 48 hours
-        check = from_dt
-        current = self._get_tariff_at(check)
+        # Check every 15 minutes for the next 48 hours, on the quarter
+        # hours where windows begin. (#1040) Stepping from an odd minute
+        # reported a 05:00 change as 05:13.
+        current = self._get_tariff_at(from_dt)
+        check = from_dt.replace(minute=from_dt.minute - from_dt.minute % 15,
+                                second=0, microsecond=0)
         for _ in range(192):  # 48h * 4 per hour
             check += timedelta(minutes=15)
+            if not self._known_at(check):
+                return None     # (#1040) past what the helper can tell
             new_tariff = self._get_tariff_at(check)
             if new_tariff == to_tariff and new_tariff != current:
                 return check
@@ -375,10 +599,15 @@ class CalendarTariffProvider(TariffProvider):
         # day of alternating NT/HT stripes to paint, right beside a sensor
         # correctly reading `flat`. The strip is the picture users check
         # first, and it was telling the older story.
-        if not self._comparison_stands(day):
+        # (#1040) …and a Schedule helper whose week is not read yet says
+        # nothing about the rest of the day: no stripes, and not "flat".
+        unread = bool(self.schedule_entity) and self._timetable is None
+        if unread or not self._comparison_stands(day):
             return [{
                 "start": "00:00", "end": "24:00", "tariff": None,
-                "level": LEVEL_FLAT,
+                "level": (LEVEL_NO_PRICES
+                          if unread or not self._known_at(day)
+                          else LEVEL_FLAT),
                 "avg_price": round(self.get_current_import_rate(), 4),
             }]
 
@@ -394,9 +623,9 @@ class CalendarTariffProvider(TariffProvider):
                 # The card reads `level` first and falls back to the
                 # legacy HT/NT word; give it both so it never has to.
                 "level": "normal" if current_tariff == "ht" else "cheap",
-                "avg_price": round(
+                "avg_price": round(self._import_value(
                     self.peak_rate if current_tariff == "ht"
-                    else self.off_peak_rate, 4),
+                    else self.off_peak_rate), 4),
             })
 
         for hour in range(24):

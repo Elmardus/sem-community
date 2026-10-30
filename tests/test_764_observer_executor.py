@@ -62,6 +62,13 @@ def _sc():
     return sc
 
 
+def _observer_events(sc):
+    """(#1084) The bus also carries the decision log's event now; these
+    tests are about the observer surface's edges only."""
+    return sum(1 for c in sc.hass.bus.async_fire.call_args_list
+               if c.args[0] == "solar_energy_management_observer_decision")
+
+
 def _charger_adapter(phases=3, voltage=230.0, max_a=32.0):
     a = MagicMock()
     a.phases = phases
@@ -167,12 +174,12 @@ class TestTheChargerSeamCuts:
         for _ in range(5):
             await actuate(_cdec(amps=10), _charger_adapter(), _cpower(),
                           _reconciler(), observer=True, controller=sc)
-        assert sc.hass.bus.async_fire.call_count == 1
+        assert _observer_events(sc) == 1
         await actuate(_cdec(intent=ChargerIntent.IDLE, amps=0,
                             reason="surplus gone"),
                       _charger_adapter(), _cpower(), _reconciler(),
                       observer=True, controller=sc)
-        assert sc.hass.bus.async_fire.call_count == 2
+        assert _observer_events(sc) == 2
 
     async def test_the_seam_survives_without_a_controller(self):
         """Bare callers (older paths, unit tests) still get the cut — which
@@ -279,7 +286,7 @@ class TestTheBatterySeamCuts:
         for w in (3000.0, 3004.0, 2996.0):
             await actuate_battery(_bdec(charge_power_w=w), _battery_adapter(),
                                   observer=True, controller=sc)
-        assert sc.hass.bus.async_fire.call_count == 1
+        assert _observer_events(sc) == 1
 
 
 # ─────────── the pipeline runs for real under observer ───────────
@@ -404,7 +411,7 @@ class TestTheSurfaceIsARosterNotALedger:
         sc.publish_observer_decision(
             key="battery:b2", name="b2", action="normal", kind="battery")
 
-        assert sc.hass.bus.async_fire.call_count == 1
+        assert _observer_events(sc) == 1
 
     def test_a_still_deciding_device_survives_every_sweep(self):
         sc = _sc()

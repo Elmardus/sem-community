@@ -21,9 +21,9 @@ because that is what execution's ``price_is_cheap`` gate fires on.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 _FIT_EPS = 0.999          # float-drift guard on "floor met", never a real short
 _W_EPS = 1.0              # grants below 1 W are noise
@@ -48,7 +48,12 @@ class Demand:
     ``min_run_s``/``min_gap_s``: the #688 anti-cycle windows — an allocation
     shorter than min-run would physically run min-run anyway, so the plan
     quantizes honestly. ``priority``: one-list position, LOWER packs first
-    (callers negate the drag-list number).
+    (callers negate the drag-list number). ``contiguous`` (#1023): the need
+    is met in ONE run of back-to-back slots — the cheapest such run — or,
+    when no run can hold it, slot-wise with a note saying so. ``late_s``
+    (#1023): the last ``late_s`` seconds before the deadline are charged
+    first, price-blind, at the headroom there, ending AT the deadline; the
+    rest is packed to end before that window opens.
     """
     id: str
     kind: str                       # 'ev' | 'load' | 'battery'
@@ -61,6 +66,12 @@ class Demand:
     needs_cheap_level: bool = False
     min_run_s: int = 0
     min_gap_s: int = 0
+    contiguous: bool = False
+    late_s: int = 0
+    #: (#812) The device's own tariff (``device_tariff.PlanTariff``): its
+    #: price and cheap level per slot, read in place of the house's. None =
+    #: the house tariff, exactly as before.
+    tariff: Any = field(default=None, compare=False)
 
 
 @dataclass
@@ -161,6 +172,8 @@ class Allocation:
     power_w: float
     price: float
     reason: str
+    #: (#1023) the top-up before departure — the card hatches it
+    late: bool = False
 
     @property
     def energy_kwh(self) -> float:
@@ -241,11 +254,32 @@ def pack_night(demands, ledger, *, floor_kwh=0.0, max_discharge_w=5000.0,
     results = []
     last_block_end = {}             # demand id -> datetime of its last block
 
+    def _price(d, i):
+        """(#812) The slot's price for THIS demand: its own tariff's when
+        it has one (unknown there = the house price), else the house's."""
+        s = ledger[i]
+        if d.tariff is None:
+            return s.price
+        own = d.tariff.price_at(s.start)
+        return s.price if own is None else own
+
+    def _cheap(d, i):
+        """(#812) Is the slot cheap for THIS demand — the live gate's rule."""
+        s = ledger[i]
+        return s.level_cheap if d.tariff is None else bool(d.tariff.cheap_at(s.start))
+
+    def _order(d):
+        """Grid demands walk the cheapest slots first — by their own price."""
+        if d.tariff is None:
+            return by_price
+        return sorted((i for i in idx if _price(d, i) is not None),
+                      key=lambda i: (_price(d, i), ledger[i].start))
+
     def _eligible(d, i):
         s = ledger[i]
         if d.deadline is not None and s.end > d.deadline:
             return False
-        if d.needs_cheap_level and not s.level_cheap:
+        if d.needs_cheap_level and not _cheap(d, i):
             return False
         prev = last_block_end.get(d.id)
         if (prev is not None and d.min_gap_s > 0 and s.start > prev
@@ -253,12 +287,126 @@ def pack_night(demands, ledger, *, floor_kwh=0.0, max_discharge_w=5000.0,
             return False
         return True
 
+    def _grid_cell(d, i, want):
+        """What a grid demand would take from slot ``i`` toward ``want``
+        kWh: ``(power_w, run_h)``, or None when the slot cannot serve it.
+        The same sizing as the slot-wise path below."""
+        s = ledger[i]
+        h = s.hours
+        if h <= 0 or _price(d, i) is None or not _eligible(d, i):
+            return None
+        grant = min(float(d.max_power_w), s.headroom_w)
+        if grant < max(_W_EPS, float(d.min_power_w)):
+            return None
+        power = min(grant, max(float(d.min_power_w), want / h * 1000.0))
+        return power, min(h, want / (power / 1000.0))
+
+    def _cheapest_run(d, need):
+        """(#1023) The cheapest run of back-to-back priced, eligible slots
+        that covers ``need`` within headroom: ``[(i, power_w, run_h)]``, or
+        None when no run can. Ties go to the earlier run."""
+        best, best_cost = None, None
+        for a in idx:
+            cells, got, run_cost, prev_end = [], 0.0, 0.0, None
+            for b in idx[a:]:
+                s = ledger[b]
+                if prev_end is not None and s.start != prev_end:
+                    break
+                cell = _grid_cell(d, b, need - got)
+                if cell is None:
+                    break
+                power, run_h = cell
+                cells.append((b, power, run_h))
+                got += power / 1000.0 * run_h
+                run_cost += power / 1000.0 * run_h * float(_price(d, b))
+                prev_end = s.end
+                if got >= need * _FIT_EPS:
+                    break
+            if got < need * _FIT_EPS:
+                continue
+            if d.min_run_s > 0:
+                # (#688) A block shorter than min-run would run min-run.
+                short = d.min_run_s / 3600.0 - sum(r for _, _, r in cells)
+                if short > 0:
+                    b, power, run_h = cells[-1]
+                    grown = min(ledger[b].hours, run_h + short)
+                    run_cost += (power / 1000.0 * (grown - run_h)
+                                 * float(_price(d, b)))
+                    cells[-1] = (b, power, grown)
+            if best is None or run_cost < best_cost - 1e-12:
+                best, best_cost = cells, run_cost
+        return best
+
     for d in sorted(demands, key=lambda d: (d.priority, d.id)):
         need = max(0.0, float(d.energy_kwh))
         planned = 0.0
         cost = 0.0
         note = ""
-        order = (idx if d.source == "battery" else by_price)
+        block_note = ""
+        if (d.late_s > 0 and d.deadline is not None
+                and d.source != "battery" and need > 1e-9):
+            # (#1023) The late part first: latest slot first, each run
+            # ending where the next one starts, the last at the deadline.
+            # Never held back for price — an unpublished hour costs 0 here.
+            window = d.deadline - timedelta(seconds=d.late_s)
+            for i in reversed(idx):
+                if need - planned <= 1e-9:
+                    break
+                s = ledger[i]
+                lo, hi = max(s.start, window), min(s.end, d.deadline)
+                span_h = (hi - lo).total_seconds() / 3600.0
+                if span_h <= 0:
+                    continue
+                power = min(float(d.max_power_w), s.headroom_w)
+                if power < max(_W_EPS, float(d.min_power_w)):
+                    continue
+                run_h = min(span_h, (need - planned) / (power / 1000.0))
+                if d.min_run_s > 0 and planned <= 1e-9:
+                    run_h = min(span_h, max(run_h, d.min_run_s / 3600.0))
+                begin = hi - timedelta(hours=run_h)
+                _p = _price(d, i)
+                price = 0.0 if _p is None else float(_p)
+                s.grid_committed_w += power
+                s.headroom_w -= power
+                allocations.append(Allocation(
+                    demand_id=d.id, start=begin, end=hi, power_w=power,
+                    price=price,
+                    reason=(f"{d.id}: {power:.0f} W {begin:%H:%M}–{hi:%H:%M} "
+                            f"@ {price:.3f} (late charge before departure)"),
+                    late=True))
+                last_block_end[d.id] = max(last_block_end.get(d.id, hi), hi)
+                planned += power / 1000.0 * run_h
+                cost += power / 1000.0 * run_h * price
+            # The rest ends before the late window opens.
+            d = replace(d, deadline=window)
+        block_done = False
+        if d.contiguous and d.source != "battery" and need - planned > 1e-9:
+            run = _cheapest_run(d, need - planned)
+            if run is None:
+                block_note = "no single block fits"
+            else:
+                for i, power, run_h in run:
+                    s = ledger[i]
+                    end = s.start + timedelta(hours=run_h)
+                    price = float(_price(d, i))
+                    s.grid_committed_w += power
+                    s.headroom_w -= power
+                    allocations.append(Allocation(
+                        demand_id=d.id, start=s.start, end=end, power_w=power,
+                        price=price,
+                        reason=(f"{d.id}: {power:.0f} W {s.start:%H:%M}–"
+                                f"{end:%H:%M} @ {price:.3f} (one block, "
+                                f"headroom left {s.headroom_w:.0f} W)")))
+                    last_block_end[d.id] = max(
+                        last_block_end.get(d.id, end), end)
+                    planned += power / 1000.0 * run_h
+                    cost += power / 1000.0 * run_h * price
+                block_done = True
+        order = (idx if d.source == "battery" else _order(d))
+        own_rank = ({i: n + 1 for n, i in enumerate(order)}
+                    if d.tariff is not None and d.source != "battery" else rank)
+        if block_done:
+            order = ()                  # the block holds it all
         for i in order:
             if need - planned <= 1e-9:
                 break
@@ -274,7 +422,7 @@ def pack_night(demands, ledger, *, floor_kwh=0.0, max_discharge_w=5000.0,
                             - s.home_batt_kwh - s.batt_out_kwh)
                 if avail <= 1e-9:
                     continue
-                # The discharge limit is a SHARED per-slot bottleneck (Guido,
+                # The discharge limit is a SHARED per-slot bottleneck (decision
                 # 2026-07-29): home's battery draw + every booked Tier-2 load
                 # sum against the inverter's total — INSTANTANEOUSLY, since
                 # allocations start at slot start and overlap. Peak, not
@@ -305,7 +453,7 @@ def pack_night(demands, ledger, *, floor_kwh=0.0, max_discharge_w=5000.0,
             if run_h <= 0:
                 continue
             end = s.start + timedelta(hours=run_h)
-            price = 0.0 if d.source == "battery" else float(s.price)
+            price = 0.0 if d.source == "battery" else float(_price(d, i))
             e_kwh = power / 1000.0 * run_h
             if d.source == "battery":
                 s.batt_out_kwh += e_kwh
@@ -319,7 +467,7 @@ def pack_night(demands, ledger, *, floor_kwh=0.0, max_discharge_w=5000.0,
                 s.grid_committed_w += power   # survives trajectory re-walks
                 s.headroom_w -= power
                 why = (f"{d.id}: {power:.0f} W {s.start:%H:%M}–{end:%H:%M} "
-                       f"@ {price:.3f} (slot #{rank[i]} cheapest, "
+                       f"@ {price:.3f} (slot #{own_rank[i]} cheapest, "
                        f"headroom left {s.headroom_w:.0f} W)")
             allocations.append(Allocation(
                 demand_id=d.id, start=s.start, end=end, power_w=power,
@@ -332,8 +480,9 @@ def pack_night(demands, ledger, *, floor_kwh=0.0, max_discharge_w=5000.0,
             note = (f"{unpriced} slot(s) unpriced — replans when the "
                     f"day-ahead series lands")
         elif d.needs_cheap_level and planned == 0 and need > 1e-9:
-            if not any(s.level_cheap for s in ledger):
+            if not any(_cheap(d, i) for i in idx):
                 note = "no cheap window tonight"
+        note = "; ".join(n for n in (block_note, note) if n)
         status = ("fits" if planned >= need * _FIT_EPS or need <= 1e-9
                   else "partial" if planned > 0 else "yields")
         results.append(DemandResult(

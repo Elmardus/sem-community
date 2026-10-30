@@ -35,7 +35,7 @@ and the legacy types simultaneously.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Dict
 
@@ -128,6 +128,17 @@ class ChargerPower:
     real draw by ~5 s (#289); consumers should prefer
     ``power_w > 500`` for the "actually charging" decision and
     treat ``charging`` as informational."""
+    plug_known: bool = True
+    """(#1153) Whether ``connected`` is an answer. False for a charger
+    with no plug sensor of its own that is not drawing: it shows a car
+    only through its draw, so "not connected" there means "not known",
+    not "no car". Defaults True: every reader keeps today's meaning."""
+
+    @property
+    def car_absent(self) -> bool:
+        """(#1153) "No car" as an answer, never as a missing one —
+        unknown is not gone."""
+        return not self.connected and self.plug_known
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -209,6 +220,15 @@ class BatteryPower:
     # reason as ``InverterPower.daily_kwh``: nothing ever wrote them.
 
     name: str = ""
+
+    power_read: bool = False
+    """(#1167) True only when THIS unit's power sensor answered with a
+    number this cycle (both sides for a two-sensor pair) and the number is
+    one a battery can produce. ``power_w`` is 0.0 on a dark read, which is
+    also what an idle pack reads. The fleet's flag cannot stand in for it:
+    one dark unit would make every other unit's 0 W no reading too.
+    (#1170) ``SEMData.to_dict`` publishes this unit's power and status as
+    None while it is False, so its entity shows no 0 W."""
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -362,6 +382,9 @@ class ExportDecision:
     intent: ExportIntent = ExportIntent.NONE
     watts: float = 0.0
     reason: str = ""
+    #: (#1174) why, as a stable code and its numbers — recorded only
+    reason_code: str = field(default="", compare=False)
+    reason_params: Mapping[str, Any] = field(default_factory=dict, compare=False)
 
 
 @dataclass(frozen=True)
@@ -384,6 +407,21 @@ class BatteryDecision:
     """Used iff intent == FORCE_DISCHARGE (#523) — stop discharging at
     this reserve SOC."""
     reason: str = ""
+    room_capped: bool = False
+    """(#1069) FORCE_CHARGE / STOP_FORCE_CHARGE shaped by the room under the
+    grid limit: actuation lowers it at once, raises it only after the room
+    held, and restarts after a no-room stop only with clear room."""
+    follows_load: bool = False
+    """(#1173) LIMIT_DISCHARGE whose watts ARE the house load (the EV clamp,
+    the grid-funded clamp): actuation raises it only to a level the house
+    has held for a while. ``False`` — a target (the hold, a peak cover owed,
+    the blind release, the cars' share) — rises at once. Lowering is the
+    same for both."""
+    # (#1174) The reason as a stable code and its sentence's numbers —
+    # recorded only, left out of equality (see ChargerDecision).
+    reason_code: str = field(default="", compare=False)
+    reason_params: Mapping[str, Any] = field(
+        default_factory=dict, compare=False)
 
 
 @dataclass(frozen=True)
@@ -421,10 +459,17 @@ class BatteryView:
     # sink. Defaults keep every existing install untouched: no master
     # switch, no budget, and a dynamic floor of None contributes nothing
     # to the max() rather than being read as a floor of zero.
+    ev_drew_recently: bool = True
+    """(#1199) A car drew in the last 15 minutes. The discharge clamp holds
+    for a plugged-in car only while this is true; an idle car is not fed."""
     ev_wants_pack: bool = False
     """(03.09) A CONNECTED charger in *Solar + battery* mode — the consent
     the charger side already acts on (``_battery_assist_split``), so the
     discharge clamp reads the same one instead of a separate master switch."""
+    ev_pack_shared_w: Optional[float] = None
+    """(#1130) With a connected car whose mode must not use the pack: the
+    assist the cars that may use it were offered this cycle. The clamp
+    then holds the pack at house + this. ``None`` = no such car."""
     battery_spendable_kwh: float = 0.0
     forecast_spending_enabled: bool = False
     dynamic_floor_pct: float = None
@@ -472,6 +517,22 @@ class BatteryView:
     — the SPEND twin of ``arbitrage_sell``, fleet-split by the pipeline.
     decide_battery consults THIS gate when the verdict carries
     ``from_forecast_spend``; arbitrage verdicts never read it."""
+    #: (#1025) a battery boost runs: the pack may feed the car down to THIS
+    #: floor, in percent. None without a boost.
+    battery_boost_floor_soc: Optional[float] = None
+    #: (#1066) What SEM knows about a forced charge / discharge on this
+    #: battery, one per direction (:func:`decide_battery.forced_ops`):
+    #: ``None`` — unknown (a fresh adapter; one from a prior instance may
+    #: run), ``True`` — SEM started one and its stop has not landed,
+    #: ``False`` — stopped. A scheduler stop verdict wins only while its
+    #: direction is not ``False``; a ``True`` is stopped before any other
+    #: command. ``None`` keeps a view built without an adapter on the old
+    #: precedence.
+    sem_forced_charge: Optional[bool] = None
+    sem_forced_discharge: Optional[bool] = None
+    #: (#1066) cycles in a row the stop of such an op has not landed
+    #: (:func:`decide_battery.stop_misses`); 0 when nothing is pending.
+    sem_stop_misses: int = 0
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -554,6 +615,13 @@ class ChargerDecision:
     never held above it by a blind-cycle hold): a limit is not a preference.
     PROD 02.09: the guard said 10 A, the wire carried 14→12 A for two more
     minutes and the slot set the month's peak."""
+    peak_paused: bool = False
+    """(#1069) An IDLE because the peak slot has no room for this charger's
+    minimum current. Not a mode's verdict: the stability layer bridges it
+    for the user's disable delay and restarts only after the enable delay —
+    in EVERY mode, day or night, the same rule surplus charging uses. Before
+    this the clamp floored at 6 A and the car flipped on/off every cycle
+    against a limit near its minimum."""
     redirect_w: float = 0.0
     """(#899) Battery-charge watts this decision credited to the car
     ("redirect"). Carried so the loop can check it against the meter
@@ -608,6 +676,13 @@ class ChargerDecision:
     Deliberately NOT derived from ``bridgeable``: that field answers "is
     this dip transient", which a max-SOC stop also answers False, and a
     full car is not an emergency. One flag, one meaning."""
+
+    # (#1174) The reason as a stable code (``reason_codes``) and the few
+    # numbers its plain sentence names. Recorded only — never read by a
+    # decider, and left out of equality so no comparison moves.
+    reason_code: str = field(default="", compare=False)
+    reason_params: Mapping[str, Any] = field(
+        default_factory=dict, compare=False)
 
 
 def solar_commitment_w(
@@ -775,6 +850,14 @@ class FleetContext:
     """(#892) the ev sink verdict is OPEN this cycle — the pack may feed the
     car below the solar gate, down to the drain floor."""
 
+    boost_charger_id: Optional[str] = None
+    """(#1025) the charger a battery boost runs for this cycle, or None. For
+    THAT charger the pack may feed the car below the solar gate, down to
+    ``boost_floor_soc`` — like the morning window, on the user's one-off."""
+
+    boost_floor_soc: Optional[float] = None
+    """(#1025) the running boost's floor, in percent; None without one."""
+
     home_w: float = 0.0
     """Home consumption (W). Pre-priority-attribution this was
     the slack variable; post-#349 it's a first-class demand."""
@@ -862,6 +945,12 @@ class FleetContext:
     peak_committed_w: float = 0.0
     """Watts already committed to higher-priority chargers in
     this cycle (the #274/H1 share-one-peak-budget invariant)."""
+    battery_forced_grid_w: float = 0.0
+    """(#1069) The grid watts of a forced battery charge SEM itself is
+    running. They sit in ``grid_import_w``, but the battery yields them to
+    the car next cycle (it sizes its charge from what the chargers were
+    offered), so the peak clamp counts them as room, not as somebody
+    else's draw — the car comes before the battery."""
 
     arbitrage: Optional["ArbitrageSignals"] = None
     """Battery→grid arbitrage market signals (#533), computed once per cycle.
@@ -1031,6 +1120,8 @@ class FleetCycleState:
     # (#864) the slot-budget allowance, resolved once per cycle; None when
     # no target peak limit is configured.
     peak_slot_allowed_w: Optional[float] = None
+    # (#1069) grid watts of SEM's own forced battery charge (FleetContext).
+    battery_forced_grid_w: float = 0.0
     # #576 — fleet-level priority-list inputs (one home battery). Threaded
     # here so every charger's view sees the same slot + command state.
     battery_priority: "Optional[int]" = None
@@ -1051,6 +1142,10 @@ class FleetCycleState:
     #: (#892) the ev sink verdict is OPEN this cycle — a morning window the
     #: user opened; the charger side may offer the pack below the solar gate.
     morning_window_open: bool = False
+    #: (#1025) the battery boost running this cycle, if any: which charger,
+    #: and the floor it may draw the pack down to. Never persisted.
+    boost_charger_id: Optional[str] = None
+    boost_floor_soc: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -1196,3 +1291,18 @@ class FleetView:
             count=len(power),
             per_charger=dict(power),
         )
+
+
+def rewrite(decision, *, reason_code: str,
+            reason_params: Optional[Mapping[str, Any]] = None, **changes):
+    """(#1174) The one way to change what a decision does — its intent, its
+    current or power, its mode — after it was made. The caller names WHY in
+    the same breath (``reason_code``), so a rewritten decision never keeps
+    a code that describes the decision it replaced. ``reason_params=None``
+    keeps the decision's own numbers; pass a mapping to replace them.
+    ``tests/test_1174_plain_reasons.py`` fails on a bare ``replace`` that
+    changes one of those fields."""
+    params = (getattr(decision, "reason_params", None) if reason_params is None
+              else reason_params)
+    return replace(decision, reason_code=reason_code,
+                   reason_params=dict(params or {}), **changes)

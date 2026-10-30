@@ -12,6 +12,7 @@
 
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semDefineCard } from '../base/sem-shared.js';
+import { MISSING, allOut, fmtValue, readNumber } from '../util/missing-value.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
 
@@ -46,10 +47,11 @@ class SEMChargerStatusCard extends SEMLitBase {
         if (this._isFrozen() && !localeChanged) return;
 
         // Skip transient unavailable states caused by coordinator refresh
+        // (#1197: only when every charger's power is out, not one).
         if (this._chargers?.length > 0 && !localeChanged) {
             const prefix = this._config?.entity_prefix || DEFAULT_PREFIX;
-            const canary = hass.states[`${prefix}charger_${this._chargers[0]}_power`]?.state;
-            if (canary === 'unavailable' || canary === 'unknown') return;
+            if (allOut(hass.states,
+                this._chargers.map(id => `${prefix}charger_${id}_power`))) return;
         }
 
         // Re-discover chargers when entity count changes
@@ -89,10 +91,9 @@ class SEMChargerStatusCard extends SEMLitBase {
         this._prefix = config.entity_prefix || DEFAULT_PREFIX;
     }
 
-    _val(suffix, fallback = 0) {
-        const e = this._hass?.states[`${this._prefix}${suffix}`];
-        if (!e || e.state === 'unavailable' || e.state === 'unknown') return fallback;
-        return parseFloat(e.state) ?? fallback;
+    // (#1200) null for a sensor that is out: the tile prints "—", not 0.
+    _val(suffix, fallback = null) {
+        return readNumber(this._hass?.states[`${this._prefix}${suffix}`]) ?? fallback;
     }
 
     _valStr(suffix) {
@@ -103,6 +104,8 @@ class SEMChargerStatusCard extends SEMLitBase {
     _chargerName(id) {
         const entity = this._hass?.states[`${this._prefix}charger_${id}_power`];
         let name = id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        // (#1053) the charger's own name, in the user's language
+        if (entity?.attributes?.charger_name) return entity.attributes.charger_name;
         if (entity?.attributes?.friendly_name) {
             name = entity.attributes.friendly_name
                 .replace(/^SEM\s+/i, '')
@@ -120,7 +123,9 @@ class SEMChargerStatusCard extends SEMLitBase {
         const name = this._chargerName(id);
         const isCharging = power > 50;
         const statusColor = isCharging ? '#8DC892' : '#888';
-        const statusText = isCharging ? this._t('charging') : this._t('idle');
+        // (#1200) a power that is out says nothing about charging
+        const statusText = power == null ? MISSING
+            : isCharging ? this._t('charging') : this._t('idle');
         const glowOpacity = isCharging ? '0.15' : '0';
 
         return html`
@@ -133,17 +138,17 @@ class SEMChargerStatusCard extends SEMLitBase {
                 </div>
                 <div class="charger-metrics">
                     <div class="metric">
-                        <span class="metric-value">${power.toFixed(0)}</span>
+                        <span class="metric-value">${fmtValue(power, 0)}</span>
                         <span class="metric-unit">W</span>
                         <span class="metric-label">${this._t('power')}</span>
                     </div>
                     <div class="metric">
-                        <span class="metric-value">${session.toFixed(1)}</span>
+                        <span class="metric-value">${fmtValue(session, 1)}</span>
                         <span class="metric-unit">kWh</span>
                         <span class="metric-label">${this._t('session')}</span>
                     </div>
                     <div class="metric">
-                        <span class="metric-value">${solar.toFixed(0)}</span>
+                        <span class="metric-value">${fmtValue(solar, 0)}</span>
                         <span class="metric-unit">%</span>
                         <span class="metric-label">${this._t('solar')}</span>
                     </div>

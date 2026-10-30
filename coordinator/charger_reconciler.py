@@ -216,6 +216,8 @@ class ChargerReconciler:
                  enable_retry_interval_s: float = 300.0) -> None:
         self.charger_id = charger_id
         self._heartbeat_s = float(heartbeat_s)
+        # (#1084) set by ``actuate()``; None = record nothing
+        self.decision_log = None
         self._idle_disable_threshold = int(idle_disable_threshold)
         self._last_write_at: float = 0.0
         self._consecutive_idle_count: int = 0
@@ -264,8 +266,8 @@ class ChargerReconciler:
         # (park-on-disconnect) An enabled KEBA auto-starts the NEXT plug-in
         # on its own — "not drawing" is NOT "off". SEM used to issue nothing
         # when a car left (the box stayed enabled), so the next plug-in
-        # auto-charged ~1 kWh before the quota-hold caught it (Guido, PROD
-        # 26.08). His pre-SEM automation disabled the box after every charge
+        # auto-charged ~1 kWh before the quota-hold caught it (PROD
+        # 26.08). The pre-SEM automation disabled the box after every charge
         # for exactly this. So: ONE PARK_OFF on the settled disconnect edge.
         # ``_seen_connected`` gates it to a real "car LEFT" edge: only a
         # charger we have observed WITH a car, now gone, is parked on
@@ -783,9 +785,13 @@ class ChargerReconciler:
             if desired is DesiredState.OFF:
                 fs = self._failsafe_action()
                 if fs:
+                    if not observed.enable_controllable and not observed.connected:
+                        return fs
                     if not observed.enable_controllable:
                         return fs + [Action(ActionKind.REPORT_ENABLE_BLOCKED)]
                     return fs + self._gated_disable(now, bypass_anticycle=_stop_is_a_demand)
+                if not observed.enable_controllable and not observed.connected:
+                    return [Action(ActionKind.NONE)]
                 if not observed.enable_controllable:
                     # #548 — the contactor is app/cloud-locked (Wallbox
                     # Eco-Smart / Scheduled / Power-Sharing): SEM cannot
@@ -856,6 +862,10 @@ class ChargerReconciler:
         # action). Keyed on the ACTUAL switch state, NOT on power, so a
         # full-but-plugged car (switch on, drawing 0 W) does not churn.
         enable_actions: List[Action] = []
+        if not observed.enable_controllable and not observed.connected:
+            # (#1032) No car: a switch the device makes unavailable has
+            # nothing to start, so there is nothing to report.
+            return [Action(ActionKind.NONE)]
         if not observed.enable_controllable:
             # Switch present but unavailable/unknown (locked / eco-smart):
             # SEM cannot drive it → charging is silently impossible. Surface.
@@ -1069,6 +1079,7 @@ class ChargerReconciler:
         for action in actions:
             if action.kind is ActionKind.NONE:
                 continue
+            self._log_write(action, adapter, decision)
             # (#700) any action other than the unenforceable-report means the
             # intent moved or a mechanism appeared — re-arm the one-shot
             # warning so the NEXT unenforceable episode warns again.
@@ -1224,6 +1235,43 @@ class ChargerReconciler:
                 return
         self._retire_stand_down(adapter)
 
+    def _log_write(self, action: Action, adapter, decision) -> None:
+        """(#1084) Hand a write that leaves for the box to the decision log.
+
+        Only the writes that change what the charger does: a current, a
+        start, a stop, a park. ENABLE re-asserts and the REPORT/CLEAR rows
+        send no command. Under observer mode the device's ``send`` withholds
+        the write; the row is the same, flagged ``observer``. The log keeps
+        only changes, so a re-asserted DISABLE or a heartbeat write of the
+        same amps makes no row. Recording only.
+        """
+        log = getattr(self, "decision_log", None)
+        if log is None:
+            return
+        # (#1084 review) everything below is recording only: nothing in it
+        # may raise into the write it describes
+        try:
+            kind = action.kind
+            if kind is ActionKind.DISABLE:
+                verb, value = "disable", None
+            elif kind is ActionKind.PARK_OFF:
+                verb, value = "park_off", None
+            elif kind in (ActionKind.WRITE_CURRENT, ActionKind.START_AND_WRITE):
+                amps = int(action.amps or 0)
+                verb, value = ("charge", float(amps)) if amps > 0 else ("stop", None)
+            else:
+                return
+            from .decision_log import record_charger
+            dev = getattr(adapter, "_device", None)
+            observer = getattr(dev, "observer_mode", False) is True
+            # the charger's own name, so two chargers' rows tell apart
+            name = getattr(dev, "name", None)
+            record_charger(log, decision, verb=verb, value=value,
+                           observer=observer,
+                           name=name if isinstance(name, str) else "")
+        except Exception as e:  # noqa: BLE001 — recording only, never the send
+            _LOGGER.debug("decision log: charger row not written: %s", e)
+
     # ── #627 stop-unenforceable repair plumbing ──────────────────────────
     def _device_and_hass(self, adapter):
         dev = getattr(adapter, "_device", None)
@@ -1354,7 +1402,12 @@ def observe(adapter, power) -> ObservedState:
         setpoint_a=setpoint,
         self_charging=adapter.is_self_charging(power),
         power_w=float(getattr(power, "power_w", 0.0) or 0.0),
-        connected=bool(getattr(power, "connected", True)),
+        # (#1153) A car that is not KNOWN to be gone is "a charger that
+        # cannot say" — the default above. A charger with no plug sensor
+        # reads not-connected whenever it stops drawing; parking it off on
+        # that left it off for good.
+        connected=(bool(getattr(power, "connected", True))
+                   or not bool(getattr(power, "plug_known", True))),
         enabled=enabled,
         enable_controllable=controllable,
         stop_controllable=stop_ok,

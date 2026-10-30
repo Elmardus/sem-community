@@ -99,6 +99,65 @@ def native_power_scale(
         hass, entity_id, require_explicit_unit=require_explicit_unit)
 
 
+def clamp_to_entity_range(
+    attrs,
+    watts: float,
+    scale: float,
+    *,
+    round_down_to_step: bool = False,
+) -> float:
+    """Clamp a watt value to a number entity's own min/max (#523).
+
+    ``min``/``max``/``step`` are the entity's NATIVE units, so they are
+    scaled to watts with ``scale`` (from :func:`native_power_scale`); the
+    result stays in watts. Home Assistant REFUSES a ``number.set_value``
+    outside the range, and a non-blocking call never hears about it — the
+    register keeps its old value while the writer believes it moved
+    (RienduPre's Sessy setpoint stuck at 0, #523; Arne's charge limit stuck
+    at 1560 W, #820). ONE clamp for every power write.
+
+    ``round_down_to_step`` is for a ceiling (a charge cap): rounding it up
+    to the next step would let through more than was decided. The grid
+    starts at zero (#820: min 10, step 100 means 1400, not 1410). A cap
+    below the first grid point lands on the entity's MIN — Home Assistant
+    always accepts the min, and it is the smallest cap the entity has.
+    """
+    if not isinstance(attrs, Mapping):
+        return watts
+    lo = attrs.get("min")
+    lo_w = (float(lo) * scale
+            if isinstance(lo, (int, float)) and math.isfinite(lo) else None)
+    hi = attrs.get("max")
+    hi_w = (float(hi) * scale
+            if isinstance(hi, (int, float)) and math.isfinite(hi) else None)
+    step = attrs.get("step")
+    step_w = (float(step) * scale
+              if round_down_to_step and isinstance(step, (int, float))
+              and math.isfinite(step) and step > 0 else None)
+
+    def _floor(value: float) -> float:
+        # (#820, 02.10) The grid starts at ZERO. Arne's Sungrow template
+        # number has min 10 and step 100; a grid anchored at the min gave
+        # 1410 W and, with step 10, 1151 W — values off the step the user
+        # sees. A min that sits on its own step's grid is the same grid.
+        # The tiny tolerance keeps 2.4 kW / 0.1 kW at 24 steps, not 23.
+        return math.floor(value / step_w + 1e-9) * step_w
+
+    if step_w is not None:
+        watts = _floor(watts)
+    if hi_w is not None:
+        if step_w is not None and watts > hi_w:
+            # a capped ceiling is still a value on the step (#820 review)
+            hi_w = _floor(hi_w)
+        watts = min(hi_w, watts)
+    if lo_w is not None:
+        # The entity's own floor wins over the grid: Home Assistant
+        # accepts its min, and nothing lower — a cap below the first
+        # grid point lands here.
+        watts = max(lo_w, watts)
+    return watts
+
+
 def is_valid_power_control_entity(
     hass,
     entity_id: str,
@@ -210,6 +269,7 @@ async def async_write_power_setpoint_verbose(
     watts: float,
     *,
     context: str,
+    force: bool = False,
 ) -> tuple:
     """Validate, convert, and write a watt setpoint.
 
@@ -219,6 +279,10 @@ async def async_write_power_setpoint_verbose(
     #915 read-back needs: noting a "write" that never happened re-armed its
     grace timer every cycle and no verdict could ever be reached (06.09
     audit).
+
+    ``force`` skips the same-value check, for a caller that knows it wrote
+    another value last: the entity can still show the value from before
+    that write until the integration next reads it (#1175).
     """
     prepared = prepare_power_setpoint(hass, entity_id, watts)
     if prepared is None:
@@ -228,7 +292,8 @@ async def async_write_power_setpoint_verbose(
     # a Huawei install — wrote its max every cycle). Compare in native units
     # to the LIVE entity state, so an external change is still re-asserted;
     # one native unit is the resolution the entity can express.
-    if abs(prepared.current_value - prepared.value) < 1.0 / prepared.scale_to_watts:
+    if (not force and abs(prepared.current_value - prepared.value)
+            < 1.0 / prepared.scale_to_watts):
         log_on_change(
             _LOGGER, f"setpoint-skip:{entity_id}", logging.DEBUG,
             "%s: %s already at %.3f — no write", context, entity_id, prepared.value,
@@ -256,8 +321,9 @@ async def async_write_power_setpoint(
     watts: float,
     *,
     context: str,
+    force: bool = False,
 ) -> bool:
     """Validate, convert, and write a watt setpoint. Return success."""
     ok, _wrote = await async_write_power_setpoint_verbose(
-        hass, entity_id, watts, context=context)
+        hass, entity_id, watts, context=context, force=force)
     return ok

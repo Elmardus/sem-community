@@ -31,8 +31,26 @@ export function antiCyclePlaceholder(goals, effKey) {
  */
 export function antiCycleBounds(attrs) {
     const b = attrs && attrs.anti_cycle_bounds;
-    if (!b) return null;
+    if (!b || b.min == null || b.max == null) return null;
     const min = Number(b.min), max = Number(b.max);
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
     return { min, max };
+}
+
+/**
+ * (#1128) The anti-cycle value to send for what was typed, or null to send
+ * nothing. An input's min/max limit its arrows, not typing: a typed 500
+ * still fires `change`. A value past the published range is the nearest end
+ * of it. Empty, not a number, or under 1 sends nothing: 0 is the "off"
+ * value, and clearing the field must not send ''. No published range: the
+ * value as typed.
+ * @param {string} raw    the input's value
+ * @param {{min:number,max:number}|null} bounds from antiCycleBounds()
+ */
+export function antiCycleValue(raw, bounds) {
+    if (raw === '' || raw == null) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 1) return null;
+    const v = bounds ? Math.min(bounds.max, Math.max(bounds.min, n)) : n;
+    return v < 1 ? null : v;
 }

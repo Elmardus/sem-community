@@ -39,6 +39,13 @@ The dashboard is generated automatically on first install. If you need to regene
 > configured, and cards on the other tabs drop the parts that belong to
 > hardware you do not have (the sankey's battery and EV nodes, for example).
 > See [Modules](USER_GUIDE.md#modules--sem-shows-what-you-have).
+>
+> **Controls follow your house too (#996).** A setting you cannot use is
+> not shown: the price thresholds appear only on a dynamic tariff, the
+> export guard only when SEM finds an export-limit entity on the inverter
+> (or you name one), the forecast rows only with a forecast, kWh-per-kWp
+> only with a plant size, ROI only with an investment figure. Set the
+> thing up and the control appears.
 
 ### Home
 
@@ -86,16 +93,17 @@ Deep dive into energy production, consumption, and environmental impact.
 
 | Card | Description |
 |------|-------------|
-| **Sankey Diagram** | Energy flow visualization from sources to destinations |
+| **Sankey Diagram** | Energy flow visualization from sources to destinations. A battery that sells shows a Battery → Grid line; regenerate the dashboard once to see it |
 | **Self-Consumption + Autarky** | Gauge cards showing percentage rates |
 | **Energy Distribution** | Donut chart breaking down today's energy by category |
 | **24h Power Curves** | Detailed power graph with solar, home, grid, battery over 24 hours |
 | **Solar Today vs Yesterday** | Side-by-side comparison chart |
-| **Carbon Avoided** | Daily CO2 savings from self-consumed solar (128g/kWh Swiss grid) |
+| **Carbon Avoided** | The *CO2 Avoided Today* sensor: solar used on site, also into the battery, times the grid's g/kWh |
 | **Trees Saved** | Yearly trees equivalent with growing icon (sprout > tree > pine > forest) |
 | **Self-Consumption Trend** | 30-day line chart of self-consumption and autarky rates |
 | **Solar Forecast** | Today + tomorrow forecast with percentage comparison |
 | **30-Day Energy** | Monthly bar chart of daily solar and consumption |
+| **PV health** (2.2) | One tile, green to red: a week of yield against forecast. Tap it for the numbers: ratio, downtime minutes, days since the last full day, snow |
 
 ### Battery
 
@@ -123,8 +131,28 @@ EV charging session tracking and statistics.
 | **Session Gauges** | Daily energy vs target, solar share percentage |
 | **Charging Power Chart** | 24h EV power curve |
 | **Charging Settings** | Charge target range (Min ↔ Max), [Charge mode selector](#charging-mode-selector-v163), Charge by deadline picker, Set as default |
-| **EV Intelligence** | Taper trend visualization, virtual SOC estimate, charge skip status & reasoning, battery health indicator |
 | **Lifetime Statistics** | Total energy, cost, sessions, solar share over all time |
+| **Sessions** (2.2) | Per charger: this month's count and kWh in the header, the month's list with totals, a **Download .xlsx** button. The energy is the charger's own meter |
+
+#### Everyday and All settings (2.2)
+
+The EV card has two views, switched at its top right: **Everyday** (the
+default) and **All settings**. It is the same switch as on the Configuration
+tab, kept per browser.
+
+Everyday shows, per charger, what you use every day: name and status, SOC,
+power, today's energy and solar share, the charge mode, the charge target with
+the km it adds, and *Charge by* with the next departure (and a warning when it
+cannot be reached). The rest is folded:
+
+| Fold | Holds |
+|---|---|
+| **More** | Pause, phase mode (when set up), weekday departures, *Charge in one block*, *Top up before leaving*, battery boost (homes with a battery) |
+| **Details** | Session energy and the current SEM set, the plan strip, the SOC estimate line, the learning note, the session list |
+
+Battery size, minimum current and consumption sit on one *Set once* line; tap a
+value to change it. All settings opens both folds and shows them as tiles. A
+fold you open stays open on this page until you switch the view.
 
 #### Charging mode selector (v1.6.3)
 
@@ -158,6 +186,7 @@ EV section moved to per-charger cards on the EV tab in v1.6.3.
 | **Heat Pump** | Active mode and SG-Ready state (auto-hidden when no heat pump is configured) |
 | **Tariff & Pricing** | Provider, price level, current import rate |
 | **Peak & Load Management** | Live % of peak limit, peak margin, sheddable devices |
+| **Why?** | Each command SEM changed on a device, the reason, and the numbers it decided on ([details](#sem-why-card)) |
 | **Load Priority** | Drag-and-drop device ordering with real-time power, controllable/critical toggles, per-device control mode (Off / Peak Only / Surplus), and a per-device **Configure** button (see below). EV chargers have no mode dropdown here — their charge target is set in the **Charge Target** block on the EV card |
 
 A red observer-mode banner appears at the top whenever Observer Mode
@@ -181,21 +210,48 @@ Entity types use a searchable entity picker filtered to the right domain. **Rese
 ![Configuration Tab](images/sem_config_tab.png)
 
 The single home for **every changeable setting** (`sem-config-card`),
-organized in collapsible sections: Setup overview, Sensor sources (power-source overrides for grid / solar / battery, #628), EV chargers, Battery zones, Tariff & pricing, Heat pump, Hot water, Battery scheduler, Load management, Solar forecast, PV strings (when 2+ strings are detected), Notifications, and Advanced
-zones, Tariff & pricing, Heat pump, Hot water, Battery scheduler, Load
-management, Solar forecast, Notifications, and Advanced (update
-interval, deltas, min solar power, regulation offset, Observer Mode,
-SEM status history).
+organized in collapsible sections under three headings:
+
+| Group | Sections |
+|---|---|
+| **Basics** | Setup overview, Tariff & pricing, EV chargers, Battery zones, Sensor sources (what SEM reads now, in plain words, with one tap to turn a wrong grid or battery direction around, #1213; and the power-source overrides for grid / solar / battery / house, #628) |
+| **My devices** | Heat pump, Hot water, Load management, PV strings (when 2+ strings are detected), Detected hardware |
+| **Fine-tuning** | Battery scheduler, Battery intelligence, Solar forecast, Notifications (with the **Hints** setting, 2.2), Advanced (update interval, delays, min solar power, regulation offset, Observer Mode, grid VPP, SEM status history, sign fixes) |
+
+##### Everyday and All settings
+
+A switch at the top picks one of two views. Your choice is kept in this
+browser (not in SEM's settings, so each person keeps their own) and the other
+SEM tabs follow the same switch.
+
+- **Everyday** (the default) shows what SEM needs to work: the tariff mode and
+  its prices (or its price entity / schedule), each charger's power sensor and
+  control entity, the battery's discharge protection and, when load
+  management is on, its on/off and peak limit. Sections you have already set
+  up stay visible; a section with nothing to change day to day shows one line
+  instead. Each section ends with **N more in All settings**, one tap to the
+  rest. Fine-tuning folds to one line unless one of its sections has unsaved
+  changes.
+- **All settings** shows every setting. Nothing is only reachable elsewhere.
+  Set-once values such as a car's battery capacity, min/max current, kWh per
+  100 km and phases, the plug and car sensors, and the battery zone floors are
+  here (the floors are also on the Battery tab, the charge target on the EV
+  tab).
 
 ##### Detected hardware (2.1)
 
 What SEM found, with the evidence: every charger and its roles, the entities
 it left unmapped, and **near misses** — hardware it saw but could not place.
+Since 2.2 the same section carries **offers** read from what an integration
+provides — start/stop buttons, a charge-mode select, a car's own charging
+amps — which the add-charger step pre-fills. An offer is never saved by itself.
 Since 2.1 a near miss carries **proposals** read from the integration's own
 words (entities *and* services), and an *add this charger* button when SEM
 can drive it as-is. When it cannot, the row says why ("wire by hand: fields
 SEM cannot fill"). Cars found on a transport such as MQTT are listed as
 **vehicles**. Nothing here is bound until you confirm it in a picker.
+For a grid meter with two sensors, one **Use this** click saves both import
+and export.
 
 ##### Battery: setpoint model (2.1)
 
@@ -297,7 +353,7 @@ went to zero. Installs that already have those cards are unaffected.
 
 ## Bundled SEM Cards
 
-All 31 cards ship inside the integration — no HACS installation needed. Each
+All 33 cards ship inside the integration — no HACS installation needed. Each
 one registers itself with Home Assistant's card picker carrying a name, a
 description, and a **help link that lands on its section below**. If you are
 looking at a card in the dashboard editor and want to know what it does, the
@@ -336,9 +392,11 @@ refill, tonight's floor — plus the charge-pacing line (#820) and the sell
 window when one is scheduled. The pace is solved for the whole bill — what the
 pack still needs plus what the house will draw back out of it in the deficit
 hours before sunset — and carries a fixed 10 % headroom so an evening that
-comes in under the forecast still lands the pack full; the sensor behind the
-line (`sensor.sem_battery_charge_pacing`) shows both terms as `drain_kwh`
-and `headroom_pct`. The other figures on the panel are entities too:
+comes in under the forecast still lands the pack full. The headroom is a share
+of the whole sunny day: with sun from 08:00 to 18:15 the pack is planned full
+by about 17:13, and every re-plan keeps that time. The sensor behind the
+line (`sensor.sem_battery_charge_pacing`) shows the terms as `drain_kwh`,
+`headroom_pct` and `finish_by`. The other figures on the panel are entities too:
 `sensor.sem_battery_spendable_kwh`, `sensor.sem_battery_dynamic_floor_pct`,
 `sensor.sem_battery_measured_capacity_kwh`, `sensor.sem_battery_capacity_drift_pct`
 and `sensor.sem_forecast_trust_d1` / `_d2`. In the **Learning** state the panel also offers
@@ -393,6 +451,12 @@ often), and **Override external scheduling** (let it act while a Huawei
 reports an operator's `DI Active Scheduling`). All off / at defaults until
 you turn them on.
 
+The *Notifications* group holds **Hints** (2.2): Off, Weekly note or All
+hints. And since 2.2 the card shows only controls your house can use: on a
+flat tariff the price thresholds are not there, without an export-limit
+entity no export guard, without a forecast no forecast spending. Wire the
+entity and the rows appear.
+
 #### sem-control-card
 
 **SEM Control** · *Control tab*
@@ -430,7 +494,8 @@ free. Cost per kWh and the shares therefore tell one consistent story.
 
 **SEM Energy Impact** · *Energy tab*
 
-CO₂ avoided and its tree-equivalent, for today, this year, and lifetime.
+CO₂ avoided and its tree-equivalent, for today, this year, and lifetime. It
+shows the same figure as its sensor, solar stored in the battery included.
 
 #### sem-energy-plan-card
 
@@ -452,8 +517,10 @@ Today's EV charging progress against target, plus lifetime charging totals.
 **SEM EV Status** · *EV tab*
 
 The EV hero card: per-charger state, charge mode, target and deadline, with
-the intelligence readouts (taper, estimated SOC) and settings inline. This is
-the reference card for SEM's UI patterns — see [UI patterns](UI_PATTERNS.md).
+the plan, estimated SOC and settings folded under *More* and *Details* in the
+Everyday view and open in All settings (see
+[Everyday and All settings](#everyday-and-all-settings-22)). This is the
+reference card for SEM's UI patterns — see [UI patterns](UI_PATTERNS.md).
 
 Its plan strip paints the charger's night as *wait*, *charging*,
 *done* — or *estimate* (a paler wait): by day, before the joint Energy Plan
@@ -469,6 +536,12 @@ whichever is longer, up to 24 hours. Read in the morning, a fixed 12 hours
 stopped before the night it was describing: a charge booked for 00:00 against
 a 06:00 deadline sat past the right edge and only the wait band showed. Its
 title says how far it is looking.
+
+**Sessions (2.2).** Under each charger, a block headed *Sessions* shows this
+month's count and kWh while collapsed. Open it for the month's list — start,
+kWh, solar share, cost, minutes — with month totals and ‹ › to step back, and
+a **Download .xlsx** button that saves every stored session of that charger as an Excel file (dates and numbers typed, no CSV delimiter to guess). The energy
+is the charger's own meter. Sessions saved before 2.2 have no cost stored.
 
 #### sem-flow-card
 
@@ -561,6 +634,18 @@ view for people who do not have it.
 A 24-hour timeline of tariff level, night window, surplus window, and EV
 charging periods on one axis.
 
+#### sem-simulation-card
+
+**SEM Simulation Card** · *Simulation tab*
+
+Pick a recorded period (last 30 / 90 / 365 days, a month, or the *Most
+recent days* slider), change battery size (up to 150 kWh), power, reserve,
+peak limit, solar size or price — or tap a scenario — and replay it on your
+own Home Assistant. The day types filter the result; tap a day to see why it
+differs. Simulated costs are marked *est.*: numbers after a changed decision
+are estimated, not measured.
+The tab appears when the Simulation tab switch is on and you reload the page.
+
 #### sem-solar-card
 
 **SEM Solar** · *Home tab*
@@ -600,6 +685,24 @@ The illustrated energy diagram — drawn solar panels, house, battery, grid
 pole, and EV charger with animated spark flows along each path, a time-based
 sun arc, and clickable nodes. Responsive down to phone width.
 
+The EV node shows the car's state of charge beside its status ("Connected ·
+64%", or just "64%" while the car is not plugged in). It reads the charger's
+vehicle SOC sensor, then the fleet sensor, then the taper estimate, which is
+marked "~". With more than one charger it shows no SOC: no single car is
+"the" EV, and the node must not borrow one charger's car for all of them.
+
+SEM models one car per charger, so if two cars share one charger the figure can
+belong to the other car (see
+[One vehicle per charger](KNOWN_LIMITATIONS.md#one-vehicle-per-charger)). Set
+`show_ev_soc: false` on the card to hide the figure in that case; the default
+is to show it.
+
+```yaml
+type: custom:sem-system-diagram-card
+entity_prefix: sensor.sem_
+show_ev_soc: false
+```
+
 #### sem-tab-header
 
 **SEM Tab Header** · *every tab*
@@ -621,6 +724,20 @@ used to break long views into labelled sections in the user's own language.
 The forward-looking view of the rest of today: tariff, expected solar, and EV
 charging on one strip. The day-shaped companion to
 [`sem-energy-plan-card`](#sem-energy-plan-card).
+
+#### sem-why-card
+
+**SEM Why?** · *Control tab*
+
+Why did SEM act? One row per command SEM changed on a device: the time, the
+device, its old and new command, the reason as a short sentence in your
+language, and the numbers SEM decided on (sun, battery level, prices,
+surplus). Hold the pointer on the sentence to see SEM's own reason text.
+Rows SEM did not send
+because observer mode is on say *test mode: not sent*. Tap a device chip to
+see only its rows. *Everyday* shows the newest four; the rest open from the
+*Earlier* fold. SEM keeps the last 200 changes until a restart; the same rows
+are in Home Assistant's logbook.
 
 #### sem-weather-card
 
@@ -673,6 +790,7 @@ entities:
   ev:
     entity: sensor.wallbox_charging_power   # invert: true to flip sign
     daily_energy: sensor.ev_today
+    state_of_charge: sensor.car_battery_level   # diagram card only; %
   home:
     entity: sensor.home_consumption         # optional — derived from the balance when omitted
     daily_energy: sensor.home_today

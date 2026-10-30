@@ -49,4 +49,7 @@ def decide_export(fleet: "FleetContext | Any") -> ExportDecision:
         intent=intent,
         watts=float(getattr(cmd, "watts", 0.0) or 0.0),
         reason=str(getattr(cmd, "reason", "")),
+        # (#1174) the why the guard carried from the verdict
+        reason_code=str(getattr(cmd, "reason_code", "") or ""),
+        reason_params=dict(getattr(cmd, "reason_params", None) or {}),
     )

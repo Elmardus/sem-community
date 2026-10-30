@@ -90,7 +90,8 @@ class TestTheEngagementSurvivesARestart:
         w = ChargePacingWriter(store=store)
         assert _run(w.apply(_hass("5000"), ENTITY, 400.0, observer=False)) == "wrote"
         assert store.data == {"entity_id": ENTITY, "restore_value": 5000.0,
-                              "cap_w": 400.0}
+                              "cap_w": 400.0, "accepted_w": None,
+                              "applied_differs": None}
 
     def test_the_next_lifetime_restores_the_REAL_maximum(self):
         """The regression, end to end: restart with the cap on the register."""

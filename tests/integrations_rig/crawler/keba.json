@@ -1,0 +1,29 @@
+{
+ "chargers": [
+  {
+   "control": "service: keba.set_current",
+   "mapped": {
+    "ev_charger_service": "keba.set_current",
+    "ev_charger_service_entity_id": "binary_sensor.keba_p30_plug",
+    "ev_charging_power_sensor": "sensor.keba_p30_charging_power",
+    "ev_charging_sensor": "binary_sensor.keba_p30_charging_state",
+    "ev_connected_sensor": "binary_sensor.keba_p30_plug",
+    "ev_current_sensor": "sensor.keba_p30_max_current",
+    "ev_service_param_name": "current",
+    "ev_session_energy_sensor": "sensor.keba_p30_session_energy",
+    "ev_total_energy_sensor": "sensor.keba_p30_total_energy"
+   }
+  }
+ ],
+ "meters": [],
+ "near_misses": [],
+ "proposals": [
+  {
+   "ev_current_control": [
+    "keba.set_current",
+    "per_charger"
+   ]
+  }
+ ],
+ "vehicles": []
+}

@@ -8,6 +8,9 @@ Pins two contracts:
      ``sem-config-card`` uses to surface advanced settings.
 """
 import pytest
+from custom_components.solar_energy_management.hardware_detection import (  # noqa: E402
+    EVChargerDetector,
+)
 from unittest.mock import MagicMock, AsyncMock, patch
 
 from custom_components.solar_energy_management.config_flow import (
@@ -34,8 +37,7 @@ async def test_install_flow_is_two_steps_only():
         "ev_charging_power_sensor": "sensor.ev_power",
     })
 
-    detector = MagicMock()
-    detector.get_suggested_ev_defaults.return_value = {}
+    detector = MagicMock(spec=EVChargerDetector)
     detector.validate_ev_configuration.return_value = {}
 
     with patch(
@@ -51,7 +53,7 @@ async def test_install_flow_is_two_steps_only():
         "custom_components.solar_energy_management.config_flow.discover_inverter_from_registry",
         return_value=None,
     ):
-        result = await flow.async_step_user(user_input={"observer_mode": False})
+        result = await flow.async_step_user(user_input={})
 
     # Must skip ev_charger and go straight to hardware
     assert result["step_id"] == "hardware", (

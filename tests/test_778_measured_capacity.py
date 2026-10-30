@@ -1,6 +1,6 @@
 """#778 — what is a percent of this battery actually worth?
 
-Guido, 23.08: *"Does the battery SOC = energy also get a ledger, to have it all
+23.08: *"Does the battery SOC = energy also get a ledger, to have it all
 there — or would that be too complicated?"*
 
 Not complicated, and it needs **no new recording**: every sealed night from
@@ -139,7 +139,7 @@ class TestItSaysWhy:
 
 @pytest.mark.unit
 class TestTheOvernightNeedIsAnEnvelopeNotAnAverage:
-    """Guido's framing on #778: the learner-safe ENVELOPE. Reserving the
+    """The framing on #778: the learner-safe ENVELOPE. Reserving the
     typical night leaves the pack short on half of them — and short is not
     symmetric with generous. One costs a little export revenue; the other
     strands the house at its floor before dawn."""

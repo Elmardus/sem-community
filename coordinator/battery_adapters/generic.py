@@ -16,11 +16,38 @@ from typing import Optional
 from ..charger_types import BatteryIntent, ExportIntent
 from ..power_control import async_write_power_setpoint_verbose
 from .base import BatteryControlAdapter
+from ...utils.select_option import listed_option
 
 _LOGGER = logging.getLogger(__name__)
 
 
+class _StrategyOption:
+    """(#1039) A configured power-strategy value, read as the option the
+    strategy select LISTS. Every compare against the select's state and
+    every write uses it — a value typed as the label a person sees (``API``
+    for ``api``) would otherwise never be read as landed, and the user's own
+    mode would be captured as the "prior" to restore."""
+
+    def __set_name__(self, owner, name) -> None:
+        self._raw = f"{name}_raw"
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        return listed_option(getattr(obj, "_hass", None),
+                             getattr(obj, "_strategy_entity", ""),
+                             getattr(obj, self._raw, None))
+
+    def __set__(self, obj, value) -> None:
+        setattr(obj, self._raw, value)
+
+
 class GenericBatteryAdapter(BatteryControlAdapter):
+    _strategy_active = _StrategyOption()
+    _strategy_idle = _StrategyOption()
+    _strategy_self_consume = _StrategyOption()
+    _strategy_off = _StrategyOption()
+
     def __init__(self, hass, config: dict) -> None:
         super().__init__(hass, config)
         self._discharge_control_entity = config.get(
@@ -63,6 +90,9 @@ class GenericBatteryAdapter(BatteryControlAdapter):
         self._strategy_miss_said = None
         #: a miss / a landing not yet turned into a #915 verdict
         self._strategy_verdict = None
+        #: (wanted, seen) of the miss in ``_strategy_verdict`` — (#1124) the
+        #: limit's own verdict can re-point the ledger before it is reported
+        self._strategy_miss = ("", "")
         self._setpoint_withheld_said = False
         # #523: AC-coupled batteries (Sessy, …) expose ONE bidirectional power
         # setpoint — the same ``battery_force_discharge_control_entity`` that
@@ -174,6 +204,13 @@ class GenericBatteryAdapter(BatteryControlAdapter):
             self.last_unverified_entity = ""
             self.last_verified_entity = self._strategy_entity
             self._strategy_verdict = True
+        elif sent and self._strategy_verdict is None:
+            # (#1124, class 84) A flip SEM SENT that the select now reads is
+            # proof too. Before, only a landing after a miss in this same
+            # lifetime proved the select, so its Repair from before a
+            # restart never cleared. The strikes stay: they may be the
+            # limit entity's.
+            self._strategy_verdict = True
 
     def _strategy_missed(self, value: str, age_s: float) -> None:
         seen = self._strategy_state_text()
@@ -185,6 +222,7 @@ class GenericBatteryAdapter(BatteryControlAdapter):
             f"power strategy not taken by {self._strategy_entity}: "
             f"wanted {value}, reads {seen}")
         self._strategy_verdict = False
+        self._strategy_miss = (value, seen)
         if self._strategy_miss_said != (value, seen):
             self._strategy_miss_said = (value, seen)
             _LOGGER.warning(
@@ -214,6 +252,7 @@ class GenericBatteryAdapter(BatteryControlAdapter):
         is re-sent. No-op without a strategy entity."""
         if not self._strategy_entity:
             return
+        value = listed_option(self._hass, self._strategy_entity, value)
         import time as _time
         if self._read_strategy() == value:
             self._strategy_landed(value)
@@ -325,6 +364,15 @@ class GenericBatteryAdapter(BatteryControlAdapter):
         v = super().verify_pending_write()
         if v is None and self._strategy_verdict is not None:
             v, self._strategy_verdict = self._strategy_verdict, None
+            # (#1124) The held verdict speaks for the SELECT. A limit write
+            # judged since has pointed the ledger at its own entity, and a
+            # kept write clears only the entity it names.
+            if v is True:
+                self.last_verified_entity = self._strategy_entity
+            else:
+                self.last_unverified_entity = self._strategy_entity
+                (self.last_unverified_wanted,
+                 self.last_unverified_seen) = self._strategy_miss
         return v
 
     async def _enter_active_strategy(self) -> bool:
@@ -467,6 +515,7 @@ class GenericBatteryAdapter(BatteryControlAdapter):
         # battery already in ``nom`` isn't re-written.
         await self._set_strategy(self._strategy_self_consume)
         await self._apply_discharge_limit(self._max_discharge_w)
+        self._clear_no_limit_error()                    # (#1066)
         self._last_intent = BatteryIntent.NORMAL
 
     async def command_off(self) -> None:
@@ -482,14 +531,18 @@ class GenericBatteryAdapter(BatteryControlAdapter):
             return
         await self._zero_setpoint()  # (#1005)
         await self._set_strategy(self._strategy_off)
+        # (#1175) Hands off means no limit of SEM's left behind either.
+        await self._hand_back_own_limit()
         self._last_intent = BatteryIntent.OFF
 
     async def command_limit_discharge(self, watts: float) -> None:
         await self._zero_setpoint()  # #523 mutual exclusion (#1005)
         await self._set_strategy(self._strategy_self_consume)
+        if self._discharge_limit_unwritable():          # (#1066)
+            self._last_intent = BatteryIntent.LIMIT_DISCHARGE
+            return
         watts = max(0.0, min(watts, self._max_discharge_w))
-        if (self._last_discharge_limit_w >= 0
-                and abs(watts - self._last_discharge_limit_w) < 100.0):
+        if self._limit_already_sent(watts):
             self._last_intent = BatteryIntent.LIMIT_DISCHARGE
             return
         await self._apply_discharge_limit(watts)
@@ -559,7 +612,10 @@ class GenericBatteryAdapter(BatteryControlAdapter):
         self._last_error = None
         self._last_intent = BatteryIntent.STOP_FORCE_CHARGE
 
-    async def _apply_discharge_limit(self, watts: float) -> None:
+    async def _apply_discharge_limit(self, watts: float, *,
+                                     force: bool = False) -> None:
+        if self._limit_not_mine(watts, force):          # (#1178)
+            return
         if not self._discharge_control_entity:
             self._last_discharge_limit_w = watts
             return
@@ -568,6 +624,7 @@ class GenericBatteryAdapter(BatteryControlAdapter):
             self._discharge_control_entity,
             watts,
             context="Generic battery discharge limit",
+            force=force,
         )
         if ok:
             self._last_discharge_limit_w = watts
@@ -575,4 +632,3 @@ class GenericBatteryAdapter(BatteryControlAdapter):
                 # only a write that went OUT is judged; the same-value skip
                 # is not a write and must not re-arm the grace (06.09 audit)
                 self._note_pending_write(self._discharge_control_entity, watts)
-

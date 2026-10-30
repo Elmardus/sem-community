@@ -1,6 +1,6 @@
 """#778 — mode is posture, permission is permission, and nobody's setup changes.
 
-The design argument (Guido, 23.08): the mode enum mixed posture, a permission
+The design argument (23.08): the mode enum mixed posture, a permission
 and two manual commands, and being single-select it could not express
 "self-consumption posture AND allowed to sell". Adding a sixth value for the
 second sink would not have composed with the first.

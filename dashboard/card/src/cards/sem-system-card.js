@@ -10,7 +10,7 @@
  */
 
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
-import { fmtNum, MISSING } from '../util/missing-value.js';
+import { fmtNum, MISSING, readNumber } from '../util/missing-value.js';
 import { semTheme, semFormatPower, semGetCurrency, semCardSurfaceCSS, SEM_COLORS, semDefineCard } from '../base/sem-shared.js';
 
 const SECTIONS = [
@@ -21,10 +21,7 @@ const SECTIONS = [
         titleKey: 'system_info',
         subtitleFn: (c) => {
             const ver = c._val('diag_version') || '—';
-            const mode = c._val('diag_grid_mode') || '—';
-            const modeT = mode === 'combined' ? c._t('grid_combined')
-                : mode === 'split' ? c._t('grid_split') : mode;
-            return `v${ver} · ${modeT}`;
+            return `v${ver} · ${c._valLabel('diag_grid_mode') || '—'}`;
         },
     },
     {
@@ -37,7 +34,7 @@ const SECTIONS = [
             // 0 % on the page people open to ask what is wrong.
             const solar = c._valFmt('solar_power');
             const soc = c._valFmt('battery_soc');
-            return `${solar}W solar · SOC ${soc}%`;
+            return `${solar}W ${c._t('solar')} · SOC ${soc}%`;
         },
     },
     // mode_controls section removed in #282 audit: the night/smart night
@@ -129,11 +126,10 @@ class SEMSystemCard extends SEMLitBase {
         return fmtNum(this._hass?.states[`${this._prefix}${suffix}`], digits);
     }
 
-    /** Numeric state for a sensor.sem_ suffixed entity. */
-    _valNum(suffix, fallback = 0) {
-        const e = this._hass?.states[`${this._prefix}${suffix}`];
-        if (!e || e.state === 'unavailable' || e.state === 'unknown') return fallback;
-        return parseFloat(e.state) ?? fallback;
+    /** Numeric state for a sensor.sem_ suffixed entity — (#1200) null when
+     *  out, so it prints "—", not 0. */
+    _valNum(suffix, fallback = null) {
+        return readNumber(this._hass?.states[`${this._prefix}${suffix}`]) ?? fallback;
     }
 
     /** Boolean: is switch.sem_<suffix> on? */
@@ -158,12 +154,14 @@ class SEMSystemCard extends SEMLitBase {
 
     _copyDiagnostics() {
         const ver = this._val('diag_version') || '—';
-        const gridMode = this._val('diag_grid_mode') || '—';
+        // The copied text keeps SEM's own words: support reads them.
+        const gridMode = this._val('diag_grid_mode') || '—';  // #1053: raw for support
         const chargerCount = this._val('diag_charger_count') || '—';
-        const controlType = this._val('diag_charger_control') || '—';
+        const controlType = this._val('diag_charger_control') || '—';  // #1053: raw for support
         const capacity = this._valNum('diag_battery_capacity');
         const capStr = capacity > 0 ? capacity.toFixed(1) : '—';
-        const unavailable = this._val('diag_sensors_unavailable') || '0';
+        // (#1200) the count's own sensor out is no count, not 0
+        const unavailable = this._val('diag_sensors_unavailable') || MISSING;
 
         const header = `SEM ${ver} | Grid: ${gridMode} | Chargers: ${chargerCount} (${controlType}) | Battery: ${capStr}kWh | Unavailable: ${unavailable}`;
 
@@ -296,7 +294,7 @@ class SEMSystemCard extends SEMLitBase {
         const cap = this._valNum('diag_battery_capacity');
         const interval = this._valNum('diag_update_interval');
         const chargerCount = this._val('diag_charger_count') || '—';
-        const controlType = this._val('diag_charger_control') || '';
+        const controlType = this._valLabel('diag_charger_control');
         const chargersVal = controlType ? `${chargerCount} (${controlType})` : chargerCount;
 
         return html`
@@ -306,7 +304,7 @@ class SEMSystemCard extends SEMLitBase {
             </div>
             <div class="info-row">
                 <span class="info-row-label">${this._t('grid_mode')}</span>
-                <span class="info-row-value">${(() => { const m = this._val('diag_grid_mode') || '—'; return m === 'combined' ? this._t('grid_combined') : m === 'split' ? this._t('grid_split') : m; })()}</span>
+                <span class="info-row-value">${this._valLabel('diag_grid_mode') || '—'}</span>
             </div>
             <div class="info-row">
                 <span class="info-row-label">${this._t('battery_capacity')}</span>
@@ -322,7 +320,7 @@ class SEMSystemCard extends SEMLitBase {
             </div>
             <div class="info-row">
                 <span class="info-row-label">${this._t('unavailable_sensors')}</span>
-                <span class="info-row-value">${this._val('diag_sensors_unavailable') || '0'}</span>
+                <span class="info-row-value">${this._val('diag_sensors_unavailable') || MISSING}</span>
             </div>
         `;
     }

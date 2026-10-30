@@ -1,0 +1,2427 @@
+{
+ "devices": {
+  "tessie:123456": {
+   "manufacturer": null,
+   "model": null,
+   "name": "123456"
+  },
+  "tessie:VINVINVIN": {
+   "manufacturer": null,
+   "model": null,
+   "name": "VINVINVIN"
+  }
+ },
+ "domain": "tessie",
+ "entities": [
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.energy_site_backup_capable",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "backup_capable",
+   "unique_id": "123456-backup_capable",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.energy_site_grid_services_active",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "grid_services_active",
+   "unique_id": "123456-grid_services_active",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.energy_site_grid_services_enabled",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "components_grid_services_enabled",
+   "unique_id": "123456-components_grid_services_enabled",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.energy_site_grid_status",
+   "original_device_class": "power",
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "grid_status",
+   "unique_id": "123456-grid_status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.energy_site_storm_watch_active",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "storm_mode_active",
+   "unique_id": "123456-storm_mode_active",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_auto_seat_climate_left",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "climate_state_auto_seat_climate_left",
+   "unique_id": "VINVINVIN-climate_state_auto_seat_climate_left",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_auto_seat_climate_right",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "climate_state_auto_seat_climate_right",
+   "unique_id": "VINVINVIN-climate_state_auto_seat_climate_right",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_auto_steering_wheel_heater",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "climate_state_auto_steering_wheel_heat",
+   "unique_id": "VINVINVIN-climate_state_auto_steering_wheel_heat",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "heat"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_battery_heater",
+   "original_device_class": "heat",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "climate_state_battery_heater",
+   "unique_id": "VINVINVIN-climate_state_battery_heater",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "running"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_cabin_overheat_protection",
+   "original_device_class": "running",
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "climate_state_cabin_overheat_protection",
+   "unique_id": "VINVINVIN-climate_state_cabin_overheat_protection",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "heat"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_cabin_overheat_protection_actively_cooling",
+   "original_device_class": "heat",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "climate_state_cabin_overheat_protection_actively_cooling",
+   "unique_id": "VINVINVIN-climate_state_cabin_overheat_protection_actively_cooling",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "connectivity"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_charge_cable",
+   "original_device_class": "connectivity",
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "charge_state_conn_charge_cable",
+   "unique_id": "VINVINVIN-charge_state_conn_charge_cable",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "battery_charging"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_charging",
+   "original_device_class": "battery_charging",
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "charge_state_charging_state",
+   "unique_id": "VINVINVIN-charge_state_charging_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "running"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_dashcam",
+   "original_device_class": "running",
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "vehicle_state_dashcam_state",
+   "unique_id": "VINVINVIN-vehicle_state_dashcam_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "door"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_front_driver_door",
+   "original_device_class": "door",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_df",
+   "unique_id": "VINVINVIN-vehicle_state_df",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "window"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_front_driver_window",
+   "original_device_class": "window",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_fd_window",
+   "unique_id": "VINVINVIN-vehicle_state_fd_window",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "door"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_front_passenger_door",
+   "original_device_class": "door",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_pf",
+   "unique_id": "VINVINVIN-vehicle_state_pf",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "window"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_front_passenger_window",
+   "original_device_class": "window",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_fp_window",
+   "unique_id": "VINVINVIN-vehicle_state_fp_window",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_preconditioning_enabled",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "charge_state_preconditioning_enabled",
+   "unique_id": "VINVINVIN-charge_state_preconditioning_enabled",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "door"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_rear_driver_door",
+   "original_device_class": "door",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_dr",
+   "unique_id": "VINVINVIN-vehicle_state_dr",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "window"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_rear_driver_window",
+   "original_device_class": "window",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_rd_window",
+   "unique_id": "VINVINVIN-vehicle_state_rd_window",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "door"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_rear_passenger_door",
+   "original_device_class": "door",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_pr",
+   "unique_id": "VINVINVIN-vehicle_state_pr",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "window"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_rear_passenger_window",
+   "original_device_class": "window",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_rp_window",
+   "unique_id": "VINVINVIN-vehicle_state_rp_window",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_scheduled_charging_pending",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "charge_state_scheduled_charging_pending",
+   "unique_id": "VINVINVIN-charge_state_scheduled_charging_pending",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "connectivity"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_status",
+   "original_device_class": "connectivity",
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "state",
+   "unique_id": "VINVINVIN-state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "problem"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_tire_pressure_warning_front_left",
+   "original_device_class": "problem",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_tpms_soft_warning_fl",
+   "unique_id": "VINVINVIN-vehicle_state_tpms_soft_warning_fl",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "problem"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_tire_pressure_warning_front_right",
+   "original_device_class": "problem",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_tpms_soft_warning_fr",
+   "unique_id": "VINVINVIN-vehicle_state_tpms_soft_warning_fr",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "problem"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_tire_pressure_warning_rear_left",
+   "original_device_class": "problem",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_tpms_soft_warning_rl",
+   "unique_id": "VINVINVIN-vehicle_state_tpms_soft_warning_rl",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "problem"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_tire_pressure_warning_rear_right",
+   "original_device_class": "problem",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_tpms_soft_warning_rr",
+   "unique_id": "VINVINVIN-vehicle_state_tpms_soft_warning_rr",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.test_trip_charging",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "charge_state_trip_charging",
+   "unique_id": "VINVINVIN-charge_state_trip_charging",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "occupancy"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_user_present",
+   "original_device_class": "occupancy",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_is_user_present",
+   "unique_id": "VINVINVIN-vehicle_state_is_user_present",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.test_flash_lights",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "flash_lights",
+   "unique_id": "VINVINVIN-flash_lights",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.test_homelink",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "trigger_homelink",
+   "unique_id": "VINVINVIN-trigger_homelink",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.test_honk_horn",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "honk",
+   "unique_id": "VINVINVIN-honk",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.test_keyless_driving",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "enable_keyless_driving",
+   "unique_id": "VINVINVIN-enable_keyless_driving",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.test_play_fart",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "boombox",
+   "unique_id": "VINVINVIN-boombox",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.test_wake",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "wake",
+   "unique_id": "VINVINVIN-wake",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.energy_site_backup_reserve",
+   "original_device_class": "battery",
+   "platform": "tessie",
+   "state": "0",
+   "translation_key": "backup_reserve_percent",
+   "unique_id": "123456-backup_reserve_percent",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.energy_site_off_grid_reserve",
+   "original_device_class": "battery",
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "off_grid_vehicle_charging_reserve_percent",
+   "unique_id": "123456-off_grid_vehicle_charging_reserve_percent",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "max": 32.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "max": 32.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.test_charge_current",
+   "original_device_class": "current",
+   "platform": "tessie",
+   "state": "32",
+   "translation_key": "charge_state_charge_current_request",
+   "unique_id": "VINVINVIN-charge_state_charge_current_request",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "max": 100.0,
+    "min": 50.0,
+    "step": 1.0,
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 50.0,
+    "step": 1.0
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.test_charge_limit",
+   "original_device_class": "battery",
+   "platform": "tessie",
+   "state": "80",
+   "translation_key": "charge_state_charge_limit_soc",
+   "unique_id": "VINVINVIN-charge_state_charge_limit_soc",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "speed",
+    "max": 120.0,
+    "min": 50.0,
+    "step": 1.0,
+    "unit_of_measurement": "mph"
+   },
+   "capabilities": {
+    "max": 120.0,
+    "min": 50.0,
+    "step": 1.0
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.test_speed_limit",
+   "original_device_class": "speed",
+   "platform": "tessie",
+   "state": "74.564543",
+   "translation_key": "vehicle_state_speed_limit_mode_current_limit_mph",
+   "unique_id": "VINVINVIN-vehicle_state_speed_limit_mode_current_limit_mph",
+   "unit_of_measurement": "mph"
+  },
+  {
+   "attributes": {
+    "options": [
+     "never",
+     "battery_ok",
+     "pv_only"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "never",
+     "battery_ok",
+     "pv_only"
+    ]
+   },
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.energy_site_allow_export",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "pv_only",
+   "translation_key": "components_customer_preferred_export_rule",
+   "unique_id": "123456-components_customer_preferred_export_rule",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "options": [
+     "autonomous",
+     "backup",
+     "self_consumption"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "autonomous",
+     "backup",
+     "self_consumption"
+    ]
+   },
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.energy_site_operation_mode",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "self_consumption",
+   "translation_key": "default_real_mode",
+   "unique_id": "123456-default_real_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_seat_cooler_left",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "climate_state_seat_fan_front_left",
+   "unique_id": "VINVINVIN-climate_state_seat_fan_front_left",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_seat_cooler_right",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "climate_state_seat_fan_front_right",
+   "unique_id": "VINVINVIN-climate_state_seat_fan_front_right",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_seat_heater_left",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "climate_state_seat_heater_left",
+   "unique_id": "VINVINVIN-climate_state_seat_heater_left",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_seat_heater_rear_center",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "climate_state_seat_heater_rear_center",
+   "unique_id": "VINVINVIN-climate_state_seat_heater_rear_center",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_seat_heater_rear_left",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "climate_state_seat_heater_rear_left",
+   "unique_id": "VINVINVIN-climate_state_seat_heater_rear_left",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_seat_heater_rear_right",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "climate_state_seat_heater_rear_right",
+   "unique_id": "VINVINVIN-climate_state_seat_heater_rear_right",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "off",
+     "low",
+     "medium",
+     "high"
+    ]
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_seat_heater_right",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "climate_state_seat_heater_right",
+   "unique_id": "VINVINVIN-climate_state_seat_heater_right",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_battery_charged_from_generator",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "battery_energy_imported_from_generator",
+   "unique_id": "123456-battery_energy_imported_from_generator",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_battery_charged_from_grid",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "battery_energy_imported_from_grid",
+   "unique_id": "123456-battery_energy_imported_from_grid",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_battery_charged_from_solar",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.684",
+   "translation_key": "battery_energy_imported_from_solar",
+   "unique_id": "123456-battery_energy_imported_from_solar",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_battery_discharged",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.036",
+   "translation_key": "battery_energy_exported",
+   "unique_id": "123456-battery_energy_exported",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_battery_power",
+   "original_device_class": "power",
+   "platform": "tessie",
+   "state": "5.06",
+   "translation_key": "battery_power",
+   "unique_id": "123456-battery_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_energy_consumed_from_battery",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.036",
+   "translation_key": "consumer_energy_imported_from_battery",
+   "unique_id": "123456-consumer_energy_imported_from_battery",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_energy_consumed_from_generator",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "consumer_energy_imported_from_generator",
+   "unique_id": "123456-consumer_energy_imported_from_generator",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_energy_consumed_from_grid",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "consumer_energy_imported_from_grid",
+   "unique_id": "123456-consumer_energy_imported_from_grid",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_energy_consumed_from_solar",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.038",
+   "translation_key": "consumer_energy_imported_from_solar",
+   "unique_id": "123456-consumer_energy_imported_from_solar",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy_storage",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.energy_site_energy_left",
+   "original_device_class": "energy_storage",
+   "platform": "tessie",
+   "state": "38.8964736842105",
+   "translation_key": "energy_left",
+   "unique_id": "123456-energy_left",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_generator_exported",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "generator_energy_exported",
+   "unique_id": "123456-generator_energy_exported",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_generator_power",
+   "original_device_class": "power",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "generator_power",
+   "unique_id": "123456-generator_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_grid_exported_from_battery",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "grid_energy_exported_from_battery",
+   "unique_id": "123456-grid_energy_exported_from_battery",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_grid_exported_from_generator",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "grid_energy_exported_from_generator",
+   "unique_id": "123456-grid_energy_exported_from_generator",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_grid_exported_from_solar",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.002",
+   "translation_key": "grid_energy_exported_from_solar",
+   "unique_id": "123456-grid_energy_exported_from_solar",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_grid_imported",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "grid_energy_imported",
+   "unique_id": "123456-grid_energy_imported",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_grid_power",
+   "original_device_class": "power",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "grid_power",
+   "unique_id": "123456-grid_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_grid_services_exported",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "grid_services_energy_exported",
+   "unique_id": "123456-grid_services_energy_exported",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_grid_services_imported",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "grid_services_energy_imported",
+   "unique_id": "123456-grid_services_energy_imported",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_grid_services_power",
+   "original_device_class": "power",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "grid_services_power",
+   "unique_id": "123456-grid_services_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "on_grid",
+     "off_grid",
+     "off_grid_intentional",
+     "off_grid_unintentional",
+     "island_status_unknown"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "on_grid",
+     "off_grid",
+     "off_grid_intentional",
+     "off_grid_unintentional",
+     "island_status_unknown"
+    ]
+   },
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_island_status",
+   "original_device_class": "enum",
+   "platform": "tessie",
+   "state": "on_grid",
+   "translation_key": "island_status",
+   "unique_id": "123456-island_status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_load_power",
+   "original_device_class": "power",
+   "platform": "tessie",
+   "state": "6.245",
+   "translation_key": "load_power",
+   "unique_id": "123456-load_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_percentage_charged",
+   "original_device_class": "battery",
+   "platform": "tessie",
+   "state": "95.5053740373966",
+   "translation_key": "percentage_charged",
+   "unique_id": "123456-percentage_charged",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_solar_exported",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.724",
+   "translation_key": "solar_energy_exported",
+   "unique_id": "123456-solar_energy_exported",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_solar_power",
+   "original_device_class": "power",
+   "platform": "tessie",
+   "state": "1.185",
+   "translation_key": "solar_power",
+   "unique_id": "123456-solar_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_total_battery_charged",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.684",
+   "translation_key": "total_battery_charge",
+   "unique_id": "123456-total_battery_charge",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_total_battery_discharged",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.036",
+   "translation_key": "total_battery_discharge",
+   "unique_id": "123456-total_battery_discharge",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_total_grid_exported",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.002",
+   "translation_key": "total_grid_energy_exported",
+   "unique_id": "123456-total_grid_energy_exported",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_total_home_usage",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.074",
+   "translation_key": "total_home_usage",
+   "unique_id": "123456-total_home_usage",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy_storage",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.energy_site_total_pack_energy",
+   "original_device_class": "energy_storage",
+   "platform": "tessie",
+   "state": "40.727",
+   "translation_key": "total_pack_energy",
+   "unique_id": "123456-total_pack_energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.energy_site_total_solar_generated",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "0.724",
+   "translation_key": "total_solar_generation",
+   "unique_id": "123456-total_solar_generation",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.energy_site_vpp_backup_reserve",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "0",
+   "translation_key": "vpp_backup_reserve_percent",
+   "unique_id": "123456-vpp_backup_reserve_percent",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_battery_level",
+   "original_device_class": "battery",
+   "platform": "tessie",
+   "state": "75",
+   "translation_key": "charge_state_usable_battery_level",
+   "unique_id": "VINVINVIN-charge_state_usable_battery_level",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_battery_module_temperature_max",
+   "original_device_class": "temperature",
+   "platform": "tessie",
+   "state": "18",
+   "translation_key": "module_temp_max",
+   "unique_id": "VINVINVIN-module_temp_max",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_battery_module_temperature_min",
+   "original_device_class": "temperature",
+   "platform": "tessie",
+   "state": "16.5",
+   "translation_key": "module_temp_min",
+   "unique_id": "VINVINVIN-module_temp_min",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_battery_pack_current",
+   "original_device_class": "current",
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "pack_current",
+   "unique_id": "VINVINVIN-pack_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_battery_pack_voltage",
+   "original_device_class": "voltage",
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "pack_voltage",
+   "unique_id": "VINVINVIN-pack_voltage",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "distance",
+    "unit_of_measurement": "km"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_battery_range",
+   "original_device_class": "distance",
+   "platform": "tessie",
+   "state": "424.35182592",
+   "translation_key": "charge_state_battery_range",
+   "unique_id": "VINVINVIN-charge_state_battery_range",
+   "unit_of_measurement": "km"
+  },
+  {
+   "attributes": {
+    "device_class": "distance",
+    "unit_of_measurement": "km"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_battery_range_estimate",
+   "original_device_class": "distance",
+   "platform": "tessie",
+   "state": "522.60227712",
+   "translation_key": "charge_state_est_battery_range",
+   "unique_id": "VINVINVIN-charge_state_est_battery_range",
+   "unit_of_measurement": "km"
+  },
+  {
+   "attributes": {
+    "device_class": "distance",
+    "unit_of_measurement": "km"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_battery_range_ideal",
+   "original_device_class": "distance",
+   "platform": "tessie",
+   "state": "424.35182592",
+   "translation_key": "charge_state_ideal_battery_range",
+   "unique_id": "VINVINVIN-charge_state_ideal_battery_range",
+   "unit_of_measurement": "km"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_charge_cable",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "IEC",
+   "translation_key": "charge_state_conn_charge_cable",
+   "unique_id": "VINVINVIN-charge_state_conn_charge_cable",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_charge_energy_added",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "18.47",
+   "translation_key": "charge_state_charge_energy_added",
+   "unique_id": "VINVINVIN-charge_state_charge_energy_added",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "engaged",
+     "disengaged",
+     "blocking"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "engaged",
+     "disengaged",
+     "blocking"
+    ]
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_charge_port_latch",
+   "original_device_class": "enum",
+   "platform": "tessie",
+   "state": "engaged",
+   "translation_key": "charge_state_charge_port_latch",
+   "unique_id": "VINVINVIN-charge_state_charge_port_latch",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "speed",
+    "unit_of_measurement": "km/h"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_charge_rate",
+   "original_device_class": "speed",
+   "platform": "tessie",
+   "state": "49.2459264",
+   "translation_key": "charge_state_charge_rate",
+   "unique_id": "VINVINVIN-charge_state_charge_rate",
+   "unit_of_measurement": "km/h"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_charger_current",
+   "original_device_class": "current",
+   "platform": "tessie",
+   "state": "32",
+   "translation_key": "charge_state_charger_actual_current",
+   "unique_id": "VINVINVIN-charge_state_charger_actual_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_charger_power",
+   "original_device_class": "power",
+   "platform": "tessie",
+   "state": "7",
+   "translation_key": "charge_state_charger_power",
+   "unique_id": "VINVINVIN-charge_state_charger_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_charger_voltage",
+   "original_device_class": "voltage",
+   "platform": "tessie",
+   "state": "224",
+   "translation_key": "charge_state_charger_voltage",
+   "unique_id": "VINVINVIN-charge_state_charger_voltage",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "starting",
+     "charging",
+     "stopped",
+     "complete",
+     "disconnected",
+     "no_power"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "starting",
+     "charging",
+     "stopped",
+     "complete",
+     "disconnected",
+     "no_power"
+    ]
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_charging",
+   "original_device_class": "enum",
+   "platform": "tessie",
+   "state": "charging",
+   "translation_key": "charge_state_charging_state",
+   "unique_id": "VINVINVIN-charge_state_charging_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_destination",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "Giga Texas",
+   "translation_key": "drive_state_active_route_destination",
+   "unique_id": "VINVINVIN-drive_state_active_route_destination",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "distance",
+    "unit_of_measurement": "km"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_distance_to_arrival",
+   "original_device_class": "distance",
+   "platform": "tessie",
+   "state": "75.168198306432",
+   "translation_key": "drive_state_active_route_miles_to_arrival",
+   "unique_id": "VINVINVIN-drive_state_active_route_miles_to_arrival",
+   "unit_of_measurement": "km"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_driver_temperature_setting",
+   "original_device_class": "temperature",
+   "platform": "tessie",
+   "state": "22.5",
+   "translation_key": "climate_state_driver_temp_setting",
+   "unique_id": "VINVINVIN-climate_state_driver_temp_setting",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "energy_storage",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_energy_remaining",
+   "original_device_class": "energy_storage",
+   "platform": "tessie",
+   "state": "46.92",
+   "translation_key": "charge_state_energy_remaining",
+   "unique_id": "VINVINVIN-charge_state_energy_remaining",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_inside_temperature",
+   "original_device_class": "temperature",
+   "platform": "tessie",
+   "state": "30.4",
+   "translation_key": "climate_state_inside_temp",
+   "unique_id": "VINVINVIN-climate_state_inside_temp",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_lifetime_energy_used",
+   "original_device_class": "energy",
+   "platform": "tessie",
+   "state": "20505.629",
+   "translation_key": "lifetime_energy_used",
+   "unique_id": "VINVINVIN-lifetime_energy_used",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "distance",
+    "unit_of_measurement": "km"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_odometer",
+   "original_device_class": "distance",
+   "platform": "tessie",
+   "state": "8778.15941765875",
+   "translation_key": "vehicle_state_odometer",
+   "unique_id": "VINVINVIN-vehicle_state_odometer",
+   "unit_of_measurement": "km"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_outside_temperature",
+   "original_device_class": "temperature",
+   "platform": "tessie",
+   "state": "30.5",
+   "translation_key": "climate_state_outside_temp",
+   "unique_id": "VINVINVIN-climate_state_outside_temp",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_passenger_temperature_setting",
+   "original_device_class": "temperature",
+   "platform": "tessie",
+   "state": "22.5",
+   "translation_key": "climate_state_passenger_temp_setting",
+   "unique_id": "VINVINVIN-climate_state_passenger_temp_setting",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_phantom_drain",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "phantom_drain_percent",
+   "unique_id": "VINVINVIN-phantom_drain_percent",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_power",
+   "original_device_class": "power",
+   "platform": "tessie",
+   "state": "-7",
+   "translation_key": "drive_state_power",
+   "unique_id": "VINVINVIN-drive_state_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "p",
+     "d",
+     "r",
+     "n"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "p",
+     "d",
+     "r",
+     "n"
+    ]
+   },
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_shift_state",
+   "original_device_class": "enum",
+   "platform": "tessie",
+   "state": "p",
+   "translation_key": "drive_state_shift_state",
+   "unique_id": "VINVINVIN-drive_state_shift_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "speed",
+    "unit_of_measurement": "km/h"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_speed",
+   "original_device_class": "speed",
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "drive_state_speed",
+   "unique_id": "VINVINVIN-drive_state_speed",
+   "unit_of_measurement": "km/h"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_state_of_charge_at_arrival",
+   "original_device_class": "battery",
+   "platform": "tessie",
+   "state": "65",
+   "translation_key": "drive_state_active_route_energy_at_arrival",
+   "unique_id": "VINVINVIN-drive_state_active_route_energy_at_arrival",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "timestamp"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_time_to_arrival",
+   "original_device_class": "timestamp",
+   "platform": "tessie",
+   "state": "2024-01-01T00:59:12+00:00",
+   "translation_key": "drive_state_active_route_minutes_to_arrival",
+   "unique_id": "VINVINVIN-drive_state_active_route_minutes_to_arrival",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "timestamp"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_time_to_full_charge",
+   "original_device_class": "timestamp",
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "charge_state_minutes_to_full_charge",
+   "unique_id": "VINVINVIN-charge_state_minutes_to_full_charge",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "pressure",
+    "unit_of_measurement": "psi"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_tire_pressure_front_left",
+   "original_device_class": "pressure",
+   "platform": "tessie",
+   "state": "43.1487288094417",
+   "translation_key": "vehicle_state_tpms_pressure_fl",
+   "unique_id": "VINVINVIN-vehicle_state_tpms_pressure_fl",
+   "unit_of_measurement": "psi"
+  },
+  {
+   "attributes": {
+    "device_class": "pressure",
+    "unit_of_measurement": "psi"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_tire_pressure_front_right",
+   "original_device_class": "pressure",
+   "platform": "tessie",
+   "state": "43.1487288094417",
+   "translation_key": "vehicle_state_tpms_pressure_fr",
+   "unique_id": "VINVINVIN-vehicle_state_tpms_pressure_fr",
+   "unit_of_measurement": "psi"
+  },
+  {
+   "attributes": {
+    "device_class": "pressure",
+    "unit_of_measurement": "psi"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_tire_pressure_rear_left",
+   "original_device_class": "pressure",
+   "platform": "tessie",
+   "state": "42.7861344496985",
+   "translation_key": "vehicle_state_tpms_pressure_rl",
+   "unique_id": "VINVINVIN-vehicle_state_tpms_pressure_rl",
+   "unit_of_measurement": "psi"
+  },
+  {
+   "attributes": {
+    "device_class": "pressure",
+    "unit_of_measurement": "psi"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_tire_pressure_rear_right",
+   "original_device_class": "pressure",
+   "platform": "tessie",
+   "state": "42.7861344496985",
+   "translation_key": "vehicle_state_tpms_pressure_rr",
+   "unique_id": "VINVINVIN-vehicle_state_tpms_pressure_rr",
+   "unit_of_measurement": "psi"
+  },
+  {
+   "attributes": {
+    "device_class": "duration",
+    "unit_of_measurement": "min"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_traffic_delay",
+   "original_device_class": "duration",
+   "platform": "tessie",
+   "state": "0",
+   "translation_key": "drive_state_active_route_traffic_minutes_delay",
+   "unique_id": "VINVINVIN-drive_state_active_route_traffic_minutes_delay",
+   "unit_of_measurement": "min"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.wall_connector_power",
+   "original_device_class": "power",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "wall_connector_power",
+   "unique_id": "123456-abd-123-wall_connector_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.wall_connector_power_2",
+   "original_device_class": "power",
+   "platform": "tessie",
+   "state": "0.0",
+   "translation_key": "wall_connector_power",
+   "unique_id": "123456-bcd-234-wall_connector_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "booting",
+     "charging",
+     "disconnected",
+     "connected",
+     "scheduled",
+     "negotiating",
+     "error",
+     "charging_finished",
+     "waiting_car",
+     "charging_reduced"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "booting",
+     "charging",
+     "disconnected",
+     "connected",
+     "scheduled",
+     "negotiating",
+     "error",
+     "charging_finished",
+     "waiting_car",
+     "charging_reduced"
+    ]
+   },
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.wall_connector_state",
+   "original_device_class": "enum",
+   "platform": "tessie",
+   "state": "disconnected",
+   "translation_key": "wall_connector_state",
+   "unique_id": "123456-abd-123-wall_connector_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "booting",
+     "charging",
+     "disconnected",
+     "connected",
+     "scheduled",
+     "negotiating",
+     "error",
+     "charging_finished",
+     "waiting_car",
+     "charging_reduced"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "booting",
+     "charging",
+     "disconnected",
+     "connected",
+     "scheduled",
+     "negotiating",
+     "error",
+     "charging_finished",
+     "waiting_car",
+     "charging_reduced"
+    ]
+   },
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.wall_connector_state_2",
+   "original_device_class": "enum",
+   "platform": "tessie",
+   "state": "disconnected",
+   "translation_key": "wall_connector_state",
+   "unique_id": "123456-bcd-234-wall_connector_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.wall_connector_vehicle",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "vin",
+   "unique_id": "123456-abd-123-vin",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.wall_connector_vehicle_2",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "unknown",
+   "translation_key": "vin",
+   "unique_id": "123456-bcd-234-vin",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.energy_site_allow_charging_from_grid",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "components_disallow_charge_from_grid_with_solar_installed",
+   "unique_id": "123456-components_disallow_charge_from_grid_with_solar_installed",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tessie:123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.energy_site_storm_watch",
+   "original_device_class": null,
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "user_settings_storm_mode_enabled",
+   "unique_id": "123456-user_settings_storm_mode_enabled",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "switch"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.test_charge",
+   "original_device_class": "switch",
+   "platform": "tessie",
+   "state": "on",
+   "translation_key": "charge_state_charging_state",
+   "unique_id": "VINVINVIN-charge_state_charge_enable_request",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "switch"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.test_defrost_mode",
+   "original_device_class": "switch",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "climate_state_defrost_mode",
+   "unique_id": "VINVINVIN-climate_state_defrost_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "switch"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.test_sentry_mode",
+   "original_device_class": "switch",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_sentry_mode",
+   "unique_id": "VINVINVIN-vehicle_state_sentry_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "switch"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.test_steering_wheel_heater",
+   "original_device_class": "switch",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "climate_state_steering_wheel_heater",
+   "unique_id": "VINVINVIN-climate_state_steering_wheel_heater",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "switch"
+   },
+   "capabilities": {},
+   "device": "tessie:VINVINVIN",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.test_valet_mode",
+   "original_device_class": "switch",
+   "platform": "tessie",
+   "state": "off",
+   "translation_key": "vehicle_state_valet_mode",
+   "unique_id": "VINVINVIN-vehicle_state_valet_mode",
+   "unit_of_measurement": null
+  }
+ ],
+ "services": {},
+ "source": {
+  "files": [
+   "tests/components/tessie/snapshots/test_number.ambr",
+   "tests/components/tessie/snapshots/test_switch.ambr",
+   "tests/components/tessie/snapshots/test_sensor.ambr",
+   "tests/components/tessie/snapshots/test_binary_sensor.ambr",
+   "tests/components/tessie/snapshots/test_select.ambr",
+   "tests/components/tessie/snapshots/test_button.ambr"
+  ],
+  "kind": "core-snapshot",
+  "note": "Home Assistant's own test output for this integration at the tag; the device grouping comes from unique_id",
+  "repo": "home-assistant/core",
+  "tag": "2026.8.2"
+ }
+}

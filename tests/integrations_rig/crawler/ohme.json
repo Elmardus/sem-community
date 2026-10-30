@@ -1,0 +1,27 @@
+{
+ "chargers": [
+  {
+   "control": "see mapping",
+   "mapped": {
+    "ev_charge_mode_entity": "select.ohme_home_pro_charge_mode",
+    "ev_charge_mode_start": "max_charge",
+    "ev_charge_mode_stop": "paused",
+    "ev_charging_power_sensor": "sensor.ohme_home_pro_power",
+    "ev_charging_sensor": "sensor.ohme_home_pro_status",
+    "ev_connected_sensor": "sensor.ohme_home_pro_status",
+    "ev_current_sensor": "sensor.ohme_home_pro_current"
+   }
+  }
+ ],
+ "meters": [],
+ "near_misses": [],
+ "proposals": [
+  {
+   "ev_charge_mode": [
+    "select.ohme_home_pro_charge_mode",
+    "per_charger"
+   ]
+  }
+ ],
+ "vehicles": []
+}

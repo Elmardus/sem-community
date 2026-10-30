@@ -1,0 +1,30 @@
+{
+ "chargers": [
+  {
+   "control": "service: easee.set_charger_dynamic_limit",
+   "mapped": {
+    "ev_charger_service": "easee.set_charger_dynamic_limit",
+    "ev_charging_power_sensor": "sensor.easee_home_eh123456_power",
+    "ev_charging_sensor": "sensor.easee_home_eh123456_status",
+    "ev_connected_sensor": "sensor.easee_home_eh123456_status",
+    "ev_service_device_id": "<device id>",
+    "ev_service_param_name": "current",
+    "ev_session_energy_sensor": "sensor.easee_home_eh123456_session_energy",
+    "ev_start_service": "easee.action_command",
+    "ev_start_service_data": "{\"action_command\": \"resume\"}",
+    "ev_stop_service": "easee.action_command",
+    "ev_stop_service_data": "{\"action_command\": \"pause\"}"
+   }
+  }
+ ],
+ "meters": [
+  {
+   "note": "a meter beside a charger, not a charger",
+   "platform": "easee",
+   "unit": "<device id>"
+  }
+ ],
+ "near_misses": [],
+ "proposals": [],
+ "vehicles": []
+}

@@ -65,10 +65,8 @@ _BASELINE = {
     # (#778) `spendable_budget` LEFT this list when phase 3 wired it to the
     # refill estimate — the guard's staleness check is what forced the removal,
     # which is the behaviour that keeps a baseline from rotting into a rubber
-    # stamp. `forecast_for` / `actual_for` remain the ledger's read accessors,
-    # used by its tests and by the phase-4 planner feed; remove them when that
-    # lands.
-    "forecast_for", "actual_for",
+    # stamp. (#1022: `forecast_for` / `actual_for` now have a caller — the
+    # PV health verdict — and left this list.)
     # (#923) read by ~/bin/validate-sem.sh, outside the package — this
     # scan can never see that caller.
     "presence_from_summary",
@@ -76,7 +74,7 @@ _BASELINE = {
     "clear_daily_accumulators", "clear_monthly_accumulators", "get_accumulator",
     "get_baseline", "get_daily_accumulator", "get_flow_accumulator",
     "get_last_update", "get_monthly_accumulator", "get_previous_value",
-    "get_session_history", "set_accumulator", "set_baseline",
+    "set_accumulator", "set_baseline",
     "set_daily_accumulator", "set_flow_accumulator", "set_monthly_accumulator",
     "set_previous_value",
     # compat-alias / public API kept deliberately
@@ -85,7 +83,6 @@ _BASELINE = {
     "create_dashboard",                        # generator entry point, service-driven
     # UNTRIAGED — each is a candidate finding
     "add_update_callback", "remove_update_callback",
-    "get_diagnostics",
     "get_peak_margin",
     # TRIAGED, KEPT (#659): ``get_status`` is abstract on
     # BatteryChargeAdapter, implemented three times, and has ZERO production

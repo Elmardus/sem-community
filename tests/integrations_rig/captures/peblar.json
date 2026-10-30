@@ -1,0 +1,500 @@
+{
+ "devices": {
+  "peblar:peblar": {
+   "manufacturer": null,
+   "model": null,
+   "name": "peblar"
+  }
+ },
+ "domain": "peblar",
+ "entities": [
+  {
+   "attributes": {
+    "device_class": "problem"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.peblar_ev_charger_active_errors",
+   "original_device_class": "problem",
+   "platform": "peblar",
+   "state": "off",
+   "translation_key": "active_error_codes",
+   "unique_id": "23-45-A4O-MOF_active_error_codes",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "problem"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.peblar_ev_charger_active_warnings",
+   "original_device_class": "problem",
+   "platform": "peblar",
+   "state": "off",
+   "translation_key": "active_warning_codes",
+   "unique_id": "23-45-A4O-MOF_active_warning_codes",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "identify"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "button.peblar_ev_charger_identify",
+   "original_device_class": "identify",
+   "platform": "peblar",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "23-45-A4O-MOF_identify",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "restart"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "button.peblar_ev_charger_restart",
+   "original_device_class": "restart",
+   "platform": "peblar",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "23-45-A4O-MOF_reboot",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "max": 16.0,
+    "min": 6.0,
+    "step": 1.0,
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "max": 16.0,
+    "min": 6.0,
+    "step": 1.0
+   },
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.peblar_ev_charger_charge_limit",
+   "original_device_class": "current",
+   "platform": "peblar",
+   "state": "16",
+   "translation_key": "charge_current_limit",
+   "unique_id": "23-45-A4O-MOF_charge_current_limit",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "options": [
+     "default",
+     "fast_solar",
+     "pure_solar",
+     "scheduled",
+     "smart_solar"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "default",
+     "fast_solar",
+     "pure_solar",
+     "scheduled",
+     "smart_solar"
+    ]
+   },
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "select.peblar_ev_charger_smart_charging",
+   "original_device_class": null,
+   "platform": "peblar",
+   "state": "pure_solar",
+   "translation_key": "smart_charging",
+   "unique_id": "23-45-A4O-MOF_smart_charging",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_current",
+   "original_device_class": "current",
+   "platform": "peblar",
+   "state": "14.242",
+   "translation_key": null,
+   "unique_id": "23-45-A4O-MOF_current_total",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_current_phase_1",
+   "original_device_class": "current",
+   "platform": "peblar",
+   "state": "14.242",
+   "translation_key": "current_phase_1",
+   "unique_id": "23-45-A4O-MOF_current_phase_1",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_current_phase_2",
+   "original_device_class": "current",
+   "platform": "peblar",
+   "state": "0.0",
+   "translation_key": "current_phase_2",
+   "unique_id": "23-45-A4O-MOF_current_phase_2",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_current_phase_3",
+   "original_device_class": "current",
+   "platform": "peblar",
+   "state": "0.0",
+   "translation_key": "current_phase_3",
+   "unique_id": "23-45-A4O-MOF_current_phase_3",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_lifetime_energy",
+   "original_device_class": "energy",
+   "platform": "peblar",
+   "state": "880.703",
+   "translation_key": "energy_total",
+   "unique_id": "23-45-A4O-MOF_energy_total",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "charging_cable",
+     "current_limiter",
+     "dynamic_load_balancing",
+     "external_power_limit",
+     "group_load_balancing",
+     "hardware_limitation",
+     "high_temperature",
+     "household_power_limit",
+     "installation_limit",
+     "local_modbus_api",
+     "local_rest_api",
+     "local_scheduled_charging",
+     "ocpp_smart_charging",
+     "overcurrent_protection",
+     "phase_imbalance",
+     "power_factor",
+     "solar_charging"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "charging_cable",
+     "current_limiter",
+     "dynamic_load_balancing",
+     "external_power_limit",
+     "group_load_balancing",
+     "hardware_limitation",
+     "high_temperature",
+     "household_power_limit",
+     "installation_limit",
+     "local_modbus_api",
+     "local_rest_api",
+     "local_scheduled_charging",
+     "ocpp_smart_charging",
+     "overcurrent_protection",
+     "phase_imbalance",
+     "power_factor",
+     "solar_charging"
+    ]
+   },
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_limit_source",
+   "original_device_class": "enum",
+   "platform": "peblar",
+   "state": "current_limiter",
+   "translation_key": "charge_current_limit_source",
+   "unique_id": "23-45-A4O-MOF_charge_current_limit_source",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.peblar_ev_charger_power",
+   "original_device_class": "power",
+   "platform": "peblar",
+   "state": "3185",
+   "translation_key": null,
+   "unique_id": "23-45-A4O-MOF_power_total",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_power_phase_1",
+   "original_device_class": "power",
+   "platform": "peblar",
+   "state": "3185",
+   "translation_key": "power_phase_1",
+   "unique_id": "23-45-A4O-MOF_power_phase_1",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_power_phase_2",
+   "original_device_class": "power",
+   "platform": "peblar",
+   "state": "0",
+   "translation_key": "power_phase_2",
+   "unique_id": "23-45-A4O-MOF_power_phase_2",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_power_phase_3",
+   "original_device_class": "power",
+   "platform": "peblar",
+   "state": "0",
+   "translation_key": "power_phase_3",
+   "unique_id": "23-45-A4O-MOF_power_phase_3",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.peblar_ev_charger_session_energy",
+   "original_device_class": "energy",
+   "platform": "peblar",
+   "state": "0.381",
+   "translation_key": "energy_session",
+   "unique_id": "23-45-A4O-MOF_energy_session",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "suspended",
+     "charging",
+     "charging",
+     "error",
+     "fault",
+     "invalid",
+     "no_ev_connected"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "suspended",
+     "charging",
+     "charging",
+     "error",
+     "fault",
+     "invalid",
+     "no_ev_connected"
+    ]
+   },
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.peblar_ev_charger_state",
+   "original_device_class": "enum",
+   "platform": "peblar",
+   "state": "charging",
+   "translation_key": "cp_state",
+   "unique_id": "23-45-A4O-MOF_cp_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "timestamp"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_uptime",
+   "original_device_class": "timestamp",
+   "platform": "peblar",
+   "state": "2024-12-18T04:16:46+00:00",
+   "translation_key": "uptime",
+   "unique_id": "23-45-A4O-MOF_uptime",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_voltage_phase_1",
+   "original_device_class": "voltage",
+   "platform": "peblar",
+   "state": "223",
+   "translation_key": "voltage_phase_1",
+   "unique_id": "23-45-A4O-MOF_voltage_phase_1",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_voltage_phase_2",
+   "original_device_class": "voltage",
+   "platform": "peblar",
+   "state": "unknown",
+   "translation_key": "voltage_phase_2",
+   "unique_id": "23-45-A4O-MOF_voltage_phase_2",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.peblar_ev_charger_voltage_phase_3",
+   "original_device_class": "voltage",
+   "platform": "peblar",
+   "state": "unknown",
+   "translation_key": "voltage_phase_3",
+   "unique_id": "23-45-A4O-MOF_voltage_phase_3",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "switch.peblar_ev_charger_charge",
+   "original_device_class": null,
+   "platform": "peblar",
+   "state": "on",
+   "translation_key": "charge",
+   "unique_id": "23-45-A4O-MOF_charge",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "peblar:peblar",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "switch.peblar_ev_charger_force_single_phase",
+   "original_device_class": null,
+   "platform": "peblar",
+   "state": "off",
+   "translation_key": "force_single_phase",
+   "unique_id": "23-45-A4O-MOF_force_single_phase",
+   "unit_of_measurement": null
+  }
+ ],
+ "services": {},
+ "source": {
+  "files": [
+   "tests/components/peblar/snapshots/test_number.ambr",
+   "tests/components/peblar/snapshots/test_switch.ambr",
+   "tests/components/peblar/snapshots/test_sensor.ambr",
+   "tests/components/peblar/snapshots/test_binary_sensor.ambr",
+   "tests/components/peblar/snapshots/test_select.ambr",
+   "tests/components/peblar/snapshots/test_button.ambr"
+  ],
+  "kind": "core-snapshot",
+  "note": "Home Assistant's own test output for this integration at the tag; the device grouping comes from unique_id",
+  "repo": "home-assistant/core",
+  "tag": "2026.8.2"
+ }
+}

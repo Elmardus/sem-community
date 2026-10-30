@@ -63,6 +63,12 @@ _NOT_CHARGING = frozenset({
     "charging finished, vehicle still connected",
     # Ohme (models.py ChargerStatus)
     "plugged_in", "plugged in", "finished", "unplugged",
+    # Peblar (HA core peblar/const.py PEBLAR_CP_STATE_TO_HOME_ASSISTANT):
+    # "suspended" is IEC state B, a car plugged in and not charging (#1038).
+    # Its "error" / "fault" / "invalid" stay unknown on purpose.
+    "suspended", "no_ev_connected",
+    # Tesla Wall Connector (HA core tesla_wall_connector/sensor.py, state 1)
+    "not_connected",
     # OCPP 1.6 ChargePointStatus (lower-cased, both spellings of suspended)
     "available", "preparing", "suspendedev", "suspended_ev",
     "suspendedevse", "suspended_evse", "finishing", "reserved",
@@ -114,6 +120,10 @@ _CABLE_ABSENT = frozenset({
     "disconnected", "no car connected",
     # Ohme
     "unplugged",
+    # Peblar
+    "no_ev_connected",
+    # Tesla Wall Connector
+    "not_connected",
     # OCPP 1.6 — "Available" is the connector with no EV attached
     "available",
     # go-e
@@ -122,6 +132,42 @@ _CABLE_ABSENT = frozenset({
     "suspended ev disconnected", "finish wait disconnect",
 })
 
+
+# ── FAULT — the box reports a fault ────────────────────────────────────
+# SEM knows these words, but they say nothing about the cable or the
+# contactor, so ``classify_charger_status`` returns "unknown" for them and
+# every reader falls back exactly as before. They are listed so the setup
+# wizard does not refuse a status sensor caught in a fault (#1038).
+_FAULT = frozenset({
+    # Wallbox (core ChargerStatus.ERROR "Error"), NRGkick, Peblar, Tesla
+    # Wall Connector
+    "error",
+    # OCPP 1.6 ChargePointStatus "Faulted"
+    "faulted",
+    # Peblar (core cp_state)
+    "fault",
+})
+
+
+# ── IEC 61851 PILOT CODES, as a box may report them bare ("C2") ────────
+# The wizard's old copy took these (for Blue Current, whose core
+# integration stores words instead); ABL eMH1 (#808) may store them. SEM
+# has never mapped them: ``classify_charger_status`` returns "unknown" and
+# the reader falls back, as before. Mapping them needs the stored format
+# checked at the source. Listed so the wizard keeps taking them (#1038).
+_IEC_PILOT = frozenset({
+    "a", "b1", "b2", "c1", "c2", "d1", "d2", "e", "f",
+})
+
+
+
+# ── The words a charge-mode SELECT offers to STOP ─────────────────────────
+# (R5, #1032) A select is read by what it offers: one of these options means
+# "do not charge". They are status-shaped words, so they live here with the
+# rest of the vocabulary (#1038: no second copy anywhere in the package).
+SELECT_STOP_WORDS = frozenset({
+    "stopped", "stop", "paused", "pause", "off", "disabled",
+})
 
 def is_cable_present(raw: "str | None") -> "bool | None":
     """Is a car plugged in, according to this charger's status string?
@@ -141,6 +187,21 @@ def is_cable_present(raw: "str | None") -> "bool | None":
     if classify_charger_status(raw) == "unknown":
         return None
     return str(raw).strip().lower() not in _CABLE_ABSENT
+
+
+def knows_status(raw: "str | None") -> bool:
+    """Is this a charger status word this module knows — one it maps to a
+    class, a fault, or a bare pilot code?
+
+    #1038: the setup wizard asks this instead of keeping its own list. Its
+    copy had drifted like the reader's did in #833 — it held Ohme's label
+    "plugged in", never the state ``plugged_in`` HA stores — so it refused
+    a status sensor the reader understood.
+    """
+    if classify_charger_status(raw) != "unknown":
+        return True
+    return raw is not None and str(raw).strip().lower() in (
+        _FAULT | _IEC_PILOT)
 
 
 def classify_charger_status(raw: "str | None") -> str:

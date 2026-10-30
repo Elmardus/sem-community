@@ -91,6 +91,30 @@ def reads_attribute(fn: Callable, obj: str, attr: str) -> bool:
     return False
 
 
+def reads_flag(fn: Callable, obj: str, attr: str) -> bool:
+    """Does ``fn`` read ``obj.attr`` EITHER WAY — plainly, or through
+    ``getattr(obj, "attr", default)``?
+
+    (#1027) The house style for a flag that may be missing on a bare test
+    stub is ``getattr(self, "observer_mode", False)``, and
+    :func:`reads_attribute` sees no attribute there at all. A guard that
+    pins "this gate asks whether SEM commands" has to accept both spellings,
+    or it pins the spelling instead of the gate.
+    """
+    if reads_attribute(fn, obj, attr):
+        return True
+    for n in ast.walk(_tree_of(fn)):
+        if not (isinstance(n, ast.Call) and _callee_name(n) == "getattr"):
+            continue
+        if len(n.args) < 2:
+            continue
+        target, name = n.args[0], n.args[1]
+        if (isinstance(target, ast.Name) and target.id == obj
+                and isinstance(name, ast.Constant) and name.value == attr):
+            return True
+    return False
+
+
 def assigns_attribute(fn: Callable, obj: str, attr: str) -> bool:
     """Does ``fn`` ASSIGN ``obj.attr``? The counterpart to the above — a
     read with no writer anywhere is a dead feature (#915)."""

@@ -1,0 +1,2521 @@
+{
+ "devices": {
+  "myenergi:10088800": {
+   "manufacturer": "myenergi",
+   "model": "Eddi",
+   "name": "Test Eddi 1"
+  },
+  "myenergi:10088801": {
+   "manufacturer": "myenergi",
+   "model": "Eddi",
+   "name": "eddi-10088801"
+  },
+  "myenergi:10644500": {
+   "manufacturer": "myenergi",
+   "model": "Harvi",
+   "name": "Test Harvi 2"
+  },
+  "myenergi:10645200": {
+   "manufacturer": "myenergi",
+   "model": "Harvi",
+   "name": "Test Harvi 1"
+  },
+  "myenergi:16042300": {
+   "manufacturer": "myenergi",
+   "model": "Zappi",
+   "name": "Test Zappi 1"
+  },
+  "myenergi:17005900": {
+   "manufacturer": "myenergi",
+   "model": "Zappi",
+   "name": "Test Zappi 2"
+  },
+  "myenergi:test_username": {
+   "manufacturer": "myenergi",
+   "model": "Hub",
+   "name": "Test Site"
+  }
+ },
+ "domain": "myenergi",
+ "entities": [
+  {
+   "attributes": {
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Relay 1",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.eddi_10088801_myenergi_eddi_10088801_relay_1",
+   "original_device_class": null,
+   "state": "on",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-r1a",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Relay 2",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.eddi_10088801_myenergi_eddi_10088801_relay_2",
+   "original_device_class": null,
+   "state": "on",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-r2a",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Relay 1",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_eddi_1_myenergi_test_eddi_1_relay_1",
+   "original_device_class": null,
+   "state": "on",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-r1a",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Relay 2",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_eddi_1_myenergi_test_eddi_1_relay_2",
+   "original_device_class": null,
+   "state": "on",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-r2a",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Charge When Locked",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_zappi_1_myenergi_test_zappi_1_charge_when_locked",
+   "original_device_class": null,
+   "state": "on",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-charge_when_locked",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Lock when Plugged In",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_zappi_1_myenergi_test_zappi_1_lock_when_plugged_in",
+   "original_device_class": null,
+   "state": "off",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-lock_when_pluggedin",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Lock when Unplugged",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_zappi_1_myenergi_test_zappi_1_lock_when_unplugged",
+   "original_device_class": null,
+   "state": "off",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-lock_when_unplugged",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Locked",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_zappi_1_myenergi_test_zappi_1_locked",
+   "original_device_class": null,
+   "state": "off",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-locked",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Update available",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_zappi_1_myenergi_test_zappi_1_update_available",
+   "original_device_class": null,
+   "state": "off",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-update_available",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Charge When Locked",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_zappi_2_myenergi_test_zappi_2_charge_when_locked",
+   "original_device_class": null,
+   "state": "on",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-charge_when_locked",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Lock when Plugged In",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_zappi_2_myenergi_test_zappi_2_lock_when_plugged_in",
+   "original_device_class": null,
+   "state": "off",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-lock_when_pluggedin",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Lock when Unplugged",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_zappi_2_myenergi_test_zappi_2_lock_when_unplugged",
+   "original_device_class": null,
+   "state": "off",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-lock_when_unplugged",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Locked",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_zappi_2_myenergi_test_zappi_2_locked",
+   "original_device_class": null,
+   "state": "off",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-locked",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Update available",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.test_zappi_2_myenergi_test_zappi_2_update_available",
+   "original_device_class": null,
+   "state": "off",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-update_available",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Device Priority",
+    "icon": "mdi:sort-numeric-variant",
+    "integration": "myenergi",
+    "max": 10,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "capabilities": {
+    "max": 10,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.eddi_10088801_myenergi_eddi_10088801_device_priority",
+   "original_device_class": null,
+   "state": "2",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-device_priority",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Heater Priority",
+    "integration": "myenergi",
+    "max": 2,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "capabilities": {
+    "max": 2,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.eddi_10088801_myenergi_eddi_10088801_heater_priority",
+   "original_device_class": null,
+   "state": "2",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-heater_priority",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Device Priority",
+    "icon": "mdi:sort-numeric-variant",
+    "integration": "myenergi",
+    "max": 10,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "capabilities": {
+    "max": 10,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.test_eddi_1_myenergi_test_eddi_1_device_priority",
+   "original_device_class": null,
+   "state": "2",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-device_priority",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Heater Priority",
+    "integration": "myenergi",
+    "max": 2,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "capabilities": {
+    "max": 2,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.test_eddi_1_myenergi_test_eddi_1_heater_priority",
+   "original_device_class": null,
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-heater_priority",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Device Priority",
+    "icon": "mdi:sort-numeric-variant",
+    "integration": "myenergi",
+    "max": 10,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "capabilities": {
+    "max": 10,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.test_zappi_1_myenergi_test_zappi_1_device_priority",
+   "original_device_class": null,
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-device_priority",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Minimum Green Level",
+    "icon": "mdi:leaf",
+    "integration": "myenergi",
+    "max": 100,
+    "min": 0,
+    "mode": "auto",
+    "step": 1
+   },
+   "capabilities": {
+    "max": 100,
+    "min": 0,
+    "mode": "auto",
+    "step": 1
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.test_zappi_1_myenergi_test_zappi_1_minimum_green_level",
+   "original_device_class": null,
+   "state": "50",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-minimum_green_level",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Device Priority",
+    "icon": "mdi:sort-numeric-variant",
+    "integration": "myenergi",
+    "max": 10,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "capabilities": {
+    "max": 10,
+    "min": 1,
+    "mode": "auto",
+    "step": 1
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.test_zappi_2_myenergi_test_zappi_2_device_priority",
+   "original_device_class": null,
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-device_priority",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Minimum Green Level",
+    "icon": "mdi:leaf",
+    "integration": "myenergi",
+    "max": 100,
+    "min": 0,
+    "mode": "auto",
+    "step": 1
+   },
+   "capabilities": {
+    "max": 100,
+    "min": 0,
+    "mode": "auto",
+    "step": 1
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.test_zappi_2_myenergi_test_zappi_2_minimum_green_level",
+   "original_device_class": null,
+   "state": "50",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-minimum_green_level",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Operating Mode",
+    "integration": "myenergi",
+    "options": [
+     "Stopped",
+     "Normal"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "Stopped",
+     "Normal"
+    ]
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.eddi_10088801_myenergi_eddi_10088801_operating_mode",
+   "original_device_class": null,
+   "state": "Stopped",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-operating_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Operating Mode",
+    "integration": "myenergi",
+    "options": [
+     "Stopped",
+     "Normal"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "Stopped",
+     "Normal"
+    ]
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_eddi_1_myenergi_test_eddi_1_operating_mode",
+   "original_device_class": null,
+   "state": "Normal",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-operating_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Charge Mode",
+    "icon": "mdi:ev-station",
+    "integration": "myenergi",
+    "options": [
+     "Fast",
+     "Eco",
+     "Eco+",
+     "Stopped"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "Fast",
+     "Eco",
+     "Eco+",
+     "Stopped"
+    ]
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_zappi_1_myenergi_test_zappi_1_charge_mode",
+   "original_device_class": null,
+   "state": "Fast",
+   "translation_key": "phase_setting",
+   "unique_id": "77889900ab-16042300-charge_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Phase Setting",
+    "icon": "mdi:ev-station",
+    "integration": "myenergi",
+    "options": [
+     "1",
+     "3",
+     "auto"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "1",
+     "3",
+     "auto"
+    ]
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_zappi_1_myenergi_test_zappi_1_phase_setting",
+   "original_device_class": null,
+   "state": "unknown",
+   "translation_key": "phase_setting",
+   "unique_id": "77889900ab-16042300-phase_setting_select",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Charge Mode",
+    "icon": "mdi:ev-station",
+    "integration": "myenergi",
+    "options": [
+     "Fast",
+     "Eco",
+     "Eco+",
+     "Stopped"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "Fast",
+     "Eco",
+     "Eco+",
+     "Stopped"
+    ]
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_zappi_2_myenergi_test_zappi_2_charge_mode",
+   "original_device_class": null,
+   "state": "Fast",
+   "translation_key": "phase_setting",
+   "unique_id": "77889900ab-17005900-charge_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Phase Setting",
+    "icon": "mdi:ev-station",
+    "integration": "myenergi",
+    "options": [
+     "1",
+     "3",
+     "auto"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "1",
+     "3",
+     "auto"
+    ]
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.test_zappi_2_myenergi_test_zappi_2_phase_setting",
+   "original_device_class": null,
+   "state": "unknown",
+   "translation_key": "phase_setting",
+   "unique_id": "77889900ab-17005900-phase_setting_select",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Active Heater",
+    "icon": "mdi:fraction-one-half",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_active_heater",
+   "original_device_class": null,
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-active_heater",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Battery CT2",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_battery_ct2",
+   "original_device_class": "power",
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-ct2.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 ct battery today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_ct_battery_today",
+   "original_device_class": "energy",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-ct_battery",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 ct internal load today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_ct_internal_load_today",
+   "original_device_class": "energy",
+   "state": "1.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-ct_internal_load",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Energy consumed session",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_energy_consumed_session",
+   "original_device_class": "energy",
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-consumed_session",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Energy used today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_energy_used_today",
+   "original_device_class": "energy",
+   "state": "2.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-energy_total",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Firmware",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_firmware",
+   "original_device_class": null,
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-firmware_version",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Green energy today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_green_energy_today",
+   "original_device_class": "energy",
+   "state": "1.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-energy_green",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Internal load CT1",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_internal_load_ct1",
+   "original_device_class": "power",
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-ct1.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 None CT3",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_none_ct3",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-ct3.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 power ct battery",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_power_ct_battery",
+   "original_device_class": "power",
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-power-ct_battery",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 power ct internal load",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_power_ct_internal_load",
+   "original_device_class": "power",
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-power-ct_internal_load",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Serial number",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_serial_number",
+   "original_device_class": null,
+   "state": "10088801",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-serial_number",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Status",
+    "icon": "mdi:shower",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_status",
+   "original_device_class": null,
+   "state": "Stopped",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Temp Tank 1",
+    "icon": "mdi:thermometer",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_temp_tank_1",
+   "original_device_class": "temperature",
+   "state": "49",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-temp_1",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "friendly_name": "eddi-10088801 myenergi eddi-10088801 Temp Tank 2",
+    "icon": "mdi:thermometer",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088801",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.eddi_10088801_myenergi_eddi_10088801_temp_tank_2",
+   "original_device_class": "temperature",
+   "state": "54",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088801-temp_2",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Active Heater",
+    "icon": "mdi:fraction-one-half",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_active_heater",
+   "original_device_class": null,
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-active_heater",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 ct generation today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_ct_generation_today",
+   "original_device_class": "energy",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-ct_generation",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 ct grid today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_ct_grid_today",
+   "original_device_class": "energy",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-ct_grid",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Energy consumed session",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_energy_consumed_session",
+   "original_device_class": "energy",
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-consumed_session",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Energy used today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_energy_used_today",
+   "original_device_class": "energy",
+   "state": "2.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-energy_total",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Firmware",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_firmware",
+   "original_device_class": null,
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-firmware_version",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Generation CT2",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_generation_ct2",
+   "original_device_class": "power",
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-ct2.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Green energy today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_green_energy_today",
+   "original_device_class": "energy",
+   "state": "1.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-energy_green",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Grid CT1",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_grid_ct1",
+   "original_device_class": "power",
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-ct1.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 None CT3",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_none_ct3",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-ct3.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 power ct generation",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_power_ct_generation",
+   "original_device_class": "power",
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-power-ct_generation",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 power ct grid",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_power_ct_grid",
+   "original_device_class": "power",
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-power-ct_grid",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Serial number",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_serial_number",
+   "original_device_class": null,
+   "state": "10088800",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-serial_number",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Status",
+    "icon": "mdi:shower",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_status",
+   "original_device_class": null,
+   "state": "Paused",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Temp Tank 1",
+    "icon": "mdi:thermometer",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_temp_tank_1",
+   "original_device_class": "temperature",
+   "state": "49",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-temp_1",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "friendly_name": "Test Eddi 1 myenergi Test Eddi 1 Temp Tank 2",
+    "icon": "mdi:thermometer",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10088800",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_eddi_1_myenergi_test_eddi_1_temp_tank_2",
+   "original_device_class": "temperature",
+   "state": "54",
+   "translation_key": null,
+   "unique_id": "77889900ab-10088800-temp_2",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Harvi 1 myenergi Test Harvi 1 Firmware",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10645200",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_harvi_1_myenergi_test_harvi_1_firmware",
+   "original_device_class": null,
+   "state": "",
+   "translation_key": null,
+   "unique_id": "77889900ab-10645200-firmware_version",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Harvi 1 myenergi Test Harvi 1 Generation CT1",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10645200",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_harvi_1_myenergi_test_harvi_1_generation_ct1",
+   "original_device_class": "power",
+   "state": "26",
+   "translation_key": null,
+   "unique_id": "77889900ab-10645200-ct1.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Harvi 1 myenergi Test Harvi 1 Generation CT2",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10645200",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_harvi_1_myenergi_test_harvi_1_generation_ct2",
+   "original_device_class": "power",
+   "state": "33",
+   "translation_key": null,
+   "unique_id": "77889900ab-10645200-ct2.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Harvi 1 myenergi Test Harvi 1 Generation CT3",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10645200",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_harvi_1_myenergi_test_harvi_1_generation_ct3",
+   "original_device_class": "power",
+   "state": "17",
+   "translation_key": null,
+   "unique_id": "77889900ab-10645200-ct3.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Harvi 1 myenergi Test Harvi 1 power ct generation",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10645200",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_harvi_1_myenergi_test_harvi_1_power_ct_generation",
+   "original_device_class": "power",
+   "state": "76",
+   "translation_key": null,
+   "unique_id": "77889900ab-10645200-power-ct_generation",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Harvi 1 myenergi Test Harvi 1 Serial number",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10645200",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_harvi_1_myenergi_test_harvi_1_serial_number",
+   "original_device_class": null,
+   "state": "10645200",
+   "translation_key": null,
+   "unique_id": "77889900ab-10645200-serial_number",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Harvi 2 myenergi Test Harvi 2 Firmware",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10644500",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_harvi_2_myenergi_test_harvi_2_firmware",
+   "original_device_class": null,
+   "state": "",
+   "translation_key": null,
+   "unique_id": "77889900ab-10644500-firmware_version",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Harvi 2 myenergi Test Harvi 2 Grid CT1",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10644500",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_harvi_2_myenergi_test_harvi_2_grid_ct1",
+   "original_device_class": "power",
+   "state": "1000",
+   "translation_key": null,
+   "unique_id": "77889900ab-10644500-ct1.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Harvi 2 myenergi Test Harvi 2 Grid CT2",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10644500",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_harvi_2_myenergi_test_harvi_2_grid_ct2",
+   "original_device_class": "power",
+   "state": "2000",
+   "translation_key": null,
+   "unique_id": "77889900ab-10644500-ct2.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Harvi 2 myenergi Test Harvi 2 Grid CT3",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10644500",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_harvi_2_myenergi_test_harvi_2_grid_ct3",
+   "original_device_class": "power",
+   "state": "1428",
+   "translation_key": null,
+   "unique_id": "77889900ab-10644500-ct3.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Harvi 2 myenergi Test Harvi 2 power ct grid",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:10644500",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_harvi_2_myenergi_test_harvi_2_power_ct_grid",
+   "original_device_class": "power",
+   "state": "4428",
+   "translation_key": null,
+   "unique_id": "77889900ab-10644500-power-ct_grid",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Harvi 2 myenergi Test Harvi 2 Serial number",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:10644500",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_harvi_2_myenergi_test_harvi_2_serial_number",
+   "original_device_class": null,
+   "state": "10644500",
+   "translation_key": null,
+   "unique_id": "77889900ab-10644500-serial_number",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Site myenergi Test Site Frequency grid",
+    "icon": "mdi:sine-wave",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "Hz"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_site_myenergi_test_site_frequency_grid",
+   "original_device_class": null,
+   "state": "49.96",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-frequency_grid",
+   "unit_of_measurement": "Hz"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Site myenergi Test Site Generated today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_site_myenergi_test_site_generated_today",
+   "original_device_class": "energy",
+   "state": "10.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-energy_generated",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Site myenergi Test Site Green Energy today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_site_myenergi_test_site_green_energy_today",
+   "original_device_class": "energy",
+   "state": "1.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-energy_green",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Site myenergi Test Site Grid export today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_site_myenergi_test_site_grid_export_today",
+   "original_device_class": "energy",
+   "state": "3.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-energy_exported",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Site myenergi Test Site Grid import today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_site_myenergi_test_site_grid_import_today",
+   "original_device_class": "energy",
+   "state": "4.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-energy_imported",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Site myenergi Test Site Home consumption",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_site_myenergi_test_site_home_consumption",
+   "original_device_class": "power",
+   "state": "4506",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-consumption_home",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Site myenergi Test Site Hub firmware",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_site_myenergi_test_site_hub_firmware",
+   "original_device_class": null,
+   "state": "3401S3077",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-firmware_version",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Site myenergi Test Site Hub serial number",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_site_myenergi_test_site_hub_serial_number",
+   "original_device_class": null,
+   "state": "test_username",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-serial_number",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Site myenergi Test Site Power battery",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_site_myenergi_test_site_power_battery",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-power_battery",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Site myenergi Test Site Power charging",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_site_myenergi_test_site_power_charging",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-power_charging",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Site myenergi Test Site Power export",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_site_myenergi_test_site_power_export",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-power_export",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Site myenergi Test Site Power generation",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_site_myenergi_test_site_power_generation",
+   "original_device_class": "power",
+   "state": "77",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-power_generation",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Site myenergi Test Site Power grid",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_site_myenergi_test_site_power_grid",
+   "original_device_class": "power",
+   "state": "4429",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-power_grid",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Site myenergi Test Site Power import",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_site_myenergi_test_site_power_import",
+   "original_device_class": "power",
+   "state": "4429",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-power_import",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "friendly_name": "Test Site myenergi Test Site Voltage grid",
+    "icon": "mdi:lightning-bolt",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:test_username",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_site_myenergi_test_site_voltage_grid",
+   "original_device_class": "voltage",
+   "state": "234.5",
+   "translation_key": null,
+   "unique_id": "77889900ab-hub-test_username-voltage_grid",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Charge added session",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_charge_added_session",
+   "original_device_class": "energy",
+   "state": "0.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-charge_added",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 ct internal load today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_ct_internal_load_today",
+   "original_device_class": "energy",
+   "state": "1.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-ct_internal_load",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Energy used today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_energy_used_today",
+   "original_device_class": "energy",
+   "state": "2.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-energy_total",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Firmware",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_firmware",
+   "original_device_class": null,
+   "state": "3560S3.139",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-firmware_version",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Green energy today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_green_energy_today",
+   "original_device_class": "energy",
+   "state": "1.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-energy_green",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Internal Load CT1",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_internal_load_ct1",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-ct1.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Internal Load CT2",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_internal_load_ct2",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-ct2.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Internal Load CT3",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_internal_load_ct3",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-ct3.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "diagnostic",
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Number of phases",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_number_of_phases",
+   "original_device_class": "diagnostic",
+   "state": "",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-num_phases",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Plug status",
+    "icon": "mdi:ev-plug-type2",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_plug_status",
+   "original_device_class": null,
+   "state": "Waiting for EV",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-plug_status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 power ct internal load",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_power_ct_internal_load",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-power-ct_internal_load",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 PWM",
+    "integration": "myenergi",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_pwm",
+   "original_device_class": null,
+   "state": "27.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-pwm",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Serial number",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_serial_number",
+   "original_device_class": null,
+   "state": "16042300",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-serial_number",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 1 myenergi Test Zappi 1 Status",
+    "icon": "mdi:ev-station",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:16042300",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_1_myenergi_test_zappi_1_status",
+   "original_device_class": null,
+   "state": "Paused",
+   "translation_key": null,
+   "unique_id": "77889900ab-16042300-status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 AC Battery CT1",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_ac_battery_ct1",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-ct1.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 AC Battery CT2",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_ac_battery_ct2",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-ct2.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 AC Battery CT3",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_ac_battery_ct3",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-ct3.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Charge added session",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_charge_added_session",
+   "original_device_class": "energy",
+   "state": "0.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-charge_added",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 ct ac battery today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_ct_ac_battery_today",
+   "original_device_class": "energy",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-ct_ac_battery",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 ct monitor today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_ct_monitor_today",
+   "original_device_class": "energy",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-ct_monitor",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Energy used today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_energy_used_today",
+   "original_device_class": "energy",
+   "state": "2.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-energy_total",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Firmware",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_firmware",
+   "original_device_class": null,
+   "state": "3560S3.139",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-firmware_version",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Green energy today",
+    "integration": "myenergi",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_green_energy_today",
+   "original_device_class": "energy",
+   "state": "1.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-energy_green",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Monitor CT4",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_monitor_ct4",
+   "original_device_class": "power",
+   "state": "-1",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-ct4.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Monitor CT5",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_monitor_ct5",
+   "original_device_class": "power",
+   "state": "1",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-ct5.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Monitor CT6",
+    "icon": "mdi:flash",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_monitor_ct6",
+   "original_device_class": "power",
+   "state": "5",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-ct6.power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "diagnostic",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Number of phases",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_number_of_phases",
+   "original_device_class": "diagnostic",
+   "state": "",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-num_phases",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Plug status",
+    "icon": "mdi:ev-plug-type2",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_plug_status",
+   "original_device_class": null,
+   "state": "EV Disconnected",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-plug_status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 power ct ac battery",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_power_ct_ac_battery",
+   "original_device_class": "power",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-power-ct_ac_battery",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 power ct monitor",
+    "integration": "myenergi",
+    "state_class": "measurement",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_power_ct_monitor",
+   "original_device_class": "power",
+   "state": "5",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-power-ct_monitor",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 PWM",
+    "integration": "myenergi",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_pwm",
+   "original_device_class": null,
+   "state": "53.0",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-pwm",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Serial number",
+    "icon": "mdi:numeric",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_serial_number",
+   "original_device_class": null,
+   "state": "17005900",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-serial_number",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "friendly_name": "Test Zappi 2 myenergi Test Zappi 2 Status",
+    "icon": "mdi:ev-station",
+    "integration": "myenergi"
+   },
+   "capabilities": {},
+   "device": "myenergi:17005900",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.test_zappi_2_myenergi_test_zappi_2_status",
+   "original_device_class": null,
+   "state": "Paused",
+   "translation_key": null,
+   "unique_id": "77889900ab-17005900-status",
+   "unit_of_measurement": null
+  }
+ ],
+ "services": {
+  "myenergi_boost": [
+   "amount"
+  ],
+  "myenergi_eddi_boost": [
+   "target",
+   "time"
+  ],
+  "myenergi_smart_boost": [
+   "amount",
+   "when"
+  ],
+  "myenergi_stop_boost": [],
+  "myenergi_unlock": []
+ },
+ "source": {
+  "client": "pymyenergi==0.2.3",
+  "commit": "ce5aca11dfe87b1644d73962d38d5797a21bcde4",
+  "data": "the integration's own tests/fixtures (client.json, history_*.json) via its own setup helper",
+  "kind": "live-load",
+  "repo": "CJNE/ha-myenergi"
+ }
+}

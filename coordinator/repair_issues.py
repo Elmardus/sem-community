@@ -23,6 +23,12 @@ Issues filed today:
   * ``no_recorder`` — recorder integration not available, so
     ``async_seed_from_history`` cannot bootstrap EV / forecast
     history. Filed at setup, cleared if recorder appears later.
+  * ``external_write_seen_<device>`` — a device whose external-control mode
+    is ``observe`` took a write SEM did not make (#1079). Cleared the cycle
+    the writes stop.
+  * ``power_sensor_not_found_<source>`` — the Energy Dashboard counts the
+    grid, solar or battery in kWh and SEM found no power sensor for it
+    (#1188). Cleared the cycle a sensor is found.
 
 The legacy log-channel feedback ("the solar_energy_management
 component should handle unavailability gracefully instead of
@@ -244,6 +250,13 @@ _DOCS_ANCHORS = {
     "split_grid_guessed": "sem-guessed-your-grid-power-meters",
     # (#947) the guess was checked against the counters and failed
     "split_grid_rejected": "sem-could-not-find-your-grid-power-meters",
+    # (#1079) another party writes to a device SEM drives: the next step is
+    # the user's own external-control setting
+    "external_write_seen": "another-party-writes-to-a-device",
+    # (#1188) the dashboard counts a source in kWh; SEM found no power sensor
+    "power_sensor_not_found": "sem-found-no-power-sensor",
+    # (#1226) …for one inverter or battery, beside others that read
+    "power_sensor_not_found_unit": "sem-found-no-power-sensor",
     # (#935) files from an install that came before this one
     "previous_install_leftovers": "files-from-a-previous-sem-install",
     "sensor_stale": "a-sensor-stopped-updating-stale",
@@ -445,6 +458,59 @@ def clear_split_grid_guessed(hass: HomeAssistant) -> None:
             _LOGGER.debug("issue_registry.delete (%s) failed: %s", issue_id, e)
 
 
+#: (#1188) The sources SEM reads from the Energy Dashboard. Each has its own
+#: "no power sensor" Repair, so a home that misses two sees two.
+POWER_SOURCES: tuple[str, ...] = ("grid", "solar", "battery")
+
+
+def _power_not_found_issue_id(source: str) -> str:
+    return f"power_sensor_not_found_{source}"
+
+
+def raise_power_sensor_not_found(hass: HomeAssistant, source: str, *,
+                                 energy_entity, beside: bool = False) -> bool:
+    """(#1188) The Energy Dashboard counts this source in kWh, and SEM found
+    no power sensor for it, so the source reads 0 W. Until now one log line
+    said so. Non-persistent: the reader asks again after every start.
+
+    (#1226) ``beside``: other inverters or batteries of the source are read,
+    and only this one is not. Its own text sends the user to the Energy
+    Dashboard only: the Config card pick stands for the whole source, so it
+    would drop the units that read.
+
+    True when the Repair was filed, so the caller tries again when not."""
+    tr_key = "power_sensor_not_found"
+    if beside:
+        tr_key = "power_sensor_not_found_unit"
+    try:
+        ir.async_create_issue(
+            hass,
+            domain=DOMAIN,
+            issue_id=_power_not_found_issue_id(source),
+            is_fixable=False,
+            is_persistent=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=tr_key,
+            learn_more_url=next_step_url("docs", tr_key, **_versions(hass)),
+            translation_placeholders={
+                "energy_entity": str(energy_entity or "—"),
+            },
+        )
+    except Exception as e:  # noqa: BLE001
+        _LOGGER.debug("issue_registry.create (power_sensor_not_found_%s) "
+                      "failed: %s", source, e)
+        return False
+    return True
+
+
+def clear_power_sensor_not_found(hass: HomeAssistant, source: str) -> None:
+    try:
+        ir.async_delete_issue(hass, DOMAIN, _power_not_found_issue_id(source))
+    except Exception as e:  # noqa: BLE001
+        _LOGGER.debug("issue_registry.delete (power_sensor_not_found_%s) "
+                      "failed: %s", source, e)
+
+
 def raise_soc_zones_out_of_order(hass: HomeAssistant, *, priority, buffer,
                                   auto_start) -> None:
     """(#870) The three battery SOC zones are not in ascending order.
@@ -513,6 +579,10 @@ def clear_battery_platform_pinned_generic(hass: HomeAssistant) -> None:
         pass
 
 
+def _operating_mode_issue_id(entity_id: str) -> str:
+    return f"battery_operating_mode_unexpected_{entity_id}"
+
+
 def raise_battery_operating_mode_unexpected(hass: HomeAssistant, entity_id: str,
                                             *, mode: str, expected: str) -> None:
     """(#845) The inverter's operating-policy selector is in a mode SEM's
@@ -522,7 +592,7 @@ def raise_battery_operating_mode_unexpected(hass: HomeAssistant, entity_id: str,
     try:
         ir.async_create_issue(
             hass, domain=DOMAIN,
-            issue_id=f"battery_operating_mode_unexpected_{entity_id}",
+            issue_id=_operating_mode_issue_id(entity_id),
             is_fixable=False, is_persistent=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key="battery_operating_mode_unexpected",
@@ -540,10 +610,13 @@ def raise_battery_operating_mode_unexpected(hass: HomeAssistant, entity_id: str,
 
 def clear_battery_operating_mode_unexpected(hass: HomeAssistant, entity_id: str) -> None:
     try:
-        ir.async_delete_issue(
-            hass, DOMAIN, f"battery_operating_mode_unexpected_{entity_id}")
+        ir.async_delete_issue(hass, DOMAIN, _operating_mode_issue_id(entity_id))
     except Exception as e:  # noqa: BLE001
         _LOGGER.debug("issue_registry.delete failed for %s: %s", entity_id, e)
+
+
+def _work_mode_issue_id(entity_id: str) -> str:
+    return f"deye_system_work_mode_invalid_{entity_id}"
 
 
 def raise_deye_system_work_mode_invalid(hass: HomeAssistant, entity_id: str,
@@ -553,7 +626,7 @@ def raise_deye_system_work_mode_invalid(hass: HomeAssistant, entity_id: str,
     try:
         ir.async_create_issue(
             hass, domain=DOMAIN,
-            issue_id=f"deye_system_work_mode_invalid_{entity_id}",
+            issue_id=_work_mode_issue_id(entity_id),
             is_fixable=False, is_persistent=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key="deye_system_work_mode_invalid",
@@ -567,7 +640,7 @@ def raise_deye_system_work_mode_invalid(hass: HomeAssistant, entity_id: str,
 
 def clear_deye_system_work_mode_invalid(hass: HomeAssistant, entity_id: str) -> None:
     try:
-        ir.async_delete_issue(hass, DOMAIN, f"deye_system_work_mode_invalid_{entity_id}")
+        ir.async_delete_issue(hass, DOMAIN, _work_mode_issue_id(entity_id))
     except Exception as e:  # noqa: BLE001
         _LOGGER.debug("issue_registry.delete failed for %s: %s", entity_id, e)
 
@@ -714,7 +787,7 @@ def raise_battery_night_backfill_blocked(
 
     A person who presses "Rebuild from history" is asking a direct question
     and deserves a direct answer that OUTLIVES the moment. A notification is
-    dismissed and gone; the missing sensor is not. Guido, 31.08: *"if a user
+    dismissed and gone; the missing sensor is not. Rule, 31.08: *"if a user
     presses the button and not all requirements are met it should create a
     repair"* — so the refusal goes where unfinished setup lives, with a docs
     anchor that says which sensor and why.
@@ -1673,6 +1746,132 @@ def clear_charger_control_entity_broken(
         _LOGGER.debug("issue_registry.delete failed for %s: %s", entity_id, e)
 
 
+#: (#1139) The Repairs SEM files for ONE charger, by the id builder that names
+#: it. Only the charger's own checks clear them, and only while that charger
+#: and that entity are in the config — so a charger the user removed, or an
+#: entity they replaced, left its Repair in Settings forever (@OddmarDam:
+#: "entity missing" for a deleted "New charger 1", whose ids HA had renamed
+#: under it). ``charger_actuation_failed`` is not here: load devices driven
+#: by current file it under their own id, and this sweep knows no load ids —
+#: ``clear_orphan_repairs`` sweeps it once the loads are built (#1140).
+_CHARGER_ONLY_ISSUE_IDS = (
+    _failsafe_issue_id,
+    _stop_unenforceable_issue_id,
+    _stop_war_stand_down_issue_id,
+    _phase_mismatch_issue_id,
+    _soc_cap_issue_id,
+)
+
+
+def clear_orphan_charger_repairs(
+    hass: HomeAssistant,
+    *,
+    charger_ids,
+    control_entities,
+) -> int:
+    """(#1139) Delete every per-charger Repair no configured charger owns.
+
+    ``charger_ids`` are the chargers SEM runs now; ``control_entities`` the
+    ``(charger id, entity id)`` pairs whose control check runs now. A
+    ``charger_control_entity_broken`` Repair outside those pairs, or a
+    per-charger Repair of an id outside ``charger_ids``, is deleted. Called
+    once per setup, after the chargers are registered: every config change
+    reloads SEM, so that is when an owner can disappear.
+
+    Returns the count cleared."""
+    keep = {_control_entity_issue_id(str(cid), eid)
+            for cid, eid in control_entities}
+    prefixes = [_control_entity_issue_id("", "")[:-1]]
+    for build in _CHARGER_ONLY_ISSUE_IDS:
+        prefixes.append(build(""))
+        keep |= {build(str(cid)) for cid in charger_ids}
+    try:
+        registry = ir.async_get(hass)
+        orphans = [issue_id for (domain, issue_id) in list(registry.issues)
+                   if domain == DOMAIN and issue_id.startswith(tuple(prefixes))
+                   and issue_id not in keep]
+    except Exception as e:  # noqa: BLE001 — never fail a setup over a repair
+        _LOGGER.debug("Orphan charger-repair sweep failed: %s", e)
+        return 0
+    cleared = 0
+    for issue_id in orphans:
+        try:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+            cleared += 1
+            _LOGGER.info("Cleared orphan charger repair: %s (charger or "
+                         "entity no longer in SEM config)", issue_id)
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.debug("issue_registry.delete failed for orphan %s: %s",
+                          issue_id, e)
+    return cleared
+
+
+#: (#1140) The Repairs keyed on a thing SEM reads, writes or drives, by the
+#: kind of owner that names it. Each is cleared only by its own check, and
+#: that check runs only for what SEM still uses: change the grid sensor, and
+#: the old one's "unavailable" Repair stayed in Settings for good.
+#: ``read`` — an entity ``SensorReader._read_sensor`` reads; ``battery`` — a
+#: battery entity named in the config; ``device`` — a device SEM drives by
+#: current (a charger, or a load under its own id).
+_ORPHAN_SWEPT_ISSUE_IDS = {
+    "read": (_sensor_issue_id, _stale_issue_id),
+    "battery": (
+        _battery_write_issue_id,
+        _battery_force_discharge_issue_id,
+        _operating_mode_issue_id,
+        _work_mode_issue_id,
+    ),
+    "device": (_actuation_issue_id,),
+}
+
+
+def clear_orphan_repairs(
+    hass: HomeAssistant,
+    *,
+    read_entities=None,
+    battery_entities=None,
+    device_ids=None,
+) -> int:
+    """(#1140) Delete the Repairs of a sensor, battery entity or device SEM
+    no longer uses.
+
+    Each argument is what one kind of owner uses now — see
+    ``_ORPHAN_SWEPT_ISSUE_IDS``. A Repair of that kind filed under anything
+    else is deleted. ``None`` means "not known": that kind is left alone.
+
+    Returns the count cleared."""
+    keep: set[str] = set()
+    prefixes: list[str] = []
+    for kind, used in (("read", read_entities), ("battery", battery_entities),
+                       ("device", device_ids)):
+        if used is None:
+            continue
+        for build in _ORPHAN_SWEPT_ISSUE_IDS[kind]:
+            prefixes.append(build(""))
+            keep |= {build(str(x)) for x in used if x}
+    if not prefixes:
+        return 0
+    try:
+        registry = ir.async_get(hass)
+        orphans = [issue_id for (domain, issue_id) in list(registry.issues)
+                   if domain == DOMAIN and issue_id.startswith(tuple(prefixes))
+                   and issue_id not in keep]
+    except Exception as e:  # noqa: BLE001 — never fail a cycle over a repair
+        _LOGGER.debug("Orphan repair sweep failed: %s", e)
+        return 0
+    cleared = 0
+    for issue_id in orphans:
+        try:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+            cleared += 1
+            _LOGGER.info("Cleared orphan repair: %s (SEM no longer reads, "
+                         "writes or drives it)", issue_id)
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.debug("issue_registry.delete failed for orphan %s: %s",
+                          issue_id, e)
+    return cleared
+
+
 _PREVIOUS_INSTALL_ISSUE_ID = "previous_install_leftovers"
 
 
@@ -1718,3 +1917,37 @@ def clear_previous_install_leftovers(hass: HomeAssistant) -> None:
         ir.async_delete_issue(hass, DOMAIN, _PREVIOUS_INSTALL_ISSUE_ID)
     except Exception as e:  # noqa: BLE001
         _LOGGER.debug("issue_registry.delete failed for leftovers: %s", e)
+
+
+def _external_write_issue_id(device: str) -> str:
+    return f"external_write_seen_{device}"
+
+
+def raise_external_write_seen(hass: HomeAssistant, device: str, *,
+                              name: str) -> None:
+    """(#1079) A device set to ``observe`` took writes SEM did not make.
+    Non-persistent: SEM looks again after every start."""
+    try:
+        ir.async_create_issue(
+            hass,
+            domain=DOMAIN,
+            issue_id=_external_write_issue_id(device),
+            is_fixable=False,
+            is_persistent=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="external_write_seen",
+            learn_more_url=next_step_url("docs", "external_write_seen",
+                                         **_versions(hass)),
+            translation_placeholders={"name": str(name or device)},
+        )
+    except Exception as e:  # noqa: BLE001 — never fail the cycle over a repair
+        _LOGGER.debug("issue_registry.create (external_write_seen_%s) "
+                      "failed: %s", device, e)
+
+
+def clear_external_write_seen(hass: HomeAssistant, device: str) -> None:
+    try:
+        ir.async_delete_issue(hass, DOMAIN, _external_write_issue_id(device))
+    except Exception as e:  # noqa: BLE001
+        _LOGGER.debug("issue_registry.delete (external_write_seen_%s) "
+                      "failed: %s", device, e)

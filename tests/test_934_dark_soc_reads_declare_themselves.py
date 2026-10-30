@@ -183,8 +183,14 @@ def _ledger(hours=8, solar_w=6800.0, home_w=800.0):
 
 def _pacer():
     hass = MagicMock()
-    hass.services.async_call = AsyncMock()
-    hass.states.get = MagicMock(return_value=SimpleNamespace(state="5000"))
+    # (#820) the register takes the writes it is sent: the pacer checks the
+    # register, not its memory, so one that never moved is a refusal.
+    register = SimpleNamespace(state="5000")
+
+    async def _set_value(domain, service, data, blocking=False):
+        register.state = str(data["value"])
+    hass.services.async_call = AsyncMock(side_effect=_set_value)
+    hass.states.get = MagicMock(return_value=register)
     fake = SimpleNamespace(
         hass=hass,
         config={
@@ -198,6 +204,7 @@ def _pacer():
         battery_capacity_kwh=21.0,
         _planning_evidence={"forecast_trust_d1": 0.9},
         _observer_mode=False,
+        external_yielding=lambda key: False,
         _charge_pacing_writer=None,
         _today_pacing_ledger=lambda: _ledger(),
     )
@@ -250,7 +257,9 @@ class TestTheShapeTheReaderMakes:
             "the hold's age is published through the outage — it is the "
             "reader's fact, not the decision's")
         assert "expired" in st["reason"]
-        assert _writes(hass) == [pytest.approx(cap), 5000.0]
+        # (#820) the release gives the larger of the capture (5000 W) and
+        # the pack's full charge power (10 kW here)
+        assert _writes(hass) == [pytest.approx(cap), 10000.0]
         clock[0] += 30.0
         await SEMCoordinator._run_charge_pacing(fake, r.read_power())
         assert fake._charge_pacing_state["action"] == "idle"

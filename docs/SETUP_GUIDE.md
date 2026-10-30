@@ -21,6 +21,9 @@ For developer and architecture details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 1. [Prerequisites](#1-prerequisites)
 2. [Installation via HACS](#2-installation-via-hacs)
 3. [Config Flow](#3-config-flow)
+   - [Step 1: SEM found your system](#step-1-sem-found-your-system)
+   - [When SEM asks one more question](#when-sem-asks-one-more-question)
+   - [Watch-only mode](#watch-only-mode)
 4. [Verification](#4-verification)
 5. [Options Flow](#5-options-flow)
 6. [SOC Zone Strategy](#6-soc-zone-strategy)
@@ -97,7 +100,9 @@ SEM requires **Home Assistant 2026.2.0 or newer**. Check your version at
 
 SEM is distributed through HACS (Home Assistant Community Store). If you do
 not have HACS installed, follow the official instructions at
-<https://hacs.xyz/docs/use/> before continuing.
+<https://hacs.xyz/docs/use/> before continuing. On Home Assistant 2026.11 or
+newer, HACS is built in as **Settings > Marketplace**, so there is nothing
+to install.
 
 ### The Energy Dashboard
 
@@ -137,7 +142,7 @@ Growatt, and any inverter that exposes watt-level sensors to HA.
 OCPP-compatible, Ohme, Peblar, V2C Trydan, Alfen Eve, Blue Current, OpenEVSE,
 and any charger with a controllable number entity.
 
-**Solar forecasts (optional):** Solcast, Forecast.Solar, Open-Meteo Solar Forecast. Required for smart
+**Solar forecasts (optional):** Solcast, Forecast.Solar, Open-Meteo Solar Forecast, Helios Forecast. Required for smart
 night charging and battery charge scheduling.
 
 > **Easee note:** Easee's charging power sensor is disabled by default in HA.
@@ -150,7 +155,7 @@ night charging and battery charge scheduling.
 ### Checklist
 
 - [ ] HA 2026.2.0 or newer
-- [ ] HACS installed
+- [ ] HACS installed (on Home Assistant 2026.11 or newer it is built in as Marketplace)
 - [ ] Energy Dashboard configured (solar + grid sensors at minimum)
 - [ ] Battery sensors visible in HA (optional)
 - [ ] EV charger integration installed and power sensor enabled (optional)
@@ -165,6 +170,9 @@ night charging and battery charge scheduling.
 3. Click the result, then **Download** at the bottom right.
 4. When the download finishes, go to **Settings > System > Restart** and
    restart Home Assistant. Wait 30–60 seconds for it to come back.
+
+On Home Assistant 2026.11 or newer, open **Settings > Marketplace** instead
+of HACS in step 1. The other steps are the same.
 
 After the restart, SEM is installed but not yet active. Complete the config
 flow in the next step to start it.
@@ -198,20 +206,70 @@ The config flow has three steps. You can change any setting later via the
 
 ![SEM integration detail page](images/sem_integration_detail.png)
 
-### Step 1: Energy Dashboard Detection
+### Step 1: SEM found your system
 
-![Step 1 — Energy Dashboard detection](screenshots/setup-flow/01-step1-energy-dashboard.png)
+![Step 1 — SEM found your system](screenshots/setup-flow/01-step1-energy-dashboard.png)
 
-SEM scans your Energy Dashboard and auto-detects all configured sensors:
-solar production, grid import/export, battery charge/discharge, and EV charger.
+SEM reads your Energy Dashboard and shows what it finds, as live watts:
+solar, grid and battery (with its charge).
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| **Observer mode** | **On** | A new install observes first: SEM reads your system, builds the dashboard, and publishes the decisions it *would* make — without sending a single command to your hardware. Look at those decisions, and when they match what you'd want, turn observer mode off (`switch.sem_observer_mode`) to let SEM act. Leave it on permanently for test rigs, secondary HA instances that mirror a production one, or monitoring-only setups. |
+**What to do:**
 
-> **Tip:** If a sensor you expect is missing from the detection summary,
-> check your Energy Dashboard (**Settings > Dashboards > Energy**) and ensure
-> that sensor type is assigned there first.
+1. Look at the three numbers. Do they match your inverter or energy app?
+2. If yes, press **Submit**. That is all.
+3. If one is wrong, open **Choose sensors myself**, pick the right sensor
+   for that line, then press **Submit**. Only a sensor you change is saved.
+   The others keep following your Energy Dashboard.
+
+If a line is empty, SEM found several sensors that could fit, such as one per
+battery module or one per phase. It does not guess. Pick the one for the whole
+battery, solar or meter.
+
+You do not need to know a sensor name to pass this step. Nothing here
+changes your hardware.
+
+#### When SEM asks one more question
+
+Most homes see only the screen above. In two cases SEM shows one more
+screen before **Hardware**. You can always get through it: choose **I don't
+know**, or leave the picker empty. SEM then starts anyway and learns the grid
+direction from your energy counters over the next days.
+
+**"SEM guessed your grid meter."** Your Energy Dashboard has no grid power
+sensor, so SEM picked one. Look at your house right now and answer:
+
+![One question — is your house buying or sending?](screenshots/setup-flow/01a-step1-one-question.png)
+
+| Answer | Choose it when |
+|---|---|
+| **Buying from the grid** | your house takes power from the grid |
+| **Sending to the grid** | your house gives power to the grid |
+| **This is my grid meter** | shown instead of the two above when the meter reads almost 0 W, so it cannot tell |
+| **Use the other meter** | shown only when SEM found a second meter. The screen names it and shows its watts |
+| **I don't know** | you cannot tell. Nothing is changed. **This is preselected**, so pressing **Submit** without choosing is safe |
+
+Your answer, not the brand of your meter, decides the direction. If you say
+*Buying* and the meter shows a plus number, SEM turns the sign around.
+
+**"SEM found no grid power sensor."** A picker is shown, empty. Choose your
+grid power sensor (the one in W or kW, not a kWh counter), or press
+**Submit** to skip it. You can set it later: see
+[Sensor source overrides](#sensor-source-overrides).
+
+![Pick your grid meter](screenshots/setup-flow/01b-step1-pick-grid.png)
+
+#### Watch-only mode
+
+A new install starts in **observer mode**: SEM reads your system, builds the
+dashboard and shows the decisions it *would* make, without sending a single
+command to your hardware. It is no longer a switch on this screen. Turn it
+off on the **Configuration** tab (`switch.sem_observer_mode`) when those
+decisions match what you want.
+
+> **Fixing it later:** open the SEM dashboard, tab **Configuration**, section
+> **Sensor sources**. It shows the same live values, with **Grid direction is
+> wrong** and **Battery direction is wrong** buttons that turn a direction
+> around in one tap. See [Sensor source overrides](#sensor-source-overrides).
 
 ### Step 2: EV Charger (optional)
 
@@ -220,6 +278,11 @@ solar production, grid import/export, battery charge/discharge, and EV charger.
 If you have an EV charger, this step configures how SEM controls it. SEM
 auto-detects your charger from the HA entity registry — review the pre-filled
 values and correct anything that looks wrong.
+
+Since 2.2 the pre-fill comes from what your charger's integration offers, not
+from a brand list: a start and a stop button, a charge-mode select, a car's own
+charging amps and charge switch, or a service with current fields. A field SEM
+cannot fill stays empty for you. Nothing is saved until you submit.
 
 Step 2 is intentionally minimal — only the 3 required sensors plus the one
 control-path field your charger needs (number entity OR service call). All
@@ -338,6 +401,14 @@ load — check **Settings > System > Logs** (filter for
 
 ### Sensor source overrides
 
+![Configuration tab, Sensor sources: what SEM reads right now](screenshots/setup-flow/04-sensor-sources-check.png)
+
+The top of **Sensor sources** shows what SEM reads right now, in watts: solar,
+grid, battery and what your home uses. Compare it with your meter or energy
+app. If the grid or battery direction is wrong, tap **Grid direction is
+wrong** or **Battery direction is wrong**. One tap turns it around. If the
+sensor itself is wrong, pick another one under **All settings** (below).
+
 SEM derives its grid, solar and battery power sources from HA's Energy
 Dashboard — that stays the primary path, and fixing a wrong mapping there
 (then reloading SEM) is the first thing to try. For the cases where that
@@ -354,6 +425,8 @@ dashboard's ⚙ Configuration tab lets you pin an explicit entity per source:
 
 Notes:
 
+- **Pick your meter's sensor, not one of SEM's own** (`sensor.sem_…`).
+  SEM ignores its own sensors here.
 - **Sign conventions are detected on the override.** A Shelly EM does not
   share the inverter's sign convention — SEM's import/export (and battery
   charge/discharge) sign detection runs against whatever entity you pick,
@@ -438,11 +511,25 @@ Night charging and smart night charging are **not settings here** — since v1.6
 
 | Setting | Default | What it does and when to change it |
 |---------|---------|-------------------------------------|
-| Tariff mode | Static | How SEM gets electricity prices. Static uses fixed import/export rates you enter. Dynamic reads prices from a HA sensor (e.g. Tibber, Octopus, Amber). Calendar uses HA's calendar to define cheap periods. |
+| Tariff mode | Static | How SEM gets electricity prices. Static uses fixed import/export rates you enter. Dynamic reads prices from a HA sensor (e.g. Tibber, Octopus, Amber). Calendar reads your peak hours from a HA Schedule helper. |
+| Peak-time schedule | None | Calendar mode only, and required there. A HA Schedule helper: its time blocks are the peak (HT) hours at the import rate; all other hours use the night rate. |
 | Import rate | 0.30 per kWh | What you pay to import from the grid (minimum: 0.00). Used for cost calculations and the break-even check in the battery charge scheduler. Set it to your actual electricity rate. Set to 0 if you have free electricity or net metering. |
 | Export rate | 0.08 per kWh | What you receive for feeding into the grid (minimum: 0.00). Used in savings calculations. Set it to your actual feed-in tariff. Set to 0 if you have no feed-in compensation. |
 | Dynamic price sensor | None | When tariff mode is Dynamic, point this at a sensor that reports the current price per kWh. SEM uses it to find the cheapest hours for overnight charging. |
+| Feed-in price entity | None | Optional. A sensor with your live export price. Plans then value exported energy at this price. With a forecast on the sensor, each hour uses its own price. Without the sensor, SEM uses the Export rate. |
 | Demand charge (per kW) | 0 | Some utility contracts charge monthly for peak demand (your highest 15-minute average). If yours does, enter the rate here. SEM factors it into the peak management calculation. |
+| Taxes and fees preset | None | *None* adds nothing. *Netherlands from 2027* fills energy tax and 21 % VAT and sets the price to spot. Enter your markup and feed-in fee yourself. |
+| What your import price includes | All-in | *All-in*: the price already has tax and VAT (Tibber, a rate from your bill); SEM adds nothing. *Spot price incl. VAT*: SEM adds markup and tax, each with VAT. *Spot price*: SEM adds markup, tax and VAT. |
+| Supplier markup / Energy tax | 0 | Per bought kWh, without VAT. Spot price only. |
+| VAT | 0 % | On the bought kWh. Spot price only. |
+| Feed-in fee | None | What your supplier charges for exported energy: *Per kWh*, *Tiers by kWh per year* (`0:0, 1000:0.02, 3000:0.05`) or *Fixed per month*. |
+
+With these fields at their defaults, every price stays as it was. Set any of
+them and six value sensors appear (self-consumption value, export value,
+feed-in fees; today and this year). On the Configuration card they are in
+**Tariff & pricing** under **All settings**. More in
+[User Guide](USER_GUIDE.md#taxes-markup-and-feed-in-fee) and
+[Tariff models](TARIFF_MODELS.md#what-a-kwh-is-worth-1077).
 
 **Tariff mode details:**
 
@@ -453,8 +540,12 @@ Night charging and smart night charging are **not settings here** — since v1.6
   change hourly. The [joint energy planner](ENERGY_PLANNER.md) uses the
   price curve to place every scheduled demand — EV, battery and deferrable
   loads — in the cheapest hours automatically.
-- **Calendar**: You define cheap/expensive periods via a HA calendar entity.
-  Useful for fixed time-of-use tariffs without a dynamic price API.
+- **Calendar**: You pick a HA Schedule helper in **Peak-time schedule**
+  (create one under Settings → Devices & services → Helpers → Schedule).
+  Its time blocks are the peak (HT) hours and cost the import rate; all
+  other hours cost the night rate. Example: one block 05:00–24:00 on every
+  day makes 00:00–05:00 the cheap hours. To change the times, edit the
+  helper. Useful for fixed time-of-use tariffs without a dynamic price API.
 
 #### Price classification — how the dynamic-tariff "cheap" / "expensive" labels are computed
 
@@ -607,18 +698,25 @@ estimates, not invoice replication (see #612).
 - Forecast-based charge alert (solar tomorrow looks good/poor)
 
 Notifications have a 10-minute cooldown per type to prevent alert fatigue.
+
+**Hints (2.2)** are a separate setting: `select.sem_hints` on the Configuration
+tab, under Notifications. **Off** (the default) sends none, **Weekly note**
+sends the Sunday summary, **All hints** also sends a sentence when an input
+goes silent, a load runs all night, grid use rises, or power is cheap while the
+car waits. See [Hints](USER_GUIDE.md#hints).
 Flap suppression prevents notifications for transient state changes (state
 must be stable for 60 seconds before a notification fires).
 
 ### Forecast settings
 
 SEM reads a solar forecast for smart night charging, the battery scheduler
-and the recommendation tips. **Three integrations are supported**, and SEM
+and the recommendation tips. **Four integrations are supported**, and SEM
 auto-detects them in this order:
 
 1. [Solcast PV Solar](https://github.com/BJReplay/ha-solcast-solar)
 2. [Forecast.Solar](https://www.home-assistant.io/integrations/forecast_solar/)
 3. [Open-Meteo Solar Forecast](https://github.com/rany2/ha-open-meteo-solar-forecast)
+4. [Helios Forecast](https://github.com/ReikanYsora/Helios-Forecast)
 
 The first one installed wins. If you run several side by side, choose one
 explicitly with **Solar forecast source** below — the picker offers only the
@@ -627,12 +725,12 @@ integrations actually installed on your system.
 > There is **no** support for pointing SEM at your own forecast sensor.
 > This section used to imply otherwise, which is what made #819 look like a
 > missing setting rather than a missing feature. If you use a forecast
-> integration that is not one of the three, please open an issue — a named
+> integration that is not one of the four, please open an issue — a named
 > integration is a data row, not a rewrite.
 
 | Setting | Default | What it does and when to change it |
 |---------|---------|-------------------------------------|
-| Solar forecast source | Auto | Which forecast **integration** SEM reads. Auto walks Solcast → Forecast.Solar → Open-Meteo and takes the first one installed. Choose one explicitly if you run several side by side — SEM then uses that one and falls back to auto-detection only if it is no longer installed (the fallback is recorded in diagnostics, never silent). |
+| Solar forecast source | Auto | Which forecast **integration** SEM reads. Auto walks Solcast → Forecast.Solar → Open-Meteo → Helios and takes the first one installed. Choose one explicitly if you run several side by side — SEM then uses that one and falls back to auto-detection only if it is no longer installed (the fallback is recorded in diagnostics, never silent). |
 | Price forecast entity | Auto | *(Dynamic tariffs only.)* The sensor carrying hourly **price** forecasts. This is a tariff setting, not a solar one — it used to be listed here as "Forecast entity", which is what made #819 look like a missing override. |
 | Weather entity | Auto | Feeds the weather card and forecast dampening. Auto-generated `weather.forecast_*` subentities are skipped (they lack the needed attributes) — any real `weather.*` entity is preferred. |
 
@@ -894,6 +992,30 @@ Check these in order:
 
 ---
 
+### Grid operator relay (§14a, ripple control) (#1021)
+
+Some grid operators can tell your house to use less power. SEM can follow that
+signal. It is off until you pick a relay.
+
+**Wire the relay into Home Assistant.** The operator's control box (Steuerbox,
+ripple receiver) closes a contact. Bring that contact in through any
+integration as a `binary_sensor` (or an `input_boolean`). SEM reads it; it
+needs no driver of its own and speaks no EEBus. If an integration publishes
+the EEBus limit as a sensor, SEM can read the limit from it too.
+
+**Germany (§14a EnWG).** Configuration → *Advanced* → Load management →
+*Grid operator relay*: pick the sensor. Once set, it also shows without
+*Advanced*. *Grid limit while it is on*: the limit your operator
+gave you (4.2 kW per device, times the factor in your contract). While the
+relay is on, SEM keeps the house's grid draw under that limit and shares it
+out across the car and the loads it controls. Solar on top is fine: the limit
+counts grid power only.
+
+**Switzerland (ripple control).** The operator's relay switches a boiler or
+heat pump off by itself. Open that device's *Configure device* and turn on
+*Behind the grid operator's relay*. While the relay is on, SEM does not plan
+the device, does not count on it, and shows *Locked by the grid operator*.
+
 ## 8. EV Charging Modes
 
 SEM runs two parallel state machines — one for daytime solar charging and one
@@ -1033,7 +1155,7 @@ separate from EV night charging.
 
 The scheduler requires:
 
-- A solar forecast integration (Solcast, Forecast.Solar or Open-Meteo Solar Forecast)
+- A solar forecast integration (Solcast, Forecast.Solar, Open-Meteo Solar Forecast or Helios Forecast)
 - An inverter that supports forced battery charging via a HA service or
   number entity
 - The battery charge scheduler enabled in the options flow
@@ -1057,6 +1179,8 @@ battery becomes one demand among the EV, the deferrable loads and the comfort
 bands, placed in the cheapest hours of the overnight window (or across the
 full window on a static tariff) under your peak limit and priority order.
 SEM then issues forced charge commands only while that block is open.
+On some inverters this sets the battery's charge limit, for example to 60 %.
+When the charge stops, SEM puts your own value back.
 
 > Since v2.0 the scheduler no longer picks its own window (#638). Two
 > consequences: the battery's charge hours now respect the same peak limit
@@ -1266,11 +1390,16 @@ path, the hot-water boiler is a simple on/off device controlled by SEM.
 |---|---|
 | Boiler control entity | The `switch.`, `water_heater.`, or `climate.` entity that turns the boiler on/off |
 | Temperature sensor (optional) | A `sensor.` reporting current water temperature in °C |
-| Solar target | Boiler runs on surplus until water reaches this (default 50 °C) |
-| Max temperature | Safety ceiling — SEM never activates above this regardless of mode (default 70 °C) |
+| Solar target | Boiler runs on surplus until water reaches this, then SEM stops it (default 50 °C). It is the highest temperature SEM heats to, except for the Legionella cycle |
 | Legionella target | Target temperature for the periodic Legionella cycle (default 65 °C) |
-| Minimum temperature | Below this, SEM force-heats from any source — not just solar (default 40 °C) |
-| Priority | Surplus-dispatch order (lower = served first, default 6) |
+
+Mode, priority, and when to stop or force heating are set on the **Control
+tab**, in the boiler's row. Under **Comfort**, "Keep at" plus "Extra from
+surplus" is a second stop (SEM stops at whichever is lower), and "Run now
+past" forces heating below that temperature from the sources you allow there.
+An example under the fields shows how high surplus may heat. The section also
+names the thermometer it reads; with none picked, it reads the boiler's own
+temperature.
 
 **If the temperature sensor is omitted:** SEM operates the boiler "blind" —
 it controls the on/off but relies on the boiler's internal thermostat to
@@ -1391,6 +1520,13 @@ wrong-unit, negative and non-finite readings instead of silently changing
 source. Radio, meter and field-bus pairing remain the responsibility of the
 hardware and its Home Assistant integration; SEM consumes only the resulting
 HA sensor entities.
+
+With enforcement on, the guard acts once per coordinator cycle (the update
+interval, 10 seconds by default): it stops or clamps SEM's chargers, and since 2.2 a phase still over
+its limit after that — or over with no car charging — sheds the loads known
+to sit on that phase, then those of unknown phase, held down until the
+guard's recovery latch clears. Give each load its phase in the priority list;
+see [A phase over its limit](LOAD_PRIORITY.md#a-phase-over-its-limit-1048).
 
 In Observer Mode SEM still runs its **full** decision logic against your live
 sensors every cycle — it just never actuates. It logs each command it *would*

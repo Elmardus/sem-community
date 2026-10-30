@@ -1,7 +1,7 @@
 """#778 — the pack-size learner's progress must count what already
 qualifies, not read 0 until the verdict lands.
 
-PROD 26.08 (Guido, screenshot of the Battery tab): "Measured pack size —
+PROD 26.08 (screenshot of the Battery tab): "Measured pack size —
 Learning · 0 / 5 nights" while storage held FOUR sealed nights that pass
 every gate (trainable, ≥15 % SOC span, positive drain). `measured_capacity`
 returns None below MIN_SAMPLES and throws the count away with it, so the

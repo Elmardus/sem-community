@@ -1,0 +1,2929 @@
+{
+ "devices": {
+  "vicare:vicare": {
+   "manufacturer": null,
+   "model": null,
+   "name": "vicare"
+  }
+ },
+ "domain": "vicare",
+ "entities": [
+  {
+   "attributes": {
+    "device_class": "running"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model0_burner",
+   "original_device_class": "running",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "burner",
+   "unique_id": "gateway0_deviceSerialVitodens300W-burner_active-0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "running"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model0_circulation_pump",
+   "original_device_class": "running",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "circulation_pump",
+   "unique_id": "gateway0_deviceSerialVitodens300W-circulationpump_active-0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "running"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model0_circulation_pump_2",
+   "original_device_class": "running",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "circulation_pump",
+   "unique_id": "gateway0_deviceSerialVitodens300W-circulationpump_active-1",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "running"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model0_dhw_charging",
+   "original_device_class": "running",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "domestic_hot_water_charging",
+   "unique_id": "gateway0_deviceSerialVitodens300W-charging_active",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "running"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model0_dhw_circulation_pump",
+   "original_device_class": "running",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "domestic_hot_water_circulation_pump",
+   "unique_id": "gateway0_deviceSerialVitodens300W-dhw_circulationpump_active",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "running"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model0_dhw_pump",
+   "original_device_class": "running",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "domestic_hot_water_pump",
+   "unique_id": "gateway0_deviceSerialVitodens300W-dhw_pump_active",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model0_frost_protection",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "frost_protection",
+   "unique_id": "gateway0_deviceSerialVitodens300W-frost_protection_active-0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model0_frost_protection_2",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "frost_protection",
+   "unique_id": "gateway0_deviceSerialVitodens300W-frost_protection_active-1",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "running"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model0_one_time_charge",
+   "original_device_class": "running",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "one_time_charge",
+   "unique_id": "gateway0_deviceSerialVitodens300W-one_time_charge",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model1_child_safety_lock",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "child_safety_lock_mode",
+   "unique_id": "gateway1_zigbee_################-child_safety_lock_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.model1_identification_mode",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "identification_mode",
+   "unique_id": "gateway1_zigbee_################-identification_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.model1_mounting_mode",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "mounting_mode",
+   "unique_id": "gateway1_zigbee_################-mounting_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "door"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model1_valve",
+   "original_device_class": "door",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "valve",
+   "unique_id": "gateway1_zigbee_################-valve",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.model2_identification_mode",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "identification_mode",
+   "unique_id": "gateway2_zigbee_################-identification_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.model3_identification_mode",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "identification_mode",
+   "unique_id": "gateway3_zigbee_################-identification_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "door"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.model4_valve",
+   "original_device_class": "door",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "valve",
+   "unique_id": "gateway4_zigbee_################_2-valve",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "button.model0_activate_one_time_charge",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "unknown",
+   "translation_key": "activate_onetimecharge",
+   "unique_id": "gateway0_deviceSerialVitodens300W-activate_onetimecharge",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "button.model0_deactivate_one_time_charge",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "unknown",
+   "translation_key": "deactivate_onetimecharge",
+   "unique_id": "gateway0_deviceSerialVitodens300W-deactivate_onetimecharge",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.model0_comfort_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "comfort_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-comfort_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.model0_comfort_temperature_2",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "comfort_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-comfort_temperature-1",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.model0_dhw_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "dhw_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-dhw_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "max": 40.0,
+    "min": -13.0,
+    "step": 1.0,
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "max": 40.0,
+    "min": -13.0,
+    "step": 1.0
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.model0_heating_curve_shift",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "heating_curve_shift",
+   "unique_id": "gateway0_deviceSerialVitodens300W-heating curve shift-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "max": 40.0,
+    "min": -13.0,
+    "step": 1.0,
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "max": 40.0,
+    "min": -13.0,
+    "step": 1.0
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.model0_heating_curve_shift_2",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "heating_curve_shift",
+   "unique_id": "gateway0_deviceSerialVitodens300W-heating curve shift-1",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "max": 3.5,
+    "min": 0.2,
+    "step": 0.1
+   },
+   "capabilities": {
+    "max": 3.5,
+    "min": 0.2,
+    "step": 0.1
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.model0_heating_curve_slope",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "heating_curve_slope",
+   "unique_id": "gateway0_deviceSerialVitodens300W-heating curve slope-0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "max": 3.5,
+    "min": 0.2,
+    "step": 0.1
+   },
+   "capabilities": {
+    "max": 3.5,
+    "min": 0.2,
+    "step": 0.1
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.model0_heating_curve_slope_2",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "heating_curve_slope",
+   "unique_id": "gateway0_deviceSerialVitodens300W-heating curve slope-1",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.model0_normal_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "normal_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-normal_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.model0_normal_temperature_2",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "normal_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-normal_temperature-1",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.model0_reduced_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "reduced_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-reduced_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.model0_reduced_temperature_2",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "reduced_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-reduced_temperature-1",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "options": [
+     "efficient_with_min_comfort",
+     "efficient",
+     "off"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "efficient_with_min_comfort",
+     "efficient",
+     "off"
+    ]
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "select.model0_dhw_operating_mode",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "efficient",
+   "translation_key": "dhw_operating_mode",
+   "unique_id": "gateway0_deviceSerialVitocal250A-dhw_operating_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_boiler_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "63",
+   "translation_key": "boiler_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-boiler_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model0_burner_hours",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "18726.3",
+   "translation_key": "burner_hours",
+   "unique_id": "gateway0_deviceSerialVitodens300W-burner_hours-0",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_burner_modulation",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "0",
+   "translation_key": "burner_modulation",
+   "unique_id": "gateway0_deviceSerialVitodens300W-burner_modulation-0",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model0_burner_starts",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "14315",
+   "translation_key": "burner_starts",
+   "unique_id": "gateway0_deviceSerialVitodens300W-burner_starts-0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_dhw_gas_consumption_this_month",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "805",
+   "translation_key": "hotwater_gas_consumption_heating_this_month",
+   "unique_id": "gateway0_deviceSerialVitodens300W-hotwater_gas_consumption_heating_this_month",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_dhw_gas_consumption_this_week",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "84",
+   "translation_key": "hotwater_gas_consumption_heating_this_week",
+   "unique_id": "gateway0_deviceSerialVitodens300W-hotwater_gas_consumption_heating_this_week",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_dhw_gas_consumption_this_year",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "8203",
+   "translation_key": "hotwater_gas_consumption_heating_this_year",
+   "unique_id": "gateway0_deviceSerialVitodens300W-hotwater_gas_consumption_heating_this_year",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_dhw_gas_consumption_today",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "22",
+   "translation_key": "hotwater_gas_consumption_today",
+   "unique_id": "gateway0_deviceSerialVitodens300W-hotwater_gas_consumption_today",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_dhw_max_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "60",
+   "translation_key": "hotwater_max_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-hotwater_max_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_dhw_min_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "10",
+   "translation_key": "hotwater_min_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-hotwater_min_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_electricity_consumption_this_week",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "0.829",
+   "translation_key": "power_consumption_this_week",
+   "unique_id": "gateway0_deviceSerialVitodens300W-power consumption this week",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_electricity_consumption_this_year",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "207.106",
+   "translation_key": "power_consumption_this_year",
+   "unique_id": "gateway0_deviceSerialVitodens300W-power consumption this year",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_electricity_consumption_today",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "0.219",
+   "translation_key": "power_consumption_today",
+   "unique_id": "gateway0_deviceSerialVitodens300W-power consumption today",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_energy",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "7.843",
+   "translation_key": "power consumption this month",
+   "unique_id": "gateway0_deviceSerialVitodens300W-power consumption this month",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_heating_gas_consumption_this_month",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "0",
+   "translation_key": "gas_consumption_heating_this_month",
+   "unique_id": "gateway0_deviceSerialVitodens300W-gas_consumption_heating_this_month",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_heating_gas_consumption_this_week",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "0",
+   "translation_key": "gas_consumption_heating_this_week",
+   "unique_id": "gateway0_deviceSerialVitodens300W-gas_consumption_heating_this_week",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_heating_gas_consumption_this_year",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "30946",
+   "translation_key": "gas_consumption_heating_this_year",
+   "unique_id": "gateway0_deviceSerialVitodens300W-gas_consumption_heating_this_year",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_heating_gas_consumption_today",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "0",
+   "translation_key": "gas_consumption_heating_today",
+   "unique_id": "gateway0_deviceSerialVitodens300W-gas_consumption_heating_today",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_outside_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "20.8",
+   "translation_key": "outside_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-outside_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_supply_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "63",
+   "translation_key": "supply_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-supply_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model0_supply_temperature_2",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "25.5",
+   "translation_key": "supply_temperature",
+   "unique_id": "gateway0_deviceSerialVitodens300W-supply_temperature-1",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model10_signal_strength",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "46",
+   "translation_key": "zigbee_signal_strength",
+   "unique_id": "gateway10_zigbee_################-zigbee_signal_strength",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "cooling",
+     "heating",
+     "standby"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "cooling",
+     "heating",
+     "standby"
+    ]
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model11_mode",
+   "original_device_class": "enum",
+   "platform": "vicare",
+   "state": "heating",
+   "translation_key": "active_mode",
+   "unique_id": "gateway11_zigbee_################-active_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model11_signal_strength",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "37",
+   "translation_key": "zigbee_signal_strength",
+   "unique_id": "gateway11_zigbee_################-zigbee_signal_strength",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model11_supply_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "31.0",
+   "translation_key": "supply_temperature",
+   "unique_id": "gateway11_zigbee_################-supply_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_boiler_supply_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "33.1",
+   "translation_key": "boiler_supply_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-boiler_supply_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_buffer_main_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "29.9",
+   "translation_key": "buffer_main_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-buffer main temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model1_compressor_hours",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "8118",
+   "translation_key": "compressor_hours",
+   "unique_id": "gateway1_deviceSerialVitocal250A-compressor_hours-0",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "device_class": "pressure",
+    "unit_of_measurement": "bar"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_compressor_inlet_pressure",
+   "original_device_class": "pressure",
+   "platform": "vicare",
+   "state": "6.66",
+   "translation_key": "compressor_inlet_pressure",
+   "unique_id": "gateway1_deviceSerialVitocal250A-compressor_inlet_pressure-0",
+   "unit_of_measurement": "bar"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_compressor_inlet_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "20.9",
+   "translation_key": "compressor_inlet_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-compressor_inlet_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_compressor_outlet_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "25.3",
+   "translation_key": "compressor_outlet_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-compressor_outlet_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model1_compressor_phase",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "ready",
+   "translation_key": "compressor_phase",
+   "unique_id": "gateway1_deviceSerialVitocal250A-compressor_phase-0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model1_compressor_starts",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "1502",
+   "translation_key": "compressor_starts",
+   "unique_id": "gateway1_deviceSerialVitocal250A-compressor_starts-0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_condenser_liquid_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "25.9",
+   "translation_key": "condenser_liquid_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-condenser_liquid_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_dhw_electricity_consumption_last_seven_days",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "24.5",
+   "translation_key": "energy_summary_dhw_consumption_heating_lastsevendays",
+   "unique_id": "gateway1_deviceSerialVitocal250A-energy_summary_dhw_consumption_heating_lastsevendays",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_dhw_electricity_consumption_this_month",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "16",
+   "translation_key": "energy_dhw_summary_consumption_heating_currentmonth",
+   "unique_id": "gateway1_deviceSerialVitocal250A-energy_dhw_summary_consumption_heating_currentmonth",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_dhw_electricity_consumption_this_year",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "875.1",
+   "translation_key": "energy_dhw_summary_consumption_heating_currentyear",
+   "unique_id": "gateway1_deviceSerialVitocal250A-energy_dhw_summary_consumption_heating_currentyear",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_dhw_electricity_consumption_today",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "2.6",
+   "translation_key": "energy_dhw_summary_consumption_heating_currentday",
+   "unique_id": "gateway1_deviceSerialVitocal250A-energy_dhw_summary_consumption_heating_currentday",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_dhw_energy_consumption_this_year",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "875.1",
+   "translation_key": "energy_consumption_dhw_this_year",
+   "unique_id": "gateway1_deviceSerialVitocal250A-energy_consumption_dhw_this_year",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_dhw_max_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "60",
+   "translation_key": "hotwater_max_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-hotwater_max_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_dhw_min_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "10",
+   "translation_key": "hotwater_min_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-hotwater_min_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_dhw_storage_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "46.8",
+   "translation_key": "dhw_storage_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-dhw_storage_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_electricity_consumption_this_year",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "3440.8",
+   "translation_key": "power_consumption_this_year",
+   "unique_id": "gateway1_deviceSerialVitocal250A-power consumption this year",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_electricity_consumption_today",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "7.2",
+   "translation_key": "power_consumption_today",
+   "unique_id": "gateway1_deviceSerialVitocal250A-power consumption today",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_energy",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "48.3",
+   "translation_key": "power consumption this month",
+   "unique_id": "gateway1_deviceSerialVitocal250A-power consumption this month",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_evaporator_liquid_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "13.9",
+   "translation_key": "evaporator_liquid_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-evaporator_liquid_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_evaporator_overheat_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "20.0",
+   "translation_key": "evaporator_overheat_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-evaporator_overheat_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_heating_electricity_consumption_last_seven_days",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "39.4",
+   "translation_key": "energy_summary_consumption_heating_lastsevendays",
+   "unique_id": "gateway1_deviceSerialVitocal250A-energy_summary_consumption_heating_lastsevendays",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_heating_electricity_consumption_this_month",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "32.3",
+   "translation_key": "energy_summary_consumption_heating_currentmonth",
+   "unique_id": "gateway1_deviceSerialVitocal250A-energy_summary_consumption_heating_currentmonth",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_heating_electricity_consumption_this_year",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "2565.7",
+   "translation_key": "energy_summary_consumption_heating_currentyear",
+   "unique_id": "gateway1_deviceSerialVitocal250A-energy_summary_consumption_heating_currentyear",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_heating_electricity_consumption_today",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "4.6",
+   "translation_key": "energy_summary_consumption_heating_currentday",
+   "unique_id": "gateway1_deviceSerialVitocal250A-energy_summary_consumption_heating_currentday",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_heating_energy_consumption_this_year",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "2565.7",
+   "translation_key": "energy_consumption_heating_this_year",
+   "unique_id": "gateway1_deviceSerialVitocal250A-energy_consumption_heating_this_year",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model1_heating_rod_hours",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "31",
+   "translation_key": "heating_rod_hours",
+   "unique_id": "gateway1_deviceSerialVitocal250A-heating_rod_hours",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model1_heating_rod_starts",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "314",
+   "translation_key": "heating_rod_starts",
+   "unique_id": "gateway1_deviceSerialVitocal250A-heating_rod_starts",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_inverter_current",
+   "original_device_class": "current",
+   "platform": "vicare",
+   "state": "0.0",
+   "translation_key": "inverter_current",
+   "unique_id": "gateway1_deviceSerialVitocal250A-inverter_current-0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_inverter_power",
+   "original_device_class": "power",
+   "platform": "vicare",
+   "state": "0.0",
+   "translation_key": "inverter_power",
+   "unique_id": "gateway1_deviceSerialVitocal250A-inverter_power-0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_inverter_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "26.3",
+   "translation_key": "inverter_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-inverter_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_outside_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "12.2",
+   "translation_key": "outside_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-outside_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_primary_circuit_supply_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "13.9",
+   "translation_key": "primary_circuit_supply_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-primary_circuit_supply_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_return_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "34.2",
+   "translation_key": "return_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-return_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model1_seasonal_performance_factor",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "3.9",
+   "translation_key": "spf_total",
+   "unique_id": "gateway1_deviceSerialVitocal250A-spf_total",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model1_seasonal_performance_factor_domestic_hot_water",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "3.8",
+   "translation_key": "spf_dhw",
+   "unique_id": "gateway1_deviceSerialVitocal250A-spf_dhw",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model1_seasonal_performance_factor_heating",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "3.9",
+   "translation_key": "spf_heating",
+   "unique_id": "gateway1_deviceSerialVitocal250A-spf_heating",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_secondary_circuit_supply_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "32.9",
+   "translation_key": "secondary_circuit_supply_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-secondary_circuit_supply_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "signal_strength",
+    "unit_of_measurement": "dBm"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model1_signal_strength",
+   "original_device_class": "signal_strength",
+   "platform": "vicare",
+   "state": "-30",
+   "translation_key": null,
+   "unique_id": "gateway1_deviceSerialVitocal250A-wifi_signal_strength",
+   "unit_of_measurement": "dBm"
+  },
+  {
+   "attributes": {
+    "device_class": "pressure",
+    "unit_of_measurement": "bar"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model1_supply_pressure",
+   "original_device_class": "pressure",
+   "platform": "vicare",
+   "state": "1.8",
+   "translation_key": "supply_pressure",
+   "unique_id": "gateway1_deviceSerialVitocal250A-supply_pressure",
+   "unit_of_measurement": "bar"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model1_supply_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "29.8",
+   "translation_key": "supply_temperature",
+   "unique_id": "gateway1_deviceSerialVitocal250A-supply_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "m\u00b3/h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model1_volumetric_flow",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "0.0",
+   "translation_key": "volumetric_flow",
+   "unique_id": "gateway1_deviceSerialVitocal250A-volumetric_flow",
+   "unit_of_measurement": "m\u00b3/h"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_buffer_main_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "41.2",
+   "translation_key": "buffer_main_temperature",
+   "unique_id": "gateway2_################-buffer main temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_buffer_top_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "41.2",
+   "translation_key": "buffer_top_temperature",
+   "unique_id": "gateway2_################-buffer top temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_coefficient_of_performance",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "5.3",
+   "translation_key": "cop_total",
+   "unique_id": "gateway2_################-cop_total",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_coefficient_of_performance_cooling",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "0.0",
+   "translation_key": "cop_cooling",
+   "unique_id": "gateway2_################-cop_cooling",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_coefficient_of_performance_domestic_hot_water",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "4.8",
+   "translation_key": "cop_dhw",
+   "unique_id": "gateway2_################-cop_dhw",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_coefficient_of_performance_heating",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "5.4",
+   "translation_key": "cop_heating",
+   "unique_id": "gateway2_################-cop_heating",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_compressor_hours",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "2394.4",
+   "translation_key": "compressor_hours",
+   "unique_id": "gateway2_################-compressor_hours-0",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_compressor_hours_load_class_1",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "105",
+   "translation_key": "compressor_hours_loadclass1",
+   "unique_id": "gateway2_################-compressor_hours_loadclass1-0",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_compressor_hours_load_class_2",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "455",
+   "translation_key": "compressor_hours_loadclass2",
+   "unique_id": "gateway2_################-compressor_hours_loadclass2-0",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_compressor_hours_load_class_3",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "1305",
+   "translation_key": "compressor_hours_loadclass3",
+   "unique_id": "gateway2_################-compressor_hours_loadclass3-0",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_compressor_hours_load_class_4",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "408",
+   "translation_key": "compressor_hours_loadclass4",
+   "unique_id": "gateway2_################-compressor_hours_loadclass4-0",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_compressor_hours_load_class_5",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "43",
+   "translation_key": "compressor_hours_loadclass5",
+   "unique_id": "gateway2_################-compressor_hours_loadclass5-0",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "device_class": "pressure",
+    "unit_of_measurement": "bar"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_compressor_inlet_pressure",
+   "original_device_class": "pressure",
+   "platform": "vicare",
+   "state": "12.9",
+   "translation_key": "compressor_inlet_pressure",
+   "unique_id": "gateway2_################-compressor_inlet_pressure-0",
+   "unit_of_measurement": "bar"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_compressor_inlet_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "23.3",
+   "translation_key": "compressor_inlet_temperature",
+   "unique_id": "gateway2_################-compressor_inlet_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_compressor_outlet_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "31.8",
+   "translation_key": "compressor_outlet_temperature",
+   "unique_id": "gateway2_################-compressor_outlet_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_compressor_phase",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "off",
+   "translation_key": "compressor_phase",
+   "unique_id": "gateway2_################-compressor_phase-0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_compressor_power",
+   "original_device_class": "power",
+   "platform": "vicare",
+   "state": "8.0",
+   "translation_key": "compressor_power",
+   "unique_id": "gateway2_################-compressor_power-0",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_compressor_starts",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "5067",
+   "translation_key": "compressor_starts",
+   "unique_id": "gateway2_################-compressor_starts-0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_condenser_subcooling_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "-2.8",
+   "translation_key": "condenser_subcooling_temperature",
+   "unique_id": "gateway2_################-condenser_subcooling_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_dhw_max_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "60",
+   "translation_key": "hotwater_max_temperature",
+   "unique_id": "gateway2_################-hotwater_max_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_dhw_min_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "10",
+   "translation_key": "hotwater_min_temperature",
+   "unique_id": "gateway2_################-hotwater_min_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_dhw_storage_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "45.1",
+   "translation_key": "dhw_storage_temperature",
+   "unique_id": "gateway2_################-dhw_storage_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_dhw_storage_top_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "45.1",
+   "translation_key": "dhw_storage_top_temperature",
+   "unique_id": "gateway2_################-dhw_storage_top_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_evaporator_liquid_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "18.2",
+   "translation_key": "evaporator_liquid_temperature",
+   "unique_id": "gateway2_################-evaporator_liquid_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_evaporator_overheat_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "0.0",
+   "translation_key": "evaporator_overheat_temperature",
+   "unique_id": "gateway2_################-evaporator_overheat_temperature-0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "pressure",
+    "unit_of_measurement": "bar"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_hot_gas_pressure",
+   "original_device_class": "pressure",
+   "platform": "vicare",
+   "state": "12.7",
+   "translation_key": "hot_gas_pressure",
+   "unique_id": "gateway2_################-hot_gas_pressure",
+   "unit_of_measurement": "bar"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_hot_gas_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "31.8",
+   "translation_key": "hot_gas_temperature",
+   "unique_id": "gateway2_################-hot_gas_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_liquid_gas_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "18.2",
+   "translation_key": "liquid_gas_temperature",
+   "unique_id": "gateway2_################-liquid_gas_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_outside_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "6.1",
+   "translation_key": "outside_temperature",
+   "unique_id": "gateway2_################-outside_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_primary_circuit_pump_rotation",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "0.0",
+   "translation_key": "primary_circuit_pump_rotation",
+   "unique_id": "gateway2_################-primary_circuit_pump_rotation",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_primary_circuit_return_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "15.5",
+   "translation_key": "primary_circuit_return_temperature",
+   "unique_id": "gateway2_################-primary_circuit_return_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_primary_circuit_supply_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "14.6",
+   "translation_key": "primary_circuit_supply_temperature",
+   "unique_id": "gateway2_################-primary_circuit_supply_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_return_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "33.2",
+   "translation_key": "return_temperature",
+   "unique_id": "gateway2_################-return_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_secondary_circuit_supply_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "35.2",
+   "translation_key": "secondary_circuit_supply_temperature",
+   "unique_id": "gateway2_################-secondary_circuit_supply_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "pressure",
+    "unit_of_measurement": "bar"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_suction_gas_pressure",
+   "original_device_class": "pressure",
+   "platform": "vicare",
+   "state": "12.9",
+   "translation_key": "suction_gas_pressure",
+   "unique_id": "gateway2_################-suction_gas_pressure",
+   "unit_of_measurement": "bar"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_suction_gas_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "23.3",
+   "translation_key": "suction_gas_temperature",
+   "unique_id": "gateway2_################-suction_gas_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_supply_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "34.3",
+   "translation_key": "supply_temperature",
+   "unique_id": "gateway2_################-supply_temperature-1",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "m\u00b3/h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_ventilation_input_volume_flow",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "257",
+   "translation_key": "ventilation_input_volumeflow",
+   "unique_id": "gateway2_################-ventilation_input_volumeflow",
+   "unit_of_measurement": "m\u00b3/h"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "standby",
+     "levelone",
+     "leveltwo",
+     "levelthree",
+     "levelfour"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "standby",
+     "levelone",
+     "leveltwo",
+     "levelthree",
+     "levelfour"
+    ]
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_ventilation_level",
+   "original_device_class": "enum",
+   "platform": "vicare",
+   "state": "levelthree",
+   "translation_key": "ventilation_level",
+   "unique_id": "gateway2_################-ventilation_level",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "m\u00b3/h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model2_ventilation_output_volume_flow",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "257",
+   "translation_key": "ventilation_output_volumeflow",
+   "unique_id": "gateway2_################-ventilation_output_volumeflow",
+   "unit_of_measurement": "m\u00b3/h"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "standby",
+     "permanent",
+     "schedule",
+     "sensordriven",
+     "silent",
+     "forcedlevelfour"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "standby",
+     "permanent",
+     "schedule",
+     "sensordriven",
+     "silent",
+     "forcedlevelfour"
+    ]
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model2_ventilation_reason",
+   "original_device_class": "enum",
+   "platform": "vicare",
+   "state": "schedule",
+   "translation_key": "ventilation_reason",
+   "unique_id": "gateway2_################-ventilation_reason",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "standby",
+     "levelone",
+     "leveltwo",
+     "levelthree",
+     "levelfour"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "standby",
+     "levelone",
+     "leveltwo",
+     "levelthree",
+     "levelfour"
+    ]
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model3_ventilation_level",
+   "original_device_class": "enum",
+   "platform": "vicare",
+   "state": "levelone",
+   "translation_key": "ventilation_level",
+   "unique_id": "gateway3_deviceSerialViAir300F-ventilation_level",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "standby",
+     "permanent",
+     "schedule",
+     "sensordriven",
+     "silent",
+     "forcedlevelfour"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "standby",
+     "permanent",
+     "schedule",
+     "sensordriven",
+     "silent",
+     "forcedlevelfour"
+    ]
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model3_ventilation_reason",
+   "original_device_class": "enum",
+   "platform": "vicare",
+   "state": "permanent",
+   "translation_key": "ventilation_reason",
+   "unique_id": "gateway3_deviceSerialViAir300F-ventilation_reason",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model4_filter_hours",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "5795",
+   "translation_key": "filter_hours",
+   "unique_id": "gateway4_deviceId4-filter_hours",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model4_filter_overdue_hours",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "0",
+   "translation_key": "filter_overdue_hours",
+   "unique_id": "gateway4_deviceId4-filter_overdue_hours",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model4_filter_remaining_hours",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "2965",
+   "translation_key": "filter_remaining_hours",
+   "unique_id": "gateway4_deviceId4-filter_remaining_hours",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "device_class": "pm1",
+    "unit_of_measurement": "\u03bcg/m\u00b3"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model4_pm1",
+   "original_device_class": "pm1",
+   "platform": "vicare",
+   "state": "0.1",
+   "translation_key": null,
+   "unique_id": "gateway4_deviceId4-pm01",
+   "unit_of_measurement": "\u03bcg/m\u00b3"
+  },
+  {
+   "attributes": {
+    "device_class": "pm10",
+    "unit_of_measurement": "\u03bcg/m\u00b3"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model4_pm10",
+   "original_device_class": "pm10",
+   "platform": "vicare",
+   "state": "0.5",
+   "translation_key": null,
+   "unique_id": "gateway4_deviceId4-pm10",
+   "unit_of_measurement": "\u03bcg/m\u00b3"
+  },
+  {
+   "attributes": {
+    "device_class": "pm25",
+    "unit_of_measurement": "\u03bcg/m\u00b3"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model4_pm2_5",
+   "original_device_class": "pm25",
+   "platform": "vicare",
+   "state": "0.3",
+   "translation_key": null,
+   "unique_id": "gateway4_deviceId4-pm02",
+   "unit_of_measurement": "\u03bcg/m\u00b3"
+  },
+  {
+   "attributes": {
+    "device_class": "pm4",
+    "unit_of_measurement": "\u03bcg/m\u00b3"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model4_pm4",
+   "original_device_class": "pm4",
+   "platform": "vicare",
+   "state": "0.4",
+   "translation_key": null,
+   "unique_id": "gateway4_deviceId4-pm04",
+   "unit_of_measurement": "\u03bcg/m\u00b3"
+  },
+  {
+   "attributes": {
+    "device_class": "signal_strength",
+    "unit_of_measurement": "dBm"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model4_signal_strength",
+   "original_device_class": "signal_strength",
+   "platform": "vicare",
+   "state": "-41",
+   "translation_key": null,
+   "unique_id": "gateway4_deviceId4-wifi_signal_strength",
+   "unit_of_measurement": "dBm"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "h"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model4_supply_fan_hours",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "819",
+   "translation_key": "supply_fan_hours",
+   "unique_id": "gateway4_deviceId4-supply_fan_hours",
+   "unit_of_measurement": "h"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "rpm"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model4_supply_fan_speed",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "555",
+   "translation_key": "supply_fan_speed",
+   "unique_id": "gateway4_deviceId4-supply_fan_speed",
+   "unit_of_measurement": "rpm"
+  },
+  {
+   "attributes": {
+    "device_class": "humidity",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model4_supply_humidity",
+   "original_device_class": "humidity",
+   "platform": "vicare",
+   "state": "59",
+   "translation_key": "supply_humidity",
+   "unique_id": "gateway4_deviceId4-supply_humidity",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model4_supply_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "20.8",
+   "translation_key": "supply_temperature",
+   "unique_id": "gateway4_deviceId4-supply_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "standby",
+     "levelone",
+     "leveltwo",
+     "levelthree",
+     "levelfour"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "standby",
+     "levelone",
+     "leveltwo",
+     "levelthree",
+     "levelfour"
+    ]
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model4_ventilation_level",
+   "original_device_class": "enum",
+   "platform": "vicare",
+   "state": "unavailable",
+   "translation_key": "ventilation_level",
+   "unique_id": "gateway4_deviceId4-ventilation_level",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "standby",
+     "permanent",
+     "schedule",
+     "sensordriven",
+     "silent",
+     "forcedlevelfour"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "standby",
+     "permanent",
+     "schedule",
+     "sensordriven",
+     "silent",
+     "forcedlevelfour"
+    ]
+   },
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model4_ventilation_reason",
+   "original_device_class": "enum",
+   "platform": "vicare",
+   "state": "sensordriven",
+   "translation_key": "ventilation_reason",
+   "unique_id": "gateway4_deviceId4-ventilation_reason",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model5_battery_charge_total",
+   "original_device_class": "energy",
+   "platform": "vicare",
+   "state": "1879163",
+   "translation_key": "ess_charge_total",
+   "unique_id": "gateway5_deviceId5-ess_charge_total",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model7_battery",
+   "original_device_class": "battery",
+   "platform": "vicare",
+   "state": "89",
+   "translation_key": null,
+   "unique_id": "gateway7_zigbee_d87a3bfffe5d844a-battery_level",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "humidity",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model7_humidity",
+   "original_device_class": "humidity",
+   "platform": "vicare",
+   "state": "53.0",
+   "translation_key": null,
+   "unique_id": "gateway7_zigbee_d87a3bfffe5d844a-room_humidity",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model7_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "17.5",
+   "translation_key": null,
+   "unique_id": "gateway7_zigbee_d87a3bfffe5d844a-room_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "humidity",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model8_humidity",
+   "original_device_class": "humidity",
+   "platform": "vicare",
+   "state": "52.0",
+   "translation_key": null,
+   "unique_id": "gateway8_zigbee_5cc7c1fffea33a3b-room_humidity",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model8_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "16.9",
+   "translation_key": null,
+   "unique_id": "gateway8_zigbee_5cc7c1fffea33a3b-room_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model9_battery",
+   "original_device_class": "battery",
+   "platform": "vicare",
+   "state": "36",
+   "translation_key": null,
+   "unique_id": "gateway9_zigbee_################-battery_level",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.model9_signal_strength",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "90",
+   "translation_key": "zigbee_signal_strength",
+   "unique_id": "gateway9_zigbee_################-zigbee_signal_strength",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model9_target_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "21.5",
+   "translation_key": "target_temperature",
+   "unique_id": "gateway9_zigbee_################-target_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model9_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "21.5",
+   "translation_key": null,
+   "unique_id": "gateway9_zigbee_################-room_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.model9_valve_position",
+   "original_device_class": null,
+   "platform": "vicare",
+   "state": "2",
+   "translation_key": "valve_position",
+   "unique_id": "gateway9_zigbee_################-valve_position",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "vicare:vicare",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.vitovalor_hydraulic_separator_temperature",
+   "original_device_class": "temperature",
+   "platform": "vicare",
+   "state": "22.3",
+   "translation_key": "hydraulic_separator_temperature",
+   "unique_id": "gateway6_deviceId6-hydraulic_separator_temperature",
+   "unit_of_measurement": "\u00b0C"
+  }
+ ],
+ "services": {
+  "set_vicare_mode": [
+   "vicare_mode"
+  ]
+ },
+ "source": {
+  "files": [
+   "tests/components/vicare/snapshots/test_number.ambr",
+   "tests/components/vicare/snapshots/test_sensor.ambr",
+   "tests/components/vicare/snapshots/test_binary_sensor.ambr",
+   "tests/components/vicare/snapshots/test_select.ambr",
+   "tests/components/vicare/snapshots/test_button.ambr"
+  ],
+  "kind": "core-snapshot",
+  "note": "Home Assistant's own test output for this integration at the tag; the device grouping comes from unique_id",
+  "repo": "home-assistant/core",
+  "tag": "2026.8.2"
+ }
+}

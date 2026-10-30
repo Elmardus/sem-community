@@ -53,7 +53,22 @@ NOT_DUPLICATE = {
     # settings_ev holds the GLOBAL default; the charger pages hold that
     # charger's value and default FROM the global. Two real settings.
     "daily_ev_target": "global default + per-charger override, not duplication",
+    # (#1089) settings holds the SHARED entity; each settings_battery_limit
+    # page holds one battery's own (its slot of the per-battery list), which
+    # wins over the shared one. Two real settings.
+    "battery_discharge_control_entity": "shared entity + per-battery override, not duplication",
+    # (#1213) same pattern as the discharge entity above.
+    "battery_charge_end_soc_entity": "shared entity + per-battery override, not duplication",
+    # (#1213) the menus' own selector, one per menu — not a setting.
+    "action": "a menu's choice list, one per menu, not a setting",
 }
+
+#: (#1213) The first heat pump page and the "another heat pump" page hold
+#: the same keys for two DIFFERENT pumps — the same shape as the charger
+#: family above, so they are one family, not sixteen repeated settings.
+STEP_FAMILY["heat_pump"] = "heat_pump"
+STEP_FAMILY["heat_pump_unit"] = "heat_pump"
+STEP_FAMILY["heat_pump_menu"] = "heat_pump"
 
 
 def _declaring_steps(cf: str) -> dict:
@@ -207,13 +222,17 @@ def measure() -> dict:
         "duplicates": genuine,
         "number_entities": count_keys("number.py"),
         "switch_entities": count_keys("switch.py"),
-        "user_facing_controls": len(fields) + count_keys("number.py") + count_keys("switch.py"),
+        # (#1019) a select is a control a user meets like a switch is
+        "select_entities": count_keys("select.py"),
+        "user_facing_controls": (len(fields) + count_keys("number.py")
+                                 + count_keys("switch.py") + count_keys("select.py")),
         **_first_run(cf),
         # The inventory the #830 ratchet compares against.
         "inventory": {
             "config_fields": sorted(fields),
             "number_entities": entity_keys("number.py"),
             "switch_entities": entity_keys("switch.py"),
+            "select_entities": entity_keys("select.py"),
         },
     }
 
@@ -257,6 +276,7 @@ def main() -> int:
           "— same field on two pages a user meets in one pass")
     print(f"  number entities           {m['number_entities']:4}")
     print(f"  switch entities           {m['switch_entities']:4}")
+    print(f"  select entities           {m['select_entities']:4}")
     print(f"  TOTAL user-facing controls{m['user_facing_controls']:4}")
     print()
     print("  what a NEW user faces before SEM works:")

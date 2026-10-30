@@ -1,0 +1,27 @@
+{
+ "chargers": [
+  {
+   "control": "number entity",
+   "mapped": {
+    "ev_charging_power_sensor": "sensor.zaptec_go2_zap012345_total_charge_power",
+    "ev_charging_sensor": "sensor.zaptec_go2_zap012345_charger_operation_mode",
+    "ev_connected_sensor": "sensor.zaptec_go2_zap012345_charger_operation_mode",
+    "ev_current_control_entity": "number.zaptec_go2_zap012345_charger_max_current",
+    "ev_session_energy_sensor": "sensor.zaptec_go2_zap012345_total_charge_power_session",
+    "ev_start_stop_entity": "button.zaptec_go2_zap012345_resume_charging",
+    "ev_total_energy_sensor": "sensor.zaptec_go2_zap012345_signed_meter_value_kwh"
+   }
+  }
+ ],
+ "meters": [],
+ "near_misses": [],
+ "proposals": [
+  {
+   "ev_current_control": [
+    "number.zaptec_go2_zap012345_charger_max_current",
+    "per_charger"
+   ]
+  }
+ ],
+ "vehicles": []
+}

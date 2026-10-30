@@ -1,0 +1,23 @@
+{
+ "chargers": [
+  {
+   "control": "number entity",
+   "mapped": {
+    "ev_charging_power_sensor": "sensor.evse_1_1_1_1_charge_power",
+    "ev_current_control_entity": "number.evse_1_1_1_1_intensity",
+    "ev_total_energy_sensor": "sensor.evse_1_1_1_1_charge_energy"
+   }
+  }
+ ],
+ "meters": [],
+ "near_misses": [],
+ "proposals": [
+  {
+   "ev_charge_mode": [
+    "select.evse_1_1_1_1_charge_mode",
+    "per_charger"
+   ]
+  }
+ ],
+ "vehicles": []
+}

@@ -28,12 +28,23 @@ except", which is the shape the next reader can extend.
 
 from __future__ import annotations
 
+import re as _re
 from typing import Any, Dict, Final
+
+#: (#1141, #1144) The key of a number that limits a whole site's current:
+#: Zaptec's installation ``available_current`` (and its per-phase twins).
+#: Every charger on the site shares it, and the owner sets it to protect the
+#: main fuse (#804). SEM never writes it — not as an offer, not from a save.
+SITE_CURRENT_KEY: Final[str] = r"(^|_)available_current"
+
 
 #: role -> matching rule. ``platform`` is the HA entity domain the role must
 #: live in; ``any`` is a tuple of regexes of which one must match the declared
 #: key; ``not`` disqualifies. Regexes are matched case-insensitively with
-#: ``re.search`` against the translation key alone.
+#: ``re.search`` against the translation key alone. (#1222) ``brand_any`` maps
+#: an integration domain to more ``any`` regexes that count for that one
+#: integration only: words that are the role in one brand and something else
+#: in the rest. Each one is a whole key, ``^…$``.
 ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
     # ── battery control ────────────────────────────────────────────────
     "battery_discharge_limit": {
@@ -49,6 +60,23 @@ ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
         "any": (r"max.*charg.*power", r"charg.*power.*(limit|max)",
                 r"storage_maximum_charging", r"ac_charge_power"),
         "not": (r"discharg", r"current", r"soc", r"percent", r"voltage"),
+    },
+    # (#1166) The level at which the inverter itself stops charging the pack
+    # (an end-of-charge or charge cut-off SOC, an "upper limit"). SEM only
+    # READS it: Force charge ends on a pack that takes no more at its own
+    # level, which may sit below 90 %. It stands BEFORE the target rule on
+    # purpose — the rules are first-match, and these names are the user's
+    # standing limit, never a target SEM may write.
+    "battery_charge_end_soc": {
+        "platform": "number",
+        "any": (r"(?:^|_)soc_upper_limit",
+                r"(?:^|_)(max|maximum|upper)_(\w+_)?charg\w*_soc(?:_|$)",
+                r"charg\w*_cut_?off_(soc|capacity)",
+                r"end_of_charge", r"(?:^|_)charge_end_soc"),
+        "not": (r"power", r"current", r"voltage", r"^system_", r"global",
+                r"discharg", r"(?:^|_)(min|minimum|lower)", r"couple",
+                r"backup", r"off_?grid", r"eps", r"peak_shaving",
+                r"smart_load", r"generator", r"grid_peak", r"^charge_state_"),
     },
     "battery_target_soc": {
         "platform": "number",
@@ -146,7 +174,7 @@ ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
         "any": (r"^charger_(max_)?current$", r"^charge_current_limit$",
                 r"^charging_current_(set|limit|max)$", r"ac_charger_.*current",
                 r"^(ev|evse)_.*current", r"ev.?charg.*current",
-                r"^maximum_current$", r"^available_current$",
+                r"^maximum_current$",
                 r"^current_set$", r"^set_current$", r"^current_setpoint$",
                 # Wallbox (core) — the key SEM's own discovery has driven
                 # since v1.4; `maximum_icp_current` is the installation's
@@ -157,11 +185,20 @@ ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
         # `amp` (its API's own word since v1) and OpenEVSE's `charge_rate`.
         # On an inverter a `charge_rate` is watts into a pack. The crawler
         # applies these for kind=charger and nowhere else.
-        "charger_only_any": (r"^amp$", r"^charge_rate$"),
+        # (#1096) A plain ``charging_current`` number is the same: on a
+        # charger it is the current it offers the car; on an inverter it is
+        # the battery's charge limit — the #809 trap — so it is never in
+        # the general list above.
+        "charger_only_any": (r"^amp$", r"^charge_rate$",
+                             r"^charging_current$"),
+        # (#1141) ``available_current`` is a whole site's limit: Zaptec's
+        # installation current, which every charger on the site shares and
+        # the owner sets as a grid guard (#804, 3x25 A). It is never one
+        # charger's control, whatever else matches it.
         "not": (r"phase", r"offline", r"failsafe", r"voltage", r"power",
                 r"\bmin\b", r"_min_", r"minimum", r"energy",
                 r"input", r"^ac\d", r"aes", r"remote_panel", r"bulk",
-                r"absorption", r"grid"),
+                r"absorption", r"grid", SITE_CURRENT_KEY),
     },
     "ev_charge_mode": {
         "platform": "select",
@@ -241,11 +278,24 @@ READ_ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
                 r"^grid_imported_power$", r"^from_grid_power$",
                 r"^consumption_from_grid", r"^pac_to_user",
                 # (#947 audit) declared by real meters, previously unmatched
-                r"^current_power_usage$",     # dsmr_reader — the actual DSMR pair
+                r"^current_power_usage$",     # dsmr_reader
+                # (#1189) core dsmr, the Dutch/Belgian smart meter. Its names
+                # follow the user's language (EN "Power consumption", NL
+                # "Energieverbruik", DE "Stromverbrauch"); this key does not.
+                r"^current_electricity_usage$",
                 r"^power_grid_import$",       # fronius
                 r"^power_from_grid$",         # mypv (AC-THOR)
                 r"^power_flow_from_grid$",    # tibber
                 r"^gridconsumedpower$"),      # senec
+        # (#1222) P1 Monitor calls its meter's pair ``power_consumption`` /
+        # ``power_production``, and a Tibber Pulse ``power`` /
+        # ``power_production``. Their names follow the user's language (NL
+        # "Stroomverbruik", DE "Stromverbrauch"; Tibber DE "Energie"). The
+        # keys do not, but a heat pump, a car and a solar inverter use the
+        # same words for their own power (lambda_heat_pumps, kia_uvo,
+        # enphase_envoy). So the words count in these brands only.
+        "brand_any": {"p1_monitor": (r"^power_consumption$",),
+                      "tibber": (r"^power$",)},
         "not": (r"energy", r"today", r"daily", r"total", r"month", r"year",
                 r"cumulative", r"phase", r"l1", r"l2", r"l3"),
     },
@@ -254,12 +304,17 @@ READ_ROLE_RULES: Final[Dict[str, Dict[str, Any]]] = {
         "any": (r"^grid_export_power$", r"^export_to_grid", r"^export_power$",
                 r"^grid_exported_power$", r"^to_grid_power$", r"^pac_to_grid",
                 # (#947 audit) declared by real meters, previously unmatched
-                r"^current_power_return$",    # dsmr_reader — the actual DSMR pair
+                r"^current_power_return$",    # dsmr_reader
+                r"^current_electricity_delivery$",  # (#1189) core dsmr
                 r"^power_grid_export$",       # fronius
                 r"^power_to_grid$",           # growatt_modbus
                 r"^power_flow_to_grid$",      # tibber
                 r"^feed_in_power$",           # huawei_solar
                 r"^feedinpower$"),            # solax_cloud_api
+        # (#1222) see grid_import_power: forecast_solar and enphase_envoy
+        # use these words for SOLAR power
+        "brand_any": {"p1_monitor": (r"^power_production$",),
+                      "tibber": (r"^power_production$",)},
         "not": (r"energy", r"today", r"daily", r"total", r"month", r"year",
                 r"cumulative", r"phase", r"l1", r"l2", r"l3", r"limit"),
     },
@@ -361,6 +416,8 @@ APPLIANCE_MARKERS: Final[tuple] = (
     # …and NOT "ups_": Victron's VE.Bus declares `ups_function`, which is a
     # real inverter's real setting.
     "battery_runtime",
+    # (#1223) A marker ending in `_` must BEGIN a segment (see `says`):
+    # `ram_` is in `telegram_timestamp` and `switching_program_enabled`.
     # NOTHING ELSE GOES IN THIS TUPLE WITHOUT BEING RUN AGAINST THE ROSTER
     # FIRST. Every marker here is a substring of a real vocabulary, and the
     # obvious ones are wrong: `brightness` matched the LED on Zaptec, Peblar,
@@ -369,6 +426,34 @@ APPLIANCE_MARKERS: Final[tuple] = (
     # own solar FORECAST sensors. Each of those silently deleted a working
     # brand's roles. A marker must be a word only a non-energy device says.
 )
+
+
+def says(words: str, marker: str) -> bool:
+    """(#1223, class 67) Does this vocabulary say ``marker``? EVERY test of a
+    marker list goes through here, in the crawler and at runtime.
+
+    A marker that ENDS in ``_`` names a whole segment, so it must also BEGIN
+    one. ``ram_`` is computer memory in ``ram_usage``; in DSMR Reader's
+    ``telegram_timestamp`` and a Stiebel Eltron heat pump's
+    ``switching_program_enabled`` it is four letters of another word, and as
+    a substring it called both of them appliances. A marker without that
+    ``_`` is a stem and may sit inside a compound — ``dehumidifier`` and
+    ``pvinverter`` are the words those brands really use. A leading ``_``
+    (``_grid``) already says where the segment starts. So ``grid_`` no
+    longer finds ``offgrid_`` or ``microgrid_``; measured, no brand's kind
+    or roles moved for it."""
+    if marker.endswith("_") and marker[:1].isalnum():
+        return _re.search(r"(?<![a-z0-9])" + _re.escape(marker), words,
+                          _re.I) is not None
+    return marker in words
+
+
+def says_any(words: str, markers) -> bool:
+    return any(says(words, m) for m in markers)
+
+
+def count_said(words: str, markers) -> int:
+    return sum(1 for m in markers if says(words, m))
 
 #: A battery role needs a BATTERY in the vocabulary. Midea's air conditioners
 #: are "inverter" units and declare `work_mode`; Qvantum's heat pump declares
@@ -407,7 +492,6 @@ STRONG_ENERGY_ANCHORS: Final[tuple] = (
 #: …and the shape of an ELECTRICAL measurement. A brand that declares two of
 #: these alongside a strong anchor is reporting watts, amps or kilowatt-hours,
 #: which no watch and no light strip does.
-import re as _re
 UNIT_SHAPED_KEY: Final = _re.compile(
     r"(^|_)(w|kw|kwh|wh|a|v|hz)$|_(power|current|voltage|energy)(_|$)"
     r"|^(power|current|voltage|energy)_", _re.I)
@@ -421,6 +505,8 @@ SEM_CONFIG_KEY_FOR_ROLE: Final[Dict[str, str]] = {
     "battery_discharge_limit": "battery_discharge_control_entity",
     "battery_charge_limit": "battery_charge_power_limit_entity",
     "battery_target_soc": "battery_target_soc_entity",
+    # (#1166) read only — see READ_ONLY_CONTROL_ROLES
+    "battery_charge_end_soc": "battery_charge_end_soc_entity",
     "battery_power_strategy": "battery_strategy_control_entity",
     "battery_force_charge": "battery_force_charge_switch",
     "battery_power_setpoint": "battery_force_discharge_control_entity",
@@ -478,6 +564,11 @@ PER_CHARGER_ROLES: Final[frozenset] = frozenset({
 #: can tell a Victron owner "this is your ESS mode; SEM reads it, you set it".
 OBSERVE_ONLY_ROLES: Final[frozenset] = frozenset({"battery_strategy"})
 
+#: (#1166) Roles bound with the same one-click accept as a control, whose
+#: entity SEM only READS. Not observe-only: the user picks it, so it has a
+#: config key. Nothing in SEM may write it; a test walks every service call.
+READ_ONLY_CONTROL_ROLES: Final[frozenset] = frozenset({"battery_charge_end_soc"})
+
 #: What the entity behind a role has to MEASURE for SEM to write or read it
 #: correctly. Checked against the live state at proposal time: a key can be
 #: named exactly like a power limit and be in amps, and the button used to
@@ -493,6 +584,7 @@ ROLE_EXPECTED_UNIT: Final[Dict[str, str]] = {
     "battery_charge_limit": "power",
     "battery_discharge_limit": "power",
     "battery_target_soc": "percent",
+    "battery_charge_end_soc": "percent",       # (#1166)
     "battery_power": "power",
     "battery_soc": "percent",
     "solar_power": "power",
@@ -541,21 +633,124 @@ OPAQUE_PLATFORMS: Final[frozenset] = frozenset({
 })
 
 
+#: (#1032, hardware wave) What a CHARGER exposes beside a current number —
+#: the roles the crawler reads from any integration, never a brand. Matched
+#: like ``ROLE_RULES`` (``re.search``, case-insensitive) against the entity's
+#: ``translation_key`` AND the key part of its ``unique_id``: a translation
+#: key is not always the integration's whole word (Tesla's charge switch
+#: carries ``charge_state_charging_state`` as its translation key and
+#: ``…-charge_state_user_charge_enable_request`` as its unique id).
+#:
+#: R2 — a start and a stop BUTTON together are a charger's start/stop
+#: control (Zaptec ``resume_charging`` / ``stop_charging``, Blue Current
+#: ``stop_charge_session``). Both are needed: a stop alone can stop a car
+#: SEM could never start again. ``deauthorize`` is not a stop — it ends the
+#: user's RFID session, which SEM must never touch (the #848 boundary).
+CHARGER_BUTTON_RULES: Final[Dict[str, Dict[str, Any]]] = {
+    "ev_start_button": {
+        "platform": "button",
+        "any": (r"(?:^|_)(resume|start)_charg", r"^charge_start$",
+                r"start_charge_session$"),
+        "not": (r"schedul", r"boost", r"timer", r"authori", r"firmware"),
+    },
+    "ev_stop_button": {
+        "platform": "button",
+        "any": (r"(?:^|_)(stop|pause)_charg", r"stop_charge_session$",
+                r"^charge_stop$"),
+        "not": (r"schedul", r"boost", r"timer", r"authori", r"firmware"),
+    },
+}
+
+#: A charger's own on/off for charging: a switch that says it enables
+#: charging (NRGkick ``charging_enabled``, Peblar ``charge``). Not a lock,
+#: a schedule, a boost or a phase mode.
+CHARGER_SWITCH_RULES: Final[Dict[str, Dict[str, Any]]] = {
+    "ev_charge_switch": {
+        "platform": "switch",
+        "any": (r"(?:^|_)charg(e|ing)_enabled?$", r"(?:^|_)charge_enable$",
+                r"(?:^|_)charg(e|ing)$"),
+        "not": (r"phase", r"lock", r"schedul", r"boost", r"solar", r"price",
+                r"precondition", r"from_grid", r"smart", r"approv"),
+    },
+}
+
+#: R3 — the charge control a CAR integration exposes: its charging-amps
+#: number and its charge switch. Read only on a device the vocabulary says is
+#: a vehicle (``VEHICLE_MARKERS``) — the same words on a house battery are a
+#: different machine. A car's charge limit in percent is NOT a current
+#: (``charge_limit_soc``), and neither is its maximum (``…_request_max``).
+VEHICLE_CONTROL_RULES: Final[Dict[str, Dict[str, Any]]] = {
+    "vehicle_charge_current": {
+        "platform": "number",
+        "any": (r"charge_current_request$", r"(?:^|_)charging_amps$",
+                r"(?:^|_)charge_amps$", r"(?:^|_)charging_current(_limit)?$",
+                r"(?:^|_)charge_current(_limit)?$"),
+        "not": (r"max$", r"_max_", r"soc", r"percent", r"limit_soc"),
+    },
+    "vehicle_charge_switch": {
+        "platform": "switch",
+        "any": (r"charge_enable_request$", r"(?:^|_)charging$",
+                r"(?:^|_)charge$", r"charge_switch$", r"(?:^|_)charging_enabled$"),
+        "not": (r"port", r"door", r"flap", r"schedul", r"precondition",
+                r"from_grid", r"climate", r"heater"),
+    },
+}
+
+#: R5 — a SELECT read by what it OFFERS, not by its key. myenergi gives both
+#: of a Zappi's selects the translation key ``phase_setting``; the options
+#: are what tell the charge mode (``Fast``/``Eco``/``Eco+``/``Stopped``) from
+#: the phase setting (``1``/``3``/``auto``). A charge-mode select must offer a
+#: way to stop AND a way to charge; a phase select must offer 1 and 3.
+# The stop words live with the status vocabulary (status_enum.SELECT_STOP_WORDS,
+# #1038: one copy); the reader imports them from there.
+SELECT_CHARGE_OPTIONS: Final[tuple] = ("fast", "eco", "eco+", "pv", "solar",
+                                       "now", "boost", "max charge",
+                                       "minpv", "smart charge")
+# NOT "normal": a myenergi Eddi (a water-heater diverter) offers
+# Stopped / Normal, and read as a charge mode it became a car charger.
+SELECT_PHASE_OPTIONS: Final[tuple] = ("1", "3")
+
+#: R6 — a SERVICE read by its FIELDS. A service taking ``current_p1`` /
+#: ``current_p2`` / ``current_p3`` limits each phase on its own and can run
+#: a charger on one phase (``p1`` only) or three (Easee's
+#: ``set_circuit_dynamic_limit``). A service whose only current field is
+#: ``available_current`` sets the current an installation may use (Zaptec's
+#: ``limit_current``). The rule set never names a service.
+SERVICE_PHASE_FIELDS: Final[tuple] = ("current_p1", "current_p2", "current_p3")
+SERVICE_SITE_CURRENT_FIELDS: Final[tuple] = ("available_current",)
+
+
 #: Every rule set the crawler may apply, by kind.
 ALL_RULE_SETS: Final[tuple] = ("ROLE_RULES", "READ_ROLE_RULES",
                                "VEHICLE_ROLE_RULES")
 
 
-def role_for(platform: str, key: str) -> str | None:
+def rule_any(rule: Dict[str, Any], domain: str = "") -> tuple:
+    """(#1222) A rule's ``any`` regexes, plus the ones that count for
+    ``domain`` only (``brand_any``). Every reader of a rule asks here."""
+    return (tuple(rule["any"])
+            + tuple((rule.get("brand_any") or {}).get(domain, ())))
+
+
+def role_for(platform: str, key: str, domain: str = "") -> str | None:
     """The SEM role a declared ``translation_key`` on ``platform`` plays, or
     ``None``. First matching rule wins; rules are ordered by specificity in
-    ``ROLE_RULES`` above."""
+    ``ROLE_RULES`` above. ``domain`` is the integration that declares the
+    key; without it a ``brand_any`` word matches nothing."""
     import re
     for role, rule in {**ROLE_RULES, **READ_ROLE_RULES}.items():
         if rule["platform"] != platform:
             continue
         if any(re.search(p, key, re.I) for p in rule.get("not", ())):
             continue
-        if any(re.search(p, key, re.I) for p in rule["any"]):
+        if any(re.search(p, key, re.I) for p in rule_any(rule, domain)):
             return role
     return None
+
+
+#: (#1054) A service field that names WHICH box the call is for — go-e's
+#: ``set_max_current(charger_name, max_current)``. SEM fills it with the
+#: device's own identifier in that integration (the registry identifier
+#: ``(domain, <name>)``), never with a guess; without one the service stays
+#: a proposal to wire by hand.
+DEVICE_NAME_FIELDS: Final[tuple] = ("charger_name", "charger", "device_name")

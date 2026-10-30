@@ -40,6 +40,9 @@ def _view(*, soc, spending, spendable, dynamic_floor=None, surplus_w=0.0):
         ev_charging=True, ev_connected=True,
         home_consumption_w=1000.0,
         forecast_spending_enabled=spending,
+        # (#1115) the switch reaches the clamp through the charger's mode:
+        # the coordinator sets this for a Min + Solar car with it on.
+        ev_wants_pack=spending,
         battery_spendable_kwh=spendable,
         dynamic_floor_pct=dynamic_floor,
     )

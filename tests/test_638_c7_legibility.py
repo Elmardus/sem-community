@@ -43,7 +43,8 @@ class TestNotScheduledIsStructured:
         plan = fake._energy_plan_shadow
         rows = plan.get("not_scheduled")
         assert rows, "the opted-out charger must appear structurally"
-        assert {"id": "ev:ev_charger", "why": "mode"} in rows
+        # (#1053) …with its name; the fake's charger has none.
+        assert {"id": "ev:ev_charger", "why": "mode", "label": None} in rows
 
     def test_a_disconnected_car_lands_with_its_why(self, freeze_targets):
         fake = _fake_self(devices=[_fake_load()])
@@ -52,7 +53,8 @@ class TestNotScheduledIsStructured:
         SEMCoordinator._shadow_energy_plan(
             fake, _scheduler(), energy=MagicMock(), power=power)
         rows = fake._energy_plan_shadow.get("not_scheduled")
-        assert {"id": "ev:ev_charger", "why": "disconnected"} in rows
+        assert {"id": "ev:ev_charger", "why": "disconnected",
+                "label": None} in rows
 
     def test_a_planned_night_has_an_empty_list_not_a_missing_key(
             self, freeze_targets):
@@ -186,7 +188,7 @@ class TestActuationDefaultsOn:
 
 @pytest.mark.unit
 class TestTheQuietFaceSpeaksInSentences:
-    """(Guido, first live look at the card) The raw diagnostic line
+    """(first live look at the card) The raw diagnostic line
     (`ev_targets={...}, mode_opted_out=[]...`) looked unfinished on the
     rendered face. The idle payload now carries machine CODES the card
     translates; the prose stays for logs/diagnose only."""
@@ -201,7 +203,7 @@ class TestTheQuietFaceSpeaksInSentences:
         # shape this test means. ``_idle_load`` (min_runtime 0) is a
         # non-candidate and no longer prints a row at all; using it here
         # made the test read as "every registered device gets a row",
-        # which is the noise Guido's 23:50 card was made of.
+        # which is the noise the PROD 23:50 card was made of.
         fake = _fake_self(devices=[_load(has_runtime_deficit=False)])
         ok = SEMCoordinator._shadow_energy_plan(
             fake, _scheduler(deficit=0.0), energy=MagicMock(), power=_power())
@@ -228,8 +230,8 @@ class TestTheQuietFaceSpeaksInSentences:
         SEMCoordinator._shadow_energy_plan(
             fake, _scheduler(deficit=0.0), energy=MagicMock(), power=power)
         plan = fake._energy_plan_shadow
-        assert {"id": "ev:ev_charger", "why": "disconnected"} \
-            in plan["not_scheduled"]
+        assert {"id": "ev:ev_charger", "why": "disconnected",
+                "label": None} in plan["not_scheduled"]
         # The EV code must NOT claim "target met" — the car is absent.
         assert "ev_target_met" not in plan["why_codes"]
 
@@ -323,6 +325,11 @@ class TestEveryLeftOutLoadIsNamed:
         src = (root / "coordinator" / "coordinator.py").read_text()
         codes = set(re.findall(r'"why": "([a-z_]+)"', src))
         codes |= set(re.findall(r'_left_out\([a-z_]+, "([a-z_]+)"\)', src))
+        # (#1053) the EV rows are built in demand_labels.ev_not_scheduled
+        labels = (root / "coordinator" / "demand_labels.py").read_text()
+        codes |= set(re.findall(
+            r'\("([a-z_]+)", (?:mode_opted_out|disconnected|car_full)\)',
+            labels))
         assert {"mode", "disconnected", "car_full"} <= codes, (
             "the EV whys moved — this pin is reading the wrong lines")
         assert {"load_mode", "no_runtime_need", "stop_condition", "day_only",
@@ -341,14 +348,14 @@ class TestEveryLeftOutLoadIsNamed:
 
 @pytest.mark.unit
 class TestOnlyNightCandidatesOweAWhyNot:
-    """(#744, Guido's PROD card 15.08 23:50) A device that was never asked
+    """(#744, the PROD card 15.08 23:50) A device that was never asked
     for guaranteed runtime is not a night candidate, and a non-candidate
     owes no explanation.
 
     ``control_mode`` defaults to PEAK_ONLY (devices/base.py), and the
     collector asked the mode gate FIRST — so every device the user never
     enrolled in surplus control printed a why-not row every single night.
-    Nine of Guido's eleven rows read "device mode excludes surplus
+    Nine of PROD's eleven rows read "device mode excludes surplus
     control" for a coffee machine, three tableau outputs, two Shelly 1PMs,
     a measurement channel and two lights. Not one of them has
     ``daily_min_runtime_sec`` set, so not one could have been planned in
@@ -411,7 +418,7 @@ class TestOnlyNightCandidatesOweAWhyNot:
 @pytest.mark.unit
 class TestALeftOutRowIsNamed:
     """(#744) The card rendered ``r.id.split(':').pop()`` because the row
-    carried no name — so Guido read
+    carried no name — so PROD read
     ``energy_dashboard_shellyplus1pm_441793d5470c`` instead of
     "Bad / Dusche / Gäste", and the slug's width pushed every reason into a
     ragged wrapped column. ``labels`` was only assigned AFTER every gate
@@ -444,9 +451,12 @@ class TestALeftOutRowIsNamed:
         root = pathlib.Path(__file__).resolve().parent.parent
         card = (root / "dashboard" / "card" / "src" / "cards"
                 / "sem-energy-plan-card.js").read_text()
-        assert card.count("r.label ||") == 2, (
+        # (#1053) The fallback is the demand's kind in the user's language,
+        # not the slug: "ev_charger_1" reached a Dutch card as a name.
+        assert card.count("_demandName(r.label, r.id)") == 2, (
             "both the quiet-night and the planned-night lists render the "
-            "name, falling back to the slug only when there is none")
+            "name, falling back to the kind only when there is none")
+        assert "split(':').pop()" not in card
 
 
 # The reasons for which "the plan is unreadable" IS the honest sentence:

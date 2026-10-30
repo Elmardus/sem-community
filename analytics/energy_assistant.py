@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from ..coordinator.price_signal import is_cheap_name, is_expensive_name
+from ..utils.helpers import solar_export, solar_share_pct
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,6 +68,10 @@ class EnergyAssistant:
         # (#829) rotation is for the eye, not the recorder: per-cycle
         # rotation wrote 6k rows/day on two sensors.
         self._last_tip_rotation: float = float('-inf')
+        # (#1051) the words shown, held until the next rotation: a tip's
+        # numbers move every cycle, and the text is a sensor STATE — one
+        # logbook row in Activity per change ("114%", then "111%" …).
+        self._shown_tip: Optional[tuple] = None   # (key, text, category)
         self._last_analysis: Optional[datetime] = None
         self._last_data = EnergyAssistantData()
         self._daily_stats: List[Dict[str, float]] = []
@@ -82,10 +87,12 @@ class EnergyAssistant:
         daily_ev_kwh: float = 0.0,
         daily_grid_import_kwh: float = 0.0,
         daily_grid_export_kwh: float = 0.0,
+        daily_battery_export_kwh: float = 0.0,
         daily_battery_charge_kwh: float = 0.0,
         daily_battery_discharge_kwh: float = 0.0,
         solar_to_ev_kwh: float = 0.0,
         grid_to_ev_kwh: float = 0.0,
+        battery_to_ev_kwh: float = 0.0,
         self_consumption_rate: float = 0.0,
         autarky_rate: float = 0.0,
         current_price_level: Optional[str] = None,
@@ -108,12 +115,26 @@ class EnergyAssistant:
             self_consumption_rate, autarky_rate,
         )
 
+        # (#1046) The car's solar share is the split of its flows. Dividing
+        # solar_to_ev by daily_ev (the charger's meter, which also counts
+        # cycles the flows missed) read 49 % on a day the session said 89 %.
+        # The caller hands over the flows of the EV day, the hours daily_ev
+        # counts. None: the flows hold nothing.
+        ev_share = solar_share_pct(
+            solar_to_ev_kwh, grid_to_ev_kwh, battery_to_ev_kwh,
+        )
+
+        # (#1191) "% of solar exported" counts solar's export only: a
+        # battery sale was never part of the solar it is divided by.
+        solar_export_kwh = solar_export(
+            daily_grid_export_kwh, daily_battery_export_kwh)
+
         # Generate tips based on current data
         self._analyze_ev_charging(
-            daily_ev_kwh, solar_to_ev_kwh, grid_to_ev_kwh, forecast_remaining_kwh,
+            daily_ev_kwh, ev_share, forecast_remaining_kwh,
         )
         self._analyze_surplus(
-            daily_grid_export_kwh, daily_solar_kwh,
+            solar_export_kwh, daily_solar_kwh,
             has_heat_pump, has_hot_water,
         )
         self._analyze_self_consumption(
@@ -133,14 +154,9 @@ class EnergyAssistant:
         # Calculate optimization score
         score = self._calculate_score(
             self_consumption_rate, autarky_rate,
-            daily_grid_export_kwh, daily_solar_kwh,
-            daily_ev_kwh, solar_to_ev_kwh,
+            solar_export_kwh, daily_solar_kwh,
+            daily_ev_kwh, ev_share,
         )
-
-        # EV solar percentage
-        ev_solar_pct = 0.0
-        if daily_ev_kwh > 0 and solar_to_ev_kwh > 0:
-            ev_solar_pct = (solar_to_ev_kwh / daily_ev_kwh) * 100
 
         # Rotate through tips
         current_tip = None
@@ -151,9 +167,16 @@ class EnergyAssistant:
             if now_mono - self._last_tip_rotation >= TIP_ROTATION_INTERVAL_S:
                 self._tip_rotation_index += 1
                 self._last_tip_rotation = now_mono
+            rotated = self._last_tip_rotation == now_mono
             idx = (self._tip_rotation_index - 1) % len(self._tips)
-            current_tip = self._tips[idx].description
-            tip_category = self._tips[idx].category
+            tip = self._tips[idx]
+            key = (tip.category, tip.title)
+            if rotated or self._shown_tip is None or self._shown_tip[0] != key:
+                self._shown_tip = (key, tip.description, tip.category)
+            current_tip = self._shown_tip[1]
+            tip_category = self._shown_tip[2]
+        else:
+            self._shown_tip = None
 
         self._last_data = EnergyAssistantData(
             optimization_score=score,
@@ -162,7 +185,7 @@ class EnergyAssistant:
             tips_count=len(self._tips),
             self_consumption_trend=self._get_trend("self_consumption"),
             grid_dependency_trend=self._get_trend("grid_import"),
-            ev_solar_percentage=ev_solar_pct,
+            ev_solar_percentage=ev_share or 0.0,
         )
 
         self._last_analysis = now
@@ -171,28 +194,26 @@ class EnergyAssistant:
     def _analyze_ev_charging(
         self,
         daily_ev_kwh: float,
-        solar_to_ev_kwh: float,
-        grid_to_ev_kwh: float,
+        ev_share: Optional[float],
         forecast_remaining_kwh: float,
     ) -> None:
-        """Analyze EV charging patterns."""
+        """Analyze EV charging patterns. ``ev_share``: solar % of the car's
+        flows, None when they hold nothing (#1046)."""
         if daily_ev_kwh <= 0:
             return
-
-        solar_pct = (solar_to_ev_kwh / daily_ev_kwh * 100) if daily_ev_kwh > 0 else 0
 
         from ..utils.translate import get_text
         _t = lambda key, default, **kw: get_text(self.hass, key, default, **kw)
         currency = self.hass.config.currency or "EUR"
 
-        if solar_pct < 50 and daily_ev_kwh > 2:
+        if ev_share is not None and ev_share < 50 and daily_ev_kwh > 2:
             self._tips.append(EnergyTip(
                 category="ev",
                 title=_t("tip_ev_grid_title", "EV charging mostly from grid"),
                 description=_t("tip_ev_grid_desc",
                     "Only {solar_pct:.0f}% of EV charging is from solar. "
                     "Shifting charging to 10:00-15:00 could significantly reduce grid usage.",
-                    solar_pct=solar_pct),
+                    solar_pct=ev_share),
                 estimated_savings=_t("tip_ev_grid_savings", "5-15 {currency}/month", currency=currency),
                 priority=2,
                 created=datetime.now(),
@@ -212,7 +233,7 @@ class EnergyAssistant:
 
     def _analyze_surplus(
         self,
-        daily_export_kwh: float,
+        solar_export_kwh: float,
         daily_solar_kwh: float,
         has_heat_pump: bool,
         has_hot_water: bool,
@@ -221,7 +242,12 @@ class EnergyAssistant:
         if daily_solar_kwh <= 0:
             return
 
-        export_pct = (daily_export_kwh / daily_solar_kwh * 100)
+        export_pct = (solar_export_kwh / daily_solar_kwh * 100)
+        if export_pct > 100:
+            # (#1051) More exported than the sun made is not a fact about the
+            # house — the inputs disagree (his solar read one inverter of
+            # two). Advice built on it would be wrong; say nothing.
+            return
 
         from ..utils.translate import get_text
         _t = lambda key, default, **kw: get_text(self.hass, key, default, **kw)
@@ -234,7 +260,7 @@ class EnergyAssistant:
                 description=_t("tip_high_export_desc",
                     "{export_pct:.0f}% of solar is exported. "
                     "Adding a hot water diverter would capture ~{capture:.1f} kWh/day.",
-                    export_pct=export_pct, capture=daily_export_kwh * 0.4),
+                    export_pct=export_pct, capture=solar_export_kwh * 0.4),
                 estimated_savings=_t("tip_high_export_savings", "10-20 {currency}/month", currency=currency),
                 priority=3,
                 created=datetime.now(),
@@ -441,10 +467,10 @@ class EnergyAssistant:
         self,
         self_consumption_rate: float,
         autarky_rate: float,
-        export_kwh: float,
+        solar_export_kwh: float,
         solar_kwh: float,
         ev_kwh: float,
-        solar_to_ev_kwh: float,
+        ev_share: Optional[float],
     ) -> int:
         """Calculate optimization score (0-100)."""
         score = 0.0
@@ -457,14 +483,14 @@ class EnergyAssistant:
 
         # EV solar charging (20 points max)
         if ev_kwh > 0:
-            ev_solar_pct = (solar_to_ev_kwh / ev_kwh * 100)
-            score += min(20, ev_solar_pct * 0.2)
+            # (#1046) the flow split, as on the card; no split known → 0
+            score += min(20, (ev_share or 0.0) * 0.2)
         else:
             score += 10  # No EV charging needed = neutral
 
         # Low export bonus (10 points max)
         if solar_kwh > 0:
-            export_pct = (export_kwh / solar_kwh * 100)
+            export_pct = (solar_export_kwh / solar_kwh * 100)
             score += max(0, 10 - export_pct * 0.1)
 
         return max(0, min(100, int(score)))

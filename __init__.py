@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
@@ -41,7 +42,9 @@ from .const import (
     MAX_PEAK_LIMIT_KW,
 )
 from .consts.core import DEFAULT_LOAD_MANAGEMENT_ENABLED
-from .coordinator.sensor_reader import GRID_TRIGGER_HINTS
+from .coordinator.sensor_reader import GRID_TRIGGER_HINTS, NO_GRID_SOURCE
+from .utils.select_option import listed_option
+from .utils.own_entity import is_sem_entity  # (#1103)
 from .coordinator import SEMCoordinator
 
 if TYPE_CHECKING:
@@ -260,6 +263,9 @@ PLATFORMS: list[Platform] = [
 _SKIP_RELOAD_SNAPSHOT_TTL_S = 60.0
 
 _SET_OPTION_STRUCTURAL_KEYS: frozenset[str] = frozenset({
+    # (#1040) Calendar mode's Schedule helper — read when the tariff
+    # provider is built, so a change must reload.
+    "tariff_schedule_entity",
     # #529: manual override for the battery SOC sensor when autodetect can't
     # reach it (SOC on a different device than the power sensor, or a generic
     # template helper). Read at SensorReader construction → must reload.
@@ -291,6 +297,10 @@ _SET_OPTION_STRUCTURAL_KEYS: frozenset[str] = frozenset({
     # #523: read at HeatPumpController construction, so a change must reload
     # to rebuild the controller with the new relay polarity.
     "heat_pump_invert_sg_ready",
+    # (#812) the pump's own tariff and meter — read at controller
+    # construction, and they decide whether its cost sensor exists.
+    "heat_pump_tariff_rate", "heat_pump_tariff_entity",
+    "heat_pump_tariff_meter",
     "hot_water_entity", "hot_water_power_sensor",
     "hot_water_temperature_sensor",
     "ev_chargers",
@@ -310,6 +320,10 @@ _SET_OPTION_STRUCTURAL_KEYS: frozenset[str] = frozenset({
     # adapter construction too, so a change must reload.
     "battery_force_discharge_entities",
     "battery_discharge_control_entities",
+    # (#1166) the pack's own end-of-charge level is read from the config
+    # snapshot, which only a reload rebuilds — shared and per battery.
+    "battery_charge_end_soc_entity",
+    "battery_charge_end_soc_entities",
     # #523 Sessy / AC-coupled: per-battery power-strategy selects, also read
     # at adapter construction.
     "battery_strategy_entities",
@@ -576,10 +590,29 @@ def _coerce_switch_on(value) -> bool:
     return bool(value)
 
 
-def _merge_ev_chargers_by_id(
-    existing: list, incoming: list,
-) -> list:
+def chargers_without(
+    data_chargers: list | None, opts_chargers: list | None, charger_id: str,
+) -> tuple:
+    """(#1054 follow-up) Both charger stores without ``charger_id``.
+
+    Returns ``(data, options)``. A store that did not hold the id is handed
+    back as the SAME object (so a caller can tell "nothing to write"); an
+    absent store (``None``) stays absent. Pure."""
+    def _drop(lst):
+        if lst is None:
+            return None
+        if not any(isinstance(c, dict) and c.get("id") == charger_id for c in lst):
+            return lst
+        return [c for c in lst if not (isinstance(c, dict) and c.get("id") == charger_id)]
+    return _drop(data_chargers), _drop(opts_chargers)
+
+
+def _merge_ev_chargers_by_id(existing: list, incoming: list) -> list:
     """Merge an ``ev_chargers`` list by ``id`` rather than full-replace.
+
+    (#1054) One charger per device is decided in ONE place: the charger
+    refs (``charger_refs.apply_legacy_edit``) at the next start. This merge
+    only keeps siblings — it no longer folds or displaces by guess.
 
     Built for the set_option service path so a partial submit from the
     Config card (one charger's worth of fields) can never drop sibling
@@ -782,6 +815,7 @@ def persist_global_option(hass, entry, coordinator, key: str, value) -> None:
 
 def persist_per_battery_option(
     hass, entry, coordinator, idx: int, list_key: str, value, count: int,
+    *, read_units: Any = None,
 ) -> None:
     """Persist ONE per-battery option without an integration reload (#523).
 
@@ -793,16 +827,29 @@ def persist_per_battery_option(
     battery 1, and the no-reload contract (copy options, mirror into
     ``coordinator.config``, arm the reload-skip snapshot) matches the
     charger path so a live mode flip doesn't bounce the integration.
+
+    (#1204) ``idx`` is a place in the battery order ``read_units``: for a
+    Mode select or reserve number the order it was built for
+    (``battery_control_units``); None for today's order (SEM's own write).
+    The batteries may have changed since the control was built (the reload
+    is due), so the value goes to that battery's slot today. A battery that
+    is gone takes no write.
     """
+    from .coordinator.battery_controls import put_battery_slot
     new_options = {**(entry.options or {})}
-    src = new_options.get(list_key)
-    if not isinstance(src, list):
-        src = (entry.data or {}).get(list_key)
-    lst = list(src) if isinstance(src, list) else []
+    saved = {**(entry.data or {}), **new_options}
+    if not isinstance(new_options.get(list_key), list):
+        saved[list_key] = (entry.data or {}).get(list_key)
+    if not 0 <= idx:
+        return
+    try:
+        lst = put_battery_slot(saved, list_key, idx, value, read_units)
+    except LookupError:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="battery_list_changed",
+        ) from None
     while len(lst) < count:
         lst.append(None)
-    if 0 <= idx < len(lst):
-        lst[idx] = value
     new_options[list_key] = lst
     if isinstance(getattr(coordinator, "config", None), dict):
         coordinator.config.update({**(entry.data or {}), **new_options})
@@ -944,6 +991,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> boo
                     "ev_charger_service_entity_id", "ev_current_control_entity",
                     "ev_current_sensor", "ev_total_energy_sensor",
                     "ev_session_energy_sensor", "ev_service_param_name",
+                    "ev_charger_service_data",
                     "ev_service_device_id", "ev_start_stop_entity",
                     "ev_charge_mode_entity", "ev_charge_mode_start",
                     "ev_charge_mode_stop", "ev_start_service",
@@ -1787,13 +1835,42 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> boo
     return True
 
 
+from .utils.device_names import (  # noqa: E402  (#1053)
+    HEAT_PUMP_DEFAULT, charger_display_name, device_display_name,
+)
+
+
+def _sweep_orphan_charger_repairs(hass, coordinator, chargers,
+                                  keep_ids=()) -> int:
+    """(#1139) Clear the per-charger Repairs no registered charger owns.
+
+    The pairs are the ones ``SEMCoordinator._check_charger_control_entities``
+    judges: each listed charger's own control entities. A charger id is kept
+    when it is listed (a parked or skipped one may come back without a
+    reload), was registered (a positional or flat-key fallback), or is in
+    ``keep_ids`` (the late-found primary, which appears after setup).
+    """
+    from .coordinator.repair_issues import clear_orphan_charger_repairs
+    keys = [k for k, _ in getattr(coordinator, "_CONTROL_CAPABILITIES", ())]
+    if not keys:
+        return 0      # no control check to judge by: delete nothing
+    rows = [c for c in (chargers or []) if isinstance(c, dict)]
+    ids = {str(c["id"]) for c in rows if c.get("id")}
+    ids |= {str(cid) for cid in (getattr(coordinator, "_ev_devices", None) or {})}
+    ids |= {str(cid) for cid in keep_ids}
+    pairs = {(str(c["id"]), str(c[k])) for c in rows if c.get("id")
+             for k in keys if c.get(k)}
+    return clear_orphan_charger_repairs(
+        hass, charger_ids=ids, control_entities=pairs)
+
+
 def _heat_pump_rows(full_config: dict) -> list[dict]:
     """#685: one row per heat pump — flat keys are the PRIMARY unit
     (device_id "heat_pump", full back-compat), the ``heat_pumps`` list
     holds additional units with the same key names."""
     rows: list[dict] = [{
         "id": "heat_pump",
-        "name": full_config.get("heat_pump_name", "Heat Pump"),
+        "name": full_config.get("heat_pump_name", HEAT_PUMP_DEFAULT),
         **{k: full_config.get(k) for k in (
             "heat_pump_relay1_entity", "heat_pump_relay2_entity",
             "heat_pump_climate_entity", "heat_pump_power_sensor",
@@ -1805,6 +1882,9 @@ def _heat_pump_rows(full_config: dict) -> list[dict]:
             "heat_pump_sg_ready_state_entity",
             "heat_pump_relay1_on_value", "heat_pump_relay1_off_value",
             "heat_pump_relay2_on_value", "heat_pump_relay2_off_value",
+            # (#812) the pump's own tariff and meter
+            "heat_pump_tariff_rate", "heat_pump_tariff_entity",
+            "heat_pump_tariff_meter",
         ) if full_config.get(k) not in (None, "")},
     }]
     # (#990) Two rows may carry the SAME id — a config written by a build
@@ -1831,7 +1911,7 @@ def _heat_pump_rows(full_config: dict) -> list[dict]:
             _id = f"heat_pump_{_n}"
         _seen.add(_id)
         rows.append({**_row, "id": _id,
-                     "name": _row.get("name") or f"Heat Pump {_i + 2}"})
+                     "name": _row.get("name") or f"{HEAT_PUMP_DEFAULT} {_i + 2}"})
     return rows
 
 
@@ -2110,6 +2190,201 @@ def _heal_offline_current_control_in_list(hass, chargers):
     return healed if changed else None
 
 
+def _drop_meters_saved_as_chargers(hass, chargers):
+    """(#1036, bug class 114) Remove a meter that setup SAVED as the charger.
+
+    Before #1036, detection took Easee's Equalizer — a grid meter — as the
+    first charger, and zero-config setup saves the first charger it finds.
+    Detection re-runs only when NO charger is configured, so that install
+    never corrects itself: it keeps reading the grid import as EV power and
+    keeps steering the meter.
+
+    Only SEM's own save is removed: a charger that binds no role only a
+    charger has, whose power sensor is still the meter's, and whose id is
+    the one setup gave that meter — or, saved before v1.7.5, whose stored
+    ``_device_id`` is the meter's. A charger the user pointed at a role, or
+    at another power sensor, is left alone. When the list is then empty,
+    setup's own discovery runs again and saves the real charger. Returns a
+    new list if anything changed, else ``None``."""
+    from .hardware_detection import (
+        _CHARGER_ONLY_ROLES,
+        discover_all_ev_chargers_from_registry,
+    )
+    suspects = [c for c in chargers or []
+                if isinstance(c, dict)
+                and not any(c.get(r) for r in _CHARGER_ONLY_ROLES)]
+    if not suspects:
+        return None
+    meters: List[Dict[str, Any]] = []
+    discover_all_ev_chargers_from_registry(hass, meters_out=meters)
+    def _is_this_meter(c, m) -> bool:
+        if (c.get("ev_charging_power_sensor") or None) not in (
+                None, m.get("ev_charging_power_sensor")):
+            return False
+        return (c.get("id") == stable_discovered_charger_id(m)
+                or (bool(c.get("_device_id"))
+                    and c.get("_device_id") == m.get("_device_id")))
+
+    dropped = [c for c in suspects if any(_is_this_meter(c, m) for m in meters)]
+    if not dropped:
+        return None
+    _LOGGER.warning(
+        "Removed saved EV charger(s) %s: a meter beside a charger, not a "
+        "charger (#1036).", sorted(str(c.get("id")) for c in dropped))
+    return [c for c in chargers if not any(c is d for d in dropped)]
+
+
+def _drop_flat_wiring_of_a_removed_first(hass, entry, cards=None, *,
+                                         data=None, options=None,
+                                         why: str = "") -> Optional[Dict[str, Any]]:
+    """(#1154, bug class 147) Clear the flat charger keys that no longer
+    belong to the first charger.
+
+    The setup wizard copied the first charger's power sensor, current
+    control, current service and start/stop switch to the flat top-level
+    keys, and the builder lets the first charger take a key its card lacks
+    from there. When the first charger goes, the next one becomes first and
+    would read — and drive — the removed box. So every path that removes it
+    asks this: the config card's ✕ (``remove_charger``), the Configure
+    dialog's remove, and setup, which runs after the starts' repairs (the
+    refs folding a half card, #1036's meter drop) and also clears a save
+    made before this fix.
+
+    ``data``/``options`` are the stores about to be written (default: the
+    entry's) and ``cards`` the charger list they hold. Returns
+    ``{"data": …, "options": …}`` with the stale keys removed from both (a
+    key left in one store shows through the merge), or None when nothing is
+    stale."""
+    from .charger_refs import (
+        LEGACY_KEY, registry_device_of, stale_flat_wiring, without_flat_wiring,
+    )
+    data = dict(entry.data or {}) if data is None else dict(data)
+    options = dict(entry.options or {}) if options is None else dict(options)
+    if cards is None:
+        cards = options[LEGACY_KEY] if LEGACY_KEY in options else data.get(LEGACY_KEY)
+    stale = stale_flat_wiring(data, options, cards, registry_device_of(hass))
+    if not stale:
+        return None
+    _LOGGER.warning(
+        "%sThe saved charger keys %s belong to a charger that is no longer "
+        "the first one; cleared so the first charger does not read or drive "
+        "that box (#1154).", f"{why}: " if why else "", sorted(stale))
+    return {"data": without_flat_wiring(data) or data,
+            "options": without_flat_wiring(options) or options}
+
+
+#: (#1126) What a saved charger reads its power from and drives. The heal
+#: below fills the state sensors only when each of these is what detection
+#: finds today. The charger refs ask the same list before they add one
+#: (#1151).
+from .charger_refs import STATE_MUST_MATCH as _STATE_HEAL_MUST_MATCH  # noqa: E402
+
+
+def _holds_a_link_as_charging(hass, charger) -> bool:
+    """(#1142) A save with no plug sensor whose charging sensor says only
+    that the box is online: what setup picked for a Zaptec before #1142.
+    The forms ask for both sensors, so only SEM's own save looks like this."""
+    eid = str(charger.get("ev_charging_sensor") or "")
+    if charger.get("ev_connected_sensor") or not eid:
+        return False
+    from homeassistant.helpers import entity_registry as er
+    from .hardware_detection import says_a_link
+    entry = er.async_get(hass).async_get(eid)
+    return entry is not None and says_a_link(entry)
+
+
+def _own_saves(hass) -> Dict[str, Dict[str, Any]]:
+    """What setup saves for each box detection finds, by the id it gives
+    it (a brand path; setup never saves a charger only the roles found,
+    #1032). A saved charger with one of these ids is SEM's own save. The
+    heal below and the charger refs' plug check (#1152) read this one rule."""
+    from .hardware_detection import discover_all_ev_chargers_from_registry
+    return {stable_discovered_charger_id(d): d
+            for d in discover_all_ev_chargers_from_registry(hass)
+            if d.get("_found_by") != "roles"}
+
+
+def _fill_state_sensors_of_own_save(hass, chargers):
+    """(#1126, bug class 145) Give a charger SEM saved itself the plug and
+    charging sensors detection now finds.
+
+    Before #1126 detection read no Peblar state sensor (``device_class:
+    enum``), and zero-config setup saved the Peblar without one, so SEM
+    never saw a car plugged in. Detection re-runs only when NO charger is
+    configured, so that install never corrects itself.
+
+    Only SEM's own save — the id setup gives that box, from a brand path
+    (setup never saves a charger only the roles found, #1032) — with
+    NEITHER sensor is touched. Its power reading and controls that differ
+    from what detection finds today are replaced (#1134) — never dropped:
+    when either side is empty for a key, the save is left. Then the two
+    empty sensor keys are filled. The forms require both sensors, so a charger the user
+    set up is never a suspect.
+
+    (#1142) A save whose only sensor is a link sensor as the charging
+    sensor (a Zaptec's "Charger", on while the box is online) counts as
+    having none: its charging sensor is replaced by what detection finds,
+    or removed when detection finds none or a control does not match.
+    Returns a new list if anything changed, else ``None``."""
+    keys = ("ev_connected_sensor", "ev_charging_sensor")
+    linked = [c for c in chargers or []
+              if isinstance(c, dict) and c.get("id")
+              and _holds_a_link_as_charging(hass, c)]
+    suspects = [c for c in chargers or []
+                if isinstance(c, dict) and c.get("id")
+                and not any(c.get(k) for k in keys)] + linked
+    if not suspects:
+        return None
+    found = _own_saves(hass)
+    healed = []
+    filled = []
+    changed = False
+    for c in chargers:
+        d = found.get(c.get("id")) if any(c is s for s in suspects) else None
+        # (#1142) a link sensor never says a car charges: an own save loses
+        # it even when its controls keep the rest of the heal away
+        link = d is not None and any(c is x for x in linked)
+        swap = {}
+        if d:
+            differ = [k for k in _STATE_HEAL_MUST_MATCH
+                      if (c.get(k) or None) != (d.get(k) or None)]
+            if any(not d.get(k) or not c.get(k) for k in differ):
+                _LOGGER.warning(
+                    "Saved EV charger %s has no plug or charging sensor, and "
+                    "a control it cannot match to detection; no sensor is "
+                    "added. Set the charger up again to fix it (#1126).",
+                    c.get("id"))
+                d = None
+            else:
+                swap = {k: d[k] for k in differ}
+        add = {k: d[k] for k in keys if d and d.get(k)}
+        if add or swap or link:
+            if swap:
+                _LOGGER.warning(
+                    "Saved EV charger %s: replaced %s with what detection "
+                    "finds now (#1134).", c.get("id"),
+                    {k: c.get(k) for k in swap})
+            if link:
+                _LOGGER.warning(
+                    "Saved EV charger %s: %s says the charger is online, not "
+                    "that a car charges; no longer read as charging (#1142).",
+                    c.get("id"), c.get("ev_charging_sensor"))
+            c = {**c, **swap, **add}
+            if link and "ev_charging_sensor" not in add:
+                c.pop("ev_charging_sensor", None)
+            if add:
+                filled.append(str(c.get("id")))
+            changed = True
+        healed.append(c)
+    if not changed:
+        return None
+    if filled:
+        _LOGGER.warning(
+            "Added the plug and charging sensors detection finds to saved EV "
+            "charger(s) %s (#1126).", sorted(filled))
+    return healed
+
+
 # (#638) The kill-switch's unique_id is ``sem_{key}``, so renaming the
 # planner mints a new identity. Left alone HA would register a SECOND
 # switch and strand the first as an unavailable orphan — the user would
@@ -2174,6 +2449,13 @@ async def _async_listen_energy_prefs(hass: HomeAssistant) -> None:
     manager.async_listen_updates(_on_energy_prefs_updated)
     hass.data[_ENERGY_PREFS_LISTENER] = True
 
+
+
+#: (#1095) The ways to act, besides a current control, that make a charger
+#: one SEM can run. A second charger reads them from its OWN card only, like
+#: all of its wiring (#1149, ``hardware_detection.CHARGER_WIRING_KEYS``).
+_OWN_CARD_CONTROL_KEYS = ("ev_start_stop_entity", "ev_start_service",
+                          "ev_charge_mode_entity")
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
@@ -2248,24 +2530,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
     # entry.data before the merged config is evaluated, so the reseed (which
     # only fires when the merged config has no chargers at all) never plants
     # its single ``id: "ev_charger"`` entry on top of a heal-able install.
-    if "ev_chargers" in (entry.options or {}):
-        _healed = _heal_ev_chargers_options(
-            (entry.data or {}).get("ev_chargers"),
-            entry.options.get("ev_chargers"),
-        )
-        if _healed is not None:
-            _LOGGER.warning(
-                "Healed ev_chargers options list: stored ids %s -> healed ids %s "
-                "(data-side ids: %s). See #462/#464.",
-                [c.get("id") for c in (entry.options.get("ev_chargers") or [])
-                 if isinstance(c, dict)],
-                [c.get("id") for c in _healed],
-                [c.get("id") for c in ((entry.data or {}).get("ev_chargers") or [])
-                 if isinstance(c, dict)],
-            )
-            hass.config_entries.async_update_entry(
-                entry, options={**entry.options, "ev_chargers": _healed},
-            )
+    # (#1054) A charger is a DEVICE reference; the crawler fills in its
+    # roles. ``charger_refs.async_reconcile`` replaces the #462/#464 heal:
+    # first start → the old data/options cards become refs (one per device,
+    # a half card folded into the complete one); later starts fold any
+    # change a writer made to the legacy ``options.ev_chargers`` copy and
+    # resolve every ref against the crawler's live answer. ``entry.data``
+    # keeps no charger list, so a removed charger cannot be healed back.
+    # Runs before full_config is built, as the heal did (#476 ordering).
+    try:
+        from .charger_refs import async_reconcile as _reconcile_charger_refs
+        _reconcile_charger_refs(hass, entry)
+    except Exception:  # noqa: BLE001 — the stores stay as they were
+        _LOGGER.exception("charger refs: reconcile failed, chargers unchanged")
 
     # (#886) Repair a charger persisted with its OFFLINE fallback register as
     # ev_current_control_entity (pre-fix JuiceBox detection bound
@@ -2293,6 +2570,59 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             )
     except Exception as exc:  # noqa: BLE001 — a heal must never block setup
         _LOGGER.debug("Offline current-control heal skipped: %s", exc)
+
+    # (#1036) Remove a meter that zero-config setup saved as the charger
+    # (Easee's Equalizer). Runs before ``full_config`` is read, so an emptied
+    # list sends this same setup back to discovery for the real charger.
+    try:
+        _m_data = _drop_meters_saved_as_chargers(
+            hass, (entry.data or {}).get("ev_chargers"))
+        _m_opts = _drop_meters_saved_as_chargers(
+            hass, (entry.options or {}).get("ev_chargers"))
+        if _m_data is not None or _m_opts is not None:
+            _new_data = dict(entry.data or {})
+            _new_options = dict(entry.options or {})
+            if _m_data is not None:
+                _new_data["ev_chargers"] = _m_data
+            if _m_opts is not None:
+                _new_options["ev_chargers"] = _m_opts
+            hass.config_entries.async_update_entry(
+                entry, data=_new_data, options=_new_options,
+            )
+    except Exception as exc:  # noqa: BLE001 — a heal must never block setup
+        _LOGGER.debug("Meter-as-charger heal skipped: %s", exc)
+
+    # (#1126) A charger zero-config setup saved with no plug or charging
+    # sensor (a Peblar: its state sensor is ``enum``) gets the ones
+    # detection now finds.
+    try:
+        _s_data = _fill_state_sensors_of_own_save(
+            hass, (entry.data or {}).get("ev_chargers"))
+        _s_opts = _fill_state_sensors_of_own_save(
+            hass, (entry.options or {}).get("ev_chargers"))
+        if _s_data is not None or _s_opts is not None:
+            _new_data = dict(entry.data or {})
+            _new_options = dict(entry.options or {})
+            if _s_data is not None:
+                _new_data["ev_chargers"] = _s_data
+            if _s_opts is not None:
+                _new_options["ev_chargers"] = _s_opts
+            hass.config_entries.async_update_entry(
+                entry, data=_new_data, options=_new_options,
+            )
+    except Exception as exc:  # noqa: BLE001 — a heal must never block setup
+        _LOGGER.debug("State-sensor heal skipped: %s", exc)
+
+    # (#1154) After every repair above that can drop a charger: the flat
+    # keys follow the first charger, or they go. Before ``full_config``, so
+    # every reader of the flat keys (the builder, the sensor reader, the
+    # energy counters) sees the same answer.
+    try:
+        _flat = _drop_flat_wiring_of_a_removed_first(hass, entry, why="Setup")
+        if _flat is not None:
+            hass.config_entries.async_update_entry(entry, **_flat)
+    except Exception as exc:  # noqa: BLE001 — a heal must never block setup
+        _LOGGER.debug("Flat charger keys check skipped: %s", exc)
 
     # Remove orphaned per-charger set-default button entities — the
     # button itself was retired in v1.7.0-beta.11 (#355 follow-up).
@@ -2322,6 +2652,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
 
     # Merge entry.data and entry.options for complete configuration
     full_config = {**entry.data, **entry.options}
+    # (#820) another integration's warning that names an entity SEM writes
+    # to (a refused set_value) is kept for the diagnose surface
+    try:
+        from .utils.log_buffer import written_entities as _written_entities
+        _buf = hass.data.get(f"{DOMAIN}_log_buffer")
+        if hasattr(_buf, "watch"):
+            _buf.watch(_written_entities(full_config))
+    except Exception:  # noqa: BLE001 — diagnostics never cost a setup
+        pass
     _LOGGER.debug("Configuration keys: %s", list(full_config.keys()))
 
     # The persisted toggles must be resolved BEFORE the coordinator exists.
@@ -2355,6 +2694,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
     except Exception as err:
         _LOGGER.warning("Failed to read Energy Dashboard, using legacy config: %s", err, exc_info=True)
 
+    # (#1071) One answer to "one global battery mode select, or one per
+    # battery?" — taken BEFORE the first refresh, which already commands the
+    # batteries. select.py and number.py build from it, and
+    # _per_battery_config reads the store of the controls they build.
+    from .coordinator.battery_controls import (
+        BATTERY_SLOT_UNITS_KEY, adopt_shared_battery_settings,
+        discover_battery_control_slugs,
+    )
+    coordinator.battery_control_slugs = discover_battery_control_slugs(coordinator)
+    # (#1204) …and the battery order their slots are in. A Mode select or
+    # reserve number writes its slot in this order, also after the batteries
+    # changed and before the reload rebuilds it.
+    _slot_units = {**(entry.data or {}), **(entry.options or {})}.get(
+        BATTERY_SLOT_UNITS_KEY)
+    coordinator.battery_control_units = (
+        tuple(_slot_units) if isinstance(_slot_units, list) else None)
+    # (#1171) …and the first start after one shared control: each battery
+    # starts on what that control drove, before anything is commanded.
+    adopt_shared_battery_settings(
+        hass, entry, coordinator, coordinator.battery_control_slugs)
+    _LOGGER.debug("Battery controls: %s",
+                  ", ".join(coordinator.battery_control_slugs) or "one global")
+
+    # (#1106) Load management BEFORE the first refresh: the first data set
+    # is what every entity shows until the next cycle, and without the load
+    # manager the billed monthly peak defaulted to 0.0 kW for ~10 s after
+    # each restart (PROD 12.–13.10). It only loads its saved state and
+    # schedules discovery here; the call further down is then a no-op.
+    try:
+        await coordinator.async_initialize_load_management(entry)
+    except Exception as err:  # noqa: BLE001 — optional feature, as below
+        _LOGGER.warning("Load management init before first refresh failed: %s", err)
+
     # Fetch initial data - this is critical for setup
     _LOGGER.debug("Fetching initial data from coordinator")
     try:
@@ -2367,6 +2739,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             err,
             exc_info=True
         )
+        # (#1209) the first cycle loads the store before it can fail
+        await _async_end_store(coordinator, "failed setup")
         raise ConfigEntryNotReady(
             f"Could not fetch initial data. Check that all required sensors exist: {err}"
         ) from err
@@ -2403,9 +2777,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
     # upgrading install loses the stale warning.
     ir.async_delete_issue(hass, DOMAIN, "ev_charger_not_configured")
     try:
+        # (#1103) SEM's own per-charger numbers carry "charger" in their ids.
         _cands = charger_shaped_devices(
-            [st.entity_id for st in hass.states.async_all("switch")]
-            + [st.entity_id for st in hass.states.async_all("number")]
+            [st.entity_id for st in hass.states.async_all("switch")
+             if not is_sem_entity(hass, st.entity_id)]
+            + [st.entity_id for st in hass.states.async_all("number")
+               if not is_sem_entity(hass, st.entity_id)]
         )
         _repair = unmanaged_charger_repair(full_config, _cands)
     except Exception:  # noqa: BLE001 — a repair never costs a setup
@@ -2477,8 +2854,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
         # Build charger config list from config + auto-discovery
         ev_chargers_config = list(full_config.get("ev_chargers") or [])
 
-        # Auto-discover if no chargers configured
-        if not ev_chargers_config:
+        # Auto-discover if no chargers configured — only on an install that
+        # never had a charger list. (#1054) Once charger refs exist, an empty
+        # list is the user's answer: they removed their last charger, and a
+        # silent re-discovery put one back (HA-TEST 11.10: X on the go-e, the
+        # next start planted the KEBA). The crawler still OFFERS it.
+        from .charger_refs import REFS_KEY as _REFS_KEY
+        if not ev_chargers_config and _REFS_KEY not in (entry.options or {}):
             ev_auto = {}
             if coordinator._device_registry:
                 ev_auto = coordinator._device_registry.discover_ev_charger()
@@ -2523,6 +2905,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
         # "ev_charger_1"). Surface both shapes loudly — they are config
         # corruption, not normal states.
         _seen_charger_ids: set[str] = set()
+        # (#1154) Setup clears flat keys left by a removed first charger;
+        # asked again here so the builder never reads them if that failed.
+        from .charger_refs import first_card as _first_card
+        from .charger_refs import flat_wiring_is_of, registry_device_of
+        _flat_is_first = flat_wiring_is_of(
+            _first_card(ev_chargers_config), full_config,
+            registry_device_of(hass))
         for idx, charger_cfg in enumerate(ev_chargers_config):
             if not charger_cfg.get("id"):
                 _LOGGER.warning(
@@ -2543,7 +2932,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
                     charger_id, idx,
                 )
             _seen_charger_ids.add(charger_id)
-            charger_name = charger_cfg.get("name", f"EV Charger {idx + 1}")
+            charger_name = charger_display_name(hass, charger_cfg, idx)  # (#1053)
 
             # Resolve config: charger-specific keys, fall back to global config.
             # ``_this`` binds the loop variable at definition time — today every
@@ -2553,10 +2942,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             # later) would silently resolve the LAST charger's config for every
             # charger. Bound, that failure is impossible rather than merely
             # currently-absent.
-            def _cfg(key, default=None, _this=charger_cfg):
+            # (#1095, #1149) What names a box — its power sensor, current
+            # control, current service with its fields, start/stop, status —
+            # a second charger reads from its OWN card only. The flat keys are
+            # the first charger's, so a card without one (the config card's
+            # new charger, a Zaptec Go with start/stop only) was given the
+            # first charger's, and SEM set the first charger's current for it.
+            # (#1154) The first charger takes them only while they are its
+            # own: once the charger before it was removed they name that box.
+            from .hardware_detection import CHARGER_WIRING_KEYS
+
+            def _cfg(key, default=None, _this=charger_cfg, _idx=idx):
                 v = _this.get(key)
                 if v is not None:
                     return v
+                if key in CHARGER_WIRING_KEYS and (_idx > 0 or not _flat_is_first):
+                    return default
                 v = full_config.get(key)
                 return v if v is not None else default
 
@@ -2564,6 +2965,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             ev_charger_service = _cfg("ev_charger_service")
             ev_service_entity = _cfg("ev_charger_service_entity_id")
             ev_current_entity = _cfg("ev_current_control_entity")
+            # (#1144) SEM never writes a whole site's current limit (#804).
+            # The refs take it out of a saved card; the first charger's read
+            # also falls back to its old flat keys, so it is asked here once
+            # more.
+            from homeassistant.helpers import entity_registry as _er
+            from .hardware_detection import (
+                SERVICE_CONTROL_KEYS,
+                site_limit_controls,
+            )
+            _site = site_limit_controls(
+                {k: _cfg(k) for k in ("ev_current_control_entity",
+                                      *SERVICE_CONTROL_KEYS)},
+                _er.async_get(hass).async_get)
+            if _site:
+                _LOGGER.warning(
+                    "Charger '%s': %s write a whole site's current limit, not "
+                    "this charger's; SEM does not write it (#804, #1144).",
+                    charger_id, {k: _cfg(k) for k in _site})
+                if "ev_current_control_entity" in _site:
+                    ev_current_entity = None
+                if "ev_charger_service" in _site:
+                    ev_charger_service = None
+                if "ev_charger_service_entity_id" in _site:
+                    ev_service_entity = None
             # #604: ``ev_surplus_priority`` is the ONE priority axis (#576).
             # The legacy ``ev_load_priority`` alias is mapped into it by the
             # v15→v16 migration, so the construction-time alias fallback is
@@ -2571,14 +2996,41 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             # #470 rule preserved by list position).
             ev_priority = int(_cfg("ev_surplus_priority", 3 + idx))
 
-            # Also auto-fill sensor reader config from first charger
+            # Also auto-fill sensor reader config from first charger.
+            # (#1125) No power sensor here, on purpose: the reader reads it
+            # from the charger's own entry in ``ev_chargers``.
             if idx == 0:
                 for key in ("ev_connected_sensor", "ev_charging_sensor", "ev_total_energy_sensor"):
                     if not full_config.get(key) and charger_cfg.get(key):
                         full_config[key] = charger_cfg[key]
 
-            if not ev_power_entity or not (ev_charger_service or ev_current_entity):
-                _LOGGER.debug("Charger %s missing power sensor or control method, skipping", charger_id)
+            # (#1095) ONE rule for "a charger SEM can run": the crawler's
+            # own (``charger_is_complete``) — a power reading and ANY way to
+            # act. Setup used to want a current service or a current entity,
+            # so a charger the crawler offered with only a charge-mode select
+            # or only start/stop (myenergi, Ohme, a Zaptec without current
+            # rights) was dropped here and SEM ran nothing.
+            # A second charger passes the gate only on its own card (``_cfg``):
+            # on the first charger's power and switch it would be built and
+            # drive the first charger's box. ONE helper for the gate and the
+            # wiring below.
+            from .hardware_detection import charger_is_complete
+            _resolved = {"ev_charging_power_sensor": ev_power_entity,
+                         "ev_charger_service": ev_charger_service,
+                         "ev_current_control_entity": ev_current_entity}
+            _resolved.update({k: _cfg(k) for k in _OWN_CARD_CONTROL_KEYS})
+            if not charger_is_complete(_resolved):
+                # (#1149) Say so when the first charger's keys used to fill
+                # the gap: that card ran before, on the first charger's box.
+                if idx > 0 and charger_is_complete(
+                        {k: v or full_config.get(k) for k, v in _resolved.items()}):
+                    _LOGGER.warning(
+                        "Charger '%s' has no power sensor or control of its "
+                        "own, so SEM does not run it. It used to borrow the "
+                        "first charger's and drive that charger (#1149).",
+                        charger_id)
+                else:
+                    _LOGGER.debug("Charger %s missing power sensor or control method, skipping", charger_id)
                 continue
 
             # #462 follow-up (generalized in #485 K1): an entity-platform
@@ -2632,10 +3084,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             # charging?" signal (cloud power lags ~90 s) and to detect
             # app-lock (Eco-Smart / Scheduled / Power-Sharing) so SEM can
             # surface "can't stop" instead of silently failing OFF mode.
+            # (#1143) Only THIS card's on a second charger: the flat key is
+            # the primary's, and a card with none (a link sensor taken out)
+            # would read the first charger's car.
             ev_device.charging_status_entity = str(_cfg("ev_charging_sensor", "") or "")
             # Per-integration charger profile (#82)
             if _cfg("ev_service_param_name"):
                 ev_device.service_param_name = _cfg("ev_service_param_name")
+            from .utils.service_data import service_extra_data
+            ev_device.service_extra_data = service_extra_data(
+                _cfg("ev_charger_service_data", ""))
             if _cfg("ev_service_device_id"):
                 ev_device.service_device_id = _cfg("ev_service_device_id")
             if _cfg("ev_start_stop_entity"):
@@ -2730,6 +3188,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
                     # duplicate row). Reuse the device's already-resolved values.
                     start_stop_entity=ev_device.start_stop_entity,
                     status_entity=(ev_device.charging_status_entity or None),
+                    # (#1148) a charger SEM only starts and stops gets its row
+                    # too — with no current control, so a stale one is cleared.
+                    start_stop_service=(
+                        getattr(ev_device, "start_service", None)
+                        or getattr(ev_device, "stop_service", None)),
+                    charge_mode_entity=(
+                        getattr(ev_device, "charge_mode_entity", None) or None),
                 )
 
         # Backward compat: _ev_device points to primary (first) charger
@@ -2742,6 +3207,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             )
         else:
             _LOGGER.debug("EV charger not configured (no power sensor or control method)")
+
+        # (#1139) The charger list is final here; a Repair of a charger or a
+        # control entity that left it has nobody left to clear it.
+        try:
+            # the late retry may still build the primary "ev_charger"
+            _late = (not coordinator._ev_devices
+                     and _REFS_KEY not in (entry.options or {}))
+            _sweep_orphan_charger_repairs(
+                hass, coordinator, ev_chargers_config,
+                keep_ids=("ev_charger",) if _late else ())
+        except Exception:  # noqa: BLE001 — a Repair never costs a setup
+            _LOGGER.debug("orphan charger-repair sweep failed", exc_info=True)
 
         # Register heat pump SG-Ready controller(s) if configured.
         # (#685) The flat heat_pump_* keys are the PRIMARY unit (device_id
@@ -2763,7 +3240,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             hp_extra = HeatPumpController(
                 hass=hass,
                 device_id=str(_row["id"]),
-                name=str(_row.get("name") or "Heat Pump"),
+                name=device_display_name(hass, _row.get("name"), "heat_pump"),
                 rated_power=float(_row.get("heat_pump_rated_power", 2000)),
                 priority=int(_row.get("heat_pump_priority", 4)),
                 relay1_entity_id=_r1,
@@ -2789,6 +3266,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             # returns the pump to NORMAL. A relay still loading is decided on
             # the first readable cycle (the per-cycle belief sync retries it).
             hp_extra.adopt_if_running()
+            # (#812) the pump's own tariff, when its row names one
+            from .coordinator.device_tariff import apply_tariff, heat_pump_tariff
+            apply_tariff(hp_extra, heat_pump_tariff(_row))
             coordinator._surplus_controller.register_device(hp_extra)
             hp_registered += 1
             _LOGGER.info(
@@ -2831,14 +3311,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             hw_device = HotWaterController(
                 hass=hass,
                 device_id="hot_water",
-                name=full_config.get("hot_water_name", "Hot Water"),
+                name=device_display_name(
+                    hass, full_config.get("hot_water_name"), "hot_water"),
                 rated_power=float(full_config.get("hot_water_rated_power", 2500)),
                 priority=int(full_config.get("hot_water_priority", 6)),
                 entity_id=hw_entity,
                 power_entity_id=full_config.get("hot_water_power_sensor"),
                 energy_entity_id=full_config.get("hot_water_energy_sensor"),  # #600
                 temperature_entity_id=full_config.get("hot_water_temperature_sensor"),
-                max_temperature=float(full_config.get("hot_water_max_temperature", 70.0)),
                 min_temperature=float(full_config.get("hot_water_minimum_temperature", 40.0)),
                 solar_target_temp=float(full_config.get("hot_water_solar_target", 50.0)),
                 legionella_target_temp=float(full_config.get("hot_water_legionella_target", 65.0)),
@@ -2852,10 +3332,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
             _seed_legionella_time(coordinator, hw_device)
             _LOGGER.info(
                 "Hot water registered (entity=%s, priority=%d, "
-                "temp_sensor=%s, solar_target=%.0f°C, max=%.0f°C)",
+                "temp_sensor=%s, solar_target=%.0f°C)",
                 hw_entity, hw_device.priority,
                 hw_device.temperature_entity_id or "—",
-                hw_device.solar_target_temp, hw_device.max_temperature,
+                hw_device.solar_target_temp,
             )
         else:
             _LOGGER.debug(
@@ -2878,6 +3358,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
     # (#935) Every charger is built by now, so take back any park a previous
     # lifetime left on the hardware — the reconciler cannot re-derive it
     # (PARK_OFF fires on an edge; an already-empty box at boot is not one).
+    # (#1027) A watching SEM adopts nothing; the record waits on disk, and
+    # this hook is what the first commanding cycle runs instead. Set FIRST,
+    # so no push or cycle below can look for it and find nothing.
+    coordinator._readopt_parked_chargers = lambda: hass.async_create_task(
+        _async_adopt_parked_chargers(hass, entry, coordinator))
+
+    # (#1027) Every device is built by now, so tell every one of them whether
+    # this SEM commands or only watches — BEFORE anything below can claim or
+    # release. ``send`` withholds only when the device knows, the documented
+    # default is "a device nobody told is a device that acts", and until here
+    # the only teller was the per-cycle push. A removal in the window between
+    # setup and the first cycle commanded real hardware.
+    try:
+        coordinator._push_observer_mode_to_devices()
+    except Exception as err:  # noqa: BLE001 — never fail a setup over a flag
+        # ERROR, not warning: every device is now holding the default, which
+        # is "I act", on an install that may be watching shared hardware.
+        _LOGGER.error("Could not tell the devices this SEM's mode, so each "
+                      "one holds the default and may command: %s", err)
+
     hass.async_create_task(_async_adopt_parked_chargers(hass, entry, coordinator))
 
     # (#923) ONE module verdict for every platform: captured here, after the
@@ -2895,6 +3395,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
 
     # Setup platforms (critical - must succeed)
     try:
+        # (#1204) from here the battery controls hold their places
+        coordinator._battery_controls_built = True
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
         _LOGGER.info("Platforms setup completed: %s", PLATFORMS)
         await _async_listen_energy_prefs(hass)
@@ -2902,12 +3404,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
         _LOGGER.error("Failed to setup platforms: %s", err, exc_info=True)
         # Cleanup coordinator data
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        await _async_end_store(coordinator, "failed setup")   # (#1209)
         raise ConfigEntryNotReady(f"Platform setup failed: {err}") from err
 
     # Register services (with duplicate check)
     try:
         await _async_register_services(hass, coordinator)
         await _async_register_phase_services(hass, coordinator)
+        # (#1024) The EV card reads the session list over this command.
+        from .session_history import async_register_websocket
+        async_register_websocket(hass)
+        # (#1083) the Simulation tab's commands; its job stops on unload
+        from .simulation_ws import async_register_websocket as _sim_ws
+        _sim_ws(hass)
+        # (#1084) the Why? card reads the decision log over this command
+        from .decision_ws import async_register_websocket as _why_ws
+        _why_ws(hass)
+        # (#1174) the plain sentences the logbook names a decision with
+        from .plain_reasons import async_load_plain_reasons
+        await async_load_plain_reasons(hass)
+        sim_job = getattr(coordinator, "_simulation_job", None)
+        if sim_job is not None:
+            entry.async_on_unload(lambda: sim_job.cancel(persist=False))
         _LOGGER.debug("Services registered successfully")
     except Exception as err:
         _LOGGER.warning(
@@ -3046,6 +3564,23 @@ def _schedule_post_startup_tasks(
         except Exception:  # noqa: BLE001 — evidence never costs startup
             _LOGGER.debug("post-startup detection refresh failed", exc_info=True)
 
+        async def _prime_service_fields() -> None:
+            """(#1054) An integration that registers its services with no
+            schema (go-e's set_max_current) names their fields only in its
+            services.yaml. Home Assistant loads those descriptions on
+            demand; load them once, then read the report again so the
+            crawler sees the fields."""
+            try:
+                from homeassistant.helpers.service import (
+                    async_get_all_descriptions,
+                )
+                await async_get_all_descriptions(hass)
+                coordinator.refresh_detection_report()
+            except Exception:  # noqa: BLE001 — evidence never costs startup
+                _LOGGER.debug("service description prime failed", exc_info=True)
+
+        hass.async_create_task(_prime_service_fields())
+
     @callback
     def _on_new_sensor(event) -> None:
         """Re-run split-grid discovery when a grid-shaped sensor appears.
@@ -3096,6 +3631,19 @@ def _schedule_post_startup_tasks(
             hass, _registry.async_seed_ratings_from_history,
             name="sem rated-power seed",
         ))
+    # (#1083) Tag each finished day for the replay tool, at 00:15. Asleep
+    # until the day_tags soak flag is set; it only records.
+    try:
+        from .coordinator.day_tag_store import DayTagger
+        entry.async_on_unload(DayTagger(hass, coordinator).schedule())
+        # With the Simulation tab on, catch up after start: days with no
+        # tag, and backfilled tags made by an older rule (#1083). Runs
+        # after Home Assistant has started, never in setup's await (#967).
+        from .coordinator.day_tag_store import simulation_tab_on, start_backfill
+        if simulation_tab_on(entry):
+            start_backfill(hass, coordinator)
+    except Exception:  # noqa: BLE001 — a tagger is never worth the setup
+        _LOGGER.debug("day tagger not scheduled", exc_info=True)
 
     # React live to new sensor entities from other integrations (e.g. DSMR loading
     # after SEM's first refresh). Cheap: only fires on entity creation, not state
@@ -3287,7 +3835,17 @@ async def _async_adopt_parked_chargers(hass: HomeAssistant,
     steady state. Without this, park → restart → remove left the charger
     disabled with its own persisted dead-man failsafe holding it at 0 A, and
     nothing left on the system that knew why.
+
+    (#1027) Never while SEM is only watching. The COORDINATOR is asked, not
+    the devices: this runs before the first cycle, and a device learns its
+    mode on a cycle (``_push_observer_mode_to_devices``) — so a device asked
+    here would answer with the default, which is "I act". The record is left
+    where it is; the first cycle that can command adopts it.
     """
+    if bool(getattr(coordinator, "_observer_mode", False)):
+        _LOGGER.info("#1027 — watching only: no charger park adopted, and "
+                     "the record is left for a lifetime that can command")
+        return
     store = _park_store(hass, entry)
     if store is None:
         return
@@ -3304,6 +3862,37 @@ async def _async_adopt_parked_chargers(hass: HomeAssistant,
                      "left with: %s", len(ids), ", ".join(map(str, ids)))
     except Exception as e:  # noqa: BLE001 — never block a setup
         _LOGGER.debug("#935 park adoption skipped: %s", e)
+
+
+async def _async_say_the_park_is_unpaid(hass: HomeAssistant,
+                                        entry: SEMConfigEntry) -> None:
+    """(#1027) Name a park this SEM is leaving on the hardware, and why.
+
+    A SEM that only watches hands nothing back — the box may be another
+    SEM's, which is what the mode is for. But the record can still name a
+    box that an earlier, commanding lifetime of this entry really parked,
+    and a removal deletes SEM's own files: after this there is nothing left
+    that knows. So the log carries the one fact a person needs when they
+    find a charger that will not start, and what to do about it.
+
+    Never raises: a teardown always completes.
+    """
+    store = _park_store(hass, entry)
+    if store is None:
+        return
+    try:
+        record = await store.async_load() or {}
+        ids = [str(i) for i in (record.get("parked") or [])]
+        if not ids:
+            return
+        _LOGGER.warning(
+            "#1027 — SEM was only watching, so it is leaving %s exactly as "
+            "it is: %s. An earlier run of this SEM parked %s box(es), and a "
+            "parked box refuses to charge until something says yes. Start a "
+            "charge from the charger's own app to clear it.",
+            "them" if len(ids) > 1 else "it", ", ".join(ids), len(ids))
+    except Exception as e:  # noqa: BLE001 — a teardown always completes
+        _LOGGER.debug("#1027 park notice skipped: %s", e)
 
 
 async def _async_sweep_orphan_stores(hass: HomeAssistant) -> None:
@@ -3347,7 +3936,22 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
         # would otherwise grow the list. Guarded — coordinator may be
         # missing if setup never completed.
         if coordinator is not None:
-            # (#936 — Guido, 08.09.2026: "on uninstall SEM should go to
+            # (#1027) What this LIFETIME was, captured before anything below
+            # can change it: ``async_release_batteries_on_unload`` sets
+            # observer mode ON part way down (#936), so every gate that asks
+            # "did SEM command anything here" must read this variable and not
+            # the flag. Read live, a gate moved below that line would answer
+            # "watching" for every install and silently stop handing hardware
+            # back — with no log and no failing test.
+            _was_observer = bool(getattr(coordinator, "_observer_mode", False))
+            # The re-adoption hook goes with the lifetime that owns it: it
+            # closes over this entry and this coordinator, and a hook left on
+            # a coordinator HA is done with keeps both alive.
+            try:
+                coordinator._readopt_parked_chargers = None
+            except Exception:  # noqa: BLE001 — teardown must finish
+                pass
+            # (#936 — rule, 08.09.2026: "on uninstall SEM should go to
             # observation mode on and then uninstall.") Observer ON first, so
             # nothing still in flight commands anything; then hand back ONLY
             # what SEM itself commanded in this lifetime — a force op it
@@ -3380,18 +3984,34 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
             except Exception as exc:  # noqa: BLE001 — teardown must finish
                 _LOGGER.warning("export guard hand-back failed on unload: %s", exc)
             from .coordinator.charge_pacing import (
-                async_release_pacing, pending_pacing_release,
+                async_pending_pacing_release, async_release_pacing,
             )
             # (#935) The charger, on the same "only what SEM commanded"
             # rule and the same branch structure: a reload leaves a parked
             # box parked (SEM is coming back in seconds and will decide
             # again), a disable hands it back now, a removal replays it
             # from async_remove_entry.
-            _parked = [
+            # (#1027) And never while SEM is only watching — the same gate
+            # ``async_release_export_guard`` and ``unload_release_reason``
+            # already carry. Asked of the LIFETIME (captured above), not of
+            # the devices: a device learns its mode on a cycle, and the
+            # documented default is "a device nobody told is a device that
+            # acts", so a removal between setup and the first cycle would
+            # otherwise command real hardware.
+            _parked = [] if _was_observer else [
                 dev for dev in (getattr(coordinator, "_ev_devices", None)
                                 or {}).values()
                 if getattr(dev, "_sem_parked", False)
             ]
+            if _was_observer:
+                # A record can still name a box, written by an earlier
+                # lifetime of this entry that really did park it. SEM does
+                # not touch it — on shared hardware the box may be another
+                # SEM's, and that is the whole point of the mode. But a
+                # removal takes SEM's own files with it, so this is the last
+                # moment anything can say so. Say it where a person looking
+                # for a charger that will not start can find it.
+                await _async_say_the_park_is_unpaid(hass, entry)
             if _parked:
                 if entry.disabled_by is not None:
                     for _dev in _parked:
@@ -3401,7 +4021,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
                 else:
                     _PENDING_CHARGER_RELEASE[entry.entry_id] = _parked
 
-            _held = pending_pacing_release(coordinator)
+            # (#820 review 4) from the RECORD when the writer never adopted
+            # it — an observer-only lifetime holds the register just the same
+            _held = await async_pending_pacing_release(coordinator)
             if _held:
                 if entry.disabled_by is not None:
                     # Nothing is coming back — hand the register back now.
@@ -3446,6 +4068,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
                 coordinator.cancel_pending_recorder_work()
             except Exception:  # noqa: BLE001 — teardown must finish
                 _LOGGER.debug("could not cancel pending recorder work")
+            # (#1083) a stopped Simulation run is only in the store's memory;
+            # the daily store is otherwise saved only when HA stops
+            sim_job = getattr(coordinator, "_simulation_job", None)
+            if sim_job is not None:
+                try:
+                    # (#1209) a run still going is kept as cancelled now, not
+                    # by the on-unload hook: that runs after the store ends
+                    sim_job.cancel(persist=False)
+                    await sim_job.async_flush()
+                except Exception:  # noqa: BLE001 — teardown must finish
+                    _LOGGER.debug("could not save the stopped simulation run")
 
             sc = getattr(coordinator, "_surplus_controller", None)
             if sc is not None:
@@ -3456,6 +4089,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
                     await _async_deactivate_surplus_loads(devices, "disabled")
                 elif devices:
                     _PENDING_LOAD_TEARDOWN[entry.entry_id] = devices
+
+            # (#1209) Last: SEM's own store. A reload reads the files, so what
+            # this lifetime saved must be on them; and nothing of this
+            # lifetime may write after (a removal deletes the files next).
+            await _async_end_store(coordinator, "unload")
 
         hass.data[DOMAIN].pop(entry.entry_id, None)
 
@@ -3471,10 +4109,27 @@ async def async_unload_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool
             "schedule_appliance",
             "cancel_appliance_schedule",
             "remove_leftovers",
+            "start_battery_boost",
+            "stop_battery_boost",
+            "set_charger_departure",
         ):
             hass.services.async_remove(DOMAIN, service_name)
 
     return unload_ok
+
+
+async def _async_end_store(coordinator, why: str) -> None:
+    """(#1209) End a lifetime's store: what it holds goes on the file, and
+    nothing of it writes after. For an unload and for a setup that failed
+    after the store was loaded (HA retries with a new store and never
+    unloads this one). Never raises."""
+    storage = getattr(coordinator, "_storage", None)
+    if storage is None:
+        return
+    try:
+        await storage.async_close()
+    except Exception:  # noqa: BLE001 — teardown must finish
+        _LOGGER.warning("could not save SEM's store on %s", why, exc_info=True)
 
 
 async def _async_register_services(
@@ -3579,6 +4234,14 @@ async def _async_register_services(
 
         days = call.data.get("days") or 365
         tracker = getattr(coordinator, "_battery_night", None)
+        from .coordinator.coordinator import battery_unseen
+        if battery_unseen(coordinator):
+            # (#1063) No battery, no battery nights — the recorder skips
+            # such a home, so "try again later" would never come true.
+            _LOGGER.warning(
+                "backfill_battery_nights: this install has no battery — "
+                "there are no battery nights to rebuild")
+            return
         if tracker is None:
             _LOGGER.warning(
                 "backfill_battery_nights: no night tracker on the coordinator "
@@ -3727,6 +4390,114 @@ async def _async_register_services(
         _LOGGER.debug("Registered service: %s.replan", DOMAIN)
     except Exception as err:  # noqa: BLE001
         _LOGGER.error("Failed to register replan service: %s", err)
+
+    async def async_start_battery_boost(call) -> None:
+        """(#1025) The house battery into this car for this one charge,
+        down to a floor. Refused — with the sentence the user gets — when it
+        may not start."""
+        from .coordinator.battery_boost import BoostRefused
+        try:
+            coordinator.start_battery_boost(
+                call.data["charger_id"], call.data.get("floor_soc"))
+        except BoostRefused as err:
+            # Each key spelled at its raise: the exception block is checked
+            # against the keys production raises (#913).
+            _p = err.placeholders
+            if err.key == "battery_boost_not_permitted":
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="battery_boost_not_permitted",
+                    translation_placeholders=_p) from err
+            if err.key == "battery_boost_not_connected":
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="battery_boost_not_connected",
+                    translation_placeholders=_p) from err
+            if err.key == "battery_boost_bad_floor":
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="battery_boost_bad_floor",
+                    translation_placeholders=_p) from err
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="charger_not_found",
+                translation_placeholders=_p) from err
+        await coordinator.async_request_refresh()
+
+    async def async_stop_battery_boost(call) -> None:
+        """(#1025) End the running battery boost."""
+        coordinator.stop_battery_boost("stopped")
+        await coordinator.async_request_refresh()
+
+    try:
+        hass.services.async_register(
+            DOMAIN, "start_battery_boost", async_start_battery_boost,
+            schema=vol.Schema({
+                vol.Required("charger_id"): cv.string,
+                vol.Optional("floor_soc"): vol.Coerce(float),
+            }),
+        )
+        hass.services.async_register(
+            DOMAIN, "stop_battery_boost", async_stop_battery_boost,
+            schema=vol.Schema({}),
+        )
+        _LOGGER.debug("Registered services: %s.start/stop_battery_boost", DOMAIN)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.error("Failed to register the battery boost services: %s", err)
+
+    async def async_set_charger_departure(call) -> None:
+        """(#1023) The EV card's departure rows: each weekday's own time,
+        one block, the top-up before leaving. Written like the charger's own
+        entities write — no reload, so a click never tears down the
+        coordinator (or a running boost) — and the plan's demand signature
+        re-plans the night."""
+        from .coordinator.departure import (
+            LATE_CHARGE_KEY, WEEKDAY_KEY, WEEKDAYS, _hm,
+        )
+        cid = call.data["charger_id"]
+        if coordinator._charger_cfg_by_id(cid) is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="charger_not_found",
+                translation_placeholders={"charger": cid})
+        writes: dict = {}
+        if "by_weekday" in call.data:
+            days = {}
+            for day, value in (call.data["by_weekday"] or {}).items():
+                if value is None or str(value).strip() == "":
+                    continue    # an empty day leaves at the default
+                hm = _hm(value)
+                if day not in WEEKDAYS or hm is None:
+                    raise ServiceValidationError(
+                        translation_domain=DOMAIN,
+                        translation_key="departure_bad_time",
+                        translation_placeholders={
+                            "day": str(day), "time": str(value)})
+                days[day] = f"{hm[0]:02d}:{hm[1]:02d}"
+            writes[WEEKDAY_KEY] = days
+        if "one_block" in call.data:
+            writes["ev_plan_one_block"] = bool(call.data["one_block"])
+        if "late_charge_min" in call.data:
+            writes[LATE_CHARGE_KEY] = int(call.data["late_charge_min"])
+        for key, value in writes.items():
+            persist_per_charger_option(
+                hass, coordinator.config_entry, coordinator, cid, key, value)
+        await coordinator.async_request_refresh()
+
+    try:
+        hass.services.async_register(
+            DOMAIN, "set_charger_departure", async_set_charger_departure,
+            schema=vol.Schema({
+                vol.Required("charger_id"): cv.string,
+                vol.Optional("by_weekday"): vol.Any(None, dict),
+                vol.Optional("one_block"): cv.boolean,
+                vol.Optional("late_charge_min"): vol.All(
+                    vol.Coerce(int), vol.Range(min=0, max=120)),
+            }),
+        )
+        _LOGGER.debug("Registered service: %s.set_charger_departure", DOMAIN)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.error("Failed to register set_charger_departure: %s", err)
 
     async def async_remove_leftovers_service(call) -> None:
         """(#935) Delete what is the USER's, on their explicit say-so.
@@ -4529,6 +5300,14 @@ async def _async_register_services(
             "min_on_time_min", "min_off_time_min",
             # (#705) thermal comfort band
             "comfort_entity", "comfort_target", "comfort_offset", "comfort_limit",
+            # (#1020) a Schedule helper that sets the mode while it is on
+            "schedule_entity", "schedule_mode",
+            # (#1048) the supply phase the load sits on
+            "phase",
+            # (#1021) behind the grid operator's relay
+            "behind_operator_relay",
+            # (#812) the load's own tariff and meter
+            "tariff_rate", "tariff_entity", "tariff_meter",
         ):
             # (#559/#620) goal engine — persisted + applied live
             registry = getattr(coordinator, "_device_registry", None)
@@ -4545,6 +5324,25 @@ async def _async_register_services(
                     translation_key="device_not_found",
                     translation_placeholders={"device_id": device_id},
                 )
+            # (#1020) a mode the device knows, or empty to clear; a Schedule
+            # helper, or empty to clear. Anything else would store and then
+            # silently be no schedule.
+            if prop == "schedule_mode" and str(value) not in (
+                "", "off", "peak_only", "surplus"
+            ):
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="invalid_device_property",
+                    translation_placeholders={"property": f"{prop}={value}"},
+                )
+            if prop == "schedule_entity" and str(value) and not str(
+                value
+            ).startswith("schedule."):
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="invalid_device_property",
+                    translation_placeholders={"property": f"{prop}={value}"},
+                )
             if prop == "top_up_policy" and str(value) not in (
                 "solar_only", "cheap_hours"
             ):
@@ -4553,9 +5351,20 @@ async def _async_register_services(
                     translation_key="invalid_device_property",
                     translation_placeholders={"property": f"{prop}={value}"},
                 )
+            # (#1048) L1 / L2 / L3 / 3ph / unknown — a typo must not place a
+            # load on no phase at all
+            if prop == "phase":
+                from .consts.devices import is_load_phase
+                if not is_load_phase(str(value)):
+                    raise ServiceValidationError(
+                        translation_domain=DOMAIN,
+                        translation_key="invalid_device_property",
+                        translation_placeholders={"property": f"{prop}={value}"},
+                    )
             # (#620) normalize the two battery flags to a canonical bool string
             # so the stored dict + live apply agree regardless of "true"/"1"/"on".
-            if prop in ("battery_assist_enabled", "battery_eligible_overnight"):
+            if prop in ("battery_assist_enabled", "battery_eligible_overnight",
+                        "behind_operator_relay"):
                 value = str(str(value).strip().lower() in ("true", "1", "on", "yes"))
             # (#688) anti-cycle windows are non-negative minutes.
             if prop in ("min_on_time_min", "min_off_time_min"):
@@ -4584,7 +5393,43 @@ async def _async_register_services(
                         translation_key="invalid_device_property",
                         translation_placeholders={"property": f"{prop}={value}"},
                     ) from err
+            # (#812) a rate is a non-negative number (0 = none); a price
+            # entity or a meter is a sensor / input_number, or empty.
+            if prop == "tariff_rate":
+                try:
+                    _rv = float(value) if str(value).strip() else 0.0
+                    if not math.isfinite(_rv) or _rv < 0:
+                        raise ValueError
+                except (TypeError, ValueError) as err:
+                    raise ServiceValidationError(
+                        translation_domain=DOMAIN,
+                        translation_key="invalid_device_property",
+                        translation_placeholders={"property": f"{prop}={value}"},
+                    ) from err
+                value = str(_rv)
+            if prop in ("tariff_entity", "tariff_meter") and str(value) and not (
+                str(value).startswith(("sensor.", "input_number."))
+            ):
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="invalid_device_property",
+                    translation_placeholders={"property": f"{prop}={value}"},
+                )
+            _tariff_before = None
+            if prop in ("tariff_rate", "tariff_entity"):
+                from .coordinator.device_tariff import tariff_of
+                _live = coordinator._surplus_controller.get_device(device_id)
+                _tariff_before = tariff_of(_live).configured if _live else None
             await registry.async_update_device_goal(device_id, prop, value)
+            # (#812) The device's cost sensor exists only while it has its
+            # own tariff: setting the first field or clearing the last one
+            # reloads, so the sensor appears or goes.
+            if _tariff_before is not None:
+                _live = coordinator._surplus_controller.get_device(device_id)
+                _entry = getattr(coordinator, "config_entry", None)
+                if (_live is not None and _entry is not None
+                        and tariff_of(_live).configured != _tariff_before):
+                    hass.config_entries.async_schedule_reload(_entry.entry_id)
         else:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -4619,6 +5464,12 @@ async def _async_register_services(
                     "min_on_time_min", "min_off_time_min",
                     # (#705) thermal comfort band
                     "comfort_entity", "comfort_target", "comfort_offset", "comfort_limit",
+                    # (#1020) a Schedule helper that sets the mode while on
+                    "schedule_entity", "schedule_mode",
+                    # (#1048) the supply phase
+                    "phase",
+                    # (#1021) behind the grid operator's relay
+                    "behind_operator_relay",
                 ]),
                 vol.Required("value"): cv.string,
             }),
@@ -5098,6 +5949,10 @@ async def _async_register_phase_services(
                 "battery_eligible_overnight",
                 # (#705) thermal comfort band
                 "comfort_entity", "comfort_target", "comfort_offset", "comfort_limit",
+                # (#1020) a Schedule helper that sets the mode while on
+                "schedule_entity", "schedule_mode",
+                # (#1048) the supply phase
+                "phase",
             )
             if k in call.data
         }
@@ -5173,6 +6028,15 @@ async def _async_register_phase_services(
             ),
             vol.Optional("battery_assist_enabled"): cv.boolean,
             vol.Optional("battery_eligible_overnight"): cv.boolean,
+            # (#1020) a Schedule helper that sets the mode while it is on
+            vol.Optional("schedule_entity"): vol.Any(
+                "", vol.All(cv.string, vol.Match(r"^schedule\."))),
+            vol.Optional("schedule_mode"): vol.In(
+                ["", "off", "peak_only", "surplus"]),
+            # (#1048) the supply phase the load sits on
+            vol.Optional("phase"): vol.In(
+                ["L1", "L2", "L3", "3ph", "unknown"]
+            ),
         }),
         supports_response=SupportsResponse.OPTIONAL,
     )
@@ -5396,9 +6260,47 @@ async def _async_register_phase_services(
             options = {
                 **options,
                 "ev_chargers": _merge_ev_chargers_by_id(
-                    existing_list, options["ev_chargers"],
-                ),
+                    existing_list, options["ev_chargers"]),
             }
+
+        # (#1204) The Config card sends one battery's edit of a per-battery
+        # list, by its place in the battery order the card read. It goes to
+        # that battery's slot today, and every other slot stays as saved: a
+        # whole list from the card's copy put the old order back after the
+        # batteries changed, and emptied the others after a failed read.
+        from .coordinator.battery_controls import battery_slot_edits
+        try:
+            options = battery_slot_edits(options, {
+                **(target_entry.data or {}), **(target_entry.options or {})})
+        except LookupError:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="battery_list_changed",
+            ) from None
+        except ValueError:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="set_option_invalid_payload",
+            ) from None
+
+        # (#1077) The card picks a value preset the way the options flow
+        # does: the preset fills the fields it owns, and a hand-changed one
+        # of those makes it "custom". These keys are read when the tariff
+        # provider is built, so they take the reload path below.
+        from .tariff.value_layer import (
+            VALUE_OPTION_KEYS, apply_value_preset, basis_contradiction,
+        )
+        if any(k in options for k in VALUE_OPTION_KEYS):
+            _stored = {**(target_entry.data or {}), **(target_entry.options or {})}
+            options = apply_value_preset(options, _stored)
+            # (#1077) An all-in price adds nothing: refuse a markup, tax or
+            # VAT beside it, judged on the merged result. Zeroing one is
+            # always allowed.
+            if basis_contradiction({**_stored, **options}, options):
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="value_needs_spot_basis",
+                )
 
         merged = {**(target_entry.options or {}), **options}
         if merged == (target_entry.options or {}):
@@ -5451,13 +6353,21 @@ async def _async_register_phase_services(
             # daily-rollover check (retention_is_due), so changing it takes
             # effect without a reload — a genuinely live key.
             "status_retention_days",
+            # (#1088) read fresh every cycle by _grid_co2_reading
+            "grid_co2_entity", "co2_live_intensity",
+            # (#1090) read every cycle by _export_value_threshold
+            "export_value_threshold",
         }
         # (#637) Some options are backed by number entities under a DIFFERENT
         # name (number.py CONFIG_KEY_MAP, #542) — the naive number.sem_<key>
         # check missed them (the legionella dual-path confusion). Reverse-map
         # option key → entity suffix so they entity-route like any other.
-        from .number import CONFIG_KEY_MAP as _NUM_MAP
+        from .number import CONFIG_KEY_MAP as _NUM_MAP, NUMBER_TYPES as _NUM_TYPES
+        from .coordinator.install_modules import (
+            entity_kept as _entity_kept, presence_of as _presence_of,
+        )
         _OPTION_TO_ENTITY = {v: k for k, v in _NUM_MAP.items()}
+        _NUMBER_KEYS = {d.key for d in _NUM_TYPES}
 
         # (#636) Load-management peaks have LIVE updaters but no number
         # entities — pre-fix they fell to the unrouted → entry-write →
@@ -5469,14 +6379,46 @@ async def _async_register_phase_services(
             "warning_peak_level": "update_warning_peak_level",
             "emergency_peak_level": "update_emergency_peak_level",
         }
+        # (#1055 follow-up) The grid levels are written live as numbers
+        # below. Refuse one that is not a number before anything is written.
+        for _k in _LM_LIVE_KEYS:
+            if _k in tunable_keys:
+                try:
+                    _ok = math.isfinite(float(options[_k]))
+                except (TypeError, ValueError):
+                    _ok = False
+                if not _ok:
+                    raise ServiceValidationError(
+                        translation_domain=DOMAIN,
+                        translation_key="set_option_invalid_payload",
+                    )
+
         unrouted: list[str] = []
         for key in tunable_keys:
             value = options[key]
             _coord = getattr(target_entry, "runtime_data", None)
-            if (key in _LM_LIVE_KEYS and _coord is not None
-                    and getattr(_coord, "_load_manager", None)):
-                await getattr(_coord._load_manager, _LM_LIVE_KEYS[key])(
-                    float(value))
+            _lm = getattr(_coord, "_load_manager", None) if _coord is not None else None
+            if key in _LM_LIVE_KEYS and _lm:
+                await getattr(_lm, _LM_LIVE_KEYS[key])(float(value))
+                continue
+            # (#1055 follow-up) The grid limit and its "no limit" flag are
+            # settings the EV sizing and the published sensor read live
+            # (``_target_peak_limit_kw`` / ``_peak_limit_unlimited``), with
+            # or without a load manager. Without one, these keys fell to the
+            # unrouted path and every Config-tab save reloaded the whole
+            # integration — the reload #913 took out of the Control slider.
+            # Same writes as ``update_target_peak``.
+            if key == "peak_limit_unlimited" and _lm:
+                _target = options.get("target_peak_limit",
+                                      _coord._target_peak_limit_kw())
+                await _lm.update_target_peak_limit(
+                    float(_target), unlimited=_coerce_switch_on(value))
+                continue
+            if (key in _LM_LIVE_KEYS or key == "peak_limit_unlimited") and _coord is not None:
+                persist_global_option(
+                    hass, target_entry, _coord, key,
+                    _coerce_switch_on(value) if key == "peak_limit_unlimited"
+                    else float(value))
                 continue
             if key in _SET_OPTION_LIVE_CONFIG_KEYS:
                 _c2 = getattr(target_entry, "runtime_data", None)
@@ -5484,6 +6426,14 @@ async def _async_register_phase_services(
                     persist_global_option(hass, target_entry, _c2, key, value)
                     continue
             _ent_suffix = _OPTION_TO_ENTITY.get(key, key)
+            # (#996) A tunable whose number entity this house does not get
+            # (its capability is absent) has nothing to refresh and nothing
+            # built from it: store it without a reload (the #462 rule), so
+            # it is in place if the capability appears.
+            if (_coord is not None and _ent_suffix in _NUMBER_KEYS
+                    and not _entity_kept("number", _ent_suffix, _presence_of(_coord))):
+                persist_global_option(hass, target_entry, _coord, key, value)
+                continue
             if hass.states.get(f"number.sem_{_ent_suffix}") is not None:
                 await hass.services.async_call(
                     "number", "set_value",
@@ -5505,9 +6455,12 @@ async def _async_register_phase_services(
                     blocking=True,
                 )
             elif hass.states.get(f"select.sem_{key}") is not None:
+                # (#1039) the option the select lists, never its label
                 await hass.services.async_call(
                     "select", "select_option",
-                    {"entity_id": f"select.sem_{key}", "option": str(value)},
+                    {"entity_id": f"select.sem_{key}",
+                     "option": listed_option(
+                         hass, f"select.sem_{key}", str(value))},
                     blocking=True,
                 )
             else:
@@ -5588,11 +6541,32 @@ async def _async_register_phase_services(
         if len(kept) == len(dicts):
             _LOGGER.warning("remove_charger: id %s not found — nothing removed", charger_id)
             return
+        # (#1054 follow-up) A charger lives in TWO stores: ``entry.data``
+        # (what setup wrote) and ``entry.options`` (what the user changed).
+        # Removing it from options alone let the start-up heal put it back
+        # from data on the next reload — weindler's "Healed ev_chargers
+        # options list: stored ids [] -> healed ids ['goecharger_…']". A
+        # remove removes it everywhere it lives.
+        new_data_list, _ = chargers_without(
+            (target_entry.data or {}).get("ev_chargers"), None, charger_id)
         new_options = {**(target_entry.options or {}), "ev_chargers": kept}
         coordinator = getattr(target_entry, "runtime_data", None)
+        update: dict = {"options": new_options}
+        if new_data_list is not (target_entry.data or {}).get("ev_chargers"):
+            update["data"] = {**(target_entry.data or {}), "ev_chargers": new_data_list}
+        # (#1154) The first charger's flat keys go with it: the next charger
+        # becomes first and would read its power and set its current.
+        if dicts and dicts[0].get("id") == charger_id:
+            _flat = _drop_flat_wiring_of_a_removed_first(
+                hass, target_entry, kept,
+                data=update.get("data", target_entry.data),
+                options=new_options, why=f"Removed charger '{charger_id}'")
+            if _flat is not None:
+                update = _flat
+                new_options = _flat["options"]
         if coordinator is not None:
             coordinator._skip_options_reload = dict(new_options)
-        hass.config_entries.async_update_entry(target_entry, options=new_options)
+        hass.config_entries.async_update_entry(target_entry, **update)
         await hass.config_entries.async_reload(target_entry.entry_id)
         _LOGGER.info("Removed EV charger '%s' (%d remain)", charger_id, len(kept))
 
@@ -5643,6 +6617,32 @@ async def _async_register_phase_services(
         supports_response=SupportsResponse.ONLY,
     )
 
+    async def async_export_session_history(call):
+        """(#1024) The stored charging sessions as rows and as CSV text.
+
+        For automations and scripts that keep their own log. The card
+        builds its own download from the same rows over the websocket
+        command; this is the path with no browser in it.
+        """
+        from .session_history import history_for, select_sessions, sessions_csv
+        data = call.data or {}
+        history = history_for(hass, data.get("entry_id")) or []
+        rows = select_sessions(history, charger_id=data.get("charger_id"),
+                               since=data.get("since"))
+        return {"rows": rows, "csv": sessions_csv(rows)}
+
+    hass.services.async_register(
+        DOMAIN,
+        "export_session_history",
+        async_export_session_history,
+        schema=vol.Schema({
+            vol.Optional("entry_id"): cv.string,
+            vol.Optional("charger_id"): cv.string,
+            vol.Optional("since"): cv.string,
+        }),
+        supports_response=SupportsResponse.ONLY,
+    )
+
     # #476 item 5 escape hatch: sign-detection locks now PERSIST across
     # restarts, so a wrongly-learned lock no longer clears itself on
     # reboot. This service forgets grid + battery sign locks (RAM and
@@ -5684,7 +6684,13 @@ async def _async_register_phase_services(
         storage = getattr(coordinator, "_storage", None)
         if storage is not None:
             storage.set_sign_state({})
-            await storage.async_save_energy_delayed()
+            # (#1208) the record beside it, too
+            basis = reader.export_battery_basis() if reader is not None else None
+            if isinstance(basis, dict):
+                storage.set_battery_sign_basis(basis)
+            # (#1209) Now, not queued: the queued save lands only once the
+            # cycles stop, so a restart before it read the old signs back.
+            await storage.async_save_energy_now()
         # A re-learn must start clean: drop any prior one-tap user flip
         # (#461 / #588) so the freshly-learned sign isn't silently re-inverted
         # on top. Only touches the entry — and reloads — when a flip was
@@ -5746,14 +6752,22 @@ async def _async_register_phase_services(
                 _LOGGER.debug("flip_grid_sign: diagnostics snapshot failed", exc_info=True)
 
         current = bool((target.options or {}).get("grid_sign_user_flip", False))
+        # (#1192) A saved flip about another meter (#971) is off for this one:
+        # the tap flips this meter, as the log line asks, instead of only
+        # clearing the old flip. A second tap with no meter turns it off.
+        if current and reader is not None:
+            current = reader.user_flip_on_for_tap()
         new_flip = not current
         # (#971) the tap is bound to the grid source it corrects; the reader
         # knows which branch read the meter this cycle.
         if reader is not None:
             new_options = reader.user_flip_options(target.options or {}, new_flip)
         else:
+            # (#1192) no reader, no meter read: bound to none, never to the
+            # next meter found
             new_options = {**(target.options or {}), "grid_sign_user_flip": new_flip,
-                           "grid_sign_user_flip_source": None}
+                           "grid_sign_user_flip_source": (
+                               NO_GRID_SOURCE if new_flip else None)}
         # Suppress the update-listener reload; we issue one explicit reload
         # so the new sign is live without a double tear-down (set_option
         # pattern).
@@ -5885,7 +6899,7 @@ async def _async_register_phase_services(
     # when the controller is hooked up).
     _DIAGNOSE_HOT_WATER_OPTION = {
         "hot_water_entity", "hot_water_temperature_sensor",
-        "hot_water_solar_target", "hot_water_max_temperature",
+        "hot_water_solar_target",
         "hot_water_legionella_target", "hot_water_minimum_temperature",
         "hot_water_priority", "hot_water_rated_power",
     }
@@ -5897,7 +6911,7 @@ async def _async_register_phase_services(
         "hot_water_registered", "hot_water_entity",
         "hot_water_temperature_sensor",
         "hot_water_current_temperature",
-        "hot_water_solar_target", "hot_water_max_temperature",
+        "hot_water_solar_target",
         "hot_water_legionella_target", "hot_water_hours_since_legionella",
         "hot_water_legionella_cycle_active",
         "hot_water_activation_path", "hot_water_deactivation_path",
@@ -5917,17 +6931,25 @@ async def _async_register_phase_services(
     _DIAGNOSE_EV_STATE_PREFIXES = ("ev_", "charger_", "daily_ev", "session_")
     # Tariff — pricing config + classifier diagnostics
     _DIAGNOSE_TARIFF_OPTION = {
-        "tariff_mode", "tariff_classification_mode",
+        "tariff_mode", "tariff_classification_mode", "tariff_schedule_entity",
         "dynamic_tariff_entity", "dynamic_forecast_entity", "dynamic_feedin_entity",
         "electricity_import_rate", "electricity_off_peak_rate",
         "electricity_export_rate", "demand_charge_rate",
         "grid_import_surcharge",
         "cheap_price_threshold", "expensive_price_threshold",
+        # (#1077) what a kWh is worth
+        "tariff_value_preset", "import_price_basis", "import_markup",
+        "import_energy_tax", "import_vat_percent", "feed_in_fee_model",
+        "feed_in_fee", "feed_in_fee_tiers",
+        "export_value_threshold",   # (#1090)
     }
     _DIAGNOSE_TARIFF_STATE = {
         "tariff_provider", "tariff_is_dynamic", "tariff_currency",
         "tariff_price_level", "tariff_classifier_path",
         "tariff_current_import_rate", "tariff_current_export_rate",
+        # (#1077) where the tiered feed-in fee stands
+        "tariff_export_ytd_kwh", "tariff_feed_in_fee_rate",
+        "tariff_next_fee_tier_kwh",
         "tariff_today_min_price", "tariff_today_max_price", "tariff_today_avg_price",
         "tariff_next_cheap_start", "tariff_next_cheap_end",
         "tariff_upcoming", "tariff_schedule_today",
@@ -5970,6 +6992,7 @@ async def _async_register_phase_services(
     # Load management
     _DIAGNOSE_LOAD_MGMT_OPTION = {
         "load_management_enabled", "target_peak_limit",
+        "peak_limit_unlimited",
         "warning_peak_level", "emergency_peak_level",
     }
     _DIAGNOSE_LOAD_MGMT_STATE = {
@@ -6051,6 +7074,7 @@ async def _async_register_phase_services(
         """
         from .coordinator.charger_types import ChargerPower
         from .coordinator.charger_adapters import adapter_for
+        from .utils.switch_sense import on_means_paused as _on_means_paused
 
         out: dict = {}
         devs = getattr(coordinator, "_ev_devices", {}) or {}
@@ -6084,6 +7108,10 @@ async def _async_register_phase_services(
                 "current_entity_state": _state(getattr(dev, "current_entity_id", None)),
                 "start_stop_entity": getattr(dev, "start_stop_entity", None),
                 "start_stop_state": _state(getattr(dev, "start_stop_entity", None)),
+                # (#1042) True when the switch is named for the pause, so
+                # its "on" is the stop (V2C's "Pause session").
+                "start_stop_on_means_paused": _on_means_paused(
+                    hass, getattr(dev, "start_stop_entity", None)),
                 "status_entity": getattr(dev, "charging_status_entity", None),
                 "status_raw": _state(getattr(dev, "charging_status_entity", None)),
                 "believed_setpoint_a": getattr(dev, "_current_setpoint", None),
@@ -6258,6 +7286,38 @@ async def _async_register_phase_services(
                 "data": _chargers_brief(target.data),
                 "options": _chargers_brief(target.options),
             }
+            # (#1054) What is stored (which device, what the user set) and
+            # what the crawler answers for that device right now — so a
+            # report shows both sides of every charger role.
+            try:
+                from .charger_refs import REFS_KEY, ROLE_KEYS, live_charger_roles
+                refs = (target.options or {}).get(REFS_KEY)
+                if isinstance(refs, list):
+                    live = live_charger_roles(hass)
+                    payload["ev_charger_refs"] = [
+                        {
+                            "id": r.get("id"),
+                            "device_id": r.get("device_id"),
+                            "connector": (r.get("settings") or {}).get("connector"),
+                            "stored_complete": r.get("stored_complete"),
+                            "role_source": {
+                                role: ("you" if role in (r.get("overrides") or {})
+                                       else "cleared" if role in (r.get("cleared") or ())
+                                       # (#1151) kept back for the control check
+                                       else "held" if role in (r.get("held") or ())
+                                       else "crawler")
+                                for role in sorted(ROLE_KEYS)
+                                if role in (r.get("overrides") or {})
+                                or role in (r.get("cleared") or ())
+                                or role in (r.get("held") or ())
+                                or role in (r.get("found") or {})
+                            },
+                            "crawler_now": live.get(r.get("device_id")) or {},
+                        }
+                        for r in refs if isinstance(r, dict)
+                    ]
+            except Exception as exc:  # noqa: BLE001 — a diagnose never raises
+                payload["ev_charger_refs"] = {"error": str(exc)}
 
             # #548 actuation truth — the load-bearing facts for "SEM says
             # stop but the charger keeps charging": per charger, the adapter's
@@ -6270,6 +7330,13 @@ async def _async_register_phase_services(
                 payload["ev_actuation"] = _charger_actuation_diag(hass, coordinator)
             except Exception as exc:  # noqa: BLE001
                 payload["ev_actuation"] = {"error": str(exc)}
+            # (#1079) devices another party steers, and whether SEM yields
+            try:
+                _book = getattr(coordinator, "_external_control", None)
+                if _book is not None and _book.rows():
+                    payload["external_control"] = _book.rows()
+            except Exception as exc:  # noqa: BLE001
+                payload["external_control"] = {"error": str(exc)}
 
         if section in ("all", "battery_zones", "battery_scheduler"):
             # (#983) the battery half of the #548 actuation truth: what the
@@ -6282,6 +7349,18 @@ async def _async_register_phase_services(
                     hass, coordinator)
             except Exception as exc:  # noqa: BLE001
                 payload["battery_actuation"] = {"error": str(exc)}
+            # (#820) the charge-pacing register: what it holds and accepts,
+            # what SEM believes, the record it would restore from, and the
+            # other integration's refusals that never reach SEM's own log
+            try:
+                from .coordinator.battery_diag import pacing_actuation_diag
+                pacing = await pacing_actuation_diag(hass, coordinator)
+                buf = hass.data.get(f"{DOMAIN}_log_buffer")
+                if hasattr(buf, "get_foreign_lines"):
+                    pacing["foreign_log"] = buf.get_foreign_lines()
+                payload["pacing_actuation"] = pacing
+            except Exception as exc:  # noqa: BLE001
+                payload["pacing_actuation"] = {"error": str(exc)}
 
         if section in ("all", "trace", "ev_chargers"):
             # Layered-trace observability (1.7.5) — the recent

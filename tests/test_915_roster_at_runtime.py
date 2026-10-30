@@ -220,9 +220,12 @@ class TestSemDoesNotOfferToWriteTheseRegisters:
     def test_the_real_ones_still_match(self):
         from custom_components.solar_energy_management.consts import (
             role_lexicon as lex)
-        for key in ("ac_charge_soc_limit", "battery_charge_soc_limit",
-                    "soc_upper_limit"):
+        for key in ("ac_charge_soc_limit", "battery_charge_soc_limit"):
             assert lex.role_for("number", key) == "battery_target_soc", key
+        # (#1166) an UPPER limit is where the inverter stops charging, the
+        # user's standing level: SEM reads it and never writes it.
+        assert lex.role_for("number", "soc_upper_limit") == \
+            "battery_charge_end_soc"
 
     @pytest.mark.parametrize("key,role", [
         # s-o-c inside "sockets": SENEC's switchable wall sockets were being
@@ -989,7 +992,7 @@ class TestANearMissIsAboutHardware:
 
 @pytest.mark.unit
 class TestAProposalCanActuallyBeAccepted:
-    """Guido, reading the card: *"Huawei Solar unconfirmed — how do I
+    """Reading the card: *"Huawei Solar unconfirmed — how do I
     confirm?"* Fair: the block said unconfirmed and offered no way to
     confirm, so the only route was to read the entity, scroll to the right
     section and re-enter it by hand. That is a chore wearing the word
@@ -1067,7 +1070,7 @@ class TestAProposalCanActuallyBeAccepted:
 
 @pytest.mark.unit
 class TestANearMissIsAnOfferNotAChore:
-    """Guido: *"'no role matched — please report' — how?"* Fair. When SEM has
+    """Asked: *"'no role matched — please report' — how?"* Fair. When SEM has
     already worked out which entity is the charging current, asking the user
     to file a bug report is the wrong end of the offer: the answer is *add
     this charger*, pre-filled. "Please report" stays for the case where SEM
@@ -1076,7 +1079,7 @@ class TestANearMissIsAnOfferNotAChore:
     def test_a_charger_near_miss_comes_with_a_ready_charger(self):
         ents = [
             _ent("number.zap_current", "zaptec", device_id="z1",
-                 unique_id="sim-1_available_current"),
+                 unique_id="sim-1_charger_max_current"),
             _ent("sensor.zap_power", "zaptec", device_id="z1",
                  device_class="power"),
             _ent("binary_sensor.zap_cable", "zaptec", device_id="z1",
@@ -1095,7 +1098,7 @@ class TestANearMissIsAnOfferNotAChore:
         """A charger SEM cannot measure is one it must not steer, so the
         honest line there is still 'please report'."""
         ents = [_ent("number.zap_current", "zaptec", device_id="z1",
-                     unique_id="sim-1_available_current")]
+                     unique_id="sim-1_charger_max_current")]
         proposed = hd.propose_roles_from_roster(ents, "zaptec")
         assert hd.charger_from_near_miss(ents, "zaptec", proposed) == {}
 
@@ -1107,7 +1110,7 @@ class TestANearMissIsAnOfferNotAChore:
     def test_the_report_carries_the_offer(self):
         ents = [
             _ent("number.zap_current", "zaptec", device_id="z1",
-                 unique_id="sim-1_available_current"),
+                 unique_id="sim-1_charger_max_current"),
             _ent("sensor.zap_power", "zaptec", device_id="z1",
                  device_class="power"),
         ]
@@ -1230,13 +1233,12 @@ class TestTheReadBackIsActuallyWired:
                              last_unverified_entity="number.limit",
                              last_unverified_wanted="1200 W",
                              last_unverified_seen="5000 W")
-        c = SimpleNamespace(hass=MagicMock(), _battery_adapters={"primary": ad},
-                            BATTERY_WRITE_STRIKES=SEMCoordinator.BATTERY_WRITE_STRIKES)
+        # (#1124) the real per-cycle method, not a copy of its lines
+        c = SEMCoordinator.__new__(SEMCoordinator)
+        c.hass = MagicMock()
+        c._battery_adapters = {"primary": ad}
         result = {}
-        _ad = SEMCoordinator._primary_battery_adapter(c)
-        assert _ad is ad
-        result["battery_control_write_verified"] = _ad.verify_pending_write()
-        result["battery_control_write_strikes"] = _ad.write_not_taken_strikes
+        SEMCoordinator._verify_battery_writes(c, result)
         assert result["battery_control_write_verified"] is False
         assert result["battery_control_write_strikes"] == 2
 

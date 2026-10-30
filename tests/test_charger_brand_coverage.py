@@ -16,7 +16,7 @@ would silently never actuate.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -111,8 +111,15 @@ class TestAdapterSelection:
         assert type(adapter_for(_device(charger_service="zaptec.stop_charging"))) is GenericAdapter
 
     def test_wallbox_number_is_wallbox(self):
-        a = adapter_for(_device(current_entity_id="number.wallbox_max_current",
-                                charger_service_entity_id="number.wallbox_max_current"))
+        # (#976) recognised by the registry platform, not by the word in the id
+        eid = "number.wallbox_max_current"
+        registry = MagicMock()
+        registry.async_get = lambda e: (
+            MagicMock(platform="wallbox") if e == eid else None)
+        with patch("homeassistant.helpers.entity_registry.async_get",
+                   return_value=registry):
+            a = adapter_for(_device(current_entity_id=eid,
+                                    charger_service_entity_id=eid))
         assert isinstance(a, WallboxAdapter)
 
     def test_ocpp_number_is_generic(self):

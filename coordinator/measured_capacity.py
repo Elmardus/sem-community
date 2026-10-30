@@ -1,13 +1,20 @@
 """#778 — what is a percent of this battery actually worth?
 
-Guido, 23.08: *"Does the battery SOC = energy also get a ledger, to have it all
+Asked 23.08: *"Does the battery SOC = energy also get a ledger, to have it all
 there — or would that be too complicated?"*
 
-Not complicated, and it needs **no new recording**. Every sealed night from
-#800 already carries ``drain_kwh``, ``soc_start``, ``soc_morning``,
+Not complicated, and it needed **no new ledger**. Every sealed night from
+#800 carries ``drain_kwh``, ``soc_start``, ``soc_morning``,
 ``outdoor_temp_c`` and a ``trainable`` quality flag, so kWh-per-percent is
 arithmetic over records SEM already writes. This is a READER, not a fourth
 ledger.
+
+(#1045) The energy is everything that left the pack — house drain, EV assist
+and export — less what went back in, because that is what the SOC span counts.
+``drain_kwh`` alone is the house's share: the overnight need's number, not
+this one. The recorder writes ``charge_kwh`` for that. A record sealed before
+it existed is read as it always was, unless its assist and export show that
+reading is low.
 
 Why it matters more than the forecast ledger: the spendable budget's
 ``usable_capacity_kwh`` is a configured **nameplate**. If a 30 kWh pack really
@@ -40,6 +47,23 @@ MIN_SOC_SPAN_PCT: float = 15.0
 #: seven: capacity is a physical property of the pack, not a property of the
 #: weather, so it does not need a week of conditions to be representative.
 MIN_SAMPLES: int = 5
+
+#: (#1045) How much of what left the pack may have gone back in the same night
+#: and still let the night measure it. Up to this the charge is subtracted —
+#: meter noise around zero, a short top-up. Above it the net is a small
+#: difference of two lossy conversions, and the night is not used.
+MAX_NIGHT_CHARGE_SHARE: float = 0.1
+
+#: (#1045) Charge up to this is subtracted however small the night. A pack that
+#: follows the meter can take this much in noise over ten hours, and refusing a
+#: short night over it would leave the reader with nothing.
+NIGHT_CHARGE_NOISE_KWH: float = 0.25
+
+#: (#1045) A record sealed before the recorder counted charge does not know
+#: what went back in, so adding its assist and export could read HIGH. It is
+#: read as before — the house's share — only while assist and export are at
+#: most this share of what left; past it that reading is known to be low.
+MAX_UNCOUNTED_SHARE_OLD_RECORD: float = 0.1
 
 
 @dataclass(frozen=True)
@@ -80,10 +104,10 @@ def _f(value) -> Optional[float]:
 
 def _qualifying_ratios(records: Optional[Iterable[dict]]) -> list:
     """kWh-per-percent of every night that passes the quality gates —
-    trainable, ≥ ``MIN_SOC_SPAN_PCT`` of SOC span, positive drain — one
-    record per date. The verdict and the progress count read the SAME list,
-    so the surface can never say "0 nights" while four already qualify
-    (PROD 26.08, #778)."""
+    trainable, ≥ ``MIN_SOC_SPAN_PCT`` of SOC span, energy out of the pack,
+    little charge back in — one record per date. The verdict and the progress
+    count read the SAME list, so the surface can never say "0 nights" while
+    four already qualify (PROD 26.08, #778)."""
     ratios = []
     for rec in distinct_nights(records or []):
         if not isinstance(rec, dict) or not rec.get("trainable"):
@@ -96,9 +120,32 @@ def _qualifying_ratios(records: Optional[Iterable[dict]]) -> list:
         span = start - morning
         if span < MIN_SOC_SPAN_PCT:      # also rejects a rising SOC (negative)
             continue
-        if drain <= 0:
+        # (#1045) The span counts everything that left the pack, so the energy
+        # must too. ``drain_kwh`` is the house's share only — right for the
+        # overnight need, wrong here: every night with EV assist or battery
+        # export read low (a 10 kWh pack measured 7.9).
+        assist = max(0.0, _f(rec.get("assist_kwh")) or 0.0)
+        export = max(0.0, _f(rec.get("export_kwh")) or 0.0)
+        charge = _f(rec.get("charge_kwh"))
+        if charge is None:
+            # Sealed before the recorder counted charge: unknown, not zero.
+            if assist + export > MAX_UNCOUNTED_SHARE_OLD_RECORD * (
+                    drain + assist + export):
+                continue
+            out, charge = drain, 0.0
+        else:
+            out = drain + assist + export
+        if out <= 0:
             continue
-        ratios.append(drain / span)
+        # …and the span is NET of what went back in the same night, so the
+        # energy must be net too. Gross over net reads HIGH — the direction
+        # that sizes every budget against a pack that is not there.
+        charge = max(0.0, charge)
+        if charge > max(MAX_NIGHT_CHARGE_SHARE * out, NIGHT_CHARGE_NOISE_KWH):
+            continue
+        if out - charge <= 0:            # noise larger than a tiny night
+            continue
+        ratios.append((out - charge) / span)
     return ratios
 
 
@@ -186,7 +233,7 @@ def usable_nights(records: Optional[Iterable[dict]]) -> int:
 #: Nights needed before an overnight-need figure is offered.
 MIN_NEED_SAMPLES: int = 5
 
-#: Which percentile of observed drains to reserve for. Guido's framing on #778
+#: Which percentile of observed drains to reserve for. The framing on #778
 #: is the "learner-safe envelope" — a HIGH percentile, not an average. Reserving
 #: the typical night leaves the pack short on half of them, and being short is
 #: not symmetric with being generous: one costs a little export revenue, the

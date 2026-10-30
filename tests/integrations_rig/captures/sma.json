@@ -1,0 +1,1825 @@
+{
+ "devices": {
+  "sma:sma": {
+   "manufacturer": null,
+   "model": null,
+   "name": "sma"
+  }
+ },
+ "domain": "sma",
+ "entities": [
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_capacity_a",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "5000",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00499100_0",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_capacity_b",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "5000",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00499100_1",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_capacity_c",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "5000",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00499100_2",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_capacity_total",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00696E00_0",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_charge_a",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00499500_0",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_charge_b",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00499500_1",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_charge_c",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00499500_2",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_charge_total",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00496700_0",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_charging_voltage_a",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6102_00493500_0",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_charging_voltage_b",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6102_00493500_1",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_charging_voltage_c",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6102_00493500_2",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_current_a",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40495D00_0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_current_b",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40495D00_1",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_current_c",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40495D00_2",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_discharge_a",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00499600_0",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_discharge_b",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00499600_1",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_discharge_c",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00499600_2",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_discharge_total",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00496800_0",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_power_charge_a",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "50",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00499300_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_power_charge_b",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "50",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00499300_1",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_power_charge_c",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "50",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00499300_2",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_power_charge_total",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00496900_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_power_discharge_a",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "100",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00499400_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_power_discharge_b",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "100",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00499400_1",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_power_discharge_c",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "100",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00499400_2",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_power_discharge_total",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00496A00_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_soc_a",
+   "original_device_class": "battery",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00498F00_0",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_soc_b",
+   "original_device_class": "battery",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00498F00_1",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_soc_c",
+   "original_device_class": "battery",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00498F00_2",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_soc_total",
+   "original_device_class": "battery",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00295A00_0",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_status_operating_mode",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6180_08495E00_0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_temp_a",
+   "original_device_class": "temperature",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40495B00_0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_temp_b",
+   "original_device_class": "temperature",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40495B00_1",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_temp_c",
+   "original_device_class": "temperature",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40495B00_2",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_voltage_a",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00495C00_0",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_voltage_b",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00495C00_1",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_battery_voltage_c",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00495C00_2",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_current_l1",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40465300_0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_current_l2",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40465400_0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_current_l3",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40465500_0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_current_total",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00664F00_0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_daily_yield",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00262200_0",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "device_class": "frequency",
+    "unit_of_measurement": "Hz"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_frequency",
+   "original_device_class": "frequency",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00465700_0",
+   "unit_of_measurement": "Hz"
+  },
+  {
+   "attributes": {
+    "device_class": "apparent_power",
+    "unit_of_measurement": "VA"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_grid_apparent_power",
+   "original_device_class": "apparent_power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40666700_0",
+   "unit_of_measurement": "VA"
+  },
+  {
+   "attributes": {
+    "device_class": "apparent_power",
+    "unit_of_measurement": "VA"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_grid_apparent_power_l1",
+   "original_device_class": "apparent_power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40666800_0",
+   "unit_of_measurement": "VA"
+  },
+  {
+   "attributes": {
+    "device_class": "apparent_power",
+    "unit_of_measurement": "VA"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_grid_apparent_power_l2",
+   "original_device_class": "apparent_power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40666900_0",
+   "unit_of_measurement": "VA"
+  },
+  {
+   "attributes": {
+    "device_class": "apparent_power",
+    "unit_of_measurement": "VA"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_grid_apparent_power_l3",
+   "original_device_class": "apparent_power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40666A00_0",
+   "unit_of_measurement": "VA"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.sma_device_name_grid_connection_status",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6180_0846A700_0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_grid_power",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40263F00_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power_factor"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_grid_power_factor",
+   "original_device_class": "power_factor",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00665900_0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.sma_device_name_grid_power_factor_excitation",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6180_08465A00_0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "reactive_power",
+    "unit_of_measurement": "var"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_grid_reactive_power",
+   "original_device_class": "reactive_power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40265F00_0",
+   "unit_of_measurement": "var"
+  },
+  {
+   "attributes": {
+    "device_class": "reactive_power",
+    "unit_of_measurement": "var"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_grid_reactive_power_l1",
+   "original_device_class": "reactive_power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40666000_0",
+   "unit_of_measurement": "var"
+  },
+  {
+   "attributes": {
+    "device_class": "reactive_power",
+    "unit_of_measurement": "var"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_grid_reactive_power_l2",
+   "original_device_class": "reactive_power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40666100_0",
+   "unit_of_measurement": "var"
+  },
+  {
+   "attributes": {
+    "device_class": "reactive_power",
+    "unit_of_measurement": "var"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_grid_reactive_power_l3",
+   "original_device_class": "reactive_power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40666200_0",
+   "unit_of_measurement": "var"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.sma_device_name_grid_relay_status",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6180_08416400_0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "mA"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_insulation_residual_current",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6102_40254E00_0",
+   "unit_of_measurement": "mA"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.sma_device_name_inverter_condition",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6180_08414C00_0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_inverter_power_limit",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6800_00832A00_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.sma_device_name_inverter_system_init",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6800_08811F00_0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_active_power_draw_l1",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046EB00_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_active_power_draw_l2",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046EC00_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_active_power_draw_l3",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046ED00_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_active_power_feed_l1",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046E800_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_active_power_feed_l2",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046E900_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_active_power_feed_l3",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046EA00_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_current_consumption",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00543100_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_current_l1",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40466500_0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_current_l2",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40466600_0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_current_l3",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40466B00_0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "frequency",
+    "unit_of_measurement": "Hz"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_frequency",
+   "original_device_class": "frequency",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00468100_0",
+   "unit_of_measurement": "Hz"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_power_absorbed",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40463700_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_power_supplied",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40463600_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_total_absorbed",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00462500_0",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_total_consumption",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00543A00_0",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_total_yield",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00462400_0",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_voltage_l1",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046E500_0",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_voltage_l2",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046E600_0",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_metering_voltage_l3",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046E700_0",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.sma_device_name_operating_status",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6180_08412B00_0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.sma_device_name_operating_status_general",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6180_08412800_0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_optimizer_current",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40652900_0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_optimizer_power",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40652A00_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_optimizer_temp",
+   "original_device_class": "temperature",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40652B00_0",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_optimizer_voltage",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40652800_0",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_power_l1",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40464000_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_power_l2",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40464100_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_power_l3",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_40464200_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_current_a",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6380_40452100_0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_current_b",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6380_40452100_1",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_current_c",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6380_40452100_2",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_gen_meter",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_0046C300_0",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "kOhms"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_isolation_resistance",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6102_00254F00_0",
+   "unit_of_measurement": "kOhms"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_power",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046C200_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_power_a",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6380_40251E00_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_power_b",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6380_40251E00_1",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_power_c",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6380_40251E00_2",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_voltage_a",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6380_40451F00_0",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_voltage_b",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6380_40451F00_1",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_pv_voltage_c",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6380_40451F00_2",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_secure_power_supply_current",
+   "original_device_class": "current",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046C700_0",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_secure_power_supply_power",
+   "original_device_class": "power",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046C800_0",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_secure_power_supply_voltage",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_0046C600_0",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.sma_device_name_status",
+   "original_device_class": null,
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6180_08214800_0",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_total_yield",
+   "original_device_class": "energy",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6400_00260100_0",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_voltage_l1",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00464800_0",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_voltage_l2",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00464900_0",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "sma:sma",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.sma_device_name_voltage_l3",
+   "original_device_class": "voltage",
+   "platform": "sma",
+   "state": "unknown",
+   "translation_key": null,
+   "unique_id": "123456789-6100_00464A00_0",
+   "unit_of_measurement": "V"
+  }
+ ],
+ "services": {},
+ "source": {
+  "files": [
+   "tests/components/sma/snapshots/test_sensor.ambr"
+  ],
+  "kind": "core-snapshot",
+  "note": "Home Assistant's own test output for this integration at the tag; the device grouping comes from unique_id",
+  "repo": "home-assistant/core",
+  "tag": "2026.8.2"
+ }
+}

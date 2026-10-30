@@ -24,6 +24,8 @@ Complete reference for Solar Energy Management (SEM).
 - [Peak Load Management](#peak-load-management)
 - [Tariff Integration](#tariff-integration)
 - [Solar Forecast](#solar-forecast)
+- [Simulation tab](#simulation-tab-1083)
+- [Why did SEM do that?](#why-did-sem-do-that)
 - [Observer Mode](#observer-mode)
 - [Sensors Reference](#sensors-reference)
 - [Daily Energy Reset](#daily-energy-reset)
@@ -41,6 +43,20 @@ forecast — plus **modules** for the hardware you own:
 | EV charger | a charger is configured in SEM, or HA's Energy Dashboard has an EV consumer | EV entities (power, sessions, lifetime); the EV **tab** needs a configured charger |
 | Heat pump | an SG-Ready relay, climate entity, SG-Ready service or heat-pump power/energy sensor is set | heat-pump status and energy entities |
 | Hot water | a hot-water entity is set | the tank's temperature and legionella settings |
+
+Controls follow the same rule (#996). A setting your house cannot use is
+not created, so nothing shows a live number that changes nothing:
+
+| Control | Appears when |
+|---|---|
+| Cheap / expensive price thresholds, next cheap window | the tariff mode is dynamic |
+| Export guard (switches, holds, state) | you name an export-limit entity, or SEM finds one on the inverter's device |
+| Forecast rows, forecast spending, charge pacing | a forecast entity is set, or SEM finds Solcast, Forecast.Solar, Open-Meteo or Helios |
+| kWh per kWp and the degradation trend | a plant size (kWp) is set |
+| ROI rows | an investment figure is set |
+
+Set the thing up and the control appears with one automatic reload. When
+SEM has not looked yet, it keeps the control rather than guess.
 
 A small install therefore has fewer entities, by design — a solar-only SEM
 has no `sensor.sem_battery_soc`. Add the hardware and its entities appear:
@@ -84,7 +100,7 @@ supported: open an issue with the list shown. Devices on shared transports
 (MQTT, Modbus) only appear here when they actually look like energy hardware —
 your Zigbee bridge is not a near-miss. The same report is in the
 diagnostics download (Settings → Devices & Services → SEM → ⋮ → Download
-diagnostics). Wrong detections are corrected in place with the pickers in the
+diagnostics). It also lists the units, short states and services SEM read from each charger. Your charger's own name shows as box_1, box_2 and so on, so you can attach the file to an issue. Wrong detections are corrected in place with the pickers in the
 charger and sensor-source sections — no reinstall. The full support matrix with
 an honest per-brand status is [docs/SUPPORTED_HARDWARE.md](SUPPORTED_HARDWARE.md).
 
@@ -206,6 +222,16 @@ reaches the supported-hardware list after someone confirms it on real hardware.
 
 > **Note:** Android notification channels, groups, and action buttons are only sent to `notify.mobile_app_*` services. Other services receive message + title only.
 
+### A device another party steers (#1079)
+
+A supplier, an aggregator or a grid operator may control your car charger or your battery too. When they and SEM both write to it, they undo each other. Per charger, and for the home battery, ⚙ **Configuration → All settings → Steered by another party** has three choices:
+
+- **No** (default): nothing changes.
+- **Yes, SEM yields**: while your **Steering indicator** is on, SEM writes nothing to that device. SEM never stops or starts it on its own. The device's real draw stays in the home's numbers, so the other devices plan around it. A charger's failsafe is the one thing SEM still keeps set. The indicator is any switch, binary sensor or select that shows the other party is in control. It must read *off* for 5 minutes before SEM takes the device back, and an indicator that is unknown or unavailable changes nothing, so a restart never counts as "steered".
+- **SEM drives, tell me**: SEM keeps control. A Repair appears when it sees writes it did not make.
+
+The diagnose service and the downloaded diagnostics list each such device: who steers it, since when, and whether SEM yields.
+
 ### Multi-Charger Setup
 
 SEM supports multiple EV chargers with priority-based surplus distribution:
@@ -224,7 +250,7 @@ Each charger gets its own sensor entities:
 - `sensor.sem_charger_{id}_taper_trend` — BMS taper detection
 - `sensor.sem_charger_{id}_taper_ratio` — taper ratio
 
-To **edit** an existing charger, select it from the charger menu. To **remove**, select "Remove a charger" (primary charger cannot be removed).
+To **edit** an existing charger, select it from the charger menu. To **remove**, select "Remove a charger". A working primary charger cannot be removed; a half-filled one can. The Repairs of a charger you removed clear the next time SEM starts. If an earlier setup left a charger half-filled, SEM offers it again: add it and the new charger replaces the old card.
 
 ### Appliance Dependencies
 
@@ -293,6 +319,21 @@ Declaring no limit is its own explicit switch, so it is never reached by
 accident. Your kW numbers stay in config while it is on and come back
 untouched when you turn it off.
 
+#### Grid operator relay (#1021)
+
+If your grid operator can cut your load (§14a in Germany, ripple control in
+Switzerland), pick its relay under *Load management*. While it is on, the
+Control tab says so, SEM keeps grid draw under the limit you set, and devices
+marked *Behind the grid operator's relay* show *Locked by the grid operator*.
+Setup: SETUP_GUIDE section 7.
+
+#### The rest of today's solar follows the sky (#1068)
+
+The *Forecast remaining today* sensor shows the provider's number. Its
+`corrected_kwh` attribute is the same number scaled by what today has really
+made: on a grey day it drops well below the forecast by midday. This is being
+tested; once proven, the day plan will use it.
+
 ### Other Settings
 
 | Setting | Default | Description |
@@ -327,6 +368,13 @@ supports the same three control paths, in any combination:
   every write that the command landed; a mismatch is logged, never
   silently trusted.
 
+  After a successful service call, SEM's mode and SG-Ready state sensors
+  report the commanded state, just as they do for relay control. A renewal
+  using that state can therefore keep a boost alive. A delayed or mismatched
+  read-back still reports `service_unverified`; it is not confirmation that
+  the hardware reached the commanded state. A failed call keeps the previous
+  commanded state.
+
 Each additional unit carries its own priority, thresholds, sensors and
 name, and competes in the surplus distribution as its own device.
 
@@ -347,6 +395,22 @@ in the generic device list. Every climate device gets, independently:
 
 Heat-pump units and climate devices can coexist: any number of
 menu-configured units plus any number of climate-managed ones.
+
+### A heat pump on its own tariff (#812)
+
+A heat pump on its own meter and price can have its own tariff. In the heat
+pump settings, set **Own tariff: fixed rate** or **Own tariff: price
+entity**, and optionally **Own tariff: meter (kWh)**. Empty = the house
+tariff.
+
+- Its cheap and expensive hours, and its plan, follow its own price. A fixed
+  rate is never cheap or expensive.
+- A sensor *<heat pump> tariff cost today* shows what its grid power cost.
+- If the price entity cannot be read, SEM uses the fixed rate, or else the
+  house tariff, until it reads again.
+
+Other loads get the same fields in their goals on the Load Priority card.
+More in [Tariff models](TARIFF_MODELS.md#a-tariff-per-device-812).
 
 ### How much did SG-Ready actually shift? (#769)
 
@@ -509,13 +573,12 @@ There is no Resume button, because the Charge Mode select already is one.
 Pressing Pause on a charger you set to Off yourself does nothing: there is
 nothing to pause and no mode to come back to.
 
-**On a KEBA, Off and Pause are best-effort.** SEM sends one stop and then
-leaves the box alone. About 10 minutes later the box switches itself back
-on at its fallback current (8 A on a typical setup): that is its failsafe,
-which SEM itself sets at every start so a dead controller still charges the
-car, and which the KEBA will not let SEM set to 0 A. SEM does not fight it —
-re-sending the stop every 10 minutes would only strobe the contactor. When
-this happens SEM raises a Repair, *"Your wallbox undoes SEM's stop on a
+**On a KEBA, SEM sets the box's fallback current.** At every start it sets
+the charging minimum, so a dead controller still charges the car. At every
+stop it sets 0 A, and asks again if the box missed it, up to 3 times. A box
+that keeps its fallback anyway switches itself back on about 10 minutes
+later. SEM does not fight it: sending the stop every 10 minutes would only
+switch the box on and off. When this happens SEM raises a Repair, *"Your wallbox undoes SEM's stop on a
 timer"*. To make a stop hold: turn SEM's own arming off with the service
 `solar_energy_management.set_option` and `keba_arm_failsafe: false`, then
 set the box's failsafe current (`Curr FS`) to 0 at the wallbox.
@@ -583,19 +646,40 @@ Since #878 the buffer is the **minimum** assist floor rather than the only one: 
 
 When you have multiple batteries (e.g. Huawei + Growatt, or split Huawei units), SEM v1.7.3 adds per-battery control:
 
-| Mode | SEM Control | When to use |
+| Mode | What SEM does | When to use |
 |------|---|---|
-| **Auto** | Normal SOC zone strategy (Zone 1–4) | Default; SEM manages the battery like usual |
-| **Self-Consumption** | Discharge to home only, never export to grid | Night use; battery stays reserved for home |
-| **Force Charge** | Charge from grid (if tariff is cheap) or solar | Deliberate battery top-up before heavy consumption |
-| **Force Discharge** | Discharge at maximum rate | Emergency backup or battery arbitrage |
-| **Off** | SEM ignores this battery | Manual control or testing |
+| **Auto** | The inverter runs the battery as usual. SEM steps in only to: charge it from the grid in the planned cheap hours when tonight needs it (or at a negative price); sell in the plan's sell hours when selling is on; hold it to the house while a car is plugged in and the spare sun is under the Solar Gate or the battery is under the Buffer SoC; hold it to the house while grid-funded loads run. | Default |
+| **Self-Consumption** | As Auto, but it never sells to the grid, unless you turn on *Battery may sell to the grid* | Keep the battery for the house |
+| **Force Charge** | Charges to 100 % now, at the maximum charge power, from the sun and the grid, **at any price**. Only the grid peak limit slows or stops it. At 100 % the mode goes back to Auto. Some inverters stop the charge below 100 %. From 90 % on, a battery that takes no more charge for 15 minutes also goes back to Auto. Is your inverter set to stop lower? Pick its level in Settings, **Battery end-of-charge level**. SEM only reads it and then counts from 2 % below it. | Deliberate top-up before heavy use |
+| **Force Discharge** | Sells at the maximum discharge power down to this battery's reserve, then the mode goes back to Auto. It does not sell while the battery level cannot be read. | Emergency backup or a manual sale |
+| **Off** | One clean hand-over to the inverter, then SEM sends nothing to this battery | Manual control or testing |
+
+> **Force Charge and the price.** It does not wait for a cheap hour: at night
+> in an expensive hour it buys from the grid. It is a deliberate override —
+> charge now, whatever the price.
+>
+> **The reserve.** The reserve stops SEM's own sales (Force Discharge and the
+> planned sells). In Auto and Self-Consumption SEM does not stop the house
+> from using the battery below it; the inverter's own limit does that.
+>
+> **A sale lifts SEM's own limit.** SEM sometimes limits the battery to the
+> house, down to 0 W, while a car charges or in a cheap hour. When the battery
+> then sells (Force Discharge or a planned sale), SEM first puts that limit
+> back to full.
+
+Each mode promise is tested: `tests/test_docs_contracts_battery.py`.
 
 **Per-battery control entities:**
 - `select.sem_battery_<id>_mode` — set the mode (auto / self_consumption / force_charge / force_discharge / off)
 - `number.sem_battery_<id>_reserve_soc` — the SOC this battery will not discharge below
 
+With one battery, SEM makes one `select.sem_battery_mode` and one `number.sem_battery_reserve_soc` instead. A battery that the Energy Dashboard lists as two sensors (charge and discharge) counts as one battery. Two such batteries get their own controls too. When you move from the shared controls to one per battery, each battery starts on the shared mode and reserve, and the shared controls go away. Update any automation that set them. The controls you see are the ones SEM uses. A reserve you never set is 20 %.
+
 The discharge *rate* is not per-battery: **`number.sem_battery_max_discharge_power`** (default 5000 W) caps it for the whole fleet.
+
+Each battery can have its own discharge limit entity. With two or more batteries, Config tab → Battery shows one field per battery. Leave a field empty and SEM uses the shared entity above it. When batteries share one entity, the lowest limit wins, unless one of them sells.
+
+Add or remove a battery in the Energy Dashboard and each battery keeps its own fields, mode and reserve. A new battery starts with empty fields, so it uses the shared entities until you fill them in.
 
 **Zero-config Huawei:** If you have a Huawei inverter, SEM auto-detects the discharge limit entity and uses it to enforce force-discharge at no extra config.
 
@@ -687,12 +771,22 @@ dashboards:
 | `sensor.sem_battery_capacity_drift_pct` | how far that measurement sits from the nameplate |
 | `sensor.sem_forecast_trust_d1` / `_d2` | how accurate tomorrow's and the day after's forecast have proven, 0–100 % |
 
+The measured size counts what your battery power sensor sees. When that sensor
+measures on the AC side, the size can read 5–10 % below the nameplate. That is
+conversion loss, not wear.
+
 **What the budget may be spent on**
 
 Two switches, and they are deliberately separate rather than one setting:
 
-- **Battery may sell to the grid** — export the budget when the price is high.
-- **Battery may charge the car** — use the budget on the EV in the evening.
+- **Battery may sell to the grid** — off: SEM does not sell on a high price
+  or from the forecast budget. *Force Discharge* still sells; it is a manual
+  order.
+- **Battery may charge the car** — off: no charger is offered battery power,
+  and while a car is plugged in the battery is held to the house, even when
+  full and in the sun.
+
+Both switches are tested: `tests/test_docs_contracts_battery.py`.
 
 A single mode could not express *"may sell, may not touch the car"*. Both
 default to your current behaviour, so turning forecast spending on does not
@@ -1061,6 +1155,12 @@ effective_soc = max(sensor, anchor + delivered_since_anchor_kwh × 0.92 ÷ capac
   under the SOC gauge on the EV card (e.g. "Car: 55% (28 min ago) · est. now ~59%") — the gauge
   itself always shows the raw sensor value.
 
+When a vehicle SOC sensor is configured, every numeric change corrects the
+energy-based stopping estimate, including 0.5-percentage-point and smaller
+steps. Between changes, measured charging energy advances the estimate;
+polls that repeat the same SOC do not reset it. A changed reading below the
+target can therefore reopen the remaining need after an estimate-based stop.
+
 #### Charger efficiency
 
 **Options → EV Charger → Charger efficiency (%)**, default **92 %**.
@@ -1200,7 +1300,16 @@ An EWMA predictor (alpha=0.3) learns per-weekday hourly patterns separately:
 Consumption predictions adjust for outdoor temperature using Recurrent Auto fleet data (30,000+ vehicles):
 - Winter (-5°C): +72% consumption
 - Summer (30°C): +9% consumption
-- Requires an outdoor temperature sensor (auto-detected from weather entity)
+- Needs an outdoor temperature (see below)
+
+SEM uses one outdoor temperature for everything: how your car's charging slows
+near full, snow on the panels, and the battery's night records. It finds an
+outdoor thermometer by its name, else it uses your weather entity. If it picked
+the wrong one, choose yours under **Configure → Tariff & Advanced → Outdoor
+temperature**.
+
+SEM also learns how much more your house uses on cold days. It learns from the
+first day, but the plans do not use it yet; this is off by default.
 
 ### Battery Health Tracking
 
@@ -1228,7 +1337,31 @@ SEM supports active control of **multiple EV chargers** (v1.4.0+). Add chargers 
 
 **Night charging** distributes the nightly target equally across connected chargers.
 
-**Per-charger features:** Each charger gets its own session tracking, stall detection, enable/disable delays, and taper detection. The primary charger (first configured) drives the EV Intelligence SOC tracking and charge skip decisions.
+**Per-charger features:** Each charger gets its own session tracking, stall detection, enable/disable delays, and taper detection. Each car's charge level estimate uses its own battery size and target. The primary charger (first configured) drives the charge skip decisions.
+
+### Session history and export
+
+SEM keeps the last 400 finished charging sessions: start, end, charger,
+energy, solar share, cost and duration. The EV tab shows them per charger
+with a month view and totals, and a download button (.xlsx).
+
+For your own log, call the service `solar_energy_management.export_session_history`
+from a script or automation. It returns the rows and the same rows as
+CSV text. Fields: `charger_id` (one charger), `since` (a date, `YYYY-MM-DD`).
+
+A session's energy is the charger's own meter: its session counter, or
+else the rise of its lifetime counter. Only a charger with neither falls
+back to SEM's own measurement of its power. SEM's power flows give the
+split into solar, grid and battery, scaled to that total, and the cost
+follows the split. The CSV column `energy_source` says which was used:
+`charger_meter`, `lifetime_delta` or `sem_estimate`.
+
+Sessions recorded before this version have no charger, cost or source
+stored; they show with those columns empty.
+
+Each session also shows its CO₂: the kg of CO₂ from the grid energy the car
+used. The EV tab shows it per session and in the totals; the CSV has it as
+`co2_kg`.
 
 ---
 
@@ -1236,10 +1369,13 @@ SEM supports active control of **multiple EV chargers** (v1.4.0+). Add chargers 
 
 During night charging, the home battery should only power home consumption — not the EV. SEM enforces this by setting the inverter's discharge limit to match real-time home consumption.
 
-- Updated every 10 seconds to track actual home load
-- 100W hysteresis to avoid frequent changes
-- Full discharge capability restored when night charging ends or EV disconnects
+- Set in 250 W steps, just above the home load
+- It goes up only when the home load stays higher: about a minute for 500 W or more, about five minutes for one 250 W step (at the default 10 s update interval). A short burst, such as a kettle, does not change it, so the inverter is not written every few minutes. Meanwhile the grid covers the rest of the home load
+- It goes down about a minute after the home load drops, so the battery does not feed the car
+- When the meter is over its peak limit, it goes up at once
+- The limit ends when night charging ends, when you unplug the car, or when the car has drawn nothing for 15 minutes. If you turn off **Battery may charge the car**, the limit stays while a car is plugged in
 - Requires a Huawei Solar inverter (or compatible) with a `number` entity for discharge limit control
+- Does your battery's discharge limit also stop it charging? Turn on **Discharge limit also caps charging** (off by default). Then, when the sun covers the house and the car has drawn nothing for 15 minutes, SEM lifts the limit so the sun can charge the battery
 
 ---
 
@@ -1514,6 +1650,15 @@ Everything below is **off by default** and lives on the Config tab under
   on its own; `homeassistant.update_entity` on the mode sensor forces it.
 - **House as a battery sink** — keep the pack through cheap and negative
   hours (let the house import) and spend it on the house in expensive ones.
+  The **peak limit is the hold's floor** (#970, #1003): while the pack is
+  held, the meter may still only buy what the current 15-minute slot has
+  left of its budget, and the pack covers the rest of the house. A house of
+  5 kW under 2 kW of sun with a 2.5 kW limit imports 2.5 kW and draws 0.5 kW
+  from the pack; a slot that already bought more than its share asks the
+  pack for more, one that ran cold for less. With no peak limit configured
+  the hold keeps the whole pack. On a cycle whose house load SEM cannot
+  measure (a dark grid sensor), it does not hold at all — nothing would show
+  the slot is safe — and the pack covers the house as before.
 - **Morning EV window** — before the configured departure, empty the pack
   into the car down to the *Morning drain floor*, only when today's forecast
   refills the pack.
@@ -1523,6 +1668,23 @@ Everything below is **off by default** and lives on the Config tab under
   (**Battery charge pacing**), off by default.
 
 SEM never curtails what the battery, the car and the loads could still take.
+
+**Stop exporting below a price.** Set **Stop exporting below** in the
+Configuration card under **Tariff & pricing**, or in **Configure → Tariff &
+Advanced**. When a sold kWh is worth less than this
+(export price minus feed-in fee), SEM stops exporting: the battery and the
+loads take the sun first. SEM never buys from the grid for it. It needs the
+**Export guard** switch on. Default 0: only a negative price stops export.
+More in [Tariff models](TARIFF_MODELS.md#stop-exporting-below-1090).
+
+While the meter is closed, the sun goes in this order: the battery first,
+then the car, then your other loads by their priority, and only what is
+left is cut at the inverter. A load starts on less spare sun than usual,
+because the usual margin that keeps a little export is dropped. SEM does
+not buy from the grid to start a load, unless you turn on **Start the car
+on negative export, buying the gap** (off by default). Then a car that
+cannot start on the sun alone gets the missing watts from the grid, only
+while exporting that sun costs more than buying the gap.
 
 Proven end to end on real hardware on 17.09.2026: with the price held negative
 and 2 kW of export on the meter, SEM's guard engaged after its delay, wrote the
@@ -1562,9 +1724,14 @@ Set tariff mode to "Dynamic" in the options flow. SEM auto-detects your provider
 | **Tibber** | Nordics, Germany, NL | Auto (`sensor.*electricity_price*`) | 60 min | Static |
 | **Nordpool** | Nordics, Baltics | Auto (`sensor.nordpool*`) | 60 min | Static |
 | **aWATTar** | Austria, Germany | Auto (`sensor.awattar`) | 60 min | Static |
+| **ENTSO-e** | Europe | Auto (by integration; two of its sensors) | 15 or 60 min | Static |
 | **Amber Electric** | Australia | Auto (`sensor.amber_*_general_price`) | 30 min | Dynamic (live feed-in rate) |
 | **Octopus Energy** | UK | Auto (`sensor.octopus_energy_*_current_rate`) | 30 min | Dynamic (export rate sensor) |
 | **Any other** | Any | Manual (select price entity) | Auto-detected | Static or dynamic |
+
+#### ENTSO-e setup (Europe)
+
+SEM finds the [ENTSO-e integration](https://github.com/JaccoR/hass-entso-e) by itself — leave the price entity empty. It takes the price now from *Current electricity market price* and the day's curve from *Average electricity price*, where ENTSO-e keeps it. Set ENTSO-e's energy scale to kWh. ENTSO-e's prices are market prices without tax and fees; [Tariff models](TARIFF_MODELS.md#entso-e-a-market-price-1051) says where to add them.
 
 #### Amber Electric setup (Australia)
 
@@ -1582,17 +1749,39 @@ Any HA integration that exposes a price sensor works with SEM. If the sensor has
 
 ### Calendar tariffs (time-based HT/NT schedule)
 
-Set tariff mode to "Calendar" for custom time-of-use schedules. Define rules like "HT weekdays 07:00-20:00, NT otherwise". Features:
-- Swiss utility presets built in: EKZ, BKW, CKW, ewz
-- Custom weekly schedule via configurable rules
-- HA Schedule helper entity support
-- Holiday entity override (binary_sensor)
+Set tariff mode to "Calendar" for a fixed time-of-use tariff, then pick a HA Schedule helper in **Peak-time schedule** (Settings → Configure → Tariff). The helper's time blocks are the peak (HT) hours at the import rate; all other hours use the night rate. For "HT weekdays 07:00–20:00, NT otherwise", add a 07:00–20:00 block on Monday to Friday. Edit the helper to change the times. A holiday follows the schedule like any other day.
+
+### Taxes, markup and feed-in fee
+
+SEM can add tax and a supplier markup to the price you buy at, and
+take a feed-in fee off the price you sell at. Nothing changes until you set
+one of these fields.
+
+Where: the Configuration card, section **Tariff & pricing**, under **All
+settings**. Or **Configure → Tariff & Advanced**.
+
+| Field | What to enter |
+|---|---|
+| Taxes and fees preset | *None* adds nothing. *Netherlands from 2027* fills energy tax and 21 % VAT, and sets the price to spot. |
+| What your import price includes | *All-in*: your price already has tax and VAT (Tibber, a rate from your bill). SEM adds nothing. *Spot price incl. VAT*: a market price with VAT on it. *Spot price*: a bare market price (Nord Pool, ENTSO-e). |
+| Supplier markup | per bought kWh, without VAT |
+| Energy tax | per bought kWh, without VAT |
+| VAT | in percent |
+| Feed-in fee | *Per kWh*, *Tiers by kWh per year* or *Fixed per month* |
+| Feed-in fee amount / tiers | the fee; tiers as `0:0, 1000:0.02, 3000:0.05` (kWh exported this year : fee per kWh) |
+
+Markup, tax and VAT only work with a spot price. Beside *All-in* they are
+greyed out, and the options flow refuses them.
+
+Once a field is set, six sensors appear: **Self-consumption value**, **Export
+value** and **Feed-in fees**, each for today and this year.
+[Tariff models](TARIFF_MODELS.md#what-a-kwh-is-worth-1077) has the formulas.
 
 ---
 
 ## Solar Forecast
 
-Install [Solcast PV Solar](https://github.com/BJReplay/ha-solcast-solar), [Forecast.Solar](https://www.home-assistant.io/integrations/forecast_solar/) or [Open-Meteo Solar Forecast](https://github.com/rany2/ha-open-meteo-solar-forecast) for forecast-based features:
+Install [Solcast PV Solar](https://github.com/BJReplay/ha-solcast-solar), [Forecast.Solar](https://www.home-assistant.io/integrations/forecast_solar/), [Open-Meteo Solar Forecast](https://github.com/rany2/ha-open-meteo-solar-forecast) or [Helios Forecast](https://github.com/ReikanYsora/Helios-Forecast) for forecast-based features:
 
 - `sensor.sem_forecast_today_kwh` — expected total production today (kWh)
 - `sensor.sem_forecast_tomorrow_kwh` — expected total production tomorrow (kWh)
@@ -1600,6 +1789,224 @@ Install [Solcast PV Solar](https://github.com/BJReplay/ha-solcast-solar), [Forec
 - `sensor.sem_charging_recommendation` — suggested charging strategy
 - Forecast-based night target reduction
 - Smart battery redirect decisions in the flow calculator
+
+### Charge pacing on a real inverter (2.2, #820)
+
+Pacing writes the battery charge-power limit you named. Since 2.2 it writes
+on that entity's step (1400 W, not 1410 W), at most once every five minutes,
+and only for a real change. If your inverter applies its own number instead
+(you asked for 1550 W, it holds 1449 W), SEM accepts that and leaves it alone.
+If the register does not move at all for 90 seconds, SEM says so: the battery
+Diagnose button shows what the register holds and accepts, what SEM sent, and
+any line another integration logged about that entity, such as a template
+number that dropped the write ("set_value: Already running").
+
+When the forecast just fills the battery, pacing keeps its limit. It no
+longer lets the limit go and sets it again. A short gap in the forecast does
+not end pacing.
+
+### Grid CO₂
+
+SEM finds your grid CO₂ sensor by its unit (g or kg CO₂ per kWh). If it found
+the wrong one, pick yours under **Configure → Tariff & Advanced → Grid CO₂
+intensity sensor**. For now, CO₂ avoided still uses a fixed 0.128 kg per kWh;
+the live value is off by default. The sensor *CO2 Avoided Today* shows which
+sensor SEM found.
+
+### PV health
+
+`sensor.sem_pv_health` says whether the plant does what the forecast said.
+One colour, from the last seven days of yield against forecast:
+
+| colour | yield ÷ forecast |
+|---|---|
+| green | 85 % or more |
+| yellow | 65 % to 85 % |
+| orange | 40 % to 65 % |
+| red | under 40 % |
+
+The state is `unknown` until three days are in. Attributes: `ratio_7d`,
+`settled_days`, `downtime_min_today` (minutes the solar input reported
+nothing today), `days_since_full_yield` (last day at 90 % or more), and
+`snow` — on when it is freezing, the forecast says the plant should
+produce, and it has produced almost nothing for two hours. Snow needs an
+outdoor temperature source; without one it stays off. The Energy tab
+shows the row.
+
+---
+
+## Hints
+
+SEM can send a short sentence when something is off. One setting,
+**Hints** (`select.sem_hints`, Configuration tab → Notifications),
+decides which: **Off** (the default) sends none, **Weekly note** sends
+only the Sunday summary, **All hints** sends all five below. Every hint is one message per event, on its
+own phone channel (`sem_hints`) and as the event
+`solar_energy_management_notification` with `category: hint`, so an
+automation can use it without a phone.
+
+| hint | when | example |
+|---|---|---|
+| An input stopped sending | a sensor SEM reads has been silent for 15 minutes; again when it is back | "Solar power stopped sending 17 min ago." |
+| A load ran all night | at SEM's morning, when the night's draw was 1.5× the usual (and over 300 W) | "The house used 620 W all night, usually 210 W." |
+| Grid use rose | at SEM's night start, when today's grid use was 1.5× the usual with the same sun | "Grid use rose to 9.1 kWh (usually 4.2) with the same sun." |
+| Power is cheap, car idle | the price turned cheap while a car is plugged in and not charging (dynamic tariff only) | "Power is cheap now. Garage: plugged in and not charging." |
+| Weekly summary | the first night start on a Sunday | "This week: 142 kWh solar · 71 % self-use · 38 kWh from the grid · 24 kWh into the car · 12.40 CHF." Then "Your solar avoided 18.2 kg of CO₂ this week." when every day of the week has a CO₂ number. |
+
+"Night start" and "morning" are SEM's own night window (sunset and
+sunrise, bounded by the night settings), not fixed hours. The
+comparisons need three past nights or days first.
+
+---
+
+## Simulation tab (#1083)
+
+The Simulation tab asks "what if?" about days you already had. Pick a
+period, change a few battery, solar or price settings, and SEM shows what
+that period would have cost. Every simulated number is an estimate.
+
+### Switch it on
+
+**Configuration tab → All settings → Advanced → Simulation tab**, then
+reload the page.
+The tab is off by default. Turning it on also tags each day and reads the
+last 90 days from Home Assistant's history once, in the background.
+Only a Home Assistant administrator can use the tab: other users see no
+days and no results.
+On a phone the days sit in one row: swipe it sideways.
+
+### Pick a period
+
+A battery carries its charge from one day to the next: a grey day after a
+sunny one starts with what the sunny day stored. So a run is always one
+continuous period, never single days:
+
+- **Last 30 / 90 / 365 days**
+- **Month**: one month from the list
+- **Most recent days**: drag the slider to take the newest days in one move
+
+The line under the picks shows the period and how many recorded days it
+holds. A day with a data gap (⚠️) is left out. The battery bridges a gap of
+up to two days: it keeps its level, moved by what your real battery gained
+or lost on those days. A longer gap starts again from your battery's
+recorded level. At most 365 days per run.
+
+### What if
+
+Each field shows your setting now and the value to try:
+
+- **Battery size** (kWh) — up to 150 kWh, so you can try a car battery as
+  home storage
+- **Battery charge power** and **Battery discharge power** (W) — a bigger
+  battery usually has more power
+- **Battery reserve** (%)
+- **Peak limit** (kW)
+- **Solar (PV)** — extra kWp on top of your system size, or a factor when
+  SEM does not know the size. Each recorded solar hour grows by that much;
+  with an inverter AC limit set, an hour never goes above it
+- **Import price** and **Export value** — as recorded, or one flat price
+- **Battery mode** and **Car charge mode**
+- **Battery may help the car** — No means the car never takes energy from
+  the battery
+
+**Scenarios** fill the fields in one tap: **+1 battery** (twice the size
+and power), **More solar** (asks how many kWp), **Cars on Solar + cheap**,
+**No battery for the car**. You can still change any field afterwards.
+
+### Run and stop
+
+**Run simulation** starts it. It runs on your Home Assistant, one day at a
+time, and shows how far it is. **Stop** ends it; the days done so far are
+kept. One run at a time.
+
+### Read the results
+
+- **Net incl. stored energy** is the headline: the difference with the
+  energy the simulated battery still holds counted. A bigger battery that
+  ends the period fuller has not lost that energy.
+- Each day shows the actual cost, the simulated cost and the difference.
+  Green is cheaper, orange is dearer. A sunny day can be dearer with a
+  bigger battery: it stores sun it would have sold, and the grey days after
+  it spend that energy.
+- Tap a day to open it: grid import and export, battery charge and
+  discharge, the battery at the day's end (actual → simulated), the
+  difference with what the battery gained that day, and why the day came
+  out as it did (for example "charge from grid 8.0 kWh at 0.20").
+- The day-type tiles (sunny, mixed, grey, car, cheap) are filters: tap one
+  to see only those days and their totals; tap **All days** to go back.
+  They never change what was simulated.
+- **Per month**: the difference per month, and the months where the what-if
+  comes out cheaper.
+- **Energy**: grid import, grid export, self-consumption and battery
+  cycles, actual → simulated.
+- **Extra energy left in the battery at stretch ends, summed**: what the
+  simulated battery held more (or less) than your real one at the end of
+  each stretch, added up. With several stretches it can be more than the
+  battery itself.
+- **est.** means estimated. The simulation runs SEM's real battery
+  decisions hour by hour, but the flows after a changed decision come
+  from the energy balance, not a meter.
+- **Indicative** days had a missing hour, price or battery level, or a
+  counter that jumped. Read them as a rough guide.
+- Before showing a what-if, SEM replays the same period with your own
+  settings. If that misses your real cost by more than 5 %, the tab says
+  the period cannot be simulated reliably instead.
+  This check leaves out days where a counter jumped, and says how many
+  days it used. Days when a car charged get their own line: how far off
+  your settings are on those days.
+- If the what-if gives the car less energy than it really got, the net
+  total counts that energy at the import price: it was not a saving.
+- With a flat **Import price** or **Export value**, the actual cost is
+  re-priced at that price and marked with *.
+
+How the night charge is replayed: SEM's real scheduler plans each night
+from that day's forecast (a day without a stored forecast uses its own
+solar instead), never charges more than the day needs, charges at a
+negative price only in the hours that are negative, and stops by the end
+of the night (sunrise, at the latest 07:00).
+
+### Download
+
+**Download** saves the results as an Excel file (.xlsx): one row per day
+with grid and battery energy, the battery at the day's end and a short
+note; the difference per month; totals per day type with energy actual
+against simulated; and notes. The EV tab's session download is an .xlsx
+file too.
+
+Limits: [Known Limitations → Simulation tab](KNOWN_LIMITATIONS.md#simulation-tab-estimates-from-hourly-averages-1083).
+
+---
+
+## Why did SEM do that?
+
+Open **Settings → Logbook**. SEM writes one line each time it changes what it
+tells a device to do: a charger, a battery or a load. The line shows the old
+command, the new one and the reason:
+
+    <device>: <old command> → <new command> — <reason>
+
+A command reads like `charge 8 A`, `off` or `limit_discharge 1500 W`. The
+reason is a short sentence in your Home Assistant language, for example
+*A car is plugged in. The battery is below the 80% tonight needs, so it
+powers only the house.*
+
+- A line appears only on a change: a start, a stop, a new mode, a charger
+  step of 1 A or more, a battery limit that moved by 250 W or more, a load
+  setpoint that moved by 500 W or more. The same command sent again writes
+  nothing.
+- With **Observer Mode** on, SEM sends nothing, and the line ends in
+  *(observer: not sent)*. It still shows what SEM would have done.
+- The diagnostics download (**Settings → Devices & Services → Solar Energy
+  Management → ⋮ → Download diagnostics**) keeps the last 200 lines under
+  `decision_log`.
+- The newest line per device is also an attribute:
+  `per_charger_last_decision` and `per_charger_strategy` on
+  `sensor.sem_charging_state`, `per_battery_last_decision` on
+  `sensor.sem_battery_status`, `per_device_last_decision` on
+  `sensor.sem_load_management_status`.
+
+The log starts empty after a restart. The diagnostics keep SEM's own
+reason text (in English) and its code beside each sentence.
 
 ---
 
@@ -1617,7 +2024,7 @@ SEM skips:
 - Battery discharge limit changes
 - Device shedding commands
 
-Enable via **Settings** > **Devices & Services** > **Solar Energy Management** > **Configure** > **Observer Mode**, or via `switch.sem_observer_mode`.
+Turn it on or off on the dashboard **Configuration** tab (`switch.sem_observer_mode`). The **Configure** button no longer asks for it.
 
 ---
 
@@ -1753,6 +2160,7 @@ big estimate is never treated as a measurement.
 - `sensor.sem_pv_performance_vs_forecast` — actual yield vs Solcast/Forecast.Solar prediction
 - `sensor.sem_pv_daily_specific_yield` — kWh per kWp installed
 - `sensor.sem_pv_estimated_annual_degradation` — long-term PV health
+- `sensor.sem_pv_health` — green / yellow / orange / red from seven days of yield against forecast (see [PV health](#pv-health))
 
 ### Charging Sensors
 - `sensor.sem_charging_state` — current charging state
@@ -1816,7 +2224,7 @@ Not all EV chargers support full SEM control. Here are the key differences:
 | Charger | Status | Notes |
 |---------|--------|-------|
 | **Tesla Wall Connector** | Monitoring-only | No power sensor or current control available in HA. SEM can read voltage/current but cannot control charging. |
-| **Myenergi Zappi** | Monitoring-only | Manages solar surplus internally via built-in diversion logic. SEM can monitor but cannot control current — the Zappi handles surplus charging on its own. |
+| **Myenergi Zappi** | Start and stop (2.2) | SEM starts and stops it through its charge-mode select. SEM cannot set the current; the Zappi handles surplus on its own. |
 | **KSTAR** | Supported via ha-solarman | No dedicated HA integration. Use [ha-solarman](https://github.com/davidrapan/ha-solarman) with KSTAR YAML profiles. |
 | **Easee** | Fully supported | Easee's power sensor is disabled by default in HA. Enable it in **Settings > Devices > Easee** before configuring SEM. |
 | **NRGkick** (2.1) | Found on its own | Current, on/off and the phase count are taken from the core integration's own keys. |

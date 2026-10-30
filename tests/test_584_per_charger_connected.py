@@ -248,6 +248,14 @@ class TestNotificationGate:
         notified = await self._run({}, fleet_connected=True)
         assert set(notified) == {"left", "right"}
 
+    async def test_a_start_offer_to_a_sensorless_charger_notifies_nothing(self):
+        """(#1153) A charger with no plug sensor is now offered current
+        while its car is unknown. "Charging started" waits for a draw: the
+        gate reads the confirmed plug answer, which only the physics
+        defence (a draw over 500 W) turns on for such a charger."""
+        notified = await self._run({}, fleet_connected=False)
+        assert notified == []
+
     async def test_all_disconnected_notifies_none(self):
         notified = await self._run({"left": False, "right": False})
         assert notified == []

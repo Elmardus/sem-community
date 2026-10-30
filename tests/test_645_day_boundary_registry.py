@@ -87,6 +87,11 @@ DECLARED_AUTHORITIES = {
     ("coordinator/coordinator.py", "_tracker_date init"):
         ("calendar", "n/a — the hour arrays it guards start empty anyway; "
                      "the decay that USED to ride on it moved out in #645"),
+    ("coordinator/coordinator.py", "per-charger calendar day (#1146)"):
+        ("calendar", "yes — each charger's slot date is saved with the "
+                     "per-charger buckets; a restart across midnight finds "
+                     "yesterday's date and rolls on the first cycle, so "
+                     "yesterday's kWh are not carried into today"),
     ("coordinator/coordinator.py", "tariff diagnostics"):
         ("calendar", "n/a — filters today's price points for a diagnostic "
                      "count, recomputed every cycle"),

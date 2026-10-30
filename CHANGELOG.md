@@ -13,6 +13,344 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+# [2.2.0] — 30.10.2026
+
+## 📦 Stable Release
+
+_Changes since [2.1.0](https://github.com/traktore-org/sem-community/releases/tag/v2.1.0)_
+
+The second stable release of the 2.x line. Needs Home Assistant 2026.2.0 or newer, and works on 2026.11, where HACS becomes Settings → Marketplace.
+
+### 🚀 Features and enhancements
+
+- **Try a what-if on your own days** — another battery, more solar, a different price, replayed against real recorded history (Simulation tab).
+- **Every change SEM makes says why** — the Why? card and the logbook give each one a plain sentence, in your language.
+- **Settings and the EV tab show only what you need** — Everyday groups the common controls; All settings holds the rest.
+- **Setup shows what SEM found as live watts**, and asks one question when it is unsure of your grid meter (#1213).
+- **SEM finds your outdoor temperature and grid CO₂ sensor on their own** — car charging, battery nights and CO₂ avoided all use them.
+- **A phase or grid-operator limit sheds ordinary loads too**, not only chargers.
+- **More hardware found on its own**: go-eCharger, ENTSO-e prices, Helios Forecast, NRGkick and OpenEVSE chargers.
+- **A heat pump or load can carry its own tariff and meter**, so its cheap hours follow its own price.
+- **The Home diagram shows the car's charge level**, and can hide it when two cars share one charger (by @OddmarDam in #1212, #1220).
+- **Dutch translations updated** (by @RienduPre in #1052, #1056).
+
+New features are off until you switch them on, except one: if you had already turned on the phase guard, it now sheds ordinary loads too, not only chargers.
+
+### 🐛 Bugfixes
+
+Fixed since 2.1: grid and battery sign errors on homes with a split meter or a second battery, CO₂ and self-consumption undercounting a battery sale, and a counter step that could grow a month or year total past its real limit. Each beta below lists them one by one.
+
+New since the last beta:
+
+- 🐛 **Cards now show "—", not 0, for a sensor that is out** (#1200). EV power, battery health, costs and peak no longer look like real zeros.
+- 🐛 **Battery, grid and solar on/off sensors no longer say Off while their power sensor is out** (#1201). They show unknown after 3 minutes.
+- 🐛 **A power sensor showing text such as "none" or "nan" now reads as out, not 0 W** (#1202). SEM no longer acts on it.
+- 🐛 **A learned battery sign now stays with its battery when one is removed or replaced** (#1205). Before, the next battery could read discharge as charge.
+- 🐛 **The learned battery sign no longer flips when you go back a version and forward again** (#1208). Homes without an Energy Dashboard keep it too.
+- 🐛 **"Reset sign detection" now stays reset when a "Fix sign" flip was on** (#1209). A reload no longer reads old saved data back.
+- 🐛 **SEM no longer flips the sign of a grid meter with two sensors (import and export)** (#1215). Before, export could read as import.
+- 🐛 **The Simulation tab and cost estimates no longer count a battery sale as solar sent out** (#1216). Before, self-consumption and solar savings read too low.
+- 🐛 **An emptied charger service now stays empty after Save** (#1214). A charger moved to another integration no longer gets a "device is gone" Repair.
+- 🐛 **SEM now checks each battery's sign on a home that added a second battery** (#1210). Before, a wrong sign there was never flagged.
+- 🐛 **A battery setting saved in the Config tab or Configure dialog stays with its battery when batteries change** (#1204). Before, it could move to another.
+- 🐛 **A solar string, inverter, battery or grid sensor that drops out briefly no longer counts as 0 W** (#1203, #1186). SEM keeps its last reading.
+- 🐛 **Setup's "Use the other meter" answer now names that meter and its watts** (#1213). Before, it named neither when SEM had not guessed.
+
+## 🙏 Thanks to our sponsors and contributors
+
+Sponsors: @RienduPre, @fjbruwer, @Dioko1981, @coppe218, and one private sponsor. Your support pays for the real hardware SEM is tested on.
+
+Contributors: @OddmarDam, @RienduPre — and everyone who tested the betas and reported what broke.
+
+# [2.2.0-beta.29] — 28.10.2026
+
+- 🐛 **A battery counter step above the daily limit no longer makes the month, year and lifetime totals grow** (#1218). Before, they grew on every cycle.
+- 🐛 **The Energy Impact card now shows the same CO2 as its sensor** (#1221). Before, it left out solar that went into the battery.
+- 🐛 **A P1 Monitor meter or a Tibber Pulse now shows grid power in any language** (#1222). Before, it could read 0 W.
+- 🐛 **A DSMR Reader meter now shows grid power** (#1223). Before, it read 0 W when the Energy Dashboard grid entry had no power sensor.
+- 🔧 **Settings no longer asks for the grid sensors or observer mode a second time** (#1213). Setup and the config card keep them.
+- ✨ **New switch: Start the car on negative export, buying the gap** (#1080). Off by default. It buys the watts the sun lacks.
+- ✨ **SEM can yield a charger or the battery to another party that steers it** (#1079). Off by default; set it under Steered by another party.
+- 🐛 **EV stop estimates now follow a car sensor that moves in half-point steps** (#1229). Before, the estimate drifted above the car's reading.
+- 🐛 **A heat pump set by service now shows the state SEM sent** (#1231). Before, a renewal could cancel a boost.
+- 🐛 **The plan now runs on a home with no battery** (#1207). Before, it waited for a battery sensor that is not there.
+- 🐛 **Solar made while Home Assistant was down now counts after a restart after dark** (#1187). Before, that solar was lost.
+- ✨ **New switch: Discharge limit also caps charging** (#1078). Off by default. On, a parked car no longer blocks solar charging of that battery.
+- ✨ **The Home diagram can hide the car's charge level** (#1219). Set `show_ev_soc: false` when two cars share one charger.
+- ✨ **Hot water settings are easier to read** (#1145). "Bank by" is now "Extra from surplus", with an example and the entity in use.
+- 🧹 **The options audit counts real duplicates only** (#1213). Heat pump pages, and a shared entity plus its per-battery override, are no longer counted twice.
+- 🐛 **One click on a grid meter in Detected hardware now saves both its import and export sensors** (#1224). Before, export could read 0 W.
+- 🐛 **A SlimmeLezer P1 reader now shows grid power** (#1225). Before, it read 0 W. SEM also no longer takes one phase for the whole meter.
+- 🐛 **SEM now finds the power sensor of a second inverter or battery, or a Repair says it found none** (#1226). Before, it read 0 W.
+- 🐛 **Two grid Repairs and other texts are now in your language** (#1227). Before, they were partly English in 14 languages.
+- ✨ **Setup shows what SEM found as live watts, and asks one question when it is unsure of your grid meter** (#1213).
+- 🔧 **SEM no longer guesses a battery or solar sensor when several fit** (#1213). One battery module or one phase is not the whole battery.
+- 🐛 **A device on its own tariff and meter keeps the kWh it used while Home Assistant was down** (#1228). Before, the house price took them.
+- 🐛 **A Repair now tells you when SEM finds no grid, solar or battery power sensor** (#1188). Before, that power read 0 W without notice.
+- 🐛 **A DSMR smart meter on a Dutch or German Home Assistant now shows grid power** (#1189). Before, grid power read 0 W.
+- 🐛 **The Energy tab Sankey shows a Battery → Grid line when the battery sells** (#1190). Build the dashboard again to see it.
+
+# [2.2.0-beta.28] — 26.10.2026
+
+- 🐛 **Self-consumption no longer drops to 0 % when the battery sells to the grid** (#1191). The sale no longer counts as solar export.
+- ✨ **The Home diagram shows the car's charge level at the EV node** (#1211). With one charger only; an estimate has a "~".
+- 🐛 **A battery marked "Inverted" in the Energy Dashboard now shows charging the right way from the start** (#1194). One that already reads right stays right.
+- 🐛 **Each battery keeps its own settings when you add or remove a battery** (#1195). A new battery no longer takes another battery's entities.
+- 🐛 **Each battery's charge direction is learned from its own energy counters** (#1193). A second battery could show charging as discharging.
+- 🐛 **A "Fix grid sign" tap with no grid meter no longer flips a meter found later** (#1192). Without an Energy Dashboard, the tap works again.
+
+# [2.2.0-beta.27] — 25.10.2026
+
+- 🐛 **The battery is no longer held back for a plugged-in car that is not charging** (#1199). It ends 15 minutes after the last draw.
+- 🐛 **Batteries with two power sensors now get their own Mode and reserve controls** (#1171). Each one starts on the shared setting you had.
+- 🐛 **A battery whose power sensor is out no longer shows 0 W** (#1170). It shows its last value for a short time, then unavailable.
+- 🐛 **Tab header figures show "—", not 0, when their sensor is out** (#1198). The Config tab no longer shows your heat pump as Off.
+- 🐛 **Battery and grid status no longer say Idle while their power sensor is out** (#1197). The Battery card and the Home diagram keep updating.
+- 🐛 **A solar string whose sensor is out no longer shows 0 W** (#1196). The cards show "—" for it and keep the other strings.
+
+# [2.2.0-beta.26] — 25.10.2026
+
+- 🐛 **A stopped KEBA no longer starts charging again by itself** (#1163). SEM resends the stop setting when the wallbox missed it.
+- 🐛 **Daily home energy no longer goes down during the day** (#1177). When the inverter's reading drops out for a moment, SEM counts its last value.
+- 🐛 **Two batteries on one discharge limit no longer undo each other's limit** (#1178). The lowest limit holds, unless a battery sells.
+- 🐛 **The battery discharge limit no longer moves with every short burst of home load** (#1173). It goes up only when the load stays higher.
+- 🐛 **Force charge ends on a battery set to stop below 90 %** (#1166). Pick its end-of-charge level in Settings. SEM only reads it.
+- 🐛 **A grid charge puts the battery's charge limit back when it stops** (#1180). A night charge to 60 % no longer leaves it at 60 %.
+- 🐛 **The Sankey shows Grid lines with a HomeWizard P1 meter** (#1172). SEM now finds the meter's power sensor in every language.
+
+# [2.2.0-beta.25] — 23.10.2026
+
+- 🐛 **Selling from the battery lifts the discharge limit set before** (#1175). A 0 W limit for the car or cheap hours no longer stops it.
+- 🐛 **Car energy across midnight or Charge-by is counted once** (#1161). The charger's counter sets the total over the days.
+- 🐛 **Daily car energy tells Home Assistant it resets at Charge-by, not midnight** (#1176). The Simulation tab reads each charger's daily energy.
+- 🐛 **Force charge goes back to Auto when the battery is full** (#1131). Force discharge does the same at the reserve.
+- 🐛 **Force charge also ends on a battery that stops below 100 %** (#1164). At 90 % or more, 15 minutes without taking charge means full.
+- 🐛 **Force charge ends on each battery by itself** (#1167). An unavailable power sensor on one battery no longer keeps the other charging from the grid.
+- 🐛 **Plans value exported solar at your live feed-in price** (#1162). Each hour uses its own forecast price, not the fixed rate.
+- 🐛 **Charge pacing keeps one limit when the forecast sits right at what the battery needs** (#820). It no longer jumps to full power and back.
+- ✨ **Energy tax, VAT and a feed-in fee can be set; SEM then decides on what a kWh is worth** (#1077). Preset for the Netherlands 2027.
+- ✨ **SEM stops exporting when a sold kWh is worth too little** (#1090). The battery and loads take the sun; nothing is bought.
+- ✨ **The logbook says why SEM changed a device** (#1084). Each start, stop or step names its reason; diagnostics keeps the last 200.
+- ✨ **A Why? card on the Control tab lists each change SEM made** (#1084). Reason, the numbers behind it, a filter per device.
+- ✨ **The Why? card and the logbook give each reason as a short sentence** (#1174). It is in your language. The numbers stay below it.
+- ✨ **A heat pump or load can have its own tariff and meter** (#812). Its cheap hours follow that price; a sensor shows its cost.
+
+# [2.2.0-beta.24] — 21.10.2026
+
+- 🐛 **Charge pacing no longer drops the limit and sets it again when the forecast just fills the battery** (#820). A short forecast gap is bridged.
+- ✨ **Simulation check skips days where a counter jumped, and says how many days it used** (#1083). Car days show their own error line.
+- ✨ **Simulation total counts car energy the what-if did not deliver; re-priced actuals are marked** (#1083).
+- ✨ **The EV tab opens in Everyday view**: per charger, mode, target and Charge by; pause, departures, plan and sessions fold under More and Details.
+- ✨ **The Configuration tab opens on Everyday: only what SEM needs, in three groups** (#830). All settings shows the rest, one tap away.
+- ✨ **The EV charger page in Configure says a charger is optional** (#1103). No EV charger? Keep the first option and submit.
+- 🐛 **A shared car energy counter that jumps while every charger reads 0 W no longer counts as charging** (#1157). This includes the Energy Dashboard counter.
+- 🐛 **A car charge that the charger reports late is booked once** (#1159). It no longer counts on two days or takes from the next charge.
+- 🐛 **A car charge the charger reports partly after midnight is counted once** (#1160). This is for homes where not every charger has its own counter.
+
+# [2.2.0-beta.23] — 20.10.2026
+
+- 🐛 **A charger counter that jumps at plug-in after a quiet day no longer counts as charging** (#1101). Earlier restarts let the jump through.
+
+# [2.2.0-beta.22] — 18.10.2026
+
+- 🐛 **Charge pacing keeps its 10 % headroom on every re-plan** (#820). The pack is now planned full before the last sunny hour.
+- 🐛 **Battery session average power no longer spikes to megawatts when a session starts** (#1155). It now reads the real power from the first update.
+- ✨ **Simulation tab: replay your recorded days with another battery, reserve, peak limit or price** (#1083). Estimated cost per day type. Off by default.
+- 🔧 **You now download Simulation results and EV sessions as Excel files (.xlsx)** (#1083). A CSV did not open right in every country.
+- 🔧 **SEM can tag each finished day: sunny, grey, car, cheap prices or a data gap** (#1083). Off by default; diagnostics show the last seven.
+- ✨ **Simulation: swipe the days on a phone, pick the newest with a slider, try batteries up to 150 kWh** (#1083). A car pack fits.
+- 🐛 **The SEM dashboard is built from the SEM entry that runs** (#1083). An ignored or disabled second entry could hide the Simulation tab.
+- 🐛 **Simulation: a counter jump on a day with a missing hour no longer buys energy from the grid** (#1083). One day showed +26.
+- 🐛 **Simulation: a bigger battery no longer buys a bigger night charge** (#1083). A negative price charges only in its own hours.
+- ✨ **Simulation runs one period: last 30/90/365 days, a month or the newest days** (#1083). The battery carries its charge; short gaps are bridged.
+- ✨ **Simulation results: net incl. stored energy, per month, energy totals; tap a day for why it differs** (#1083). Day types filter the result.
+- ✨ **Simulation: try battery power, more solar, no battery for the car, or a one-tap scenario** (#1083). The Excel file has the per-day energy.
+
+# [2.2.0-beta.21] — 17.10.2026
+
+- 🐛 **A charger SEM cannot drive no longer shows as "no role matched"** (#1137). The card says what it found, without a report button.
+- 🐛 **Zaptec set up in the wizard: "charger online" is no longer read as "car charging"** (#1143). SEM reads Charger mode instead.
+- 🐛 **A charger that read no car gets a plug sensor only when its controls match what detection finds** (#1151). Otherwise the startup check decides first.
+- 🐛 **A second charger no longer uses the first charger's current control or power sensor** (#1149). SEM set the first charger's current for the second.
+- 🐛 **A start/stop-only charger no longer logs an error at every start** (#1148). Load management no longer keeps its old current control.
+- 🐛 **A charger's daily energy now resets at midnight, like the fleet total** (#1146). It reset at Charge-by time and then read 0.
+- 🐛 **Removing the first charger no longer leaves its sensor and controls to the next one** (#1154). The next charger set the removed one's current.
+- 🐛 **A saved charger forgets a sensor or switch detection no longer finds** (#1147). Only when SEM reloads, not while Home Assistant starts.
+- 🐛 **A charger given a plug sensor on 2.2.0-beta.20 has its switch checked once** (#1152). Your own charger setups stay as they are.
+- 🐛 **A charger with no plug sensor is started again after it stops charging** (#1153). SEM had switched it off for good.
+- 🐛 **With several chargers, one without its own car sensor no longer counts as charging when another charges** (#1150). It now goes by its own power.
+
+# [2.2.0-beta.20] — 16.10.2026
+
+- 🐛 **Zaptec: setup no longer offers the site's "Available current" as charger control** (#1141). Set up in a 2.2 beta? Check your charger's current control.
+- 🐛 **Zaptec: SEM no longer reads "charger online" as "car charging"** (#1142). Setup now reads Charger mode; Zaptecs SEM saved itself are fixed at startup.
+- 🐛 **A discharge limit the battery did not keep is sent again once** (#1138). The old limit stayed until the new one differed by 100 W.
+- 🐛 **The "or:" label on the Configuration tab is now translated** (#1129). It was still English in 13 languages.
+- 🐛 **Repairs of a removed charger now clear when SEM starts** (#1139). They stayed forever.
+- 🐛 **Chargers SEM saved by itself now get the right power and switch** (#1134). Saves you edited stay as they are.
+- 🐛 **A Repair now clears once its sensor, battery or device leaves your settings** (#1140). Example: the old grid sensor, after you pick a new one.
+- 🐛 **Zaptec: SEM no longer writes your site's "Available current", even from an older setup** (#1144). It uses the charger's own limit or its buttons.
+
+# [2.2.0-beta.19] — 15.10.2026
+
+- 🐛 **No Repair for a charger switch that is unavailable while no car is plugged in** (#1032). Zaptec does this. With a car, it still reports.
+- ✨ **SEM finds your grid CO₂ sensor by its unit** (#1088). CO₂ avoided can use its live value, not a fixed average. Off by default.
+- ✨ **One outdoor temperature for all of SEM** (#1082). Found by its name or your weather entity; car taper, snow and battery nights use it.
+- ✨ **The home forecast learns how cold days raise your load** (#1082). The plans use it only when switched on. Off by default.
+- ✨ **Each car session shows its CO₂** (#1088), in the session list and the CSV. The weekly summary adds what your solar avoided.
+- 🐛 **Each away car's charge estimate drops by its own daily use** (#1132). Before, two cars both dropped by the sum of both.
+- 🐛 **A late-found charger is set up like one found at setup** (#1136). SEM saves it and reloads. Load management and its energy counter count it.
+- 🐛 **Adding SEM a second time now says it is already set up** (#1133). Setup showed an unknown error and logged a crash instead.
+- 🐛 **With two chargers, only cars whose mode allows it charge from the home battery** (#1130). A "Solar only" car no longer does.
+- 🐛 **A "Solar only" car no longer draws the home battery when forecast spending is on** (#1115). That switch only decides selling to the grid.
+- 🐛 **A "Solar + battery" load ranked above the battery now gets battery help while the battery charges** (#1114). Chargers already did.
+- 🐛 **A "Solar only" load now stops when only the home battery keeps it running** (#1112). It never runs on the battery.
+- 🐛 **A charger found after start-up no longer counts its car as house load** (#1125). SEM now reads that charger's power sensor.
+- 🐛 **SEM now sees a Peblar's car plugged in** (#1126). Its state sensor was skipped; a Peblar setup saved earlier gets it at startup.
+- 🐛 **With two chargers, each car's charge level estimate uses its own battery size** (#1127). The second car used the first car's size and target.
+- 🐛 **The load list keeps minimum run and pause inside the allowed range** (#1128). Clicking a solar string now opens its details.
+- 🐛 **The Configuration tab and setup screens are now in your language** (#1129). About 7,300 texts in 15 languages were still English.
+- 🐛 **A Legionella run no longer stops on the first cloud** (#1121). The tank heats on to its target, sun or not.
+- 🐛 **Boiler and heat pump read °F tank sensors right** (#1118). 120 °F was read as 120 °C, so a boiler never started on sun.
+- 🐛 **A boiler or heat pump set to Off or Peak-only stays so after a restart** (#1119). Before, it ran on sun again.
+- 🐛 **A heat pump keeps its minimum run when cheap hours end** (#1135) — thanks @HorizonKane. Set run and pause times on its load row.
+- 🐛 **A charger counter that jumps when a session starts is no longer counted as charging** (#1101) — thanks @RienduPre. SEM had seen the box idle.
+- 🐛 **A charger is stored as its device; SEM reads its roles from it** (#1054) — thanks @weindler. Removed stays removed; the card shows what you set.
+- 🐛 **A second battery that ignores SEM's commands now gets a warning too** (#1124) — thanks @RienduPre. Before, only the first battery got one.
+- 🐛 **A Deye goes back to its own work mode when SEM lifts the export cut** (#1117). It stayed at Zero Export To Load.
+- 🐛 **The battery no longer feeds the car when a reading drops out while it is saved for later** (#1120). It covers only the house then.
+- 🐛 **Changing the import rate no longer saves the old rate as off-peak** (#1122). An off-peak rate you never entered follows the import rate.
+
+# [2.2.0-beta.18] — 14.10.2026
+
+- 🐛 **A sunny morning no longer makes the day plan expect too much sun** (#1104). The live correction never raises it above what history learned.
+- 🐛 **Home power no longer jumps when the battery stops before its sensor says so** (#1105). The shown value holds until the battery reports again.
+- 🐛 **The monthly peak no longer reads 0 kW right after a restart** (#1106). Load management starts before the first update.
+- 🐛 **Unplugging your car no longer raises a false "charger control not working" Repair** (#1032) — thanks @OddmarDam. A Wattpilot start button no longer raises it either.
+- 🐛 **SEM runs chargers it finds with only a charge-mode or start/stop control** (#1095). myenergi, Ohme and Zaptec without current rights were found, then dropped.
+- 🐛 **SEM finds a charging current named plainly "charging_current"** (#1096). Only on a charger; on an inverter that name is the battery limit.
+- 🐛 **A charger whose service needs the device id now gets it** (#1097). Before, SEM called the service without saying which charger.
+- 🐛 **SEM no longer guesses its own sensor as your grid meter** (#1103) — thanks @LightBridge16. The Grid power pick now works with an Energy Dashboard.
+- 🐛 **A "Solar only" load now stops when your house buys from the grid** (#1102) — thanks @lostcontrol. Before, SEM did not count the grid import.
+
+# [2.2.0-beta.17] — 13.10.2026
+
+- 🐛 **A smart plug is no longer taken for your EV charger** (#1051) — thanks @rdehuyss. Only a charger integration makes an Energy Dashboard device the EV.
+- 🐛 **A tip no longer writes an Activity row every cycle** (#1051). Its words hold until it rotates; more export than solar gives no tip.
+- 🐛 **Belgian price sensors are read at the all-in price** (#1051). Their slots also list energy, network and taxes parts.
+
+# [2.2.0-beta.16] — 11.10.2026
+
+- 🔧 **Your diagnostics now show what SEM read from each charger: units, short states and services** (#1092). Your charger's own name is replaced by box_1.
+- 🐛 **A half-filled charger card can no longer hide or replace your working charger** (#1054) — thanks @weindler. Creating the charger again replaces the old card.
+- ✨ **The day plan follows the sky** (#1068). From midday, the rest of today's solar is scaled by what was really made. Off by default.
+- ✨ **Grid operator relay** (#1021). While it is on, SEM keeps grid draw under the operator's limit and skips the devices it switches off.
+- 🐛 **Each battery gets its own discharge limit field** (#1089) — thanks @RienduPre. With two Sessys, SEM limited only the first.
+
+# [2.2.0-beta.15] — 10.10.2026
+
+- 🐛 **The plan card shows no battery on homes without one, now also when the battery is unread** (#1063) — thanks @lostcontrol.
+- 🐛 **A removed charger stays removed; a created one is not created twice** (#1054) — thanks @weindler. kW sensors show in the power pickers.
+- 🐛 **Tests no longer fail when they run near 06:00 Pacific time** (#1076). Every test that starts Home Assistant now begins at noon.
+
+# [2.2.0-beta.14] — 09.10.2026
+
+- 🐛 **A home with no charger can open Configure** (#990) — thanks @damiano75. It starts at the charger list, so heat pumps and later pages work.
+- 🐛 **The battery mode and reserve you see are what SEM uses** (#1071). One mode control sets every battery. A reserve you never set is 20 %.
+- 🐛 **The battery and the monthly peak now keep to your grid limit** (#1069). Grid charging takes the room left; the peak follows 15-minute slots.
+- 🐛 **A load's power is what it draws while running, not its start-up peak** (#1067) — thanks @lostcontrol. A 200 W dehumidifier read 1.4 kW.
+- 🐛 **Car energy matches the charger's own meter once charging stops** (#1049) — thanks @RienduPre. A high power reading no longer makes home use too low.
+- 🐛 **The Control tab shows a grid limit you change on the Configuration tab** (#1055) — thanks @lostcontrol. No page reload needed; saving no longer restarts SEM.
+- 🐛 **A sleeping inverter no longer shows solar all night** (#1065) — thanks @RienduPre. Its last value from dusk now reads 0 W.
+- 🐛 **With night charging on, a car no longer empties a battery SEM can limit** (#1066) — thanks @RienduPre. A Sessy has no limit; Diagnose says so.
+
+# [2.2.0-beta.13] — 07.10.2026
+
+- 🐛 **Charger names and the setup menus follow your language** (#1053). An unnamed charger reads "EV-lader Vermogen" in Dutch; your own names stay.
+
+- ✨ **A departure per weekday, one charging block, a top-up before leaving** (#1023). Set on the EV card; all off by default.
+- ✨ **Battery boost: the house battery charges the car, this charge only** (#1025). Down to a floor you pick; unplugging or a restart ends it.
+- ✨ **A Schedule helper can set a device's mode** (#1020). For example the heat rod off 07:00–13:00, or solar-only charging at weekends.
+- ✨ **SEM finds a go-eCharger on the go-eCharger (HTTP) integration** (#1054): power, plug, start and stop, and the current through its own service.
+
+- ✨ **ENTSO-e prices are found on their own** (#1051, by @rdehuyss).
+- ✨ **Helios Forecast is a solar forecast source** (#1050, by @xg5x48kmfc-blip).
+
+- ✨ **A phase over its limit sheds loads, not only chargers** (#1048) — thanks @RienduPre. Give each load its phase, and that phase's loads go first.
+
+- 🐛 **Calendar tariff: the off-peak rate shows, and the schedule saves with Apply** (#1040). An unsaved off-peak rate now equals the import rate.
+
+- 🐛 **Hot water: two settings that did nothing are gone** (#1062). Max and Minimum temperature are removed. A switch boiler now stops at its solar target.
+
+- 🌍 **Dutch: 15 more dashboard texts** — thanks @RienduPre. (#1056)
+
+# [2.2.0-beta.12] — 06.10.2026
+
+- 🐛 **Heat pump and hot water names follow your language** (#1053). A Dutch home now reads "Warmtepomp", not "Heat Pump". A name you set stays.
+
+- 🐛 **The Control tab shows your saved grid limit** (#1055). With load management off it always showed 5 kW, even when set to no limit.
+- 🐛 **Charts draw again when you come back to a tab** (#1058). They were empty until you reloaded the page.
+- 🐛 **The battery card no longer says "refused" when the charge limit is right** (#820). One lost write kept that message for hours.
+- 🐛 **The Energy Plan card shows no battery on homes without one** (#1063). Sunny hours now look like sun, on every home.
+
+# [2.2.0-beta.11] — 05.10.2026
+
+- 🌍 **Dutch: 90 dashboard texts reworded or newly translated** — thanks @RienduPre. (#1052)
+
+- 🐛 **The car's daily solar share matches its sessions** (#1046). It read 49 % on an 89 % solar day. The battery's share read low too.
+- 🐛 **Dashboard words are translated** (#1053). Cards showed raw words like "manual" or "custom", and charger ids instead of names.
+
+# [2.2.0-beta.10] — 04.10.2026
+
+- 🐛 **Home power no longer jumps when a battery, grid or solar reading drops out** (#1047). SEM showed the full solar output as house load.
+- 🐛 **Lifetime totals count every tariff and inverter** (#1043). SEM read only the first counter, so lifetime CO2 showed less than one year.
+
+# [2.2.0-beta.9] — 03.10.2026
+
+### ✨ Improvements
+
+- SEM shows a control only where your house can use it: price knobs need a dynamic tariff, the export guard an export limit. (#996)
+- **Charging sessions are kept** — the last 400, per charger, with a CSV export service. (#1024)
+- 🐛 **Session energy comes from the charger's own meter** (#1024). SEM's sum read up to 31 % low.
+- **PV health** — one sensor says green, yellow, orange or red from a week of yield against forecast. (#1022)
+- **Hints** — short messages when something is off, and a weekly note. One setting: off, weekly or all. Off by default. (#1019)
+- **SEM finds more chargers by what they offer** — start/stop buttons, a charge-mode select, a car's own charging amps. The hardware report shows them. (#1032)
+- 🐛 **An OCPP charger named "wallbox" no longer gets a refused start with every current change** (#976). SEM took it for a Wallbox-brand charger.
+- 🐛 **A V2C now charges when SEM starts it and pauses when SEM stops it** (#1042). SEM turned its "Pause session" switch on to charge.
+- 🐛 **Measured battery size counts what went to the car and the grid** (#1045). It read low after the battery charged the car or sold power.
+- 🐛 **True baseload no longer goes negative while a car charges** (#1044). SEM took the car's energy away twice.
+
+# [2.2.0-beta.8] — 02.10.2026
+
+- 🐛 **Setup accepts the Ohme status sensor when the car is plugged in** (#1038). A paused Peblar car no longer reads as unplugged.
+- 🐛 **Calendar tariff mode has a field for its times** (#1040). Pick a Schedule helper; its blocks are the peak hours.
+- 🐛 **Charge pacing is calm** (#820). It writes on the register's step, accepts the inverter's own value, and rewrites at most every 5 minutes.
+
+# [2.2.0-beta.7] — 02.10.2026
+
+- 🐛 **SEM writes the option a select lists, not the name it shows** (#1039). Ohme's "Max charge" becomes max_charge; the same for other mode settings.
+
+# [2.2.0-beta.6] — 02.10.2026
+
+- 🐛 **SEM sets the V2C Trydan's charge current and reads the car's power** (#1034), not the minimum current and the solar power.
+
+# [2.2.0-beta.5] — 02.10.2026
+
+- 🐛 **SEM uses the Peblar's charge switch and total power** (#1035), not its single-phase switch and one phase. Detection ignores words in the device name.
+
+# [2.2.0-beta.4] — 02.10.2026
+
+- 🐛 **An Easee Equalizer is not a charger** (#1036). It measures the grid. Setup now finds the real charger, also where it had saved the Equalizer.
+
+# [2.2.0-beta.3] — 01.10.2026
+
+- 🐛 **Charge pacing checks the inverter took the limit** (#820). Below the buffer the battery gets full power again.
+- 🐛 **The battery Diagnose button shows the charge limit** (#820): what the register holds and accepts, and the inverter's own refusals.
+
+# [2.2.0-beta.2] — 30.09.2026
+
+- 🐛 **Removing SEM no longer switches a charger back on when SEM was set to watch only** (#1027). Watching sends no command, not even during removal.
+
 # [2.1.0] — 30.09.2026
 
 The first stable release of the 2.1 line.
@@ -2755,7 +3093,7 @@ those people.
   offered with different minimums and steps on two pages (5 kWh/1 kWh vs
   1 kWh/0.5 kWh), so a small pack saved on one page was refused by the
   other — both now allow 1–100 kWh in 0.5 kWh steps.
-- 🧹 **SEM writes far fewer recorder rows** (#829, Guido: *"SEM is gathering a
+- 🧹 **SEM writes far fewer recorder rows** (#829: *"SEM is gathering a
   lot of information and cluttering HA"*): measured on a production system,
   SEM wrote **25 % of all state rows with 13 % of the entities** — not from
   recording too much, but from a handful of entities writing a row every
@@ -4323,7 +4661,7 @@ keeps it maintained.
 
 ### 🐛 Fixes
 - 🔋 **Battery STOP flooded the Modbus bus between charge blocks** (#757, from
-  Guido's release/1.8 audit) — while the scheduler is idle/target-reached it
+  the release/1.8 audit) — while the scheduler is idle/target-reached it
   repeats a STOP_FORCE_CHARGE verdict every cycle, and each brand adapter
   re-issued the inverter stop each time (~1800 writes/night on the single
   serial link, colliding with the huawei_solar read coordinators — the #538
@@ -4348,7 +4686,7 @@ keeps it maintained.
 
 ### 🐛 Fixes
 - 🔌 **A restart mid-charge silently rewrote the session** (#753, spotted
-  live by Guido: top chip 1.6 kWh vs the charger's own 6.0 kWh) — the #282
+  live on PROD: top chip 1.6 kWh vs the charger's own 6.0 kWh) — the #282
   session persistence worked, but the restart's sensor warm-up published a
   false "disconnected", the end-detection finalized the session and a fresh
   one started when charging resumed — amputating session cost and solar
@@ -5080,7 +5418,7 @@ keeps it maintained.
   overnight battery drain the boundary exists to prevent. The latch is gone: the sunrise meter
   day is computed statelessly by the shared TimeManager class — restart-proof by construction,
   and in winter the day now rolls at actual sunrise instead of the 07:00 night-window cap.
-  (by @traktore-org, root-caused by Guido's review question)
+  (by @traktore-org, root-caused in review)
 - 🕛 **Overnight top-ups no longer flap at midnight** (#703) — the grid/battery top-up force was
   stamped and expired against the *calendar* date while a load's runtime day is held to **sunrise**,
   so every load running an overnight top-up was stopped at exactly 00:00 ("day rollover") and
@@ -6096,7 +6434,7 @@ keeps it maintained.
   amps are now `max(deadline-required, peak-managed)`, so a lazy deadline no longer
   pins the session at the floor; a tight deadline still forces the required rate.
 - ☀️🌙 **The "At least" floor is now the overnight guarantee in every mode — Solar only
-  included** (#634, Guido's design) — the charge mode is the *daytime* axis; if the day's
+  included** (#634) — the charge mode is the *daytime* axis; if the day's
   solar charging delivered less than the "At least" floor, the DIFFERENCE tops up overnight
   from grid by the Charge-by time (deadline-sized, peak-managed #630). On good-solar days it
   never runs; floor 0 keeps the classic "Solar only never grids at night" contract exactly.
@@ -6132,7 +6470,7 @@ keeps it maintained.
 
 ### 🐛 Fixes (from the #629 overnight soak)
 
-- ⚡ **Night top-up now runs at the peak-managed headroom rate** (#630, Guido) — the plain
+- ⚡ **Night top-up now runs at the peak-managed headroom rate** (#630) — the plain
   `min_plus_solar` night top-up crept at the Min floor even with kilowatts of peak headroom
   free. It now charges at the #274/C1 peak-managed rate (peak limit − expected home −
   higher-priority chargers − **live cheap-hours load draw**, so a running #620 load is never
@@ -6723,14 +7061,14 @@ keeps it maintained.
   not assumed. A median-of-3 pre-filter smooths the surplus input the same way
   the EV path is smoothed. Explicit device `rated_power` shows on the Control
   card (was shadowed by autodiscovery), and Energy-Dashboard re-discovery no
-  longer destroys service-registered devices. (by @guidoeberle in #559)
+  longer destroys service-registered devices. (#559)
 
 ### 🔌 EV charger no longer flaps on/off (KEBA UDP power blips, #573)
 - 🐛 On a KEBA P30 in `min_plus_solar`, the charger cycled on/off every ~15 s —
   a single-cycle UDP power blip to ~0 W spiked computed home consumption, crashed
   the EV surplus below the battery-assist gate and collapsed the budget. A
   median-of-3 filter on `ev_power` absorbs the blip at the source. PROD-confirmed
-  steady across solar_only ↔ min_plus_solar mode switches. (reported by Guido)
+  steady across solar_only ↔ min_plus_solar mode switches.
 
 ### ⚙️ Config on the dashboard — settings apply live
 - ✨ PV-string rename, EV charge target / range / phases, and structural config
@@ -6767,7 +7105,7 @@ keeps it maintained.
   the charger idles → the contactor opens → recovers → repeat. Fix: a
   median-of-3 filter on `ev_power` in the reader absorbs the single-cycle blip
   at the source (a genuine start/stop is 2+ cycles and still tracks within
-  one), so the budget stays steady and the car charges flat. (reported by Guido)
+  one), so the budget stays steady and the car charges flat.
 
 ### ☀️ Lifetime solar production sensor (#573)
 - ✨ New `sensor.sem_lifetime_solar_yield_energy` ("Lifetime Solar Production")
@@ -7491,7 +7829,7 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
   transient (hold) vs structural (stop) on `ChargerDecision.bridgeable`, and the
   stability layer simply honours the flag — no re-derivation — plus a durable
   stop and a post-stop settle so a winding-down car can't re-open the hold.
-  (by @guidoeberle in #461)
+  (#461)
 
 ### ⚙️ Config — knobs apply without a reload (#547)
 - ✨ **Changing a setting now takes effect live.** Scalars cached on a controller
@@ -7499,7 +7837,7 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
   EV priority + min/max current + shed priority, tariff rates) used to need a full
   integration reload. `refresh_runtime_config()` now pushes them into the live
   controllers on every config change — a refresh, not a rebuild, so timers, cost
-  accumulators and smoothing windows are preserved. (by @guidoeberle in #547)
+  accumulators and smoothing windows are preserved. (#547)
 
 ### 🔌 EV / Load management — single-writer peak control (#461)
 - 🐛 **Load management could fight the EV controller (or silently fail to shed it).**
@@ -7508,22 +7846,22 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
   already peak-managed by the night planner — both through the single
   `decide()`/reconciler writer. The old side-channel (`number.set_value 0` /
   `keba.set_current 0`) fought the reconciler heartbeat on KEBA and mis-read
-  number-entity Wallbox chargers, so it could only flap or fail. (by @guidoeberle in #461)
+  number-entity Wallbox chargers, so it could only flap or fail. (#461)
 
 # [1.7.3-beta.65] — 26.06.2026
 
 > Hardens the battery-protection limit against an EV-ramp sensor-lag spike.
 
 ### 🔋 Battery — spike-proof the discharge-protection limit (#536)
-- 🐛 **A fast EV load ramp could briefly over-allow battery discharge.** When the car ramps hard (e.g. `always_max` to 10 kW), the grid meter registers the import a cycle before the KEBA `ev_power` sensor reports the draw, so the energy-balance `home_consumption_power` transiently inflates by ~the car's draw (seen on PROD: spiked to 9213 W). Since the discharge-protection clamp limits the battery to the home load, that spike briefly raised the limit and let the inverter feed a little battery into the car below the buffer. `_smooth_home_consumption` now has a **symmetric upward-spike guard** (it already held the *dip* direction): a one-cycle jump above the last value + 2 kW is treated as the EV/grid sensor lag and the last good value is held for up to 2 cycles; a genuine, persistent rise (an appliance) is accepted once the short window expires. (by @guidoeberle in #536)
+- 🐛 **A fast EV load ramp could briefly over-allow battery discharge.** When the car ramps hard (e.g. `always_max` to 10 kW), the grid meter registers the import a cycle before the KEBA `ev_power` sensor reports the draw, so the energy-balance `home_consumption_power` transiently inflates by ~the car's draw (seen on PROD: spiked to 9213 W). Since the discharge-protection clamp limits the battery to the home load, that spike briefly raised the limit and let the inverter feed a little battery into the car below the buffer. `_smooth_home_consumption` now has a **symmetric upward-spike guard** (it already held the *dip* direction): a one-cycle jump above the last value + 2 kW is treated as the EV/grid sensor lag and the last good value is held for up to 2 cycles; a genuine, persistent rise (an appliance) is accepted once the short window expires. (#536)
 
 # [1.7.3-beta.64] — 26.06.2026
 
 > The battery now stops feeding the EV at the buffer SoC floor — cleanly.
 
 ### 🔋 Battery — enforce the buffer SoC floor (#536 follow-up to #545)
-- 🐛 **The battery drained into the EV below the buffer SoC.** With #545's aggressive assist, a high house load kept surplus just above the gate while SoC fell below the buffer (PROD: 83% with an 85% buffer), and the discharge clamp — which keyed only on `surplus < gate`, never on SoC — let the inverter keep feeding the car well below the user's reserve. The clamp now also fires when **`SoC < buffer_soc`**, so below the buffer the battery is reserved for the house **in every zone, regardless of surplus**. Above the buffer the #545 assist is unchanged. (A zone-by-zone audit confirmed the EV engine was already correct in all four zones — the gap was isolated to the battery clamp.) (by @guidoeberle in #536)
-- 🐛 **The EV stop-bridge never fired with a bursty car.** The disable-bridge stop timer only accumulated while the car drew continuously, and the draw-latch was wiped every deficit cycle — so a Renault Zoe blipping between pulses reset the timer each cycle (170→99→20 s, never reaching 180 s) and the contactor never opened. The latch now persists through the bridge (refreshed on each real draw, cleared only on a genuine stop), so the car stops cleanly instead of grid-charging indefinitely. (by @guidoeberle in #536)
+- 🐛 **The battery drained into the EV below the buffer SoC.** With #545's aggressive assist, a high house load kept surplus just above the gate while SoC fell below the buffer (PROD: 83% with an 85% buffer), and the discharge clamp — which keyed only on `surplus < gate`, never on SoC — let the inverter keep feeding the car well below the user's reserve. The clamp now also fires when **`SoC < buffer_soc`**, so below the buffer the battery is reserved for the house **in every zone, regardless of surplus**. Above the buffer the #545 assist is unchanged. (A zone-by-zone audit confirmed the EV engine was already correct in all four zones — the gap was isolated to the battery clamp.) (#536)
+- 🐛 **The EV stop-bridge never fired with a bursty car.** The disable-bridge stop timer only accumulated while the car drew continuously, and the draw-latch was wiped every deficit cycle — so a Renault Zoe blipping between pulses reset the timer each cycle (170→99→20 s, never reaching 180 s) and the contactor never opened. The latch now persists through the bridge (refreshed on each real draw, cleared only on a genuine stop), so the car stops cleanly instead of grid-charging indefinitely. (#536)
 
 # [1.7.3-beta.63] — 26.06.2026
 
@@ -7538,14 +7876,14 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
 > The home battery now empties into the EV at high SoC instead of sitting idle.
 
 ### 🔋 EV — max out the battery into the car (#545)
-- ⚡ **"Max out till self-consumption":** when the home battery is in the assist band (SoC ≥ the Buffer SoC) and there's real solar surplus past the Solar Gate, SEM now offers the **full** battery-assist potential — it raises the offered amps so the inverter discharges the battery **into the car, down to the Buffer SoC** (the self-consumption reserve floor), instead of only topping the car up to the charger minimum. This fixes the chicken-and-egg where a **full battery sat idle while the EV grid-charged** (observed live: at 100% SoC, SEM offered only ~8 A, the car drew ~3 kW from solar, the battery never assisted, and a grid night-charge was still needed). The assist self-tapers as SoC falls toward the Buffer and is off-limits below it, so the battery is never drained past the floor. Solar-gated; pure amps — SEM commands no battery directly, the inverter's self-consumption does the discharge. Aligned across both budget layers (`decide.battery_assist_budget_w` + the canonical `calculate_canonical_ev_budget`) so they agree (#282). Docs updated (EV_CHARGING_LOGIC, ARCHITECTURE). (by @guidoeberle in #545)
+- ⚡ **"Max out till self-consumption":** when the home battery is in the assist band (SoC ≥ the Buffer SoC) and there's real solar surplus past the Solar Gate, SEM now offers the **full** battery-assist potential — it raises the offered amps so the inverter discharges the battery **into the car, down to the Buffer SoC** (the self-consumption reserve floor), instead of only topping the car up to the charger minimum. This fixes the chicken-and-egg where a **full battery sat idle while the EV grid-charged** (observed live: at 100% SoC, SEM offered only ~8 A, the car drew ~3 kW from solar, the battery never assisted, and a grid night-charge was still needed). The assist self-tapers as SoC falls toward the Buffer and is off-limits below it, so the battery is never drained past the floor. Solar-gated; pure amps — SEM commands no battery directly, the inverter's self-consumption does the discharge. Aligned across both budget layers (`decide.battery_assist_budget_w` + the canonical `calculate_canonical_ev_budget`) so they agree (#282). Docs updated (EV_CHARGING_LOGIC, ARCHITECTURE). (#545)
 
 # [1.7.3-beta.61] — 26.06.2026
 
 > Fixes EV charging running past the configured max SOC during solar charging.
 
 ### 🔌 EV — stop at max SOC (#548)
-- 🐛 **The EV charged past its configured max SOC** in solar/surplus charging (reported by @RienduPre, Wallbox Pulsar Plus). The max-SOC ceiling (`soc_limit_active`) only reached the retired ChargingStateMachine (→ `SOLAR_TARGET_REACHED`), and that state was then **overwritten by the per-charger decision** — while the `decide()` day path has no max-SOC check of its own, charging whenever surplus ≥ min. So nothing actually stopped the charge at the ceiling. Now the ceiling is plumbed into `ChargerView.soc_ceiling_reached` (from the value the coordinator already computes) and **guarded in `decide()` before mode dispatch**, so **every** mode (`solar_only`/`min_plus_solar`/`always_max`/`solar_plus_cheap`) stops at the max SOC. kWh-target users are unaffected (their max is effectively unlimited). The stop now reads as **"Target reached"**. (by @guidoeberle in #548)
+- 🐛 **The EV charged past its configured max SOC** in solar/surplus charging (reported by @RienduPre, Wallbox Pulsar Plus). The max-SOC ceiling (`soc_limit_active`) only reached the retired ChargingStateMachine (→ `SOLAR_TARGET_REACHED`), and that state was then **overwritten by the per-charger decision** — while the `decide()` day path has no max-SOC check of its own, charging whenever surplus ≥ min. So nothing actually stopped the charge at the ceiling. Now the ceiling is plumbed into `ChargerView.soc_ceiling_reached` (from the value the coordinator already computes) and **guarded in `decide()` before mode dispatch**, so **every** mode (`solar_only`/`min_plus_solar`/`always_max`/`solar_plus_cheap`) stops at the max SOC. kWh-target users are unaffected (their max is effectively unlimited). The stop now reads as **"Target reached"**. (#548)
 
 # [1.7.3-beta.60] — 26.06.2026
 
@@ -7554,7 +7892,7 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
 > candidates turned out to have a consumer and were kept).
 
 ### 🧹 Dead sensors removed (#544)
-- 🗑️ **Removed 16 orphan sensors** — published, enabled-by-default, but read by no card, generator, or decision (pure entity clutter): the fleet EV-intelligence cluster (`ev_taper_ratio`, `ev_taper_minutes_to_full`, `ev_estimated_soc`, `ev_last_full_charge`, `ev_energy_since_full`, `ev_predicted_daily_consumption`, `ev_battery_health`), the forecast-accuracy cluster (`forecast_accuracy_today`, `forecast_accuracy_7d`, `forecast_deviation_kwh`, `forecast_corrected_tomorrow`, `forecast_power_now_w`, `forecast_power_next_hour_w`), and the predictor outputs (`predicted_consumption_next_hour`, `predicted_consumption_today_kwh`, `predicted_solar_next_hour`). Swept descriptions + population + metadata across `strings.json`/`icons.json`/15 translations. **Breaking** for any custom dashboard/automation that referenced these. Kept (verified live): `ev_taper_trend` (diagnostic), `forecast_correction_factor` & `forecast_history_days` (read by the dampening/correction sensor attributes). (by @guidoeberle in #544)
+- 🗑️ **Removed 16 orphan sensors** — published, enabled-by-default, but read by no card, generator, or decision (pure entity clutter): the fleet EV-intelligence cluster (`ev_taper_ratio`, `ev_taper_minutes_to_full`, `ev_estimated_soc`, `ev_last_full_charge`, `ev_energy_since_full`, `ev_predicted_daily_consumption`, `ev_battery_health`), the forecast-accuracy cluster (`forecast_accuracy_today`, `forecast_accuracy_7d`, `forecast_deviation_kwh`, `forecast_corrected_tomorrow`, `forecast_power_now_w`, `forecast_power_next_hour_w`), and the predictor outputs (`predicted_consumption_next_hour`, `predicted_consumption_today_kwh`, `predicted_solar_next_hour`). Swept descriptions + population + metadata across `strings.json`/`icons.json`/15 translations. **Breaking** for any custom dashboard/automation that referenced these. Kept (verified live): `ev_taper_trend` (diagnostic), `forecast_correction_factor` & `forecast_history_days` (read by the dampening/correction sensor attributes). (#544)
 
 ### 🔒 Census cleanup closed (#543)
 - ✅ With #544 done, the census cleanup (#543) is complete — the knob-reader contract lint (`tests/test_knob_wiring.py`) was already in place from the 2026-06-25 chunk and confirms all 26 NUMBER knobs are wired. The one remaining item (knobs read only at controller construction don't apply until reload) is a behavioral fix, split to #547.
@@ -7566,17 +7904,17 @@ Thanks to @alexmc1510, @hrdilshan, @ebnerjoh and @covuser for the reports and id
 > on PROD (KEBA P30 + Renault Zoe) across all four charging modes.
 
 ### 🔋 Battery — overnight drain root cause (#536)
-- 🐛 **The home battery drained overnight to feed the EV** (PROD 93→41 %). The discharge-protection clamp gated on the *instantaneous* draw flag (`ev_charging`), which a bursty car (Renault Zoe) toggles on/off every few seconds — so the clamp dropped in the gaps, the battery discharged freely, and that energy fed the next pull. The clamp now gates on **`ev_connected`** (vehicle plugged in), so it **holds steady** through the car's pulses. Live-verified: `battery→ev = 0 W` in every solar mode all afternoon. (by @guidoeberle in #536)
+- 🐛 **The home battery drained overnight to feed the EV** (PROD 93→41 %). The discharge-protection clamp gated on the *instantaneous* draw flag (`ev_charging`), which a bursty car (Renault Zoe) toggles on/off every few seconds — so the clamp dropped in the gaps, the battery discharged freely, and that energy fed the next pull. The clamp now gates on **`ev_connected`** (vehicle plugged in), so it **holds steady** through the car's pulses. Live-verified: `battery→ev = 0 W` in every solar mode all afternoon. (#536)
 
 ### 🧹 Config — verify-first knob cleanup (#536)
-- 🧹 **Removed three dead/redundant battery knobs** after auditing each live (two of the original four turned out to be live and were handled, not blindly cut): `battery_minimum_soc` (labelled "hard stop" but never gated discharge — its only live use, the empty-ETA, now references the real floor `battery_priority_soc`), `battery_assist_floor_soc` (shadowed by `buffer_soc` — folded in as the single assist floor), and the comment-only `battery_hold_solar_ev`. (by @guidoeberle in #536)
-- 🐛 **Fixed the `minimum_solar_power` default inconsistency** — a legacy config missing the key silently used 200 W while a fresh install seeded 1000 W; the fallback now matches the seeded default. (by @guidoeberle in #536)
-- 📝 **Corrected the misleading "Surplus floor" help text** — `minimum_solar_power` gates **raw PV production** ("is the sun up"), distinct from `battery_assist_min_surplus` (export surplus); clarified in English + 15 translations. The two were *not* collapsed — they measure different quantities and both feed the #461 deep-deficit logic. (by @guidoeberle in #536)
+- 🧹 **Removed three dead/redundant battery knobs** after auditing each live (two of the original four turned out to be live and were handled, not blindly cut): `battery_minimum_soc` (labelled "hard stop" but never gated discharge — its only live use, the empty-ETA, now references the real floor `battery_priority_soc`), `battery_assist_floor_soc` (shadowed by `buffer_soc` — folded in as the single assist floor), and the comment-only `battery_hold_solar_ev`. (#536)
+- 🐛 **Fixed the `minimum_solar_power` default inconsistency** — a legacy config missing the key silently used 200 W while a fresh install seeded 1000 W; the fallback now matches the seeded default. (#536)
+- 📝 **Corrected the misleading "Surplus floor" help text** — `minimum_solar_power` gates **raw PV production** ("is the sun up"), distinct from `battery_assist_min_surplus` (export surplus); clarified in English + 15 translations. The two were *not* collapsed — they measure different quantities and both feed the #461 deep-deficit logic. (#536)
 
 ### 🗑️ Internal — legacy retirement, stage 1 (#536)
-- 🗑️ Removed the deprecated proportional `FlowCalculator.calculate_energy_flows` (zero production callers since #282; the timing-aware `integrate_energy_flows` is canonical). (by @guidoeberle in #536)
+- 🗑️ Removed the deprecated proportional `FlowCalculator.calculate_energy_flows` (zero production callers since #282; the timing-aware `integrate_energy_flows` is canonical). (#536)
 
-**Thanks** to @guidoeberle for the PROD live-testing across all four charging modes.
+All four charging modes were live-tested on PROD.
 
 # [1.7.3-beta.58] — 26.06.2026
 

@@ -250,7 +250,7 @@ class TestTheReleaseRestoresWhatWasFound:
 
 @pytest.mark.asyncio
 class TestTheRestoreSurvivesARestart:
-    """The gap the first version of the capture left open, caught by Guido
+    """The gap the first version of the capture left open, caught on PROD
     asking whether the claim was even right.
 
     `_export_prior_mode` lives in memory. After a restart, `adopt_export_prior`

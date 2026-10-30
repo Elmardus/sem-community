@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configurare gestionare energie solară",
-        "description": "SEM a detectat următorii senzori din tabloul de bord Energie din Home Assistant:\n\n{summary}\n\nApăsați **Trimite** pentru a continua. Mai este un singur pas. Încărcătoarele VE, pompa de căldură, tariful și toate celelalte setări se configurează mai târziu în noua filă **Configurare** din tabloul SEM — nu trebuie să le tratați acum.",
-        "data": {
-          "observer_mode": "Mod test (doar citire — fără control hardware)"
-        },
-        "data_description": {
-          "observer_mode": "Lăsați OPRIT pentru o instalare normală. Activați-l doar pe un Home Assistant de test/staging care oglindește o instanță de producție, astfel încât SEM să nu trimită niciodată comenzi către KEBA, invertor sau vreun comutator."
+        "title": "SEM a găsit sistemul tău",
+        "description": "Acestea sunt valorile acum:\n\n- Solar: {solar}\n- Rețea: {grid}\n- Baterie: {battery}\n\nVin de la aceiași senzori ca panoul tău Energie. Apasă **Trimite**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Aleg singur senzorii",
+            "description": "Doar dacă o valoare de mai sus pare greșită.",
+            "data": {
+              "solar_production_sensor": "Putere solară",
+              "grid_power_sensor": "Putere rețea",
+              "battery_power_sensor": "Putere baterie",
+              "battery_soc_sensor": "Încărcare baterie %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -37,7 +43,7 @@
       },
       "hardware": {
         "title": "Hardware",
-        "description": "One final value depends on your installation:\n\n• Home Battery Capacity — the usable kWh of your inverter battery.\n\nSEM also auto-detected your inverter's discharge control entity: {discharge_entity}\n\nLeave the dashboard option ON to have SEM build its Lovelace dashboard for you. **Note: this triggers a Home Assistant restart about 5 seconds after install completes.**\n\nEverything else uses safe defaults that you can tune later from the integration's options.",
+        "description": "Ultimul pas! SEM a detectat automat entitatea de control al descărcării invertorului dvs.: {discharge_entity}\n\nLăsați opțiunea tabloului de bord PORNITĂ pentru ca SEM să vă creeze tabloul Lovelace. **Notă: aceasta repornește Home Assistant la aproximativ 5 secunde după terminarea instalării.**\n\nTot restul — inclusiv limita de vârf a rețelei — folosește valori implicite sigure pe care le puteți ajusta imediat după configurare: limita de vârf din glisorul filei **Control**, tot restul din fila **Configurare** a tabloului SEM — inclusiv încărcătoarele VE, pompa de căldură, tariful și zonele bateriei.",
         "data": {
           "battery_capacity_kwh": "Capacitatea bateriei casnice (kWh)",
           "generate_dashboard_on_install": "Generează acum tabloul de bord SEM (repornește HA)",
@@ -82,25 +88,69 @@
         }
       },
       "sources": {
-        "title": "Name your energy sensors",
-        "description": "Your Home Assistant Energy Dashboard is not set up (or is missing solar or grid), so SEM asked your system directly.\n\nWhat SEM recognised:\n{summary}\n\nConfirm or change each one below. SEM needs solar and grid to work out your surplus; leave battery empty if you have none. You can set up the Energy Dashboard later at {url} — SEM will keep using what you choose here.",
+        "title": "Denumiți senzorii dvs. de energie",
+        "description": "Energy Dashboard al Home Assistant nu este configurat (sau îi lipsește solarul sau rețeaua), așa că SEM a interogat sistemul direct.\n\nCe a recunoscut SEM:\n{summary}\n\nConfirmați sau modificați fiecare element de mai jos. SEM are nevoie de solar și rețea pentru a calcula surplusul; lăsați bateria goală dacă nu aveți una. Puteți configura Energy Dashboard mai târziu la {url} — SEM va continua să folosească ce alegeți aici.",
         "data": {
-          "solar_power_sensor": "Solar power",
-          "grid_import_power_sensor": "Grid power",
-          "battery_power_sensor": "Battery power (optional)",
-          "observer_mode": "Observer mode (watch only, command nothing)",
-          "battery_soc_sensor": "Battery charge % (optional)",
-          "grid_import_power_entity": "Grid import power (optional)",
-          "grid_export_power_entity": "Grid export power (optional)"
+          "solar_power_sensor": "Putere solară",
+          "grid_import_power_sensor": "Putere rețea",
+          "battery_power_sensor": "Putere baterie (opțional)",
+          "observer_mode": "Mod observator (doar urmărire, nicio comandă)",
+          "battery_soc_sensor": "Încărcare baterie % (opțional)",
+          "grid_import_power_entity": "Putere import rețea (opțional)",
+          "grid_export_power_entity": "Putere export rețea (opțional)"
         },
         "data_description": {
-          "solar_power_sensor": "Live production in watts — not a daily total.",
-          "grid_import_power_sensor": "Live import/export in watts. One signed sensor is fine; SEM works out which direction is which by watching it.",
-          "battery_power_sensor": "Live charge/discharge in watts. Leave empty if you have no home battery.",
-          "observer_mode": "Recommended for the first days: SEM shows every decision it would make and sends nothing to your hardware.",
-          "battery_soc_sensor": "State of charge in percent — SEM's four battery zones read it.",
-          "grid_import_power_entity": "Only if your meter has no single signed sensor: the import side, always positive. Fill both of these or neither.",
-          "grid_export_power_entity": "The export side, always positive. SEM computes export minus import, so no direction has to be guessed."
+          "solar_power_sensor": "Producție live în wați — nu un total zilnic.",
+          "grid_import_power_sensor": "Import/export live în wați. Un singur senzor cu semn este suficient; SEM determină ce direcție este care urmărindu-l.",
+          "battery_power_sensor": "Încărcare/descărcare live în wați. Lăsați gol dacă nu aveți baterie casnică.",
+          "observer_mode": "Recomandat pentru primele zile: SEM arată fiecare decizie pe care ar lua-o și nu trimite nimic către hardware-ul dvs.",
+          "battery_soc_sensor": "Starea de încărcare în procente — cele patru zone de baterie ale SEM o citesc.",
+          "grid_import_power_entity": "Doar dacă contorul dvs. nu are un singur senzor cu semn: partea de import, întotdeauna pozitivă. Completați pe amândouă sau pe niciuna.",
+          "grid_export_power_entity": "Partea de export, întotdeauna pozitivă. SEM calculează export minus import, deci nicio direcție nu trebuie ghicită."
+        }
+      },
+      "check_grid": {
+        "title": "O întrebare",
+        "description": "{why}\n\nAcum contorul tău de rețea arată **{grid}**. Solar: {solar}. Baterie: {battery}.",
+        "data": {
+          "grid_answer": "Ce face casa ta acum?"
+        },
+        "data_description": {
+          "grid_answer": "Uită-te la contor sau în aplicația de energie. \"Nu știu\" e în regulă: SEM învață în zilele următoare."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Aleg singur senzorii",
+            "description": "Doar dacă o valoare de mai sus pare greșită.",
+            "data": {
+              "solar_production_sensor": "Putere solară",
+              "grid_power_sensor": "Putere rețea",
+              "battery_power_sensor": "Putere baterie",
+              "battery_soc_sensor": "Încărcare baterie %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Alege contorul de rețea",
+        "description": "SEM nu a găsit un senzor de putere a rețelei. Fără el, SEM nu știe ce cumperi sau trimiți în rețea.\n\nAlege-l mai jos sau apasă **Trimite** ca să sari. Îl poți seta mai târziu în fila Configurare.\n\nSolar: {solar}. Baterie: {battery}.",
+        "data": {
+          "grid_power_sensor": "Putere rețea"
+        },
+        "data_description": {
+          "grid_power_sensor": "Putere actuală în wați, nu un total zilnic."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Aleg singur senzorii",
+            "description": "Doar dacă o valoare de mai sus pare greșită.",
+            "data": {
+              "solar_production_sensor": "Putere solară",
+              "grid_power_sensor": "Putere rețea",
+              "battery_power_sensor": "Putere baterie",
+              "battery_soc_sensor": "Încărcare baterie %"
+            }
+          }
         }
       }
     },
@@ -108,7 +158,7 @@
       "unknown": "A apărut o eroare neașteptată. Vă rugăm să încercați din nou.",
       "entity_not_found": "Entitatea nu a fost găsită. Verificați dacă ID-ul entității există.",
       "service_not_found": "Serviciul de notificare nu a fost găsit. Verificați numele serviciului (de ex. notify.mobile_app_your_phone).",
-      "required": "SEM needs this sensor to read your system."
+      "required": "SEM are nevoie de acest senzor pentru a citi sistemul dvs."
     },
     "abort": {
       "already_configured": "Solar Energy Management este deja configurat. Este permisă o singură instanță."
@@ -118,7 +168,7 @@
     "step": {
       "ev_charger": {
         "title": "Încărcător EV",
-        "description": "Sfat: majoritatea setărilor sunt acum pe tabloul SEM → fila Configurare (colorat, live). Acest flux rămâne pentru instalări fără tablou de bord.\n\nReview and update your EV charger entity mappings. The Vehicle SOC fields are only used if you provide a Vehicle Battery SOC sensor.",
+        "description": "Sfat: majoritatea setărilor sunt acum pe tabloul SEM → fila Configurare (colorat, live). Acest flux rămâne pentru instalări fără tablou de bord.\n\nVerificați și actualizați asocierile de entități ale încărcătorului VE. Câmpurile SOC ale vehiculului sunt folosite doar dacă furnizați un senzor SOC al bateriei vehiculului.",
         "data": {
           "ev_connected_sensor": "Stare conectare VE",
           "ev_charging_sensor": "Stare încărcare VE",
@@ -182,7 +232,8 @@
           "diagram_style": "Stilul diagramei de sistem",
           "battery_assist_min_surplus": "Asistență baterie – surplus solar min. (W)",
           "grid_sign_invert": "Inversează semnul puterii din rețea",
-          "battery_operating_mode_entity": "Battery operating-mode entity (watched)"
+          "battery_operating_mode_entity": "Entitate mod de funcționare baterie (urmărită)",
+          "battery_charge_end_soc_entity": "Nivel de final de încărcare al bateriei (opțional)"
         },
         "data_description": {
           "update_interval": "Cât de des citește coordonatorul senzorii și reglează hardware-ul. 10 s oferă cea mai precisă integrare a energiei; valorile peste 30 s vor subestima energia. Interval 10–60 s.",
@@ -196,7 +247,7 @@
           "battery_discharge_protection_enabled": "Când este ACTIVĂ, SEM limitează pragul de descărcare al invertorului în timpul încărcării VE pe timp de noapte, astfel încât bateria casei să alimenteze doar locuința (nu și VE).",
           "battery_max_discharge_power": "Limita superioară strictă a descărcării bateriei, impusă de funcția de protecție.",
           "electricity_import_rate": "Tarif de zi / unic (CHF/kWh, cu TVA inclus). Folosit pentru urmărirea costurilor.",
-          "electricity_off_peak_rate": "Night tariff (CHF/kWh). Set equal to import rate if you don't have a dual tariff.",
+          "electricity_off_peak_rate": "Tarif în afara orelor de vârf (pe kWh). Setați-l egal cu tariful de import dacă nu aveți un tarif dublu.",
           "electricity_export_rate": "Tariful de injecție plătit de furnizor (CHF/kWh).",
           "demand_charge_rate": "Taxa lunară de putere per kW de vârf (CHF/kW/lună). Setați 0 dacă în contractul dumneavoastră nu există o taxă de putere.",
           "observer_mode": "Când este ACTIV, SEM monitorizează și calculează totul, dar nu trimite niciodată un apel de serviciu către hardware. Folosiți-l pe un HA de test/staging care oglindește o instalare de producție.",
@@ -208,7 +259,19 @@
           "legionella_interval_hours": "Numărul maxim de ore între ciclurile de dezinfecție anti-legionella înainte ca SEM să forțeze o încălzire.",
           "battery_assist_min_surplus": "Surplusul solar real minim înainte ca bateria casei să poată ajuta la încărcarea EV — în orice mod de încărcare. Sub această valoare bateria este rezervată casei (mașina consumă din rețea + solar). Implicit 1200 W. Setați 0 pentru ca bateria să susțină EV oriunde, inclusiv pe timp de noapte.",
           "grid_sign_invert": "Activează doar dacă importul din rețea apare ca valoare pozitivă (de ex. Enphase). Convenția SEM este negativ = import; aceasta neagă citirea brută și ocolește detectarea automată a semnului.",
-          "battery_operating_mode_entity": "The inverter's operating-policy selector (e.g. Huawei's 'Working mode'). SEM only READS it: the mode is shown beside the battery evidence, and a one-time repair warns when it is not the self-consumption mode SEM's planning assumes. SEM never changes it. Leave empty to disable the watch."
+          "battery_operating_mode_entity": "Selectorul politicii de funcționare al invertorului (de ex. „Working mode” la Huawei). SEM doar îl CITEȘTE: modul este afișat lângă dovezile bateriei, iar o reparație unică avertizează când nu este modul de consum propriu pe care planificarea SEM îl presupune. SEM nu îl schimbă niciodată. Lăsați gol pentru a dezactiva urmărirea.",
+          "battery_charge_end_soc_entity": "Unde invertorul oprește singur încărcarea bateriei, în %. SEM doar îl citește, nu îl scrie niciodată. Încărcarea forțată se termină atunci și acolo când este sub 90 %."
+        }
+      },
+      "settings_battery_limit": {
+        "title": "Bateria {battery} — limită de descărcare",
+        "description": "Bateria {battery} este {sensor}.\n\nAlegeți entitatea Number care limitează puterea de descărcare a acestei baterii. Lăsați gol pentru a folosi entitatea comună de pe pagina anterioară.",
+        "data": {
+          "battery_discharge_control_entity": "Entitate limită de descărcare — bateria {battery}",
+          "battery_charge_end_soc_entity": "Nivel de final de încărcare — bateria {battery}"
+        },
+        "data_description": {
+          "battery_charge_end_soc_entity": "Nivelul propriu de final de încărcare al acestei baterii. SEM doar îl citește. Lăsați gol pentru entitatea comună de pe pagina anterioară."
         }
       },
       "settings_ev": {
@@ -242,13 +305,25 @@
           "demand_charge_rate": "Tarif pentru putere contractată",
           "update_interval": "Interval de actualizare (s)",
           "tariff_mode": "Mod tarifar",
+          "tariff_schedule_entity": "Program ore de vârf (mod Calendar)",
           "dynamic_tariff_entity": "Entitate preț dinamic (detectată automat dacă e goală)",
           "dynamic_forecast_entity": "Entitatea de prognoză a prețurilor (opțional, detectată automat dacă e goală)",
           "dynamic_feedin_entity": "Entitate preț de injecție (opțional, pentru tarif de export dinamic)",
-          "grid_import_power_entity": "Grid import power sensor (optional, auto-detected from Energy Dashboard)",
-          "grid_export_power_entity": "Grid export power sensor (optional, auto-detected from Energy Dashboard)",
+          "grid_import_power_entity": "Senzor putere import rețea (opțional, detectat automat)",
+          "grid_export_power_entity": "Senzor putere export rețea (opțional, detectat automat)",
           "tariff_classification_mode": "Mod de clasificare a prețurilor",
-          "solar_forecast_source": "Sursa prognozei solare"
+          "solar_forecast_source": "Sursa prognozei solare",
+          "grid_co2_entity": "Senzor intensitate CO₂ a rețelei (opțional)",
+          "outdoor_temperature_entity": "Temperatura exterioară (opțional)",
+          "tariff_value_preset": "Șablon taxe și comisioane",
+          "import_price_basis": "Ce include prețul de cumpărare",
+          "import_markup": "Adaosul furnizorului",
+          "import_energy_tax": "Acciza pe energie",
+          "import_vat_percent": "TVA",
+          "feed_in_fee_model": "Taxă de injecție",
+          "feed_in_fee": "Valoarea taxei de injecție",
+          "feed_in_fee_tiers": "Praguri ale taxei de injecție",
+          "export_value_threshold": "Oprește exportul sub"
         },
         "data_description": {
           "electricity_import_rate": "Tarif de import de zi/unic (monedă/kWh, cu TVA inclus). Folosit ca rezervă atunci când prețul dinamic este indisponibil.",
@@ -258,13 +333,25 @@
           "demand_charge_rate": "Taxa lunară pentru puterea de vârf (monedă/kW/lună). Setați 0 dacă în contractul dumneavoastră nu există.",
           "update_interval": "Cât de des citește SEM senzorii și reglează hardware-ul (secunde). Interval 10–60 s.",
           "tariff_mode": "Alegeți „Static” pentru tarife fixe, „Dinamic” pentru prețuri în timp real sau „Calendar” pentru programe orare.",
+          "tariff_schedule_entity": "Un ajutor Program (schedule) din Home Assistant. Blocurile sale sunt orele de vârf (HT); toate celelalte ore folosesc tariful de noapte.",
           "dynamic_tariff_entity": "Senzor care furnizează prețul curent de import al energiei electrice. Detectat automat de la Tibber, Nordpool etc.",
           "dynamic_forecast_entity": "Senzor opțional cu prognoze orare de preț, folosite pentru planificarea inteligentă.",
           "dynamic_feedin_entity": "Senzor opțional care furnizează prețul curent de injecție / export pentru tariful de export dinamic.",
           "grid_import_power_entity": "Senzor opțional (W) pentru puterea importată din rețea. Detectat automat din tabloul de bord Energie; suprascrieți-l aici dacă este nevoie.",
           "grid_export_power_entity": "Senzor opțional (W) pentru puterea exportată în rețea. Detectat automat din tabloul de bord Energie; suprascrieți-l aici dacă este nevoie.",
           "tariff_classification_mode": "„Percentilă” încadrează prețurile față de intervalul de azi (recomandat). „Static” folosește praguri fixe ieftin/scump.",
-          "solar_forecast_source": "Ce integrare de prognoză citește SEM. Detectarea automată preferă Solcast, apoi Forecast.Solar, apoi Open-Meteo — alege una dacă rulezi mai multe în paralel."
+          "solar_forecast_source": "Ce integrare de prognoză citește SEM. Detectarea automată preferă Solcast, apoi Forecast.Solar, apoi Open-Meteo — alege una dacă rulezi mai multe în paralel.",
+          "grid_co2_entity": "SEM găsește singur un senzor în g sau kg CO₂ pe kWh. Alegeți unul doar dacă a găsit unul greșit.",
+          "outdoor_temperature_entity": "SEM găsește un termometru exterior după nume sau folosește entitatea meteo. Alegeți doar dacă a ales greșit.",
+          "tariff_value_preset": "Completează câmpurile de mai jos. 'Niciunul' nu adaugă nimic: prețurile rămân la fel. 'Țările de Jos din 2027' setează acciza și TVA de 21 %; introduceți singur adaosul și taxa furnizorului.",
+          "import_price_basis": "Totul inclus: acciza și TVA sunt deja în preț (Tibber, tarif de pe factură) — nu se adaugă nimic. Preț spot cu TVA: acciza și adaosul se adaugă cu TVA. Preț spot: se adaugă acciza, adaosul și TVA.",
+          "import_markup": "Cât adaugă furnizorul pe kWh cumpărat, fără TVA.",
+          "import_energy_tax": "Acciza pe kWh cumpărat, fără TVA.",
+          "import_vat_percent": "TVA pe kWh cumpărat, în procente.",
+          "feed_in_fee_model": "Cât cere furnizorul pentru energia injectată în rețea: pe kWh, pe praguri după kWh din acest an, sau o sumă fixă pe lună.",
+          "feed_in_fee": "Pe kWh: taxa pe kWh. Fix pe lună: suma pe lună.",
+          "feed_in_fee_tiers": "Doar pentru praguri. kWh injectați anul acesta : taxă pe kWh, de exemplu 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "Dacă un kWh vândut valorează mai puțin, SEM oprește exportul: bateria și consumatorii iau întâi soarele. 0 = doar sub zero. Necesită comutatorul Gardă de export."
         }
       },
       "load_management": {
@@ -278,7 +365,9 @@
           "emergency_peak_level": "Nivel de vârf de urgență (kW)",
           "vehicle_soc_entity": "SOC baterie vehicul",
           "ev_battery_capacity_kwh": "Capacitatea bateriei VE (kWh)",
-          "ev_target_soc": "Consideră plin la (%)"
+          "ev_target_soc": "Consideră plin la (%)",
+          "shed_signal_entity": "Releul operatorului de rețea",
+          "shed_signal_limit": "Limita de rețea cât este pornit (kW)"
         },
         "data_description": {
           "load_management_enabled": "Activează/dezactivează delestarea automată a sarcinilor de către SEM pentru a rămâne sub limita de vârf a rețelei.",
@@ -288,7 +377,9 @@
           "emergency_peak_level": "Nivelul de putere (kW) la care SEM delestează agresiv sarcinile pentru a evita taxele de putere. Trebuie să fie peste limita de vârf țintă.",
           "vehicle_soc_entity": "Senzor opțional care raportează starea de încărcare curentă a vehiculului (0–100%).",
           "ev_battery_capacity_kwh": "Capacitatea utilizabilă totală a bateriei VE, în kWh.",
-          "ev_target_soc": "De aici SEM consideră mașina încărcată. Este o definiție a lui \"plin\", nu o limită de încărcare."
+          "ev_target_soc": "De aici SEM consideră mașina încărcată. Este o definiție a lui \"plin\", nu o limită de încărcare.",
+          "shed_signal_entity": "Contactul pe care îl comută operatorul de rețea (§14a, telecomandă centralizată). Lăsați gol dacă nu aveți.",
+          "shed_signal_limit": "Cât timp releul este pornit, SEM ține consumul casei din rețea sub această limită. Solarul în plus este permis."
         }
       },
       "notifications": {
@@ -328,15 +419,15 @@
           "battery_charge_platform": "Platformă de încărcare a bateriei",
           "battery_replan_interval_min": "Interval de replanificare (min)",
           "battery_prefer_consecutive_window": "Preferă o fereastră de încărcare consecutivă",
-          "battery_charge_power_limit_entity": "Battery charge-power limit entity (for pacing)",
-          "inverter_ac_limit_w": "Inverter AC output limit"
+          "battery_charge_power_limit_entity": "Entitate limită putere încărcare baterie (pentru ritmare)",
+          "inverter_ac_limit_w": "Limită putere AC invertor"
         },
         "data_description": {
           "battery_charge_platform": "Ce invertor comandă SEM pentru încărcarea programată din rețea. Alege Deye pentru a afișa pasul de cablare Deye.",
           "battery_replan_interval_min": "Cât de des este recalculat planul de încărcare pe baza celei mai recente prognoze și prețuri.",
           "battery_prefer_consecutive_window": "Pornit: orele ieftine într-un singur bloc (mai puține cicluri pornire/oprire); oprit: cele mai ieftine ore individuale, chiar dacă sunt dispersate.",
-          "battery_charge_power_limit_entity": "The inverter's max-charge-power number that charge pacing writes to (e.g. Huawei's 'Maximum charging power'). Leave empty to keep pacing advisory-only.",
-          "inverter_ac_limit_w": "Your inverter's maximum AC output in watts. Charge pacing opens its cap wherever solar would exceed this, so clipped sun is captured. 0 = not set."
+          "battery_charge_power_limit_entity": "Numărul de putere maximă de încărcare al invertorului pe care ritmarea încărcării îl scrie (de ex. „Maximum charging power” la Huawei). Lăsați gol pentru a păstra ritmarea doar consultativă.",
+          "inverter_ac_limit_w": "Puterea maximă AC a invertorului dvs. în wați. Ritmarea încărcării își ridică plafonul oriunde solarul ar depăși această valoare, pentru a capta soarele tăiat. 0 = nesetat."
         }
       },
       "ev_charger_edit": {
@@ -349,11 +440,11 @@
           "ev_charging_power_sensor": "Putere încărcare VE",
           "ev_charger_service": "Serviciu de setare a curentului încărcătorului (opțional)",
           "ev_charger_service_entity_id": "Entitate țintă pentru serviciul încărcătorului (opțional)",
-          "ev_start_stop_entity": "Start/Stop Entity (optional)",
-          "ev_current_sensor": "Offered Current Sensor (optional)",
-          "ev_charge_mode_entity": "Charge Mode Select (optional)",
-          "ev_charge_mode_start": "Charge Mode — Start Value (optional)",
-          "ev_charge_mode_stop": "Charge Mode — Stop Value (optional)",
+          "ev_start_stop_entity": "Entitate Start/Stop (opțional)",
+          "ev_current_sensor": "Senzor curent oferit (opțional)",
+          "ev_charge_mode_entity": "Selector Mod de încărcare (opțional)",
+          "ev_charge_mode_start": "Mod de încărcare — Valoare pornire (opțional)",
+          "ev_charge_mode_stop": "Mod de încărcare — Valoare oprire (opțional)",
           "ev_surplus_priority": "Prioritate surplus (1=cea mai mare)",
           "ev_battery_may_assist": "Bateria poate asista acest încărcător",
           "ev_current_control_entity": "Entitate de control al curentului (number — Wallbox, go-eCharger)",
@@ -371,7 +462,7 @@
           "ev_phase_switch_entity": "Entitate de comutare a fazelor (opțional)",
           "ev_phase_switch_value_1p": "Comutare faze: valoare monofazat (opțional)",
           "ev_phase_switch_value_3p": "Comutare faze: valoare trifazat (opțional)",
-          "ev_phase_switching_enabled": "Phase switching"
+          "ev_phase_switching_enabled": "Comutare fază"
         },
         "data_description": {
           "charger_name": "Numele prietenos al acestui încărcător, afișat în tabloul de bord.",
@@ -380,11 +471,11 @@
           "ev_charging_power_sensor": "Senzor numeric (W) care raportează puterea livrată de acest încărcător.",
           "ev_charger_service": "Serviciul HA folosit pentru a seta curentul de încărcare. Folosiți-l pentru KEBA sau Easee.",
           "ev_charger_service_entity_id": "ID-ul entității transmis ca țintă a apelului de serviciu. Lăsați gol dacă nu este necesar.",
-          "ev_start_stop_entity": "Switch or button that physically starts/stops charging. Set this when dropping to 0 A does not release the charger (Smart EVSE, some OCPP boxes) — SEM opens it instead of leaving the contactor cycling.",
-          "ev_current_sensor": "Sensor reporting the current the charger is actually offering (A). Lets SEM verify a command landed instead of assuming it did.",
-          "ev_charge_mode_entity": "Select entity SEM switches to start/stop charging on boxes that need a mode change rather than a current of 0 A (go-e, Ohme, some OCPP).",
-          "ev_charge_mode_start": "The option SEM selects to START charging (e.g. \"Instant Charging\", \"2\"). Must match the select's option exactly.",
-          "ev_charge_mode_stop": "The option SEM selects to STOP charging. Leave blank if stopping is done by the start/stop entity or by setting 0 A.",
+          "ev_start_stop_entity": "Comutator sau buton care pornește/oprește fizic încărcarea. Setați aceasta când coborârea la 0 A nu eliberează încărcătorul (Smart EVSE, unele cutii OCPP) — SEM îl deschide în loc să lase contactorul să cicleze.",
+          "ev_current_sensor": "Senzor care raportează curentul pe care încărcătorul îl oferă de fapt (A). Permite SEM să verifice că o comandă a avut efect, în loc să presupună.",
+          "ev_charge_mode_entity": "Entitate select pe care SEM o comută pentru a porni/opri încărcarea la cutiile care necesită o schimbare de mod în loc de un curent de 0 A (go-e, Ohme, unele OCPP).",
+          "ev_charge_mode_start": "Opțiunea pe care SEM o selectează pentru a PORNI încărcarea (de ex. \"Instant Charging\", \"2\"). Trebuie să corespundă exact opțiunii selectorului.",
+          "ev_charge_mode_stop": "Opțiunea pe care SEM o selectează pentru a OPRI încărcarea. Lăsați gol dacă oprirea se face prin entitatea start/stop sau prin setarea la 0 A.",
           "ev_surplus_priority": "Ordinea de alocare a surplusului între mai multe încărcătoare. Număr mai mic = prioritate mai mare.",
           "ev_battery_may_assist": "Permite bateriei casei să ajute la încărcarea acestui vehicul. Dezactivat = acest încărcător folosește doar solar și rețea. Permisiunea bateriei la nivel de instalare rămâne valabilă.",
           "ev_current_control_entity": "Entitate Number folosită pentru a seta curentul de încărcare (A). Pentru Wallbox, go-eCharger și încărcătoare similare.",
@@ -402,7 +493,7 @@
           "ev_phase_switch_entity": "Select/number/switch care comută încărcătorul între încărcare mono și trifazată (go-e 'psm', KEBA seria X, openWB). Deocamdată SEM doar observă și validează — comutarea automată vine într-o versiune viitoare.",
           "ev_phase_switch_value_1p": "Ce se scrie în entitatea de comutare pentru încărcare monofazată — numele opțiunii unui select, valoarea unui number sau on/off. Obligatoriu pentru entități select; implicit number 1, switch off.",
           "ev_phase_switch_value_3p": "Ce se scrie în entitatea de comutare pentru încărcare trifazată — numele opțiunii unui select, valoarea unui number sau on/off. Obligatoriu pentru entități select; implicit number 3, switch on.",
-          "ev_phase_switching_enabled": "Off by default while the 1/3-phase model is reworked (it paused chargers that never resumed on some brands). Turn on to test it on your charger."
+          "ev_phase_switching_enabled": "Oprit implicit cât timp modelul 1/3 faze este refăcut (a pus pauză unor încărcătoare care nu și-au mai revenit la unele mărci). Activați pentru a testa pe încărcătorul dvs."
         }
       },
       "ev_charger_add": {
@@ -415,11 +506,11 @@
           "ev_charging_power_sensor": "Putere încărcare VE",
           "ev_charger_service": "Serviciu de setare a curentului încărcătorului (opțional)",
           "ev_charger_service_entity_id": "Entitate țintă pentru serviciul încărcătorului (opțional)",
-          "ev_start_stop_entity": "Start/Stop Entity (optional)",
-          "ev_current_sensor": "Offered Current Sensor (optional)",
-          "ev_charge_mode_entity": "Charge Mode Select (optional)",
-          "ev_charge_mode_start": "Charge Mode — Start Value (optional)",
-          "ev_charge_mode_stop": "Charge Mode — Stop Value (optional)",
+          "ev_start_stop_entity": "Entitate Start/Stop (opțional)",
+          "ev_current_sensor": "Senzor curent oferit (opțional)",
+          "ev_charge_mode_entity": "Selector Mod de încărcare (opțional)",
+          "ev_charge_mode_start": "Mod de încărcare — Valoare pornire (opțional)",
+          "ev_charge_mode_stop": "Mod de încărcare — Valoare oprire (opțional)",
           "ev_surplus_priority": "Prioritate surplus (1=cea mai mare)",
           "ev_battery_may_assist": "Bateria poate asista acest încărcător",
           "ev_current_control_entity": "Entitate de control al curentului (number — Wallbox, go-eCharger)",
@@ -436,7 +527,7 @@
           "ev_phase_switch_entity": "Entitate de comutare a fazelor (opțional)",
           "ev_phase_switch_value_1p": "Comutare faze: valoare monofazat (opțional)",
           "ev_phase_switch_value_3p": "Comutare faze: valoare trifazat (opțional)",
-          "ev_phase_switching_enabled": "Phase switching"
+          "ev_phase_switching_enabled": "Comutare fază"
         },
         "data_description": {
           "charger_name": "Numele prietenos al acestui încărcător, afișat în tabloul de bord.",
@@ -445,11 +536,11 @@
           "ev_charging_power_sensor": "Senzor numeric (W) care raportează puterea livrată de acest încărcător.",
           "ev_charger_service": "Serviciul HA folosit pentru a seta curentul de încărcare. Folosiți-l pentru KEBA sau Easee.",
           "ev_charger_service_entity_id": "ID-ul entității transmis ca țintă a apelului de serviciu. Lăsați gol dacă nu este necesar.",
-          "ev_start_stop_entity": "Switch or button that physically starts/stops charging. Set this when dropping to 0 A does not release the charger (Smart EVSE, some OCPP boxes) — SEM opens it instead of leaving the contactor cycling.",
-          "ev_current_sensor": "Sensor reporting the current the charger is actually offering (A). Lets SEM verify a command landed instead of assuming it did.",
-          "ev_charge_mode_entity": "Select entity SEM switches to start/stop charging on boxes that need a mode change rather than a current of 0 A (go-e, Ohme, some OCPP).",
-          "ev_charge_mode_start": "The option SEM selects to START charging (e.g. \"Instant Charging\", \"2\"). Must match the select's option exactly.",
-          "ev_charge_mode_stop": "The option SEM selects to STOP charging. Leave blank if stopping is done by the start/stop entity or by setting 0 A.",
+          "ev_start_stop_entity": "Comutator sau buton care pornește/oprește fizic încărcarea. Setați aceasta când coborârea la 0 A nu eliberează încărcătorul (Smart EVSE, unele cutii OCPP) — SEM îl deschide în loc să lase contactorul să cicleze.",
+          "ev_current_sensor": "Senzor care raportează curentul pe care încărcătorul îl oferă de fapt (A). Permite SEM să verifice că o comandă a avut efect, în loc să presupună.",
+          "ev_charge_mode_entity": "Entitate select pe care SEM o comută pentru a porni/opri încărcarea la cutiile care necesită o schimbare de mod în loc de un curent de 0 A (go-e, Ohme, unele OCPP).",
+          "ev_charge_mode_start": "Opțiunea pe care SEM o selectează pentru a PORNI încărcarea (de ex. \"Instant Charging\", \"2\"). Trebuie să corespundă exact opțiunii selectorului.",
+          "ev_charge_mode_stop": "Opțiunea pe care SEM o selectează pentru a OPRI încărcarea. Lăsați gol dacă oprirea se face prin entitatea start/stop sau prin setarea la 0 A.",
           "ev_surplus_priority": "Ordinea de alocare a surplusului între mai multe încărcătoare. Număr mai mic = prioritate mai mare.",
           "ev_battery_may_assist": "Permite bateriei casei să ajute la încărcarea acestui vehicul. Dezactivat = acest încărcător folosește doar solar și rețea. Permisiunea bateriei la nivel de instalare rămâne valabilă.",
           "ev_current_control_entity": "Entitate Number folosită pentru a seta curentul de încărcare (A). Pentru Wallbox, go-eCharger și încărcătoare similare.",
@@ -466,7 +557,7 @@
           "ev_phase_switch_entity": "Select/number/switch care comută încărcătorul între încărcare mono și trifazată (go-e 'psm', KEBA seria X, openWB). Deocamdată SEM doar observă și validează — comutarea automată vine într-o versiune viitoare.",
           "ev_phase_switch_value_1p": "Ce se scrie în entitatea de comutare pentru încărcare monofazată — numele opțiunii unui select, valoarea unui number sau on/off. Obligatoriu pentru entități select; implicit number 1, switch off.",
           "ev_phase_switch_value_3p": "Ce se scrie în entitatea de comutare pentru încărcare trifazată — numele opțiunii unui select, valoarea unui number sau on/off. Obligatoriu pentru entități select; implicit number 3, switch on.",
-          "ev_phase_switching_enabled": "Off by default while the 1/3-phase model is reworked (it paused chargers that never resumed on some brands). Turn on to test it on your charger."
+          "ev_phase_switching_enabled": "Oprit implicit cât timp modelul 1/3 faze este refăcut (a pus pauză unor încărcătoare care nu și-au mai revenit la unele mărci). Activați pentru a testa pe încărcătorul dvs."
         }
       },
       "pv_naming": {
@@ -493,13 +584,16 @@
           "heat_pump_boost_offset": "Decalaj de stimulare a temperaturii (°C)",
           "heat_pump_max_setpoint": "Setpoint maxim de temperatură (°C)",
           "heat_pump_priority": "Prioritate surplus (1=cea mai mare)",
-          "heat_pump_sg_ready_service": "SG-Ready service (domain.service)",
-          "heat_pump_sg_ready_service_data": "SG-Ready service data (JSON; placeholders state, relay1, relay2)",
-          "heat_pump_sg_ready_state_entity": "SG-Ready state read-back entity",
-          "heat_pump_relay1_on_value": "SG-Ready contact 1 — ON value",
-          "heat_pump_relay1_off_value": "SG-Ready contact 1 — OFF value",
-          "heat_pump_relay2_on_value": "SG-Ready contact 2 — ON value",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value"
+          "heat_pump_sg_ready_service": "Serviciu SG-Ready (domain.service)",
+          "heat_pump_sg_ready_service_data": "Date serviciu SG-Ready (JSON; substituenți state, relay1, relay2)",
+          "heat_pump_sg_ready_state_entity": "Entitate citire stare SG-Ready",
+          "heat_pump_relay1_on_value": "Contact 1 SG-Ready — valoare PORNIT",
+          "heat_pump_relay1_off_value": "Contact 1 SG-Ready — valoare OPRIT",
+          "heat_pump_relay2_on_value": "Contact 2 SG-Ready — valoare PORNIT",
+          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valoare OPRIT",
+          "heat_pump_tariff_rate": "Tarif propriu: preț fix",
+          "heat_pump_tariff_entity": "Tarif propriu: entitate de preț",
+          "heat_pump_tariff_meter": "Tarif propriu: contor (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Entitate switch pentru releul SG-Ready 1 (semnal de funcționare normală). Setați-o împreună cu releul 2 pentru protocolul SG-Ready.",
@@ -510,15 +604,18 @@
           "heat_pump_boost_offset": "Grade Celsius adăugate la setpoint-ul normal în timpul unei stimulări din surplus solar.",
           "heat_pump_max_setpoint": "Limita superioară de temperatură (°C) pe care SEM o va seta în timpul unui ciclu de stimulare.",
           "heat_pump_priority": "Prioritatea de distribuție a surplusului față de celelalte dispozitive. Numerele mai mici sunt servite primele.",
-          "heat_pump_relay1_on_value": "Only for a text/number/select contact: the value SEM writes to close contact 1. Leave empty for a switch.",
-          "heat_pump_relay1_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 1. Leave empty for a switch.",
-          "heat_pump_relay2_on_value": "Only for a text/number/select contact: the value SEM writes to close contact 2. Leave empty for a switch.",
-          "heat_pump_relay2_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 2. Leave empty for a switch."
+          "heat_pump_relay1_on_value": "Doar pentru un contact text/number/select: valoarea pe care SEM o scrie pentru a închide contactul 1. Lăsați gol pentru un switch.",
+          "heat_pump_relay1_off_value": "Doar pentru un contact text/number/select: valoarea pe care SEM o scrie pentru a deschide contactul 1. Lăsați gol pentru un switch.",
+          "heat_pump_relay2_on_value": "Doar pentru un contact text/number/select: valoarea pe care SEM o scrie pentru a închide contactul 2. Lăsați gol pentru un switch.",
+          "heat_pump_relay2_off_value": "Doar pentru un contact text/number/select: valoarea pe care SEM o scrie pentru a deschide contactul 2. Lăsați gol pentru un switch.",
+          "heat_pump_tariff_rate": "Preț fix pentru contorul propriu al pompei de căldură, de ex. un tarif pentru pompa de căldură. 0 = tariful casei.",
+          "heat_pump_tariff_entity": "Un senzor cu prețul pompei de căldură, dacă se schimbă. Orele ieftine urmează atunci acest preț.",
+          "heat_pump_tariff_meter": "Opțional. Contorul de kWh propriu al pompei de căldură. Gol = SEM estimează partea din rețea."
         }
       },
       "ev_charger_menu": {
         "title": "Încărcătoare EV",
-        "description": "Gestionați configurația încărcătoarelor EV.",
+        "description": "Încărcătorul este opțional. Nu aveți încărcător EV? Lăsați prima opțiune selectată și trimiteți.",
         "data": {
           "action": "Acțiune"
         },
@@ -549,48 +646,48 @@
         }
       },
       "settings_phase_guard": {
-        "title": "Per-phase guard sensors",
+        "title": "Senzori de gardă per fază",
         "description": "Asociați senzorii pentru {topology}. Pentru o alimentare monofazată, este necesar doar L1. Pentru o alimentare trifazată, selectați o familie completă de curenți RMS directi L1-L3 atunci când este disponibilă; în caz contrar, curentul de rețea se calculează ca putere absolută împărțită la tensiune. Pentru o bandă hibridă Load/EPS, selectați senzori de curent RMS nenegativi pentru fazele configurate. Citirile obligatorii lipsă, învechite, invalide sau negative eșuează în siguranță (fail closed). Modul Observer Mode publică doar diagnostice; nu trimite comenzi de control.",
         "data": {
           "phase_guard_enforcement_enabled": "Opriți încărcarea EV când limitele de fază sunt depășite",
           "phase_guard_notifications_enabled": "Trimite alertele monitorului de fază",
           "phase_guard_recovery_margin_a": "Marjă de siguranță sub fiecare limită de fază",
           "phase_guard_recovery_cycles": "Citiri sigure înainte de reluarea încărcării",
-          "phase_guard_grid_limit_a": "Main-fuse limit per phase",
-          "phase_guard_inverter_limit_a": "Inverter Load/EPS limit per phase",
-          "phase_guard_max_age_s": "Maximum sensor age",
-          "phase_guard_grid_l1_current_entity": "Direct Grid L1 RMS current",
-          "phase_guard_grid_l2_current_entity": "Direct Grid L2 RMS current",
-          "phase_guard_grid_l3_current_entity": "Direct Grid L3 RMS current",
-          "phase_guard_grid_l1_power_entity": "Grid L1 power sensor",
-          "phase_guard_grid_l2_power_entity": "Grid L2 power sensor",
-          "phase_guard_grid_l3_power_entity": "Grid L3 power sensor",
-          "phase_guard_grid_l1_voltage_entity": "Grid L1 voltage sensor",
-          "phase_guard_grid_l2_voltage_entity": "Grid L2 voltage sensor",
-          "phase_guard_grid_l3_voltage_entity": "Grid L3 voltage sensor",
-          "phase_guard_inverter_l1_current_entity": "Inverter Load/EPS L1 RMS current",
-          "phase_guard_inverter_l2_current_entity": "Inverter Load/EPS L2 RMS current",
-          "phase_guard_inverter_l3_current_entity": "Inverter Load/EPS L3 RMS current"
+          "phase_guard_grid_limit_a": "Limită siguranță principală per fază",
+          "phase_guard_inverter_limit_a": "Limită invertor Load/EPS per fază",
+          "phase_guard_max_age_s": "Vechime maximă senzor",
+          "phase_guard_grid_l1_current_entity": "Curent RMS direct Rețea L1",
+          "phase_guard_grid_l2_current_entity": "Curent RMS direct Rețea L2",
+          "phase_guard_grid_l3_current_entity": "Curent RMS direct Rețea L3",
+          "phase_guard_grid_l1_power_entity": "Senzor putere Rețea L1",
+          "phase_guard_grid_l2_power_entity": "Senzor putere Rețea L2",
+          "phase_guard_grid_l3_power_entity": "Senzor putere Rețea L3",
+          "phase_guard_grid_l1_voltage_entity": "Senzor tensiune Rețea L1",
+          "phase_guard_grid_l2_voltage_entity": "Senzor tensiune Rețea L2",
+          "phase_guard_grid_l3_voltage_entity": "Senzor tensiune Rețea L3",
+          "phase_guard_inverter_l1_current_entity": "Curent RMS invertor Load/EPS L1",
+          "phase_guard_inverter_l2_current_entity": "Curent RMS invertor Load/EPS L2",
+          "phase_guard_inverter_l3_current_entity": "Curent RMS invertor Load/EPS L3"
         },
         "data_description": {
           "phase_guard_enforcement_enabled": "Când opțiunea este activată, toate încărcătoarele EV gestionate sunt oprite imediat dacă citirile sunt nesigure sau învechite, pentru a evita declanșarea siguranței principale. Este dezactivată implicit, astfel încât protecția de fază să poată fi verificată mai întâi în modul de observare.",
           "phase_guard_recovery_margin_a": "Încărcarea rămâne blocată până când fiecare fază necesară se află cu cel puțin această marjă sub propria limită.",
           "phase_guard_recovery_cycles": "Numărul de citiri valide și sigure consecutive necesare înainte ca încărcarea EV să poată fi pornită din nou.",
-          "phase_guard_grid_limit_a": "Maximum permitted grid current on each phase. Normally the main-fuse rating.",
-          "phase_guard_inverter_limit_a": "Maximum permitted RMS current on each phase of the inverter Load/EPS/Backup output.",
-          "phase_guard_max_age_s": "A reading older than this is treated as unsafe.",
+          "phase_guard_grid_limit_a": "Curentul maxim permis în rețea pe fiecare fază. În mod normal, valoarea nominală a siguranței principale.",
+          "phase_guard_inverter_limit_a": "Curentul RMS maxim permis pe fiecare fază a ieșirii Load/EPS/Backup a invertorului.",
+          "phase_guard_max_age_s": "O citire mai veche decât aceasta este tratată ca nesigură.",
           "phase_guard_grid_l1_current_entity": "Curent de rețea RMS direct, nenegativ, opțional, în A. Dacă se utilizează o sursă directă, trebuie furnizate toate fazele configurate.",
           "phase_guard_grid_l2_current_entity": "Curent de rețea RMS direct, nenegativ, opțional, în A. Dacă se utilizează o sursă directă, trebuie furnizate toate fazele configurate.",
           "phase_guard_grid_l3_current_entity": "Curent de rețea RMS direct, nenegativ, opțional, în A. Dacă se utilizează o sursă directă, trebuie furnizate toate fazele configurate.",
-          "phase_guard_grid_l1_power_entity": "Signed grid power for phase L1 in W. Import or export is accepted.",
-          "phase_guard_grid_l2_power_entity": "Signed grid power for phase L2 in W. Import or export is accepted.",
-          "phase_guard_grid_l3_power_entity": "Signed grid power for phase L3 in W. Import or export is accepted.",
-          "phase_guard_grid_l1_voltage_entity": "Grid voltage for phase L1 in V.",
-          "phase_guard_grid_l2_voltage_entity": "Grid voltage for phase L2 in V.",
-          "phase_guard_grid_l3_voltage_entity": "Grid voltage for phase L3 in V.",
-          "phase_guard_inverter_l1_current_entity": "Non-negative RMS current for inverter Load/EPS phase L1.",
-          "phase_guard_inverter_l2_current_entity": "Non-negative RMS current for inverter Load/EPS phase L2.",
-          "phase_guard_inverter_l3_current_entity": "Non-negative RMS current for inverter Load/EPS phase L3."
+          "phase_guard_grid_l1_power_entity": "Putere rețea cu semn pentru faza L1 în W. Import sau export este acceptat.",
+          "phase_guard_grid_l2_power_entity": "Putere rețea cu semn pentru faza L2 în W. Import sau export este acceptat.",
+          "phase_guard_grid_l3_power_entity": "Putere rețea cu semn pentru faza L3 în W. Import sau export este acceptat.",
+          "phase_guard_grid_l1_voltage_entity": "Tensiune rețea pentru faza L1 în V.",
+          "phase_guard_grid_l2_voltage_entity": "Tensiune rețea pentru faza L2 în V.",
+          "phase_guard_grid_l3_voltage_entity": "Tensiune rețea pentru faza L3 în V.",
+          "phase_guard_inverter_l1_current_entity": "Curent RMS nenegativ pentru invertor Load/EPS faza L1.",
+          "phase_guard_inverter_l2_current_entity": "Curent RMS nenegativ pentru invertor Load/EPS faza L2.",
+          "phase_guard_inverter_l3_current_entity": "Curent RMS nenegativ pentru invertor Load/EPS faza L3."
         }
       },
       "deye": {
@@ -630,11 +727,11 @@
           "deye_program_6_time": "Program 6 — entitate interval orar (time.*)",
           "deye_program_6_soc": "Program 6 — entitate number SOC țintă",
           "deye_program_6_charge": "Program 6 — entitate select încărcare din rețea",
-          "deye_system_work_mode_control": "Control Deye System Work Mode (export policy)",
-          "deye_system_work_mode_entity": "Deye System Work Mode entity",
-          "deye_system_work_mode_selling_option": "Label of the 'Selling First' option",
-          "deye_system_work_mode_zero_load_option": "Label of the 'Zero Export To Load' option",
-          "deye_system_work_mode_zero_ct_option": "Label of the 'Zero Export To CT' option"
+          "deye_system_work_mode_control": "Control Deye System Work Mode (politică export)",
+          "deye_system_work_mode_entity": "Entitate Deye System Work Mode",
+          "deye_system_work_mode_selling_option": "Eticheta opțiunii „Selling First”",
+          "deye_system_work_mode_zero_load_option": "Eticheta opțiunii „Zero Export To Load”",
+          "deye_system_work_mode_zero_ct_option": "Eticheta opțiunii „Zero Export To CT”"
         },
         "data_description": {
           "deye_bms_max_charge_current_a": "Plafon opțional impus de BMS. 0 înseamnă fără limită BMS — se aplică maximul invertorului.",
@@ -644,36 +741,39 @@
         }
       },
       "heat_pump_menu": {
-        "title": "Heat pumps",
-        "description": "Your primary heat pump is configured. Add more units, each driven independently by priority.",
+        "title": "Pompe de căldură",
+        "description": "Pompa dvs. de căldură principală este configurată. Adăugați mai multe unități, fiecare comandată independent după prioritate.",
         "data": {
-          "action": "Action"
+          "action": "Acțiune"
         }
       },
       "heat_pump_unit": {
-        "title": "Additional heat pump",
-        "description": "Configure this unit the same way as the primary: SG-Ready relays, a climate entity, or a service call (for command-driven pumps like Buderus over EMS-ESP).",
+        "title": "Pompă de căldură suplimentară",
+        "description": "Configurați această unitate la fel ca pe cea principală: relee SG-Ready, o entitate climate, sau un apel de serviciu (pentru pompe comandate prin comenzi, precum Buderus prin EMS-ESP).",
         "data": {
-          "name": "Name",
-          "heat_pump_relay1_entity": "SG-Ready relay 1",
-          "heat_pump_relay2_entity": "SG-Ready relay 2",
-          "heat_pump_invert_sg_ready": "Invert SG-Ready relays (NC wiring)",
-          "heat_pump_climate_entity": "Climate entity",
-          "heat_pump_power_sensor": "Power sensor",
-          "heat_pump_energy_sensor": "Energy sensor",
-          "heat_pump_temperature_sensor": "Temperature sensor",
-          "heat_pump_rated_power": "Rated power",
-          "heat_pump_boost_offset": "Boost offset",
-          "heat_pump_max_setpoint": "Maximum setpoint",
-          "heat_pump_force_on_threshold": "Force-on threshold",
-          "heat_pump_priority": "Priority",
-          "heat_pump_sg_ready_service": "SG-Ready service (domain.service)",
-          "heat_pump_sg_ready_service_data": "SG-Ready service data (JSON; placeholders state, relay1, relay2)",
-          "heat_pump_sg_ready_state_entity": "SG-Ready state read-back entity",
-          "heat_pump_relay1_on_value": "SG-Ready contact 1 — ON value",
-          "heat_pump_relay1_off_value": "SG-Ready contact 1 — OFF value",
-          "heat_pump_relay2_on_value": "SG-Ready contact 2 — ON value",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value"
+          "name": "Nume",
+          "heat_pump_relay1_entity": "Releu 1 SG-Ready",
+          "heat_pump_relay2_entity": "Releu 2 SG-Ready",
+          "heat_pump_invert_sg_ready": "Inversează releele SG-Ready (cablare NC)",
+          "heat_pump_climate_entity": "Entitate climate",
+          "heat_pump_power_sensor": "Senzor putere",
+          "heat_pump_energy_sensor": "Senzor energie",
+          "heat_pump_temperature_sensor": "Senzor temperatură",
+          "heat_pump_rated_power": "Putere nominală",
+          "heat_pump_boost_offset": "Decalaj de stimulare",
+          "heat_pump_max_setpoint": "Punct de referință maxim",
+          "heat_pump_force_on_threshold": "Prag pornire forțată",
+          "heat_pump_priority": "Prioritate",
+          "heat_pump_sg_ready_service": "Serviciu SG-Ready (domain.service)",
+          "heat_pump_sg_ready_service_data": "Date serviciu SG-Ready (JSON; substituenți state, relay1, relay2)",
+          "heat_pump_sg_ready_state_entity": "Entitate citire stare SG-Ready",
+          "heat_pump_relay1_on_value": "Contact 1 SG-Ready — valoare PORNIT",
+          "heat_pump_relay1_off_value": "Contact 1 SG-Ready — valoare OPRIT",
+          "heat_pump_relay2_on_value": "Contact 2 SG-Ready — valoare PORNIT",
+          "heat_pump_relay2_off_value": "Contact 2 SG-Ready — valoare OPRIT",
+          "heat_pump_tariff_rate": "Tarif propriu: preț fix",
+          "heat_pump_tariff_entity": "Tarif propriu: entitate de preț",
+          "heat_pump_tariff_meter": "Tarif propriu: contor (kWh)"
         }
       }
     },
@@ -682,14 +782,16 @@
       "peak_warning_not_below_target": "Nivelul de avertizare trebuie să fie sub limita de vârf țintă – este alerta timpurie că ținta este atinsă.",
       "peak_emergency_not_above_target": "Nivelul de urgență trebuie să fie peste limita de vârf țintă – altfel SEM ar deconecta consumatori înainte ca limita protejată să fie atinsă.",
       "heat_pump_partial_relays": "SG-Ready necesită AMBELE entități de releu. Setați ambele relee — sau lăsați-le pe ambele goale și configurați doar entitatea climate pentru stimularea punctului de referință doar prin climate.",
-      "deye_program_groups_incomplete": "All six Deye program groups must define time, SOC, and grid-charge entities.",
+      "deye_program_groups_incomplete": "Toate cele șase grupuri de program Deye trebuie să definească entitățile de timp, SOC și încărcare din rețea.",
       "deye_work_mode_mapping_not_distinct": "Controlul Work Mode are nevoie de două opțiuni diferite – una pentru Load First și una pentru Battery First. Alegeți-le pe amândouă, nu de două ori aceeași.",
       "deye_force_charge_work_mode_invalid": "Alegeți ce Work Mode trebuie să folosească SEM pentru încărcarea forțată a bateriei: Load First sau Battery First.",
-      "deye_system_work_mode_mapping_not_distinct": "The three System Work Mode labels must be filled in and distinct.",
-      "heat_pump_no_control": "Configure at least one control path: both relays, a climate entity, or a service.",
-      "heat_pump_service_invalid": "The SG-Ready service must be domain.service (e.g. ems_esp.send_command).",
-      "heat_pump_service_data_invalid": "The SG-Ready service data must be a JSON object.",
-      "heat_pump_contact_values_missing": "This SG-Ready contact is a text/number/select entity, so SEM needs both the ON and the OFF value to write. Fill both, or pick a switch entity."
+      "deye_system_work_mode_mapping_not_distinct": "Cele trei etichete System Work Mode trebuie completate și distincte.",
+      "heat_pump_no_control": "Configurați cel puțin o cale de control: ambele relee, o entitate climate, sau un serviciu.",
+      "heat_pump_service_invalid": "Serviciul SG-Ready trebuie să fie domain.service (de ex. ems_esp.send_command).",
+      "heat_pump_service_data_invalid": "Datele serviciului SG-Ready trebuie să fie un obiect JSON.",
+      "heat_pump_contact_values_missing": "Acest contact SG-Ready este o entitate text/number/select, așa că SEM are nevoie să scrie atât valoarea ON cât și OFF. Completați-le pe amândouă, sau alegeți o entitate switch.",
+      "calendar_needs_schedule": "Modul Calendar are nevoie de un program pentru orele de vârf. Alegeți un ajutor Program sau alt mod de tarif.",
+      "value_needs_spot_basis": "Un adaos, o taxă pe energie sau TVA se aplică doar la un preț spot. Alege baza spot sau setează-le la 0."
     }
   },
   "entity": {
@@ -707,7 +809,7 @@
         "name": "Abatere de capacitate"
       },
       "battery_charge_pacing": {
-        "name": "Battery charge pacing"
+        "name": "Ritmare încărcare baterie"
       },
       "battery_charge_power": {
         "name": "Putere de încărcare baterie"
@@ -884,22 +986,22 @@
         "name": "Configurare panou energie"
       },
       "diag_grid_l1_current_a": {
-        "name": "Grid L1 Current"
+        "name": "Curent Rețea L1"
       },
       "diag_grid_l1_margin_a": {
-        "name": "Grid L1 Current Margin"
+        "name": "Marjă curent Rețea L1"
       },
       "diag_grid_l2_current_a": {
-        "name": "Grid L2 Current"
+        "name": "Curent Rețea L2"
       },
       "diag_grid_l2_margin_a": {
-        "name": "Grid L2 Current Margin"
+        "name": "Marjă curent Rețea L2"
       },
       "diag_grid_l3_current_a": {
-        "name": "Grid L3 Current"
+        "name": "Curent Rețea L3"
       },
       "diag_grid_l3_margin_a": {
-        "name": "Grid L3 Current Margin"
+        "name": "Marjă curent Rețea L3"
       },
       "diag_grid_mode": {
         "name": "Mod senzor rețea"
@@ -908,40 +1010,40 @@
         "name": "Convenția de semn a rețelei"
       },
       "diag_inputs_degraded": {
-        "name": "Inputs Degraded"
+        "name": "Intrări degradate"
       },
       "diag_inverter_l1_current_a": {
-        "name": "Inverter Load/EPS L1 Current"
+        "name": "Curent invertor Load/EPS L1"
       },
       "diag_inverter_l1_margin_a": {
-        "name": "Inverter Load/EPS L1 Current Margin"
+        "name": "Marjă curent invertor Load/EPS L1"
       },
       "diag_inverter_l2_current_a": {
-        "name": "Inverter Load/EPS L2 Current"
+        "name": "Curent invertor Load/EPS L2"
       },
       "diag_inverter_l2_margin_a": {
-        "name": "Inverter Load/EPS L2 Current Margin"
+        "name": "Marjă curent invertor Load/EPS L2"
       },
       "diag_inverter_l3_current_a": {
-        "name": "Inverter Load/EPS L3 Current"
+        "name": "Curent invertor Load/EPS L3"
       },
       "diag_inverter_l3_margin_a": {
-        "name": "Inverter Load/EPS L3 Current Margin"
+        "name": "Marjă curent invertor Load/EPS L3"
       },
       "diag_observer_mode": {
         "name": "Mod observator"
       },
       "diag_phase_guard_data_fresh": {
-        "name": "Phase Guard Data Fresh"
+        "name": "Date Phase Guard recente"
       },
       "diag_phase_guard_mode": {
-        "name": "Phase Guard Mode"
+        "name": "Mod Phase Guard"
       },
       "diag_phase_guard_safe": {
-        "name": "Phase Guard Safe"
+        "name": "Phase Guard sigur"
       },
       "diag_phase_guard_stop_reason": {
-        "name": "Phase Guard Stop Reason"
+        "name": "Motiv oprire Phase Guard"
       },
       "diag_sensors_unavailable": {
         "name": "Senzori indisponibili"
@@ -1371,6 +1473,87 @@
       },
       "house_meter_gap": {
         "name": "Diferență contor"
+      },
+      "pv_health": {
+        "name": "Stare PV",
+        "state": {
+          "green": "Bună",
+          "yellow": "Medie",
+          "orange": "Slabă",
+          "red": "Proastă"
+        }
+      },
+      "per_charger_commanded_current": {
+        "name": "{charger} Curent cerut"
+      },
+      "per_charger_daily_energy": {
+        "name": "{charger} Energie zilnică"
+      },
+      "per_charger_estimated_soc": {
+        "name": "{charger} SOC estimat"
+      },
+      "per_charger_flow_battery_to_ev_energy": {
+        "name": "{charger} Baterie → VE energie"
+      },
+      "per_charger_flow_battery_to_ev_power": {
+        "name": "{charger} Baterie → VE putere"
+      },
+      "per_charger_flow_grid_to_ev_energy": {
+        "name": "{charger} Rețea → VE energie"
+      },
+      "per_charger_flow_grid_to_ev_power": {
+        "name": "{charger} Rețea → VE putere"
+      },
+      "per_charger_flow_solar_to_ev_energy": {
+        "name": "{charger} Solar → VE energie"
+      },
+      "per_charger_flow_solar_to_ev_power": {
+        "name": "{charger} Solar → VE putere"
+      },
+      "per_charger_power": {
+        "name": "{charger} Putere"
+      },
+      "per_charger_session_energy": {
+        "name": "{charger} Energie sesiune"
+      },
+      "per_charger_session_energy_external": {
+        "name": "{charger} Energie sesiune (încărcător)"
+      },
+      "per_charger_session_solar_share": {
+        "name": "{charger} Pondere solară"
+      },
+      "per_charger_taper_minutes_to_full": {
+        "name": "{charger} Minute până la plin"
+      },
+      "per_charger_taper_ratio": {
+        "name": "{charger} Raport de reducere"
+      },
+      "per_charger_taper_trend": {
+        "name": "{charger} Tendință de reducere"
+      },
+      "per_charger_vehicle_soc": {
+        "name": "{charger} SOC vehicul"
+      },
+      "daily_self_consumption_value": {
+        "name": "Valoarea autoconsumului azi"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Valoarea autoconsumului anul acesta"
+      },
+      "daily_export_value": {
+        "name": "Valoarea injecției azi"
+      },
+      "yearly_export_value": {
+        "name": "Valoarea injecției anul acesta"
+      },
+      "daily_feed_in_fees": {
+        "name": "Taxe de injecție azi"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Taxe de injecție anul acesta"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} cost tarif azi"
       }
     },
     "binary_sensor": {
@@ -1431,7 +1614,7 @@
         "name": "Cheltuire ghidată de prognoză"
       },
       "battery_charge_pacing_enabled": {
-        "name": "Battery charge pacing"
+        "name": "Ritmare încărcare baterie"
       },
       "export_guard_enabled": {
         "name": "Gardă de export"
@@ -1444,6 +1627,15 @@
       },
       "ev_morning_window_enabled": {
         "name": "Fereastra de dimineață VE"
+      },
+      "simulation_tab": {
+        "name": "Fila simulare"
+      },
+      "battery_discharge_limit_caps_charge": {
+        "name": "Limita de descărcare limitează și încărcarea"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "Pornește mașina la export negativ, cumpărând diferența"
       }
     },
     "number": {
@@ -1488,9 +1680,6 @@
       },
       "heat_pump_boost_offset": {
         "name": "Decalaj de stimulare pompă de căldură"
-      },
-      "hot_water_max_temperature": {
-        "name": "Temperatură maximă apă caldă"
       },
       "system_size_kwp": {
         "name": "Puterea instalată PV"
@@ -1608,14 +1797,27 @@
           "8_hours": "8 ore",
           "12_hours": "12 ore"
         }
+      },
+      "hints": {
+        "name": "Indicii",
+        "state": {
+          "off": "Oprit",
+          "weekly": "Notă săptămânală",
+          "all": "Toate indiciile"
+        }
       }
     },
     "button": {
       "backfill_battery_nights": {
-        "name": "Rebuild battery-night history"
+        "name": "Reconstruiește istoricul nopților bateriei"
       },
       "pause_charging": {
         "name": "{charger} Pune încărcarea pe pauză"
+      }
+    },
+    "time": {
+      "per_charger_target_time": {
+        "name": "{charger} Încărcare până la"
       }
     }
   },
@@ -1644,6 +1846,9 @@
     "set_option_invalid_payload": {
       "message": "set_option necesită un dicționar „options” care asociază chei de configurare cu valori noi."
     },
+    "battery_list_changed": {
+      "message": "Bateriile din panoul Energie s-au schimbat, așa că această setare a bateriei nu a fost salvată. Verificați-o și încercați din nou."
+    },
     "set_option_no_entry": {
       "message": "Nu a fost găsită nicio ConfigEntry SEM — instalați mai întâi SEM din Setări → Dispozitive și servicii."
     },
@@ -1655,6 +1860,24 @@
     },
     "load_management_failed_to_start": {
       "message": "Gestionarea sarcinilor este pornită, dar nu a reușit să pornească, deci SEM nu își poate folosi lista de dispozitive. Verificați jurnalul Home Assistant pentru \"Failed to initialize load management\" și reîncărcați integrarea."
+    },
+    "battery_boost_not_permitted": {
+      "message": "Bateria nu poate alimenta „{charger}”: permisiunea este dezactivată. Activeaz-o în setările bateriei pentru a folosi boost-ul."
+    },
+    "battery_boost_not_connected": {
+      "message": "Nicio mașină nu este conectată la „{charger}”."
+    },
+    "battery_boost_bad_floor": {
+      "message": "„{floor}” nu este un nivel al bateriei: indică o limită de la 0 la 100 %."
+    },
+    "charger_not_found": {
+      "message": "SEM nu are niciun încărcător „{charger}”."
+    },
+    "departure_bad_time": {
+      "message": "„{day}: {time}” nu este o plecare: zilele sunt mon … sun, orele HH:MM, de la 00:00 la 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "Un adaos, o taxă pe energie sau TVA se aplică doar la un preț spot. Alege baza spot sau setează-le la 0."
     }
   },
   "issues": {
@@ -1671,8 +1894,8 @@
       "fix_flow": {
         "step": {
           "confirm": {
-            "title": "Report this to SEM",
-            "description": "Ultimele 3+ comenzi de curent trimise de SEM către **{name}** au fost respinse: `{error}`. Încărcătorul NU este sub controlul SEM în acest moment — va continua să facă ce i s-a comandat ultima dată (inclusiv să încarce la putere maximă în modul oprit). Cele mai frecvente cauze: entitatea de control a încărcătorului a fost redenumită de o actualizare a integrării din amonte sau `ev_charger_service` indică un serviciu cu o altă schemă de parametri. Verificați entitatea/serviciul de control al încărcătorului în configurația SEM. Această problemă se șterge automat la următoarea comandă reușită.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "title": "Raportează aceasta către SEM",
+            "description": "Ultimele 3+ comenzi de curent trimise de SEM către **{name}** au fost respinse: `{error}`. Încărcătorul NU este sub controlul SEM în acest moment — va continua să facă ce i s-a comandat ultima dată (inclusiv să încarce la putere maximă în modul oprit). Cele mai frecvente cauze: entitatea de control a încărcătorului a fost redenumită de o actualizare a integrării din amonte sau `ev_charger_service` indică un serviciu cu o altă schemă de parametri. Verificați entitatea/serviciul de control al încărcătorului în configurația SEM. Această problemă se șterge automat la următoarea comandă reușită.\n\nSEM crede că această eroare îi aparține. Dacă puteți, deschideți un raport de eroare cu butonul din notificare — formularul vine deja completat. Dacă preferați, copiați contextul de mai jos într-un e-mail sau o postare pe forum. Acest dialog nu trimite nimic nicăieri.\n\n```\n{context}\n```\n\nConfirmați pentru a închide notificarea."
           }
         }
       }
@@ -1682,8 +1905,8 @@
       "fix_flow": {
         "step": {
           "confirm": {
-            "title": "Report this to SEM",
-            "description": "SEM i-a comandat lui **{name}** să se oprească, dar niciun mecanism configurat nu poate deschide efectiv contactorul — mașina consumă în continuare {power} W. Singurul control pe care SEM îl are pentru acest încărcător este `{entity}`, iar minimul acestuia este peste 0 A, deci scrierea valorii 0 A nu face nimic (SEM nu scrie niciodată o valoare pe care entitatea ar respinge-o). Dacă ai o baterie de casă, această putere iese din ea — la orice oră din zi sau din noapte. Soluție: configurează pentru acest încărcător, în opțiunile SEM, o entitate pornire/oprire (`ev_start_stop_entity`), o entitate de mod de încărcare sau un serviciu de oprire. Avertismentul dispare de îndată ce încărcătorul nu mai consumă.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "title": "Raportează aceasta către SEM",
+            "description": "SEM i-a comandat lui **{name}** să se oprească, dar niciun mecanism configurat nu poate deschide efectiv contactorul — mașina consumă în continuare {power} W. Singurul control pe care SEM îl are pentru acest încărcător este `{entity}`, iar minimul acestuia este peste 0 A, deci scrierea valorii 0 A nu face nimic (SEM nu scrie niciodată o valoare pe care entitatea ar respinge-o). Dacă ai o baterie de casă, această putere iese din ea — la orice oră din zi sau din noapte. Soluție: configurează pentru acest încărcător, în opțiunile SEM, o entitate pornire/oprire (`ev_start_stop_entity`), o entitate de mod de încărcare sau un serviciu de oprire. Avertismentul dispare de îndată ce încărcătorul nu mai consumă.\n\nSEM crede că această eroare îi aparține. Dacă puteți, deschideți un raport de eroare cu butonul din notificare — formularul vine deja completat. Dacă preferați, copiați contextul de mai jos într-un e-mail sau o postare pe forum. Acest dialog nu trimite nimic nicăieri.\n\n```\n{context}\n```\n\nConfirmați pentru a închide notificarea."
           }
         }
       }
@@ -1721,8 +1944,8 @@
       "fix_flow": {
         "step": {
           "confirm": {
-            "title": "Report this to SEM",
-            "description": "**{name}** are setată o țintă de încărcare în procente, dar vehiculul nu îşi raportează starea de încărcare în acest moment, aşa că SEM nu poate opri *exact* la **{target}%**.\n\nTotuşi nu încarcă orbeşte: de la ultima citire reală din această sesiune contorizează energia livrată efectiv şi opreşte în momentul în care acest total măsurat atinge ţinta — depăşirea este doar cât a luat maşina de la acea citire încoace. Dacă în această sesiune nu a sosit nicio citire reală (sau SEM a repornit în timpul încărcării), nu există reper şi încărcarea continuă până când maşina însăşi reduce puterea, aproape plină.\n\nPentru o limită care nimereşte exact, configuraţi un **senzor real de SOC al vehiculului** pentru acest încărcător (Configurare → EV → Entitate SOC vehicul). Procentul bateriei din tabloul de bord este SOC-ul *estimat* de SEM, ignorat în mod deliberat pentru limita fermă (poate devia). Această reparaţie dispare automat de îndată ce o citire reală de SOC este din nou disponibilă.\n\nSEM believes this one is its own fault. If you can, open a bug report with the button on the notice — the form arrives already filled in. If you prefer, copy the context below into an email or forum post instead. Nothing is sent anywhere by this dialog.\n\n```\n{context}\n```\n\nConfirm to dismiss the notice."
+            "title": "Raportează aceasta către SEM",
+            "description": "**{name}** are setată o țintă de încărcare în procente, dar vehiculul nu îşi raportează starea de încărcare în acest moment, aşa că SEM nu poate opri *exact* la **{target}%**.\n\nTotuşi nu încarcă orbeşte: de la ultima citire reală din această sesiune contorizează energia livrată efectiv şi opreşte în momentul în care acest total măsurat atinge ţinta — depăşirea este doar cât a luat maşina de la acea citire încoace. Dacă în această sesiune nu a sosit nicio citire reală (sau SEM a repornit în timpul încărcării), nu există reper şi încărcarea continuă până când maşina însăşi reduce puterea, aproape plină.\n\nPentru o limită care nimereşte exact, configuraţi un **senzor real de SOC al vehiculului** pentru acest încărcător (Configurare → EV → Entitate SOC vehicul). Procentul bateriei din tabloul de bord este SOC-ul *estimat* de SEM, ignorat în mod deliberat pentru limita fermă (poate devia). Această reparaţie dispare automat de îndată ce o citire reală de SOC este din nou disponibilă.\n\nSEM crede că această eroare îi aparține. Dacă puteți, deschideți un raport de eroare cu butonul din notificare — formularul vine deja completat. Dacă preferați, copiați contextul de mai jos într-un e-mail sau o postare pe forum. Acest dialog nu trimite nimic nicăieri.\n\n```\n{context}\n```\n\nConfirmați pentru a închide notificarea."
           }
         }
       }
@@ -1756,12 +1979,12 @@
       "description": "SEM transformă amperii în wați cu **Faze × Volți**. Pentru **{name}** asta înseamnă **{believed}**, deci un amper ar trebui să dea **{nominal} W** — dar pe **{cycles}** cicluri stabile încărcătorul a tras **{watts_per_amp} W pe amper**, ceea ce se potrivește cu **{measured}**. Acel număr stabilește curentul oferit de SEM și ce presupune planul de noapte pentru mașină. **Rezolvare:** deschide numărul *Faze* al încărcătorului și setează-l la **{measured}**. Dispare singur când se potrivește."
     },
     "deye_system_work_mode_invalid": {
-      "title": "Deye export control cannot be used: {entity_id}",
-      "description": "SEM cannot use {entity_id} for export control: {reason}. Check the select entity and the three option labels under Configuration → Battery intelligence."
+      "title": "Controlul exportului Deye nu poate fi folosit: {entity_id}",
+      "description": "SEM nu poate folosi {entity_id} pentru controlul exportului: {reason}. Verificați entitatea select și cele trei etichete de opțiuni din Configuration → Battery intelligence."
     },
     "battery_operating_mode_unexpected": {
-      "title": "Battery is in “{mode}” — SEM plans as if it were “{expected}”",
-      "description": "The operating-mode selector {entity_id} reads “{mode}”. SEM's overnight model and the spendable budget assume “{expected}”; in other modes the inverter follows its own schedule underneath SEM and the plans may not hold. If this mode is deliberate, dismiss this — SEM will not fight your choice. Otherwise set the inverter back to “{expected}”."
+      "title": "Bateria este în „{mode}” — SEM planifică ca și cum ar fi „{expected}”",
+      "description": "Selectorul de mod de funcționare {entity_id} citește „{mode}”. Modelul nocturn al SEM și bugetul cheltuibil presupun „{expected}”; în alte moduri invertorul își urmează propriul program sub SEM, iar planurile pot să nu se mai respecte. Dacă acest mod este deliberat, respingeți acest mesaj — SEM nu se va opune alegerii dvs. Altfel, readuceți invertorul la „{expected}”."
     },
     "battery_force_discharge_entity_unstable": {
       "title": "Punctul de referință al puterii bateriei devine în mod repetat indisponibil: {entity_id}",
@@ -1784,32 +2007,56 @@
       "description": "Contorul arată **{grid_import_kw} kW** față de o țintă de **{target_kw} kW**. Chiar cu tot ce poate opri SEM deja oprit, ar rămâne **{uncontrolled_kw} kW** — dintre care **{managed_charger_kw} kW** sunt un încărcător pe care SEM îl gestionează deja; vârful lui e stabilit de limita de încărcare, nu de deconectare. De aceea SEM nu deconectează nimic cât timp durează. **Rezolvare:** scade limita acelui încărcător, dă-i SEM celălalt consumator sau ridică ținta. Dispare singur când vârful devine din nou atins."
     },
     "battery_platform_pinned_generic": {
-      "title": "Battery platform pinned to Generic on a {brand} install",
-      "description": "SEM's battery platform is set to **Generic / other**, but the {brand} integration is loaded. Earlier versions of the options wizard offered only Generic and Deye and defaulted to Generic, so walking through that page once demoted a {brand} install to the generic adapter — no forcible charge, no idempotent register writes. Open **Settings → Integrations → SEM → Configure → Battery scheduler** and set **Battery charge platform** to **Auto-detect**. If Generic is a deliberate choice (a battery with its own control entities), set that entity and this notice goes away."
+      "title": "Platforma de baterie fixată pe Generic la o instalare {brand}",
+      "description": "Platforma de baterie a SEM este setată pe **Generic / altul**, dar integrarea {brand} este încărcată. Versiunile anterioare ale asistentului de opțiuni ofereau doar Generic și Deye, cu Generic implicit, așa că parcurgerea acelei pagini a retrogradat o dată o instalare {brand} la adaptorul generic — fără încărcare forțată, fără scrieri de registru idempotente. Deschideți **Setări → Dispozitive și servicii → SEM → Configurare → Planificator încărcare baterie** și setați **Platformă de încărcare a bateriei** pe **Automat (recomandat)**. Dacă Generic este o alegere deliberată (o baterie cu propriile entități de control), setați acea entitate și acest mesaj dispare."
     },
     "split_grid_guessed": {
-      "title": "SEM is checking two guessed grid meters",
-      "description": "No grid power entity is configured and the Energy Dashboard gives none, so SEM matched entity names and found **{import_entity}** as a possible grid import meter and **{export_entity}** as a possible export meter — a name match, with no device evidence behind it. SEM will NOT steer on them until they agree with your grid energy counters, so grid power reads 0 for now. To skip the wait, open **Settings → Integrations → SEM → Configure → Sensors** and set **Grid import power** and **Grid export power** explicitly."
+      "title": "SEM verifică două contoare de rețea ghicite",
+      "description": "SEM nu are un senzor de putere a rețelei, așa că a ghicit după nume: **{import_entity}** pentru importul din rețea și **{export_entity}** pentru exportul în rețea. SEM nu le folosește până când nu se potrivesc cu contoarele dvs. de energie ale rețelei, așa că deocamdată puterea rețelei arată 0. Pentru a alege contorul: deschideți tabloul SEM, fila ⚙ **Configurare**, și alegeți **Toate setările** din partea de sus. Apoi setați **Putere rețea** în secțiunea **Surse de senzori**. Dacă contorul dvs. are un senzor pentru import și unul pentru export, setați în schimb **Senzor import rețea** și **Senzor export rețea** în secțiunea **Tarif și prețuri**."
     },
     "battery_control_write_not_taken": {
       "title": "O scriere de control al bateriei nu este preluată: {entity_id}",
       "description": "SEM a setat **`{entity_id}`** la **{wanted}**; în ciclurile următoare citea în continuare **{seen}**, de {strikes} ori la rând. Apelul nu a eșuat — registrul pur și simplu nu a păstrat valoarea. **Rezolvare:** setează entitatea manual în Unelte pentru dezvoltatori → Stări. Dacă nu se păstrează, e entitatea greșită pentru acest rol: alege alta în cardul Configurare. Dacă se păstrează manual, dar nu pentru SEM, spune-ne marca și entitatea. Dispare de îndată ce o scriere este reflectată."
     },
     "soc_zones_out_of_order": {
-      "title": "Battery SOC zones are out of order",
-      "description": "Your battery zones read **Priority {priority}% · Buffer {buffer}% · Auto-start {auto_start}%**, but SEM expects them to rise in that order: Priority is the reserve you never spend, Buffer is where battery assist stops, and Auto-start is where the pack is full enough to give freely.\n\nSEM is using **{used}** as the boundaries — the same three numbers, sorted — so no zone is skipped and nothing behaves unpredictably. It is telling you because the layout you typed is almost certainly not the one you meant.\n\nFix it in **Settings → Devices & Services → SEM → Configure → Battery** or on the dashboard's Configuration tab. Any values are allowed as long as they ascend; wide zones are fine — 20 / 30 / 50 is a perfectly good layout on a large pack."
+      "title": "Zonele SOC ale bateriei sunt în ordine greșită",
+      "description": "Zonele bateriei dvs. citesc **Prioritate {priority}% · Tampon {buffer}% · Pornire automată {auto_start}%**, dar SEM se așteaptă ca ele să crească în această ordine: Prioritate este rezerva pe care n-o cheltuiți niciodată, Tampon este unde se oprește asistența bateriei, iar Pornire automată este unde bateria e suficient de plină ca să cedeze liber.\n\nSEM folosește **{used}** ca limite — aceleași trei numere, sortate — astfel încât nicio zonă nu este omisă și nimic nu se comportă imprevizibil. Vă anunță pentru că aranjamentul introdus aproape sigur nu este cel dorit.\n\nCorectați în **Setări → Dispozitive și servicii → SEM → Configurare → Baterie** sau în fila Configurare a tabloului de bord. Sunt permise orice valori atât timp cât sunt crescătoare; zonele largi sunt în regulă — 20 / 30 / 50 este un aranjament perfect valid pe o baterie mare."
     },
     "previous_install_leftovers": {
-      "title": "Files from a previous SEM install were found",
-      "description": "SEM removed {removed} leftover file(s) of its own from an earlier install — those were SEM's and are gone.\n\nWhat is left is yours, and SEM will not take it without being asked: the long-term statistics of the old install's sensors, and the dashboard it generated. If you want those cleared too, run the **Remove leftovers** action (Developer tools → Actions → *SEM: Remove leftovers*). If you would rather keep your history, ignore this — nothing else will be deleted."
+      "title": "Au fost găsite fișiere de la o instalare SEM anterioară",
+      "description": "SEM a eliminat {removed} fișier(e) rămase, ale sale, de la o instalare anterioară — acelea erau ale SEM și au dispărut.\n\nCe a rămas este al dvs., iar SEM nu îl va lua fără să fie întrebat: statisticile pe termen lung ale senzorilor vechii instalări și dashboardul generat de ea. Dacă doriți să curățați și pe acelea, rulați acțiunea **Remove leftovers** (Developer tools → Actions → *SEM: Remove leftovers*). Dacă preferați să vă păstrați istoricul, ignorați acest mesaj — nimic altceva nu va fi șters."
     },
     "heat_pump_contact_values_missing": {
-      "title": "SG-Ready contact {contact} cannot be driven",
-      "description": "**{entity_id}** is set as SG-Ready {contact}, but it is a text/number/select entity and its **{missing}** value is not configured — so SEM has nothing to write and every SG-Ready command for this heat pump fails. Open **Settings → Integrations → SEM → Configure → Heat Pump** (or the dashboard's Configuration tab) and fill both the ON and the OFF value for this contact, or point it at a switch entity instead."
+      "title": "Contactul SG-Ready {contact} nu poate fi comandat",
+      "description": "**{entity_id}** este setat ca SG-Ready {contact}, dar este o entitate text/number/select, iar valoarea sa **{missing}** nu este configurată — așa că SEM nu are ce scrie și fiecare comandă SG-Ready pentru această pompă de căldură eșuează. Deschideți **Setări → Dispozitive și servicii → SEM → Configurare → Pompă de căldură** (sau fila Configurare a tabloului de bord) și completați atât valoarea ON cât și OFF pentru acest contact, sau îndreptați-l către o entitate switch."
     },
     "split_grid_rejected": {
-      "title": "SEM could not find your grid power meters",
-      "description": "No grid power entity is configured and the Energy Dashboard gives none. SEM matched **{import_entity}** and **{export_entity}** by entity name, then checked them against your grid energy counters — and they do not track them, so they are not your meters. SEM reports **no grid power** rather than a wrong one. Open **Settings → Integrations → SEM → Configure → Sensors** and set **Grid import power** and **Grid export power** explicitly; this notice clears once real meters are named or the guesses start agreeing."
+      "title": "SEM nu a putut găsi contoarele dvs. de putere din rețea",
+      "description": "SEM nu are un senzor de putere a rețelei, iar senzorii ghiciți după nume nu sunt contorul dvs. de rețea: **{import_entity}** pentru import, **{export_entity}** pentru export. Nu se potrivesc cu contoarele dvs. de energie ale rețelei, sau unul dintre cei doi lipsește. SEM preferă să nu arate nicio putere a rețelei decât una greșită. Pentru a alege contorul: deschideți tabloul SEM, fila ⚙ **Configurare**, și alegeți **Toate setările** din partea de sus. Apoi setați **Putere rețea** în secțiunea **Surse de senzori**. Dacă contorul dvs. are un senzor pentru import și unul pentru export, setați în schimb **Senzor import rețea** și **Senzor export rețea** în secțiunea **Tarif și prețuri**."
+    },
+    "power_sensor_not_found": {
+      "title": "Niciun senzor de putere pentru {energy_entity}",
+      "description": "Panoul Energie numără **{energy_entity}** în kWh, dar SEM nu a găsit niciun senzor de putere (W) pentru el. SEM citește deci această putere ca 0 W, iar fluxurile de energie și surplusul sunt greșite. Pentru a remedia, adăugați senzorul de putere la această intrare din panoul Energie. Sau deschideți panoul SEM, fila ⚙ **Configurare**, și alegeți **Toate setările** sus. Apoi setați senzorul în secțiunea **Surse de senzori**. Dacă nu există niciun senzor de putere, puteți ignora această notificare."
+    },
+    "power_sensor_not_found_unit": {
+      "title": "Niciun senzor de putere pentru {energy_entity}",
+      "description": "Panoul Energie numără **{energy_entity}** în kWh, dar SEM nu a găsit niciun senzor de putere (W) pentru el. SEM adună deci doar celelalte intrări solare sau de baterie, iar fluxurile de energie și surplusul sunt greșite. Pentru a remedia, adăugați senzorul de putere la această intrare din panoul Energie. Dacă nu există niciun senzor de putere, puteți ignora această notificare."
+    },
+    "charger_device_gone": {
+      "title": "Încărcătorul {name}: dispozitivul lipsește",
+      "description": "Home Assistant nu mai are dispozitivul încărcătorului {name}. SEM nu îl poate comanda. Șterge încărcătorul din SEM sau adaugă din nou dispozitivul."
+    },
+    "charger_role_missing": {
+      "title": "Încărcătorul {name}: lipsește un rol",
+      "description": "SEM nu a găsit nicio entitate pe dispozitivul lui {name} pentru: {roles}. Alege-o în setările încărcătorului sau verifică integrarea dispozitivului."
+    },
+    "charger_role_entity_gone": {
+      "title": "Încărcătorul {name}: o entitate a dispărut",
+      "description": "Încărcătorul {name} folosește {entity}, care a dispărut sau e dezactivată. Alege altă entitate în setările încărcătorului sau verifică integrarea dispozitivului."
+    },
+    "external_write_seen": {
+      "title": "O altă parte scrie în {name}",
+      "description": "Altceva decât SEM schimbă mereu **{name}**, iar SEM și acea parte își anulează reciproc munca. În fila Configurare a SEM, setează acest dispozitiv pe *Da, SEM se retrage* și alege entitatea care arată când cealaltă parte are controlul."
     }
   },
   "selector": {
@@ -1818,6 +2065,86 @@
         "disabled": "Dezactivat",
         "grid_only": "Doar alimentare din rețea",
         "hybrid_load_port": "Rețea + ieșire Load/EPS a invertorului hibrid"
+      }
+    },
+    "diagram_style": {
+      "options": {
+        "sem": "SEM (integrat)",
+        "kflow": "K-Flow (HACS)"
+      }
+    },
+    "tariff_mode": {
+      "options": {
+        "static": "Fix (tarife zi/noapte fixe)",
+        "dynamic": "Dinamic / senzor de preț (Tibber / Nordpool / aWATTar / Amber / Octopus — sau orice entitate cu prețul curent)",
+        "calendar": "Calendar (program zi/noapte pe ore)"
+      }
+    },
+    "solar_forecast_source": {
+      "options": {
+        "auto": "Automat (Solcast, apoi Forecast.Solar, apoi Open-Meteo, apoi Helios)",
+        "solcast": "Solcast PV Solar",
+        "forecast_solar": "Forecast.Solar",
+        "open_meteo": "Open-Meteo Solar Forecast",
+        "helios": "Helios Forecast"
+      }
+    },
+    "tariff_classification_mode": {
+      "options": {
+        "percentile": "Percentilă (față de prețurile de azi)",
+        "static": "Fix (praguri ieftin/scump fixe)"
+      }
+    },
+    "battery_charge_platform": {
+      "options": {
+        "auto": "Automat (recomandat)",
+        "huawei": "Huawei SUN2000 / LUNA2000",
+        "goodwe": "GoodWe",
+        "deye": "Invertor hibrid Deye",
+        "generic": "Generic / altul"
+      }
+    },
+    "deye_force_charge_work_mode": {
+      "options": {
+        "load_first": "Load First",
+        "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "Niciunul (fără taxe)",
+        "nl_2027": "Țările de Jos din 2027",
+        "custom": "Personalizat"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "Totul inclus (cu taxe)",
+        "spot_incl_vat": "Preț spot cu TVA",
+        "spot": "Preț spot (fără taxe)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "Niciuna",
+        "per_kwh": "Pe kWh",
+        "tiered": "Praguri după kWh pe an",
+        "fixed_monthly": "Fix pe lună"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Cumpăr din rețea",
+        "sending": "Trimit în rețea",
+        "keep": "Acesta este contorul meu de rețea",
+        "other": "Folosește celălalt contor",
+        "unknown": "Nu știu"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "none": "negăsit",
+        "why_guessed": "Panoul tău Energie nu are senzor de putere a rețelei, așa că SEM a ghicit unul."
       }
     }
   }

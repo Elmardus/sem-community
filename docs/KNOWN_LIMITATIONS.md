@@ -31,6 +31,8 @@ The EV charger must be controllable via a supported HA integration (KEBA, Easee,
 
 Battery discharge protection requires a Huawei Solar inverter (or compatible) that exposes a `number` entity for the battery discharge power limit. Other inverters without this entity cannot have their discharge actively clamped.
 
+This includes **Battery may charge the car** turned off (2.2, #1066). A battery that follows the meter on its own, such as a Sessy in `nom`, covers the car too, and SEM has no limit to write. SEM says so in the Diagnose download (`last_error`: "no discharge limit entity").
+
 ## Export guard: what the inverter allows (2.1, #955)
 
 The export guard works with what the brand integration exposes, and the
@@ -194,6 +196,18 @@ was silently off for those installs.
 
 Peak load management requires controllable devices with switch entities for shedding. Devices without a discoverable switch entity must be configured manually. The 15-minute rolling average calculation starts fresh after each HA restart.
 
+## Grid operator relay: SEM follows it, the operator enforces it (#1021)
+
+- Only loads SEM controls obey the limit. An oven or a load SEM does not drive
+  still draws; the operator's own relay remains the hard stop.
+- SEM sets one limit for the house. The 4.2 kW-per-device floor is the
+  operator's rule; SEM does not split it per device.
+- No EEBus in SEM. The relay, and the limit if you have one, come from an
+  integration.
+- In Switzerland SEM only knows a device is locked if you mark it *Behind the
+  grid operator's relay*. An unmarked device still gets planned.
+- An unreadable relay counts as off. An unreadable limit counts as 4.2 kW.
+
 ## OCPP chargers stop through the charge-control switch (2.1, #976)
 
 On the OCPP integration the maximum-current number is a charging profile the
@@ -225,7 +239,7 @@ SEM supports SG-Ready heat pump control via two relay entities (Shelly, ESPHome,
 
 - **Virtual SOC accuracy** — depends on taper detection or car API calibration for the initial anchor. Without either, the SOC estimate drifts over time based solely on energy tracking and predicted consumption. A car that declines a start is recorded as *declined*, not as full — the estimate does not move on a refusal.
 - **Consumption predictor cold start** — needs at least 3 days of data before per-weekday predictions are useful. During the first 3 days, a conservative default is used.
-- **Temperature correction** — requires an outdoor temperature sensor (auto-detected from a `weather.*` entity). Without it, temperature correction is disabled and predictions assume 20°C.
+- **Temperature correction** — needs an outdoor temperature. SEM finds an outdoor thermometer by its name, else it uses your `weather.*` entity. Without it, temperature correction is disabled and predictions assume 20°C.
 - **Battery health tracking** — requires multiple charge sessions over weeks/months to produce meaningful estimates. Short-term values may fluctuate.
 
 ## One vehicle per charger
@@ -377,10 +391,49 @@ When the battery is held, the grid pays for the whole house; when it is
 open, the battery does. A rate in between — grid up to the peak limit,
 battery for the rest — is not built.
 
-## Every control is shown (#996 open)
+## Controls follow what the house can use (2.2, #996)
 
-A house on a flat tariff still sees the price controls, which can do nothing
-there. Hiding a control this house cannot use is planned, not built.
+A control your house cannot use is not created: price thresholds need a
+dynamic tariff, the export guard an export-limit entity, forecast rows a
+forecast, kWh-per-kWp sensors a plant size, ROI rows an investment figure.
+Wire the thing and the control appears after one automatic reload.
+
+Three things to know:
+
+- The export limit and the forecast are read from the entity registry (the
+  entity exists and is enabled), never from a live reading. An outage removes
+  nothing.
+- "Not there" is stored only after six reads over ten minutes while Home
+  Assistant is running, and takes effect at the next reload. Until then SEM
+  keeps the control rather than guess.
+- A custom dashboard that names one of these entities shows it as
+  unavailable on a house that lacks the capability.
+
+## Charge pacing drives one charge-limit entity (#820)
+
+Pacing writes one number: the battery charge-power limit you named. A house
+with two inverters paces the one that owns that entity; the other charges as
+it likes. Pacing both needs a second limit entity, which SEM does not take yet.
+
+## Charge pacing writes at most every five minutes (#820)
+
+A pacing cap is rewritten only for a real change (more than a step, 100 W or
+5 %), and at most once every five minutes. The release to full power below
+the buffer goes at once. A cap the inverter applies as its own number (you
+asked for 1550 W, it holds 1449 W) counts as taken and is left alone.
+
+## PV health: the snow flag needs a temperature source (#1022)
+
+`sensor.sem_pv_health` claims snow only when it is freezing. Without an
+outdoor temperature entity or a weather entity, the flag stays off. The
+colour needs three settled days before it shows.
+
+## Charger roles: cloud-only integrations are proven from their source (#1032)
+
+The crawler's roles are tested against each integration's real output. Zaptec
+and Easee only run with an account, so their test data comes from their
+source code, the weakest kind of proof. A report from a real box is what
+turns such a row into tested-live.
 
 ## KEBA: Off and Pause hold for about 10 minutes
 
@@ -391,3 +444,41 @@ purpose (a dead controller must not strand the car). SEM stops once and
 does not fight the box; it raises a Repair instead. A stop only holds if
 SEM's arming is turned off (`keba_arm_failsafe: false` via `set_option`)
 and the box's own `Curr FS` is set to 0.
+
+## Simulation tab: estimates from hourly averages (#1083)
+
+The Simulation tab gives estimates, not measurements:
+
+- **Hourly averages.** It reads Home Assistant's hourly history. 15-minute
+  prices and short power peaks inside an hour are averaged away, and the
+  peak limit is checked per hour.
+- **The car and your loads stay as recorded.** Only the battery and the
+  grid change. A bigger battery does not move the car's charging.
+- **Two features are off in the simulation:** spending the battery on the
+  forecast, and the export guard.
+- **No data, no day.** Days before SEM was installed, or before Home
+  Assistant kept its history, cannot be simulated.
+- **Older days are judged by the hour.** Days older than Home Assistant's
+  history are tagged from hourly totals: sunny when the day came close to
+  the best day of the month around it and no hour dipped. A cloud that
+  passes inside one hour is not seen.
+- **One changed decision changes the rest.** Once the simulated battery
+  does something different from the real one, every hour after it is an
+  estimate (marked est.).
+- **The night plan knows the day.** A day without a stored forecast (one
+  read back from history) plans its night with its own solar: a perfect
+  forecast. The night charge is never more than the day needs, which can
+  be a little better than live SEM, whose plan rests on a learned house use.
+- **A short gap is bridged with your real battery's change.** Over one or
+  two missing days the simulated battery moves as your real one did; what
+  a bigger battery would have done on those days is not known.
+- **More solar keeps your house and car as recorded.** Only the solar hours
+  grow; nothing moves to use the extra sun, except what the car's charge
+  mode does on its own.
+
+## Reconfigure cannot save a home that has a charger (#1258 open)
+
+**Settings → Devices & Services → Solar Energy Management → Reconfigure**
+asks for three EV sensors it cannot fill in when your charger is already set
+up, and will not save. Use **Configure** (the gear) instead: it holds the
+same charger and notification settings and saves them correctly.

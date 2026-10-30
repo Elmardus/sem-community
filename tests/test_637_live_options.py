@@ -30,7 +30,10 @@ STRUCTURAL_RELOAD = {"tariff_mode", "tariff_classification_mode",
                      "battery_max_target_soc", "battery_pessimism_weight",
                      "battery_precharge_trigger_hour",
                      "battery_replan_interval_min",
-                     "battery_roundtrip_efficiency"}
+                     "battery_roundtrip_efficiency",
+                     # (#1077) read when the tariff provider is built
+                     "tariff_value_preset", "import_price_basis",
+                     "feed_in_fee_model"}
 
 
 def _card_option_keys():

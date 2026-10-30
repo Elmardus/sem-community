@@ -159,7 +159,7 @@ class TestHotWater:
         assert v[Module.HOT_WATER] is Presence.PRESENT
 
     def test_settings_alone_are_not_evidence(self):
-        v = module_verdict({"hot_water_max_temperature": 60}, None, False)
+        v = module_verdict({"hot_water_solar_target": 60}, None, False)
         assert v[Module.HOT_WATER] is Presence.ABSENT
 
 
@@ -326,9 +326,10 @@ class TestPresenceOf:
         assert p[Module.BATTERY] is Presence.ABSENT
 
     def test_summary(self):
-        assert presence_summary({Module.BATTERY: Presence.ABSENT}) == {
-            "battery": "absent", "ev": "unknown", "heat_pump": "unknown",
-            "hot_water": "unknown"}
+        summary = presence_summary({Module.BATTERY: Presence.ABSENT})
+        assert summary["battery"] == "absent"
+        assert set(summary) == {m.value for m in Module}
+        assert set(summary.values()) == {"absent", "unknown"}
 
     def test_summary_round_trips(self):
         presence = {**all_unknown(), Module.BATTERY: Presence.ABSENT, Module.EV: Presence.PRESENT}

@@ -722,7 +722,7 @@ from custom_components.solar_energy_management.const import (  # noqa: E402
 @pytest.mark.unit
 class TestDefaultSeedOrder:
     """Fresh (never-dragged) seed puts EV chargers above the battery and loads
-    below it: EV → battery → loads. Guido's confirmed default; reverses the
+    below it: EV → battery → loads. The confirmed default; reverses the
     old battery-at-bottom seed so loads yield to the battery until dragged up."""
 
     def test_ev_seed_above_battery_above_load_seed(self):
@@ -853,7 +853,9 @@ class TestDrawCalibrationAllTypes:
         d = SwitchDevice(hass=hass, device_id="s", name="s", rated_power=1000,
                          power_entity_id="sensor.p")
         d._status.state = DeviceState.ACTIVE
-        d.calibrate_rated_power()
+        d.calibrate_rated_power(now=0.0)    # (#1067) held for the hold time
+        d.calibrate_rated_power(now=60.0)
+        d.calibrate_rated_power(now=120.0)
         assert d.rated_power == 2400        # snapped up to the observed draw
         assert d.min_power_threshold == 2400
 

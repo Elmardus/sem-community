@@ -23,6 +23,35 @@ BADGE = {"tested-live": "✅ tested live", "implemented": "🧩 implemented",
 ORDER = {"tested-live": 0, "implemented": 1, "requested": 2}
 
 
+
+# (#1032) SEM adds no code per brand; it reads what an integration offers.
+ROLES_SECTION = """
+## How SEM finds a charger it has no row for
+
+SEM does not add code per brand. It reads what an integration offers and
+looks for these roles:
+
+- **Start and stop buttons** — a charger with a start and a stop button can
+  be started and stopped.
+- **A charge-mode select** — a select that can stop and can charge (for
+  example Fast / Eco / Stopped) is the charge mode, whatever it is called.
+- **A phase select** — a select with 1 and 3 is suggested as the phase switch.
+- **A car's own charge control** — a car integration's charging-amps number
+  and charge switch (Tesla Fleet, Teslemetry, Tessie).
+- **A charger that only reports** — driven through the one car that has
+  those controls (a Tesla Wall Connector with one Tesla).
+  With no such car, the report shows it as a charger found with no control
+  SEM can drive: SEM can read it but not start, stop or set its current.
+  With two such cars SEM does not guess; you add it by hand with that car's
+  controls.
+- **A companion device** — an installation or site device next to a
+  charger belongs to it and is not reported as unknown hardware.
+
+What SEM finds shows in the hardware report (Diagnose). For now it is a
+report only: nothing is set up by itself, and you add the charger by hand
+with the entities the report names.
+"""
+
 def _sorted(rows):
     return sorted(rows, key=lambda r: (ORDER[r["status"]], r["brand"].lower()))
 
@@ -98,6 +127,7 @@ def render() -> str:
             brand=r["brand"], role=r["role"], integration=r["integration"],
             st=BADGE[r["status"]], ev=r["evidence"] or "—"))
 
+    out.append(ROLES_SECTION)
     out.append("\n## Upgrading a row to *tested live*\n")
     out.append("Run SEM with your hardware and tell us what happened — an "
                "issue with your brand, the config-flow result and a note "

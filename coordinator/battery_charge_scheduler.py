@@ -28,6 +28,8 @@ from typing import Optional
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from ..tariff.value_layer import export_not_worth
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -164,9 +166,11 @@ class SchedulerConfig:
     replan_soc_deviation_pct: float = 5.0  # Re-evaluate if SOC deviates this much
     replan_on_ev_change: bool = True  # Re-evaluate when EV connects/disconnects
 
-    # Peak management
-    peak_limit_w: float = 0.0  # 0 = no limit
-    max_grid_import_w: float = 0.0  # 0 = no limit; cap total grid draw during charge
+    # (#1069) No peak fields. ``peak_limit_w`` and ``max_grid_import_w``
+    # were written here and read by nothing, so a reader saw a "peak-aware"
+    # planner that was not. The grid limit is read LIVE, once per cycle:
+    # the joint plan sizes blocks against ``_planning_peak_w`` and
+    # ``decide_battery`` caps every forced charge to the slot's room.
     # #604: internal planner knob — the legacy ``ev_priority_over_battery``
     # config key no longer feeds it (it was never reachable from any UI, so
     # this always held its default True; the v14→v15 migration deletes the
@@ -221,19 +225,8 @@ class SchedulerConfig:
             pessimism_weight=config.get("battery_pessimism_weight", 0.3),
             replan_soc_deviation_pct=config.get("battery_replan_soc_deviation", 5.0),
             replan_on_ev_change=config.get("battery_replan_on_ev_change", True),
-            # #693 — the cap must come from a key installs actually carry.
-            # ``peak_limit_w`` was written by NOTHING (not the config flow,
-            # not a migration), so the peak-aware slot distribution ran with
-            # ``0 = no limit`` on every install. ``target_peak_limit`` is the
-            # install-flow key, in kW (shared with load management).
-            # (#716) An install that declared no grid ceiling seeds this
-            # planner's own ``0 = no limit`` sentinel. The flag is translated
-            # here rather than passed through: this dataclass field is
-            # consumed by slot arithmetic that has no infinity handling, and
-            # 0 is the no-limit value it already understands.
-            peak_limit_w=0.0 if config.get(
-                "peak_limit_unlimited", False
-            ) else float(config.get("target_peak_limit", 0.0) or 0.0) * 1000.0,
+            force_charge_on_negative_price=config.get("battery_force_charge_negative_price", True),
+            arbitrage_enabled=config.get("battery_grid_arbitrage_enabled", False),
             # (#932 audit / the spendable_budget lesson) ``config.get(key,
             # default)`` returns None when the key EXISTS holding null — how
             # a hand-edited or migrated options file looks — and None then
@@ -241,9 +234,6 @@ class SchedulerConfig:
             # TypeError, swallowed by the cycle's blanket except: arbitrage
             # silently off, no Repair. An explicit 0 stays a choice; None is
             # an absence and takes the documented default.
-            max_grid_import_w=_num(config.get("battery_max_grid_import_w"), 0.0),
-            force_charge_on_negative_price=config.get("battery_force_charge_negative_price", True),
-            arbitrage_enabled=config.get("battery_grid_arbitrage_enabled", False),
             arbitrage_min_export_price=_num(config.get("battery_arbitrage_min_export_price"), 0.20),
             arbitrage_reserve_soc=_num(config.get("battery_arbitrage_reserve_soc"), 50.0),
             max_discharge_power_w=_num(config.get("battery_max_discharge_power"), 5000.0),
@@ -546,6 +536,7 @@ class BatteryChargeScheduler:
         export_rate: float,
         import_forecast_min: Optional[float],
         enabled_override: Optional[bool] = None,
+        export_threshold: Optional[float] = None,
     ) -> SchedulerDecision:
         """Per-cycle export-arbitrage check (#523) — the discharge mirror
         of ``evaluate()``'s charge planning, using the SAME economic model
@@ -582,6 +573,20 @@ class BatteryChargeScheduler:
                 reason=(
                     f"SOC {current_soc:.0f}% at/below reserve "
                     f"{cfg.arbitrage_reserve_soc:.0f}%"
+                ),
+            )
+        # (#1090) A sale is an export: below the threshold it is not worth
+        # sending, whatever the spread. The one rule, not a compare here.
+        # None = the value rules are off (``value_rules_active``): the floor
+        # below alone decides, exactly as before.
+        if (export_threshold is not None
+                and export_not_worth(export_rate, export_threshold)):
+            # CAUSE: export_rate < export_threshold, tested on the line above
+            return _v(
+                state=SchedulerState.NOT_PROFITABLE,
+                reason=(
+                    f"export value {export_rate:.3f} below "
+                    f"{export_threshold:g}/kWh — not worth exporting"
                 ),
             )
         # Export must clear the configured floor to bother cycling.
@@ -870,7 +875,6 @@ def schedule_view_from_plan(plan, now) -> dict:
         "total_ev_kwh": 0.0,
         "total_kwh": round(total_kwh, 2),
         "estimated_cost": round(cost, 3),
-        "peak_limit_w": 0.0,
     }
 
 

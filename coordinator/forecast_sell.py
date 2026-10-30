@@ -5,8 +5,8 @@ phase = ``spending``). The actuation side ships too: ``decide_battery``
 sells on a DISCHARGING_ARBITRAGE verdict, budget-capped, floor-guarded,
 permission-bound. But the only thing that OPENS a sell today is the
 arbitrage engine — profitability math that requires a dynamic import
-forecast and never fires on a fixed export price. Guido's install and the
-reporter's both have fixed prices: a budget with no trigger.
+forecast and never fires on a fixed export price. PROD and the
+reporter's install both have fixed prices: a budget with no trigger.
 
 This module is the missing WHETHER + the plan's WHEN for forecast-led
 spending:
@@ -32,6 +32,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from .battery_charge_scheduler import SchedulerDecision, SchedulerState
+from ..tariff.value_layer import export_not_worth
 
 #: Below this there is nothing worth a discharge cycle.
 MIN_SPEND_KWH: float = 0.2
@@ -102,6 +103,7 @@ def evaluate_forecast_sell(
     reserve_pct: float,
     export_rate: Optional[float] = None,
     export_rate_known: bool = True,
+    export_threshold: Optional[float] = None,
 ) -> SchedulerDecision:
     """The live WHETHER, in ``evaluate_arbitrage``'s verdict shape.
 
@@ -130,6 +132,15 @@ def evaluate_forecast_sell(
         return _v(state=SchedulerState.IDLE,
                   reason=f"export price is not positive ({float(export_rate):.3f}) "
                          "— selling would pay to give energy away")
+    # (#1090) A positive value below the threshold is not worth sending
+    # either. Zero stays refused above: a sale at nothing earns nothing.
+    # None = the value rules are off (``value_rules_active``).
+    if (export_threshold is not None
+            and export_not_worth(export_rate, export_threshold)):
+        # CAUSE: export_rate < export_threshold, tested on the line above
+        return _v(state=SchedulerState.IDLE,
+                  reason=f"export value {float(export_rate):.3f} below "
+                         f"{export_threshold:g} — not worth exporting")
     kwh = float(spendable_kwh or 0.0)
     if kwh < MIN_SPEND_KWH:
         return _v(state=SchedulerState.NOT_NEEDED,

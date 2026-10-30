@@ -1,0 +1,27 @@
+{
+ "chargers": [
+  {
+   "control": "number entity",
+   "mapped": {
+    "ev_charging_power_sensor": "sensor.peblar_ev_charger_power",
+    "ev_charging_sensor": "sensor.peblar_ev_charger_state",
+    "ev_connected_sensor": "sensor.peblar_ev_charger_state",
+    "ev_current_control_entity": "number.peblar_ev_charger_charge_limit",
+    "ev_session_energy_sensor": "sensor.peblar_ev_charger_session_energy",
+    "ev_start_stop_entity": "switch.peblar_ev_charger_charge",
+    "ev_total_energy_sensor": "sensor.peblar_ev_charger_lifetime_energy"
+   }
+  }
+ ],
+ "meters": [],
+ "near_misses": [],
+ "proposals": [
+  {
+   "ev_current_control": [
+    "number.peblar_ev_charger_charge_limit",
+    "per_charger"
+   ]
+  }
+ ],
+ "vehicles": []
+}

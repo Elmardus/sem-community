@@ -43,6 +43,21 @@ _FLAP_STABILITY_SECONDS = 60  # state must be stable this long before notifying
 _CHANNEL_CHARGING = "sem_charging"
 _CHANNEL_ALERTS = "sem_alerts"
 _CHANNEL_SUMMARY = "sem_summary"
+_CHANNEL_HINTS = "sem_hints"      # (#1019)
+
+# (#1019) English fallbacks; the translated texts live in
+# dashboard/translations.json under the same keys.
+_HINT_DEFAULTS = {
+    "hint_msg_silent_input": "{name} stopped sending {minutes} min ago.",
+    "hint_msg_silent_input_back": "{name} is sending again.",
+    "hint_msg_night_load": "The house used {watts} W all night, usually {usual} W.",
+    "hint_msg_grid_rise": "Grid use rose to {kwh} kWh (usually {usual}) with the same sun.",
+    "hint_msg_cheap_now": "Power is cheap now. {cars}: plugged in and not charging.",
+    "hint_msg_weekly_summary": (
+        "This week: {solar} kWh solar · {self_use} % self-use · {grid} kWh from the grid"
+        " · {ev} kWh into the car · {cost:.2f} {currency}."),
+    "hint_msg_weekly_co2": "Your solar avoided {co2} kg of CO₂ this week.",
+}
 
 
 class NotificationManager:
@@ -708,6 +723,26 @@ class NotificationManager:
             channel=_CHANNEL_SUMMARY,
             group="sem_summary",
         )
+
+    async def notify_hint(self, hint) -> None:
+        """(#1019) One short sentence. The bus event fires always, so an
+        automation can act without a phone; the phone gets it on its own
+        channel when mobile notifications are on. The engine already made
+        sure this key fires once."""
+        from ..utils.translate import get_text
+        message = get_text(self.hass, hint.text_key, _HINT_DEFAULTS.get(hint.text_key, ""),
+                           **hint.params)
+        self.hass.bus.async_fire(f"{DOMAIN}_notification", {
+            "category": "hint",
+            "hint": hint.category,
+            "event": hint.key,
+            "message": message,
+            **{k: v for k, v in hint.params.items() if k not in ("category", "event")},
+        })
+        if not self.config.get("enable_mobile_notifications", False):
+            return
+        await self._send_mobile_notification(
+            message, channel=_CHANNEL_HINTS, group="sem_hints")
 
     async def notify_forecast_alert(self, tomorrow_kwh: float) -> None:
         """Send alert for unusually low solar forecast."""

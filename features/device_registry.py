@@ -38,13 +38,18 @@ from .load_device_discovery import LoadDeviceDiscovery, resolve_load_is_on
 from .device_axes import user_hands_off
 from ..devices.base import (
     CurrentControlDevice,
+    SwitchDevice,
     surplus_device_from_spec,
 )
 from ..devices.power_setpoint import (   # (#880) ONE producer, over there
     PowerSetpointDevice, device_class_for_control,
 )
+from ..devices.base import _MAX_PLAUSIBLE_LOAD_W
+from ..devices.held_power import held_power_from_states
+from ..consts.core import RATED_POWER_RULE, RATED_POWER_START_PEAK_RATIO
 from ..hardware_detection import discover_ev_charger_from_registry
 from ..const import LOAD_PRIORITY_BASE as _LOAD_PRIORITY_BASE
+from ..consts.devices import load_phase
 
 #: (#880) Domains whose control is a watt SETPOINT rather than a contact.
 #: The reporter configured "Control type: Number entity" and got a
@@ -58,6 +63,19 @@ STORAGE_KEY = "sem_device_mappings"
 #: (#880) The top of every EVSE SEM supports. A "current" control that
 #: ranges past it is not amperes — see ``_register_current_control``.
 MAX_PLAUSIBLE_CHARGER_AMPS: int = 32
+
+
+def _tariff_payload(live: Any, goals: Dict[str, Any]) -> Dict[str, Any]:
+    """(#812) The own-tariff fields for the card: the live device's, else
+    what is stored (no live object yet)."""
+    from ..coordinator.device_tariff import parse_rate, tariff_of
+    if live is not None:
+        t = tariff_of(live)
+        return {"tariff_rate": t.rate, "tariff_entity": t.entity,
+                "tariff_meter": t.meter}
+    return {"tariff_rate": parse_rate(goals.get("tariff_rate")),
+            "tariff_entity": str(goals.get("tariff_entity") or ""),
+            "tariff_meter": str(goals.get("tariff_meter") or "")}
 
 
 def _goal_bool(value: Any) -> bool:
@@ -225,6 +243,10 @@ class UnifiedDeviceRegistry:
         self._manual_mappings: Dict[str, Dict[str, Any]] = {}
         self._priority_overrides: Dict[str, int] = {}
         self._control_mode_overrides: Dict[str, str] = {}  # device_id → "off"/"peak_only"/"surplus"
+        # (#1119) ids whose mode the USER picked. The #805 freeze writes
+        # "peak_only" into the same map for every known id, so a stored
+        # peak_only alone does not say the user chose it.
+        self._user_control_modes: set = set()
         # (#122/#576) device_id → [parent_id] "Requires" link. Persisted HERE so
         # a device rebuild (drag → async_refresh_devices, the 35s re-discovery,
         # config change, restart) re-applies it — pre-fix it lived only on the
@@ -257,6 +279,16 @@ class UnifiedDeviceRegistry:
         # once from the power sensor's recorder history so a fresh device shows
         # its real rating immediately rather than the placeholder.
         self._rated_power_overrides: Dict[str, float] = {}
+        # (#1067) device_ids whose saved rating was learned under the old
+        # rule — the highest single reading, so a motor or compressor start
+        # could be it. Each is checked once more against the level its
+        # sensor HELD in the recorder's history. Persisted until settled.
+        self._ratings_to_recheck: set = set()
+        # (#1067) device_id → the saved rating ``_initial_rated_power`` built
+        # it with. Only a device built from the saved number may be moved
+        # DOWN by its re-check; a rating a device was given (a heat pump's
+        # configured power) never is.
+        self._built_from_store: Dict[str, float] = {}
         # device_ids we've already tried to seed from history this session — so
         # a device with no history yet isn't re-queried on every 35 s refresh.
         self._rating_seed_attempted: set = set()
@@ -324,6 +356,7 @@ class UnifiedDeviceRegistry:
                 self._manual_mappings = data.get("mappings", {})
                 self._priority_overrides = data.get("priority_overrides", {})
                 self._control_mode_overrides: Dict[str, str] = data.get("control_modes", {})
+                self._user_control_modes = set(data.get("control_modes_user", []) or [])
                 self._dependency_overrides = data.get("dependencies", {})
                 # (#650) tolerate legacy/hand-edited stores: coerce to bool
                 self._critical_overrides = {
@@ -401,6 +434,20 @@ class UnifiedDeviceRegistry:
                     data.get("rated_power_overrides", {}).items()
                     if v is not None
                 }
+                # (#1067) A store from before the held rule: every saved
+                # rating may be one start peak, so each gets checked again.
+                try:
+                    rule = int(data.get("rated_power_rule") or 0)
+                except (TypeError, ValueError):
+                    rule = 0
+                if rule < RATED_POWER_RULE:
+                    self._ratings_to_recheck = set(self._rated_power_overrides)
+                else:
+                    marks = data.get("rated_power_recheck")
+                    self._ratings_to_recheck = {
+                        str(d) for d in (marks if isinstance(marks, list) else [])
+                        if str(d) in self._rated_power_overrides
+                    }
                 self._service_registrations = data.get("service_registrations", {})
                 self._device_goals = data.get("device_goals", {})
                 # Migrate the removed "surplus_target" mode (#235): a device set to
@@ -505,7 +552,23 @@ class UnifiedDeviceRegistry:
         # (#705) thermal comfort band — Phase 1 consumes them on climate
         # devices; stored against any device (Phase 2 opens switch loads).
         "comfort_entity", "comfort_target", "comfort_offset", "comfort_limit",
+        # (#1020) a Schedule helper that sets the mode while it is on —
+        # applied to switch loads only.
+        "schedule_entity", "schedule_mode",
+        # (#1048) the supply phase the load sits on
+        "phase",
+        # (#1021) wiring: this load sits behind the grid operator's relay
+        "behind_operator_relay",
+        # (#812) the load's own tariff: a fixed rate or a price entity, and
+        # its own meter. None set = the house tariff.
+        "tariff_rate", "tariff_entity", "tariff_meter",
     )
+
+    def phase_for(self, device_id: str) -> str:
+        """(#1048) The phase the user put this load on, ``unknown`` until
+        they say — the one answer for the shedder's row and the card."""
+        goals = getattr(self, "_device_goals", None) or {}
+        return load_phase((goals.get(device_id) or {}).get("phase"))
 
     def _apply_goals(self, device) -> None:
         """Apply the persisted goal config onto a live device object.
@@ -516,6 +579,17 @@ class UnifiedDeviceRegistry:
         goals = self._device_goals.get(device.device_id)
         if not goals:
             return
+        # (#1048) key-present-only, like the anti-cycle windows below
+        if "phase" in goals:
+            device.phase = load_phase(goals.get("phase"))
+        # (#1021) key-present-only, like the phase
+        if "behind_operator_relay" in goals:
+            device.behind_operator_relay = _goal_bool(
+                goals.get("behind_operator_relay"))
+        # (#812) key-present-only, like the phase: a heat pump's config row
+        # seeds its tariff, a stored goal overrides the fields it names.
+        from ..coordinator.device_tariff import TARIFF_KEYS, apply_tariff
+        apply_tariff(device, {k: goals[k] for k in TARIFF_KEYS if k in goals})
         device.daily_min_runtime_sec = int(
             float(goals.get("daily_min_runtime_min", 0)) * 60
         )
@@ -552,6 +626,13 @@ class UnifiedDeviceRegistry:
         # without comfort goals keep their constructor values; plain setattr
         # so a comfort goal stored against a non-climate device lands as an
         # unused attribute instead of crashing the rebuild (Phase 2 reads it).
+        # (#1020) The schedule, on switch loads only (key-present, the #688
+        # pattern). It is read where the mode is read; nothing is written
+        # into the stored mode.
+        if isinstance(device, SwitchDevice):
+            for _sk in ("schedule_entity", "schedule_mode"):
+                if _sk in goals:
+                    setattr(device, _sk, str(goals.get(_sk) or ""))
         if "comfort_entity" in goals:
             device.comfort_entity = str(goals.get("comfort_entity", "") or "")
         for _ck in ("comfort_target", "comfort_offset", "comfort_limit"):
@@ -580,6 +661,12 @@ class UnifiedDeviceRegistry:
             device = self._surplus_controller.get_device(device_id)
             if device:
                 self._apply_goals(device)
+            # (#1048) the shedder reads the phase off its own row: put it
+            # there now, not at the next registry sync
+            if prop == "phase" and self._load_manager is not None:
+                row = self._load_manager._devices.get(device_id)
+                if isinstance(row, dict):
+                    row["phase"] = load_phase(value)
             await self._save_storage()
         _LOGGER.info("Device goal updated: %s.%s = %s", device_id, prop, value)
 
@@ -782,7 +869,7 @@ class UnifiedDeviceRegistry:
             # right after this registry initializes. So the filter ran once on
             # the legacy pass and THIS loop — which re-derives the whole roster
             # from the Energy Dashboard on every refresh — put the lights
-            # straight back (Guido's PROD, beta.1: "Garage / Carport Licht" and
+            # straight back (PROD, beta.1: "Garage / Carport Licht" and
             # "Girlande" still on the planner card). One rule, applied at the
             # boundary that actually runs. Because the roster is re-derived,
             # an already-imported light retires itself on the next refresh —
@@ -925,6 +1012,8 @@ class UnifiedDeviceRegistry:
         Skips EV charger — it's registered separately in __init__.py with
         special CurrentControlDevice config (phases, min/max current, service).
         """
+        # (#1067) Who was built from a saved rating is this sync's answer only.
+        self._built_from_store.clear()
         # Unregister old registry-managed devices (prefix: energy_dashboard_).
         # (#559) NEVER wipe a SERVICE-registered device, even when the user
         # picked an energy_dashboard_* id: the wipe removed it and the rebuild
@@ -1322,6 +1411,8 @@ class UnifiedDeviceRegistry:
                 # this cycle's registrations.
                 "surplus_managed": self._surplus_controller is not None
                 and self._surplus_controller.get_device(device.device_id) is not None,
+                # (#1048) the phase guard sheds a phase's own loads first
+                "phase": self.phase_for(device.device_id),
             }
 
             # Backwards-compatible switch_entity
@@ -2025,6 +2116,8 @@ class UnifiedDeviceRegistry:
             # it sheds the load is the mode's question (surplus → the surplus
             # controller's; peak_only → this row is the shedder's).
             "surplus_managed": live is not None,
+            # (#1048) as the ED rows
+            "phase": self.phase_for(device_id),
         }
 
     def refresh_direct_device_overrides(self) -> None:
@@ -2050,6 +2143,33 @@ class UnifiedDeviceRegistry:
             dev.priority = self.priority_for(
                 did, seed=int(getattr(dev, "priority", 5) or 5))
             self._apply_goals(dev)
+            self._apply_saved_mode(did, dev)
+
+    def _apply_saved_mode(self, did: str, dev: Any) -> None:
+        """(#1119) A heat pump / boiler / climate is built in Solar mode on
+        every start; the mode the user picked must come back with it. A
+        service device carries its own mode in its spec (applied at build).
+
+        Applied when the user set it, or when it is not the value the #805
+        freeze writes for every known id — "off" or "surplus" can only be
+        the user's. A frozen "peak_only" is left alone: on these devices the
+        default was always Solar.
+        """
+        if did in getattr(self, "_service_registrations", {}):
+            return
+        stored = getattr(self, "_control_mode_overrides", {}).get(did)
+        if stored is None:
+            return
+        if (did not in getattr(self, "_user_control_modes", set())
+                and stored == LEGACY_DISCOVERED_CONTROL_MODE):
+            return
+        from ..devices.base import DeviceControlMode
+        try:
+            mode = DeviceControlMode(stored)
+        except ValueError:
+            return
+        if getattr(dev, "control_mode", None) is not mode:
+            dev.control_mode = mode
 
     def set_ev_chargers(self, chargers: List[Dict[str, Any]]) -> None:
         """(#576 P2.1) The coordinator hands its configured chargers here each
@@ -2268,6 +2388,9 @@ class UnifiedDeviceRegistry:
             "control_mode": "surplus",
             "sem_owned": False,
             "connected": bool(charger.get("connected", False)),
+            # (#1048) measured, never set — the card shows it read-only
+            "phase": load_phase(charger.get("phase")),
+            "phase_measured": bool(charger.get("phase_measured", False)),
             "is_ev": True,
         }
 
@@ -2307,16 +2430,35 @@ class UnifiedDeviceRegistry:
                 "min_off_effective_min": (
                     None if live is None or getattr(live, "min_off_seconds", None) is None
                     else round(float(live.min_off_seconds) / 60.0, 1)),
+                # (#1048) the supply phase — the editor's select
+                "phase": load_phase(goals.get("phase")),
+                # (#1021) the Configure-device switch
+                "behind_operator_relay": _goal_bool(
+                    goals.get("behind_operator_relay")),
+                # (#812) the load's own tariff — what the LIVE device holds,
+                # so a heat pump's config-seeded tariff shows here too
+                **_tariff_payload(live, goals),
                 # (#705) the comfort band — pre-fill for the editor.
                 "comfort_entity": goals.get("comfort_entity", ""),
                 "comfort_target": goals.get("comfort_target", 0),
                 "comfort_offset": goals.get("comfort_offset", 0),
                 "comfort_limit": goals.get("comfort_limit", 0),
+                # (#1020) the schedule, and whether it is running now
+                "schedule_entity": goals.get("schedule_entity", ""),
+                "schedule_mode": goals.get("schedule_mode", ""),
+                "schedule_active": bool(
+                    live is not None
+                    and getattr(live, "scheduled_control_mode", lambda: None)()
+                    is not None),
             },
             "progress": {
                 "runtime_today_min": int(round(runtime_min)),
                 "targets_met": targets_met,
             },
+            # (#1021) the relay holds it now — the row's chip
+            "locked_by_operator": bool(
+                live is not None
+                and getattr(live, "locked_by_operator", False) is True),
         } | self._comfort_payload(live)
 
     @staticmethod
@@ -2543,6 +2685,7 @@ class UnifiedDeviceRegistry:
             return
 
         self._control_mode_overrides[device_id] = mode
+        self._user_control_modes.add(device_id)   # (#1119)
         # (#559 Phase 0) mode changes on service-registered devices persist
         # in their registration spec so the re-register at boot applies them.
         if device_id in self._service_registrations:
@@ -2840,8 +2983,11 @@ class UnifiedDeviceRegistry:
             # and a genuine opt-out set afterwards survives every upgrade.
             "legacy_flags_adopted": bool(self._legacy_flags_adopted),
             "rated_power_overrides": self._rated_power_overrides,
+            "rated_power_rule": RATED_POWER_RULE,                 # (#1067)
+            "rated_power_recheck": sorted(self._ratings_to_recheck),
             "service_registrations": self._service_registrations,
             "device_goals": self._device_goals,
+            "control_modes_user": sorted(self._user_control_modes),   # (#1119)
         }
         await self._store.async_save(data)
         _LOGGER.debug("Saved device mappings to storage")
@@ -2912,12 +3058,21 @@ class UnifiedDeviceRegistry:
 
         A persisted, self-calibrated value wins — so a sensor-equipped load
         keeps its learned rating across a restart / rebuild instead of dropping
-        back to the 1 kW floor. Else the live sensor reading (0 when the load is
-        off), which ``SwitchDevice.__init__`` turns into the 1 kW default."""
+        back to the 1 kW floor. Else 0, which ``SwitchDevice.__init__`` turns
+        into the 1 kW default, labelled unmeasured.
+
+        (#1067) Not the live sensor reading: one reading is not a rating. A
+        load that happened to be starting when the device was built handed
+        its start peak in as a measured rating, the up-only paths kept it, and
+        the store made it permanent. The history seed and the live hold
+        (``calibrate_rated_power``) learn the level it holds instead.
+        ``power_sensor`` stays for the callers' signature."""
         override = float(self._rated_power_overrides.get(device_id, 0) or 0)
         if override > 0:
+            self._built_from_store[device_id] = override
             return override
-        return self._get_power_rating(power_sensor)
+        self._built_from_store.pop(device_id, None)
+        return 0.0
 
     def _capture_calibrated_ratings(self) -> bool:
         """(#576) Snapshot any rating a live device self-calibrated UP to, into
@@ -2944,6 +3099,9 @@ class UnifiedDeviceRegistry:
             prev = float(self._rated_power_overrides.get(did, 0) or 0)
             if rated > prev:
                 self._rated_power_overrides[did] = rated
+                # (#1067) the load held more than the saved number: that
+                # settles its re-check — it was not a start peak above it.
+                self._ratings_to_recheck.discard(did)
                 dirty = True
         return dirty
 
@@ -2979,42 +3137,81 @@ class UnifiedDeviceRegistry:
                 dev._daily_runtime_accumulated_sec = accrued
                 dev._daily_runtime_meter_day = meter_day
 
-    async def _seed_and_apply_ratings(self) -> bool:
-        """(#576) After the rebuild: (a) apply a persisted override to any live
-        device that came back at a lower rating, and (b) for a sensor-equipped
-        device we haven't learned yet, seed its rating from the power sensor's
-        recorder-history running max. Returns True if anything changed."""
-        dirty = False
-        for did, dev in getattr(self._surplus_controller, "_devices", {}).items():
-            sensor = getattr(dev, "power_entity_id", None)
-            if getattr(dev, "is_ev", False) or not sensor:
+    def _rated_devices(self):
+        """(#576) The live devices whose rating is learned from a power
+        sensor: not a charger, with a sensor and a ``rated_power``."""
+        for did, dev in list(getattr(self._surplus_controller, "_devices", {}).items()):
+            if getattr(dev, "is_ev", False) or not getattr(dev, "power_entity_id", None):
                 continue
             if getattr(dev, "rated_power", None) is None:
                 continue
+            yield did, dev
+
+    async def _seed_and_apply_ratings(self) -> bool:
+        """(#576) After the rebuild: (a) apply a persisted override to any live
+        device that came back at a lower rating, and (b) for a sensor-equipped
+        device we haven't learned yet, seed its rating from the level the power
+        sensor held in its recorder history (#1067: held, not the highest
+        reading). (#1067) A rating saved under the old rule is checked against
+        that history too. Returns True if anything changed."""
+        # (#1067) Read the recorder first, then decide in one pass with no
+        # await in it: a rebuild can replace the device objects while a read
+        # waits, and a decision taken on the old object would be lost.
+        # (#967) ``_history_seeds_enabled`` is False until Home Assistant
+        # has started. The device is NOT marked as attempted while it is
+        # off, so the seed still happens — one pass later, off the setup
+        # path.
+        held_by_did: Dict[str, float] = {}
+        if self._history_seeds_enabled:
+            for did, dev in self._rated_devices():
+                override = float(self._rated_power_overrides.get(did, 0) or 0)
+                if (
+                    (override <= 0 or did in self._ratings_to_recheck)
+                    and did not in self._rating_seed_attempted
+                ):
+                    self._rating_seed_attempted.add(did)
+                    held_by_did[did] = await self._history_held_power(
+                        dev.power_entity_id)
+        dirty = False
+        for did, dev in self._rated_devices():
             override = float(self._rated_power_overrides.get(did, 0) or 0)
             # (#744) Does the rebuilt device hold a real number or the 1 kW
             # placeholder? Everything below turns on that, not on 1000.
             measured = bool(getattr(dev, "rated_power_measured", True))
             rated_now = float(getattr(dev, "rated_power", 0) or 0)
+            held = float(held_by_did.get(did, 0.0) or 0.0)
+            if did in self._ratings_to_recheck:
+                # (#1067) Saved under the old rule: it may be a start peak.
+                # Until the history answers, it is applied only over the 1 kW
+                # placeholder (#744: any measurement beats an invention) — a
+                # device built from it already has it, and a device given its
+                # own rating must not be raised to a peak.
+                if held <= 0 or held * RATED_POWER_START_PEAK_RATIO < override:
+                    if not measured and override > 0:
+                        dev.rated_power = override
+                        dev.rated_power_measured = True
+                        if hasattr(dev, "min_power_threshold"):
+                            dev.min_power_threshold = override
+                    continue   # no run in the history, or only idle: ask again
+                self._rated_power_overrides[did] = held
+                self._ratings_to_recheck.discard(did)
+                dirty = True
+                if self._built_from_store.get(did) == rated_now:
+                    # the device carries the old number: it moves either way
+                    dev.rated_power = held
+                    dev.rated_power_measured = True
+                    if hasattr(dev, "min_power_threshold"):
+                        dev.min_power_threshold = held
+                    continue
+                override = held
             # (b) one-shot history seed for a device we've never learned. ANY
             # real history is a measurement — including 8 W. The old
             # ``> _DEFAULT_RATED_POWER`` gate discarded exactly the small loads
             # that needed the correction most (#744).
-            # (#967) ``_history_seeds_enabled`` is False until Home Assistant
-            # has started. The device is NOT marked as attempted while it is
-            # off, so the seed still happens — one pass later, off the setup
-            # path.
-            if (
-                self._history_seeds_enabled
-                and override <= 0
-                and did not in self._rating_seed_attempted
-            ):
-                self._rating_seed_attempted.add(did)
-                hist_max = await self._history_max_power(sensor)
-                if hist_max > 0 and (not measured or hist_max > rated_now):
-                    override = hist_max
-                    self._rated_power_overrides[did] = hist_max
-                    dirty = True
+            elif override <= 0 and held > 0 and (not measured or held > rated_now):
+                override = held
+                self._rated_power_overrides[did] = held
+                dirty = True
             # (a) apply the learned rating if the rebuilt device is below it —
             # or, while it still holds only the placeholder, in EITHER
             # direction: a measured 8 W beats an invented 1 kW (#744).
@@ -3025,22 +3222,35 @@ class UnifiedDeviceRegistry:
                     dev.min_power_threshold = override
         return dirty
 
-    async def _history_max_power(self, power_sensor: str, days: int = 7) -> float:
-        """(#576) Largest numeric value the power sensor reported in the last
-        ``days`` — the load's real running draw. 0.0 if the recorder is
-        unavailable or has no usable history."""
-        from ..coordinator.recorder_history import read_states
+    async def _history_held_power(self, power_sensor: str, days: int = 7) -> float:
+        """(#576) The load's real running draw from the power sensor's last
+        ``days`` of history. 0.0 if the recorder is unavailable or has no
+        usable history.
 
+        (#1067) The highest level the sensor HELD for ``RATED_POWER_HOLD_S``,
+        not the highest reading: one compressor start in seven days used to
+        be the rating. (#641) In watts — the history rows carry no unit, so
+        the sensor's unit now scales them (a kW sensor seeded 2 kW as 2 W)."""
+        from homeassistant.util import dt as dt_util
+
+        from ..coordinator.recorder_history import read_states
+        from ..coordinator.units import power_unit_scale
+
+        live = self.hass.states.get(power_sensor)
+        if live is None:
+            return 0.0       # no unit to read the rows with: not this start
         states = await read_states(self.hass, power_sensor, days)
-        mx = 0.0
-        for st in states or []:
-            try:
-                v = float(st.state)
-            except (ValueError, TypeError):
-                continue
-            if v > mx:
-                mx = v
-        return mx
+        if not states:
+            return 0.0
+        # A week of a 1 s sensor is a lot of rows: not on the event loop.
+        try:
+            return float(await self.hass.async_add_executor_job(
+                held_power_from_states, states, power_unit_scale(live),
+                dt_util.utcnow().timestamp(), _MAX_PLAUSIBLE_LOAD_W,
+            ) or 0.0)
+        except Exception as err:  # noqa: BLE001 — a rating never costs a rebuild
+            _LOGGER.debug("held-power history for %s failed: %s", power_sensor, err)
+            return 0.0
 
     async def async_seed_ratings_from_history(self) -> None:
         """(#967) The recorder pass, once Home Assistant has started.

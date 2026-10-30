@@ -35,6 +35,11 @@ MERGE_SOURCES = {
     "build_diagnostics(self)": "coordinator/publish_diag.py",
     "_lifetime_ev_shares(lifetime)": "coordinator/coordinator.py",
     "_vpp_publish": "coordinator/coordinator.py",
+    # (#1021) the grid operator's relay — keys of its own, not in to_dict
+    "_shed_signal_payload()": "coordinator/coordinator.py",
+    # (#812) per-device cost keys (daily_tariff_cost_<id> …) — dynamic, one
+    # per own-tariff device, never in to_dict
+    "_device_tariff_books()": "coordinator/coordinator.py",
 }
 
 #: Keys knowingly published twice. Each MUST round/format identically at both

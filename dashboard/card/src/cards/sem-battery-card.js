@@ -15,7 +15,8 @@ import { capacityConsequence, horizonLabel, trustConsequence }
     from '../util/forecast-evidence.js';
 import { semTheme, semFormatPower, semGetCurrency, semCardSurfaceCSS, SEM_COLORS, semDefineCard } from '../base/sem-shared.js';
 import { temperatureUnit } from '../util/temperature.js';
-import { socDisplay } from '../util/missing-value.js';
+import { MISSING, allOut, fmtValue, readNumber, socDisplay } from '../util/missing-value.js';
+import { solarSharePct } from '../util/solar-share.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
 
@@ -93,10 +94,15 @@ class SEMBatteryCard extends SEMLitBase {
         // Skip transient unavailable states caused by coordinator refresh —
         // async_request_refresh() briefly marks all entities unavailable before
         // new data arrives (~600ms). Rendering during this window shows "Idle".
-        const statusState = hass?.states[`${this._prefix}battery_status`]?.state;
-        if (statusState === 'unavailable' || statusState === 'unknown') {
-            if (!localeChanged) return;
+        // (#1197) Only when every entity it reads is out: the status alone is
+        // out while every battery power sensor is dark, and the card must
+        // then say so, not keep the last figures.
+        const ids = WATCHED_SUFFIXES.map(s => `${this._prefix}${s}`);
+        for (const bid of this._batteries) {
+            ids.push(`${this._prefix}battery_${bid}_power`,
+                `${this._prefix}battery_${bid}_soc`);
         }
+        if (!localeChanged && allOut(hass?.states, ids)) return;
 
         let key = WATCHED_SUFFIXES
             .map(s => hass?.states[`${this._prefix}${s}`]?.state || '')
@@ -136,7 +142,9 @@ class SEMBatteryCard extends SEMLitBase {
     get hass() { return this._hass; }
 
     /* ── Prefix-scoped helpers ── */
-    _val(suffix, fallback = 0) {
+    // (#1200) null for a sensor that is out: it prints "—", not 0. A check
+    // that wants 0 passes it.
+    _val(suffix, fallback = null) {
         return this._state(`${this._prefix}${suffix}`, fallback);
     }
 
@@ -160,8 +168,11 @@ class SEMBatteryCard extends SEMLitBase {
         // (#949) A cap SEM cannot write is not a cap. Before this the line
         // read "pace · 0.4 kW · full by 19:00" on an install that had never
         // been given a charge-limit entity, while the battery took 3 kW.
+        // (#820) A cap the inverter never took is not a cap either.
         const blocked = {no_limit_entity: 'pacing_no_limit',
-                         limit_unreadable: 'pacing_limit_unreadable'}[a.action];
+                         limit_unreadable: 'pacing_limit_unreadable',
+                         write_refused: 'pacing_write_refused',
+                         yielded: 'pacing_yielded'}[a.action];
         if (blocked) {
             return html`
                 <div class="tonight-row" style="opacity:.85" title="${a.reason || ''}">
@@ -358,7 +369,7 @@ class SEMBatteryCard extends SEMLitBase {
                         <span class="bsc-stepper">
                             <button class="bsc-btn"
                                 @click=${() => this._stepNumber(reserveEntityId, -1)}>−</button>
-                            <span class="bsc-stepval">${Math.round(parseFloat(reserveState.state) || 0)}%</span>
+                            <span class="bsc-stepval">${fmtValue(readNumber(reserveState), 0)}%</span>
                             <button class="bsc-btn"
                                 @click=${() => this._stepNumber(reserveEntityId, 1)}>+</button>
                         </span>
@@ -370,9 +381,11 @@ class SEMBatteryCard extends SEMLitBase {
 
     _renderBatterySection(bid, idx) {
         const color = BATTERY_COLORS[idx % BATTERY_COLORS.length];
-        const power = this._val(`battery_${bid}_power`, 0);
+        // (#1170) null, not 0, when this battery's sensor is out: the row
+        // reads "— W", never the 0 W of an idle pack.
+        const power = this._val(`battery_${bid}_power`, null);
         const soc = this._val(`battery_${bid}_soc`, null);
-        const statusRaw = (this._valStr(`battery_${bid}_status`) || 'idle').toLowerCase();
+        const statusRaw = (this._valStr(`battery_${bid}_status`) || '').toLowerCase();
         const capacity = this._val(`battery_${bid}_capacity_kwh`, 0);
         const name = this._batteryName(bid);
 
@@ -384,6 +397,8 @@ class SEMBatteryCard extends SEMLitBase {
         const statusKey = isSelling ? 'selling_to_grid'
             : isCharging ? 'charging'
             : isDischarging ? 'discharging' : 'idle';
+        // Neither a power nor a status: nothing says the pack is idle.
+        const statusKnown = power != null || statusRaw !== '';
         const flowColor = isSelling ? '#FCD170'
             : isCharging ? '#f06292'
             : isDischarging ? '#4db6ac' : '#999';
@@ -399,7 +414,7 @@ class SEMBatteryCard extends SEMLitBase {
                     <span class="battery-section-name">${name}</span>
                     <span class="battery-section-status"
                           style="color:${flowColor}">
-                        ${this._t(statusKey)}
+                        ${statusKnown ? this._t(statusKey) : MISSING}
                     </span>
                 </div>
                 <div class="battery-section-body">
@@ -673,20 +688,23 @@ class SEMBatteryCard extends SEMLitBase {
         // em-dash with an empty gauge, never as a flat pack (PROD 02.09).
         const soc = this._val('battery_soc', null);
         const socShown = socDisplay(soc);
-        const power = this._val('battery_power', 0);
+        // (#1170) and the fleet's: an unavailable power reads "— W".
+        const power = this._val('battery_power', null);
         const chargePower = this._val('battery_charge_power', 0);
         const dischargePower = this._val('battery_discharge_power', 0);
         // Lowercase — the sensor publishes title-cased values ("Selling",
         // "Charging"); the string comparisons below expect lowercase.
         const statusRaw = (this._valStr('battery_status') || '').toLowerCase();
-        const health = this._val('battery_health_score', 0);
-        const cycles = this._val('battery_cycles_estimated', 0);
-        const dailyCharge = this._val('daily_battery_charge_energy', 0);
-        const dailyDischarge = this._val('daily_battery_discharge_energy', 0);
-        const dailySavings = this._val('daily_battery_savings', 0);
-        const monthCharge = this._val('monthly_battery_charge_energy', 0);
-        const monthDischarge = this._val('monthly_battery_discharge_energy', 0);
+        // (#1200) null when out: the figures print "—", not 0.
+        const health = this._val('battery_health_score');
+        const cycles = this._val('battery_cycles_estimated');
+        const dailyCharge = this._val('daily_battery_charge_energy');
+        const dailyDischarge = this._val('daily_battery_discharge_energy');
+        const dailySavings = this._val('daily_battery_savings');
+        const monthCharge = this._val('monthly_battery_charge_energy');
+        const monthDischarge = this._val('monthly_battery_discharge_energy');
         const solarToBatt = this._val('flow_solar_to_battery_energy', 0);
+        const gridToBatt = this._val('flow_grid_to_battery_energy', 0);
         const currency = semGetCurrency(this._hass);
 
         // Temperature — may be unavailable
@@ -706,10 +724,12 @@ class SEMBatteryCard extends SEMLitBase {
         const exportRate = (exportEnt && exportEnt.state !== 'unavailable' && exportEnt.state !== 'unknown')
             ? parseFloat(exportEnt.state) : null;
         const SELL = '#FCD170';
+        // (#1197) Neither a power nor a status: nothing says the pack is idle.
+        const statusKnown = power != null || statusRaw !== '';
         const statusText = isSelling ? this._t('selling_to_grid')
             : isCharging ? this._t('charging')
             : isDischarging ? this._t('discharging')
-            : this._t('idle');
+            : statusKnown ? this._t('idle') : MISSING;
         const arcColor = isSelling ? SELL : (isCharging ? '#f06292' : '#4db6ac');
         const statusColor = isSelling ? SELL
             : isCharging ? '#f06292' : isDischarging ? '#4db6ac' : (T.textSec || '#888');
@@ -720,19 +740,21 @@ class SEMBatteryCard extends SEMLitBase {
         const pct = socShown.fraction;
         const arcOffset = (circumference * (1 - pct)).toFixed(1);
 
-        // Solar attribution
-        const solarPct = dailyCharge > 0 ? Math.round(solarToBatt / dailyCharge * 100) : 0;
+        // Solar attribution — (#1046) the split of the flows, not solar over
+        // the measured charge, which also counts cycles the flows missed.
+        const solarPct = dailyCharge > 0
+            ? Math.round(solarSharePct(solarToBatt, gridToBatt) ?? 0) : 0;
 
         // Session
         const sessionType = this._valStr('battery_session_type');
         const sessionActive = sessionType === 'charge' || sessionType === 'discharge';
         const isChargeSess = sessionType === 'charge';
-        const sEnergy = sessionActive ? this._val('battery_session_energy', 0) : 0;
-        const sDuration = sessionActive ? this._val('battery_session_duration', 0) : 0;
-        const sAvgPower = sessionActive ? this._val('battery_session_avg_power', 0) : 0;
-        const sSolarShare = sessionActive ? this._val('battery_session_solar_share', 0) : 0;
-        const sCost = sessionActive ? this._val('battery_session_cost', 0) : 0;
-        const sSavings = sessionActive ? this._val('battery_session_savings', 0) : 0;
+        const sEnergy = sessionActive ? this._val('battery_session_energy') : 0;
+        const sDuration = sessionActive ? this._val('battery_session_duration') : 0;
+        const sAvgPower = sessionActive ? this._val('battery_session_avg_power') : 0;
+        const sSolarShare = sessionActive ? this._val('battery_session_solar_share') : 0;
+        const sCost = sessionActive ? this._val('battery_session_cost') : 0;
+        const sSavings = sessionActive ? this._val('battery_session_savings') : 0;
         const sessColor = isChargeSess ? '#f06292' : '#4db6ac';
 
         const dotCol = T.dotColor || 'rgba(128,128,128,0.05)';

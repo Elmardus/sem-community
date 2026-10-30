@@ -1,0 +1,513 @@
+{
+ "devices": {
+  "solaredge:solaredge": {
+   "manufacturer": null,
+   "model": null,
+   "name": "solaredge"
+  }
+ },
+ "domain": "solaredge",
+ "entities": [
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.battery_bat001_charge_energy_today",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "500.0",
+   "translation_key": "battery_charge_energy",
+   "unique_id": "1a2b3c4d5e6f7g8h_BAT001_battery_charge_energy",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.battery_bat001_discharge_energy_today",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "300.0",
+   "translation_key": "battery_discharge_energy",
+   "unique_id": "1a2b3c4d5e6f7g8h_BAT001_battery_discharge_energy",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.battery_bat001_power",
+   "original_device_class": "power",
+   "platform": "solaredge",
+   "state": "200.0",
+   "translation_key": "battery_power",
+   "unique_id": "1a2b3c4d5e6f7g8h_BAT001_battery_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.battery_bat001_state_of_charge",
+   "original_device_class": "battery",
+   "platform": "solaredge",
+   "state": "75.0",
+   "translation_key": "battery_state_of_charge",
+   "unique_id": "1a2b3c4d5e6f7g8h_BAT001_battery_state_of_charge",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_batteries",
+   "original_device_class": null,
+   "platform": "solaredge",
+   "state": "1",
+   "translation_key": "batteries",
+   "unique_id": "1a2b3c4d5e6f7g8h_batteries",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_consumed_energy",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "9876.0",
+   "translation_key": "consumption_energy",
+   "unique_id": "1a2b3c4d5e6f7g8h_consumption_energy",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_current_power",
+   "original_device_class": "power",
+   "platform": "solaredge",
+   "state": "1234.5",
+   "translation_key": "current_power",
+   "unique_id": "1a2b3c4d5e6f7g8h_current_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_energy_this_month",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "10000.0",
+   "translation_key": "energy_this_month",
+   "unique_id": "1a2b3c4d5e6f7g8h_energy_this_month",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_energy_this_year",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "50000.0",
+   "translation_key": "energy_this_year",
+   "unique_id": "1a2b3c4d5e6f7g8h_energy_this_year",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_energy_today",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "250.0",
+   "translation_key": "energy_today",
+   "unique_id": "1a2b3c4d5e6f7g8h_energy_today",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_exported_energy",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "6913.0",
+   "translation_key": "feedin_energy",
+   "unique_id": "1a2b3c4d5e6f7g8h_feedin_energy",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_gateways",
+   "original_device_class": null,
+   "platform": "solaredge",
+   "state": "1",
+   "translation_key": "gateways",
+   "unique_id": "1a2b3c4d5e6f7g8h_gateways",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "export",
+     "import"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "export",
+     "import"
+    ]
+   },
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_grid_flow_direction",
+   "original_device_class": "enum",
+   "platform": "solaredge",
+   "state": "import",
+   "translation_key": "grid_flow_direction",
+   "unique_id": "1a2b3c4d5e6f7g8h_grid_flow_direction",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_grid_power",
+   "original_device_class": "power",
+   "platform": "solaredge",
+   "state": "250.0",
+   "translation_key": "grid_power",
+   "unique_id": "1a2b3c4d5e6f7g8h_grid_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_imported_energy",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "4444.0",
+   "translation_key": "purchased_energy",
+   "unique_id": "1a2b3c4d5e6f7g8h_purchased_energy",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_inverters",
+   "original_device_class": null,
+   "platform": "solaredge",
+   "state": "3",
+   "translation_key": "inverters",
+   "unique_id": "1a2b3c4d5e6f7g8h_inverters",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_lifetime_energy",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "100000.0",
+   "translation_key": "lifetime_energy",
+   "unique_id": "1a2b3c4d5e6f7g8h_lifetime_energy",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_meters",
+   "original_device_class": null,
+   "platform": "solaredge",
+   "state": "2",
+   "translation_key": "meters",
+   "unique_id": "1a2b3c4d5e6f7g8h_meters",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_power_consumption",
+   "original_device_class": "power",
+   "platform": "solaredge",
+   "state": "1500.0",
+   "translation_key": "power_consumption",
+   "unique_id": "1a2b3c4d5e6f7g8h_power_consumption",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_produced_energy",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "12345.0",
+   "translation_key": "production_energy",
+   "unique_id": "1a2b3c4d5e6f7g8h_production_energy",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_self_consumed_energy",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "5432.0",
+   "translation_key": "selfconsumption_energy",
+   "unique_id": "1a2b3c4d5e6f7g8h_selfconsumption_energy",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_sensors",
+   "original_device_class": null,
+   "platform": "solaredge",
+   "state": "0",
+   "translation_key": "sensors",
+   "unique_id": "1a2b3c4d5e6f7g8h_sensors",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_site_details",
+   "original_device_class": null,
+   "platform": "solaredge",
+   "state": "Active",
+   "translation_key": "site_details",
+   "unique_id": "1a2b3c4d5e6f7g8h",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_solar_power",
+   "original_device_class": "power",
+   "platform": "solaredge",
+   "state": "1500.0",
+   "translation_key": "solar_power",
+   "unique_id": "1a2b3c4d5e6f7g8h_solar_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_storage_charge_energy_today",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "500.0",
+   "translation_key": "storage_charge_energy",
+   "unique_id": "1a2b3c4d5e6f7g8h_storage_charge_energy",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_storage_discharge_energy_today",
+   "original_device_class": "energy",
+   "platform": "solaredge",
+   "state": "300.0",
+   "translation_key": "storage_discharge_energy",
+   "unique_id": "1a2b3c4d5e6f7g8h_storage_discharge_energy",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "charge",
+     "discharge"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "charge",
+     "discharge"
+    ]
+   },
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_storage_flow_direction",
+   "original_device_class": "enum",
+   "platform": "solaredge",
+   "state": "charge",
+   "translation_key": "storage_flow_direction",
+   "unique_id": "1a2b3c4d5e6f7g8h_storage_flow_direction",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_storage_level",
+   "original_device_class": "battery",
+   "platform": "solaredge",
+   "state": "75",
+   "translation_key": "storage_level",
+   "unique_id": "1a2b3c4d5e6f7g8h_storage_level",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "solaredge:solaredge",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.solaredge_storage_power",
+   "original_device_class": "power",
+   "platform": "solaredge",
+   "state": "-250.0",
+   "translation_key": "storage_power",
+   "unique_id": "1a2b3c4d5e6f7g8h_storage_power",
+   "unit_of_measurement": "W"
+  }
+ ],
+ "services": {},
+ "source": {
+  "files": [
+   "tests/components/solaredge/snapshots/test_sensor.ambr"
+  ],
+  "kind": "core-snapshot",
+  "note": "Home Assistant's own test output for this integration at the tag; the device grouping comes from unique_id",
+  "repo": "home-assistant/core",
+  "tag": "2026.8.2"
+ }
+}

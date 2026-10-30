@@ -18,10 +18,21 @@ meanings a user must be able to tell apart on the card.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from ..utils.log_gate import log_on_change
+
 _LOGGER = logging.getLogger(__name__)
+
+#: (#820, 02.10) At most one cap write per this many seconds. The release to
+#: full power below the buffer is exempt: it goes at once.
+PACING_MIN_WRITE_INTERVAL_S = 300.0
+#: (#820) A write is judged refused only when the register has not moved
+#: for this long AND for this many cycles — a Modbus read-back is a scan late.
+PACING_REFUSE_AFTER_S = 90.0
+PACING_REFUSE_AFTER_CYCLES = 3
 
 #: (#820) The margin the solved pace is opened by, in percent. The solver
 #: finds the SMALLEST constant cap that lands the pack full in the last
@@ -31,7 +42,25 @@ _LOGGER = logging.getLogger(__name__)
 #: sun cannot deliver. @ArneGollin1987 measured exactly this on a 2×10 kW
 #: install and proposed +10 %. Not user-facing: the option surface only
 #: shrinks (#830), and a margin is a property of the solver, not a preference.
+#: (#820, 18.10) It is ALSO a share of the day: the pack is planned full by
+#: ``finish_by`` (sunrise → end of sun, minus this share), a time fixed for
+#: the whole day. A cap multiplier alone is re-applied to the REMAINING need
+#: on every re-solve, so it shrinks to nothing and the plan slides back into
+#: the last sunny slot (full at 18:10 with sun until 18:15).
 PACING_HEADROOM_PCT: float = 10.0
+
+#: (#820, 20.10) The weak-day verdict has two edges. A day is called weak
+#: when it fills under this share of the need, and stays weak until it fills
+#: all of it. On a forecast that just about fills the pack, one hard line
+#: flipped paced <-> weak every few minutes (PROD, 13.10), and each flip gave
+#: the cap back and wrote it again. In between, the pace stays on, and it is
+#: near the hardware maximum anyway.
+PACING_WEAK_ENTER: float = 0.95
+#: and never for a gap smaller than one battery reading step (percent of
+#: capacity): the SOC moves in whole steps, so a smaller gap is noise
+PACING_SOC_STEP_PCT: float = 1.0
+#: seconds a missing day forecast is bridged with the last good one
+PACING_FORECAST_GAP_S: float = 600.0
 
 
 @dataclass(frozen=True)
@@ -44,7 +73,8 @@ class PacingDecision:
     """ISO time the paced fill is predicted to reach target (diagnostic)."""
     code: str = "idle"
     """Stable token for the card (buffer/trust/weak_day/paced/clip/none/
-    target/soc_unknown). Cards render the token; the prose is a tooltip."""
+    target/soc_unknown/closed_meter). Cards render the token; the prose is
+    a tooltip. ``closed_meter`` (#1090): the grid is closed, no cap."""
     need_kwh: Optional[float] = None
     """(#820 diag) kWh the pack still needs to reach the target."""
     fill_kwh: Optional[float] = None
@@ -64,6 +94,10 @@ class PacingDecision:
     re-solve raises a cap the remaining sun cannot deliver. Not a knob:
     the option surface only shrinks (#830), and 10 % is what the reporter
     proposed."""
+    finish_by: Optional[str] = None
+    """(#820, 18.10) ISO time the pace plans the pack full by — the end of
+    sun brought forward by ``headroom_pct`` of the day. Fixed for the day,
+    so ``full_at`` stays before it on every re-plan."""
 
 
 def _fill_kwh(ledger, cap_w: float) -> float:
@@ -108,6 +142,59 @@ def _full_slot(ledger, cap_w: float, need_kwh: float):
     return None
 
 
+def _slot_share(s, until) -> float:
+    """(#820) The fraction of slot ``s`` that lies before ``until``."""
+    if until is None:
+        return 1.0
+    if s.start >= until:
+        return 0.0
+    if s.end <= until:
+        return 1.0
+    return (until - s.start) / (s.end - s.start)
+
+
+def _full_time(ledger, cap_w: float, need_kwh: float, until=None):
+    """(#820) When the pack reaches ``need_kwh`` under ``cap_w`` — inside
+    the slot, not at its end — counting only energy before ``until``.
+    None when it does not get there. A slot-end answer hid a full at 17:13
+    as "18:00", the very number a user reads the headroom from."""
+    filled = 0.0
+    for s in ledger:
+        share = _slot_share(s, until)
+        if share <= 0.0:
+            break
+        leftover = 0.0
+        if s.cap_override_w is not None:
+            leftover = max(0.0, s.cap_override_w - s.grid_committed_w)
+        gain = min(leftover, cap_w) * s.hours * share / 1000.0
+        if gain > 0 and filled + gain >= need_kwh:
+            frac = max(0.0, need_kwh - filled) / gain * share
+            return s.start + (s.end - s.start) * frac
+        filled += gain
+    return None
+
+
+def pacing_finish_by(day_start, day_end):
+    """(#820) The fixed time the pack is planned full by: the end of sun
+    brought forward by PACING_HEADROOM_PCT of the WHOLE day's window. Both
+    ends are fixed for the day, so a re-plan at 15:00 aims at the same time
+    as the one at 08:00 — the headroom cannot shrink with the remaining
+    need. None without a usable window."""
+    if day_start is None or day_end is None or day_end <= day_start:
+        return None
+    return day_end - (day_end - day_start) * (PACING_HEADROOM_PCT / 100.0)
+
+
+def bridge_forecast(day_kwh, last, now_s: float):
+    """(#820, 20.10) ``(day_kwh, last)``: a missing day forecast is bridged
+    with the last good one for ``PACING_FORECAST_GAP_S``."""
+    if day_kwh is not None and day_kwh > 0:
+        return day_kwh, (day_kwh, now_s)
+    if last and now_s - last[1] < PACING_FORECAST_GAP_S:
+        return last[0], last
+    return day_kwh, last
+
+
 def paced_charge_cap_w(
     *,
     ledger,
@@ -119,6 +206,9 @@ def paced_charge_cap_w(
     inverter_ac_limit_w: float = 0.0,
     hw_max_charge_w: float = 10000.0,
     end_margin_slots: int = 1,
+    day_start=None,
+    weak_latched: bool = False,
+    full_latched: bool = False,
 ) -> PacingDecision:
     """The smallest constant charge cap that still fills the pack in time.
 
@@ -135,6 +225,11 @@ def paced_charge_cap_w(
     4. **Clipping** — hours where surplus exceeds the inverter's AC limit
        are sun that cannot be exported anyway; the cap opens to at least
        swallow the predicted clip. Captured energy beats an even pace.
+
+    ``day_start`` (sunrise) fixes the day's window: the cap is at least the
+    one that lands the pack full by ``pacing_finish_by(day_start, end of
+    the ledger)`` (#820). Past that time and still short, the cap is the
+    hardware maximum — the headroom never starves the pack.
     """
     if capacity_kwh <= 0 or not ledger:
         return PacingDecision(None, "pacing idle — no day model", code="none")
@@ -162,7 +257,11 @@ def paced_charge_cap_w(
     need_kwh += drain_kwh
 
     fill_kwh = _fill_kwh(ledger, hw_max_charge_w)
-    if fill_kwh < need_kwh:
+    # (#820, 20.10) two edges: in at 95 % of the need, out at 100 %
+    weak_below = need_kwh * 1.05 if weak_latched else min(
+        need_kwh * PACING_WEAK_ENTER,
+        need_kwh - capacity_kwh * PACING_SOC_STEP_PCT / 100.0)
+    if fill_kwh < weak_below:
         return PacingDecision(
             None, "the day cannot fill the pack even uncapped — a cap "
                   "only makes it worse", code="weak_day",
@@ -185,12 +284,41 @@ def paced_charge_cap_w(
     # exactly; open the cap by PACING_HEADROOM_PCT so an evening that comes
     # in under the model still lands it, never past the hardware.
     cap = min(hw_max_charge_w, cap * (1.0 + PACING_HEADROOM_PCT / 100.0))
+    # (#820, 18.10) ...and the margin as TIME, which a re-solve cannot eat:
+    # the smallest cap that is full by the day's fixed finish_by. A day that
+    # cannot make finish_by bisects to the hardware maximum.
+    finish_by = pacing_finish_by(day_start, ledger[-1].end)
+    if finish_by is not None:
+        lo, hi = 0.0, hw_max_charge_w
+        for _ in range(24):
+            mid = (lo + hi) / 2.0
+            if _full_time(ledger, mid, need_kwh, until=finish_by) is not None:
+                hi = mid
+            else:
+                lo = mid
+        cap = max(cap, hi)
+    # (#820, 21.10) Full power is held like the weak verdict. A day just
+    # short of the need (or of finish_by) bisects to the hardware maximum,
+    # one SOC step away to its peak surplus: a wobbling forecast wrote
+    # 1100 -> 5000 -> 1100 W. Once at full power, stay there until the day
+    # clearly fills again, 5 % over the need, in time.
+    if full_latched and cap < hw_max_charge_w:
+        lead_kwh = need_kwh * 1.05
+        slot = _full_slot(ledger, hw_max_charge_w, lead_kwh)
+        in_time = slot is not None and slot <= last_ok and (
+            finish_by is None or _full_time(
+                ledger, hw_max_charge_w, lead_kwh, until=finish_by) is not None)
+        if not in_time:
+            cap = hw_max_charge_w
 
     # Clipping guard: any slot whose surplus exceeds the AC limit is energy
     # that cannot leave the roof — open the cap far enough to absorb the
     # worst predicted clip on top of the pace.
     reason = (f"paced to land full at day's end, {PACING_HEADROOM_PCT:.0f} % "
               "in hand for an evening under the model")
+    if finish_by is not None:
+        reason = (f"paced to land full by {finish_by:%H:%M}, "
+                  f"{PACING_HEADROOM_PCT:.0f} % of the day before the sun ends")
     if inverter_ac_limit_w and inverter_ac_limit_w > 0:
         worst_clip = 0.0
         for s in ledger:
@@ -208,13 +336,15 @@ def paced_charge_cap_w(
             reason = ("paced, opened for predicted clipping — captured sun "
                       "beats an even pace")
 
-    slot = _full_slot(ledger, cap, need_kwh)
-    full_at = ledger[slot].end.isoformat() if slot is not None else None
+    full = _full_time(ledger, cap, need_kwh)
+    full_at = full.isoformat() if full is not None else None
     return PacingDecision(round(cap, 0), reason, full_at,
                           code="clip" if "clipping" in reason else "paced",
                           need_kwh=round(need_kwh, 2), fill_kwh=round(fill_kwh, 2),
                           drain_kwh=round(drain_kwh, 2),
-                          headroom_pct=PACING_HEADROOM_PCT)
+                          headroom_pct=PACING_HEADROOM_PCT,
+                          finish_by=(finish_by.isoformat()
+                                     if finish_by is not None else None))
 
 
 class ChargePacingWriter:
@@ -233,7 +363,18 @@ class ChargePacingWriter:
       putting the cap back, and SEM reporting healthy throughout. Adoption
       writes nothing of its own — a still-wanted cap dedupes, a finished
       pacing restores the real value;
-    * writes dedupe at 100 W (the force-discharge writer's threshold);
+    * (#820, 01.10) the REGISTER is the truth, not SEM's memory of what it
+      sent: every cap is clamped to the entity's own min/max/step and unit
+      (Home Assistant refuses an out-of-range ``number.set_value``, and a
+      non-blocking call never hears it), the repeat check compares with
+      what the register holds (100 W, or one step if coarser), and a
+      write the register never takes is reported as ``write_refused`` —
+      once, never re-sent every cycle (#538), and only while the register
+      is away from the cap SEM wants now (a verdict is about one write);
+    * a release gives the pack the larger of the captured value and the
+      hardware maximum, clamped to the register: below the buffer means
+      full power, and a capture of SEM's own cap is never taken for the
+      user's setting;
     * observer mode never writes — the decision is still published, so the
       rig shows what WOULD happen (the house observer seam). It never adopts
       either: consuming the record of a real engagement is a side effect,
@@ -252,14 +393,67 @@ class ChargePacingWriter:
         self.engaged_entity: str = ""
         self.restore_value: float | None = None
         self.last_written_w: float | None = None
+        #: (#820) did the register ever show ``last_written_w``? Until it
+        #: does, a mismatch is a write that may still be on the bus.
+        self._confirmed: bool = False
+        #: (#820) cycles the register has not shown an unconfirmed write
+        self._unconfirmed_cycles: int = 0
+        #: (#820) the last cap SEM put on the register, kept across a
+        #: release — a register still holding it is SEM's, not the user's
+        self._own_cap_w: float | None = None
+        #: (#820, 02.10) the register just before the last write, when it
+        #: was sent, and what it read once it took the write
+        self._pre_write_w: float | None = None
+        self._write_at: float | None = None
+        self._accepted_w: float | None = None
+        #: None = pending, True = taken, False = refused
+        self._taken: bool | None = None
+        #: (#820, 02.10) ``(register_w, written_w)`` when the register took
+        #: the write but settled on another value (a unit scale in the
+        #: integration, or the inverter's own limit); None otherwise
+        self.applied_differs: tuple[float, float] | None = None
+        #: (#820) the previous in-band read, for the settle check
+        self._last_in_band_w: float | None = None
+        #: (#820, review 3) the record must be re-saved: a verdict changed
+        self._record_dirty: bool = False
+        #: (#820, review 3) the first reading after adoption still has to
+        #: prove the register — a cap from disk is not a cap on the wire
+        self._adopt_check: bool = False
+        self._clock = time.monotonic
         self._store = store
         #: nothing to adopt when nothing was persisted
         self._adopted: bool = store is None
 
+    def _release_state(self) -> None:
+        """Pacing no longer holds the register."""
+        self.engaged = False
+        self.engaged_entity = ""
+        self.restore_value = None
+        self.last_written_w = None
+        self._confirmed = False
+        self._unconfirmed_cycles = 0
+        self._pre_write_w = None
+        self._write_at = None
+        self._accepted_w = None
+        self._taken = None
+        self.applied_differs = None
+        self._last_in_band_w = None
+        self._adopt_check = False
+
     async def apply(self, hass, entity_id: str, cap_w, *,
-                    observer: bool) -> str:
-        """Returns a short action token:
-        wrote|held|restored|idle|observer|no_limit_entity|limit_unreadable."""
+                    observer: bool, yielded: bool = False,
+                    hw_max_w: float | None = None) -> str:
+        """Returns a short action token: wrote|held|write_refused|restored|
+        idle|observer|yielded|no_limit_entity|limit_unreadable.
+
+        ``hw_max_w`` is the battery's full charge power: what a release
+        gives back when the captured value is lower (#820).
+
+        (#1079 review) ``yielded`` is checked first and touches nothing —
+        no adopt, no write, no release — so pacing's own state is exactly
+        as another party left it whenever SEM takes the battery back."""
+        if yielded:
+            return "yielded"
         if not observer:
             await self._adopt(hass, entity_id)
         if not entity_id:
@@ -290,40 +484,218 @@ class ChargePacingWriter:
                     self.last_written_w = None
                     self._adopted = self._store is None
                     return "observer"
-                value = self.restore_value
-                self.engaged = False
-                self.engaged_entity = ""
-                self.restore_value = None
-                self.last_written_w = None
-                if value is None:
+                # (#820) Below the buffer is full power. Arne's register read
+                # 1560 W when pacing engaged, so 1560 was "the value to put
+                # back" and the pack never got its maximum. Give back the
+                # larger of the capture and the hardware maximum, clamped
+                # to what the register can take.
+                candidates = [v for v in (self.restore_value, hw_max_w)
+                              if v is not None and v > 0]
+                if not candidates:
                     # Nothing to put back, and no way left to learn it. Keep
                     # the record: erasing it would remove the only trace that
                     # a register is still being held down (#949 review).
+                    self._release_state()
                     return "idle"
+                prepared = _fit(hass, entity_id, max(candidates))
+                if prepared is None:
+                    # The register cannot be read right now (a Modbus blip).
+                    # Stay engaged so the next cycle tries the release again
+                    # and unload still knows a cap is held (#820 review).
+                    return "limit_unreadable"
+                self._release_state()
+                native, _watts = prepared
                 await self._forget()
                 await hass.services.async_call(
                     "number", "set_value",
-                    {"entity_id": entity_id, "value": float(value)},
+                    {"entity_id": entity_id, "value": native},
                     blocking=False)
                 return "restored"
             return "idle"
         if observer:
             return "observer"
+        prepared = _fit(hass, entity_id, float(cap_w), ceiling=True)
+        if prepared is None:
+            # Not a power register SEM can scale to (or unreadable): the
+            # capture would be wrong and the write would be refused.
+            return "limit_unreadable"
+        native, target_w = prepared
+        register_w = _read_watts(hass, entity_id)
+        if register_w is None:
+            return "limit_unreadable"
         if not self.engaged:
             # The capture is the ONLY way back, so a register whose prior
-            # value cannot be read is a register SEM must not write. Before
-            # this the cap went on anyway and the restore was silently
-            # skipped for good (#949 review).
-            baseline = _read_number(hass, entity_id)
-            if baseline is None:
-                return "limit_unreadable"
-            self.restore_value = baseline
+            # value cannot be read is a register SEM must not write (#949
+            # review). (#820) A register still holding SEM's own last cap is
+            # not the user's setting: capture nothing, and the release falls
+            # back to the hardware maximum.
+            own = self._own_cap_w
+            self.restore_value = (
+                None if own is not None and abs(register_w - own) < 1.0
+                else register_w)
             self.engaged_entity = str(entity_id)
             self.engaged = True
-        if (self.last_written_w is not None
-                and abs(cap_w - self.last_written_w) < 100.0):
+        step_w = _step_w(hass, entity_id)
+        # (#820, 02.10) The deadband: a cap is rewritten only for a real
+        # difference — more than one step, 100 W or 5 % of the cap. Arne's
+        # cap jittered 1150↔1158 and SEM rewrote the register every few
+        # seconds.
+        deadband = max(step_w, 100.0, 0.05 * target_w)
+        now = self._clock()
+        if self.last_written_w is None:
+            if abs(register_w - target_w) <= deadband:
+                return "held"
+            return await self._write(hass, entity_id, native, target_w,
+                                     register_w, now)
+        verdict = self._judge(entity_id, register_w, step_w, deadband, now)
+        if self._record_dirty:
+            # the accepted value and the settled difference ride the record,
+            # so the next lifetime adopts a PROVEN register (review 3)
+            self._record_dirty = False
+            await self._remember(entity_id)
+        first_after_adoption = self._adopt_check
+        self._adopt_check = False
+        # (#820, 06.10, bug class 83) The register already holds the cap SEM
+        # wants NOW — inside the same deadband every write is gated on.
+        at_wish = abs(register_w - target_w) <= deadband
+        if verdict == "pending":
+            if first_after_adoption:
+                restore = self.restore_value
+                if at_wish and (restore is None
+                                or abs(register_w - restore) >= 1.0):
+                    # The cap from disk is not on the register, but what
+                    # SEM wants is: nothing to write. Writing it anyway
+                    # sent the register its own value, which can never
+                    # read as taken (review, 06.10). Never when it holds
+                    # the value to put back (an inverter rebooted to the
+                    # user's setting): saved as SEM's cap, the #949 own-cap
+                    # rule would erase it from the record (review 3, 06.10).
+                    await self._take_register(entity_id, register_w)
+                    return "held"
+                # (review 3) The first reading after adoption is out of the
+                # band. If it also left the value the register had settled
+                # at, someone moved it while SEM was away (down, or
+                # observing): one rewrite, and the interval does not apply.
+                acc = self._accepted_w
+                if acc is None or abs(register_w - acc) > deadband:
+                    return await self._write(hass, entity_id, native,
+                                             target_w, register_w, now)
             return "held"
-        self.last_written_w = float(cap_w)
+        if at_wish:
+            # A verdict is about ONE write, ``last_written_w``; the action
+            # says what pacing is doing. Arne's register sat at 1700 W, the
+            # cap SEM wanted, while the card said "the inverter refused the
+            # limit" — about an older write that was lost. The verdict
+            # itself stays: the 02.10 rule (a refused cap is not sent
+            # again) is keyed to it, and the register being at the wish
+            # says nothing about whether it takes writes.
+            return "held"
+        # (#820, 02.10, decision) SEM rewrites when (a) the NEW cap differs
+        # from the last SENT cap by more than the deadband — a refused cap
+        # included — or (b) the register has moved away from the value it
+        # settled at (Arne's 1449) by more than the deadband: someone else
+        # changed it. It does NOT rewrite merely because the register sits
+        # at its accepted value and that is not the cap — the inverter
+        # applied its own number, and that is not a refusal.
+        wish_changed = abs(target_w - self.last_written_w) > deadband
+        moved_by_someone = (
+            self._taken is True and self._accepted_w is not None
+            and abs(register_w - self._accepted_w) > deadband)
+        settled = "held" if self._taken else "write_refused"
+        if not (wish_changed or moved_by_someone):
+            return settled
+        if (self._write_at is not None
+                and now - self._write_at < PACING_MIN_WRITE_INTERVAL_S):
+            return settled
+        return await self._write(hass, entity_id, native, target_w,
+                                 register_w, now)
+
+    def _judge(self, entity_id: str, register_w: float, step_w: float,
+               deadband: float, now: float) -> str:
+        """(#820, 02.10) Did the register take the last write?
+
+        TAKEN only when the register is IN THE BAND — within one step, 10 %
+        of what SEM sent or 100 W, whichever is widest (Arne: wrote 1550 W,
+        reads 1449 W; the inverter applied its own number, and that is not
+        a refusal) — AND has CHANGED since the write. The rewrite rule in
+        ``apply`` keeps a taken-but-different value from being rewritten
+        every interval. A reading equal to the pre-write value is "no
+        change yet": a Modbus register that has not been scanned since the
+        write (review pass 2: 4600 read back twice after a 5000 write was
+        judged taken, then "took the write as 4600 W" — before the hardware
+        did anything). It only ages the pending window. A register that
+        moved but is not in the band is PENDING too (a drift of the
+        device's own has no link to SEM's write). REFUSED when the window
+        (3 cycles and 90 s) ends and it never entered the band. A late
+        entry into the band is taken from then on."""
+        sent = self.last_written_w
+        pre = self._pre_write_w
+        changed = pre is None or abs(register_w - pre) >= 1.0
+        band = max(step_w, 0.10 * sent, 100.0)
+        in_band = abs(register_w - sent) <= band
+        if in_band and changed:
+            if self._taken is not True:
+                self._taken = True
+                self._accepted_w = register_w
+                self._record_dirty = True
+                self._confirm(entity_id)
+            self._settle(entity_id, register_w, sent, step_w)
+            return "taken"
+        self._last_in_band_w = None
+        if self._taken is True:
+            return "taken"
+        if self._taken is False:
+            return "refused"
+        self._unconfirmed_cycles += 1
+        waited = (self._write_at is None
+                  or now - self._write_at >= PACING_REFUSE_AFTER_S)
+        if self._unconfirmed_cycles < PACING_REFUSE_AFTER_CYCLES or not waited:
+            return "pending"
+        self._taken = False
+        log_on_change(
+            _LOGGER, f"charge_pacing:refused:{entity_id}", logging.WARNING,
+            "charge pacing: %s refused the cap — SEM wrote %.0f W, the "
+            "register still reads %.0f W. Check the entity's range and "
+            "that the inverter accepts writes.",
+            entity_id, sent, register_w)
+        return "refused"
+
+    def _settle(self, entity_id: str, register_w: float, sent: float,
+                step_w: float) -> None:
+        """``applied_differs`` only when the register SETTLED inside the
+        band — the same value on two consecutive reads, both different from
+        the pre-write value (the caller guarantees that) — more than a step
+        from what was sent (Arne: wrote 1550 W, reads 1449 W). Said once;
+        visible in Diagnose."""
+        if self.applied_differs is not None:
+            return
+        prev = self._last_in_band_w
+        self._last_in_band_w = register_w
+        if prev is None or abs(prev - register_w) >= 1.0:
+            return
+        if abs(register_w - sent) > max(step_w, 1.0):
+            self.applied_differs = (register_w, sent)
+            self._record_dirty = True
+            log_on_change(
+                _LOGGER, f"charge_pacing:applied:{entity_id}",
+                logging.WARNING,
+                "charge pacing: %s took the write as %.0f W, not %.0f W "
+                "— check the integration's unit and the inverter's own "
+                "limit", entity_id, register_w, sent)
+
+    async def _write(self, hass, entity_id: str, native: float,
+                     target_w: float, register_w: float, now: float) -> str:
+        self.last_written_w = target_w
+        self._own_cap_w = target_w
+        self._confirmed = False
+        self._unconfirmed_cycles = 0
+        self._pre_write_w = register_w
+        self._write_at = now
+        self._accepted_w = None
+        self._taken = None
+        self.applied_differs = None
+        self._last_in_band_w = None
+        self._adopt_check = False
         # Persisted BEFORE the write, and on every write: the record has to
         # describe a register that may already carry the cap, never one that
         # might not. The cap rides along so the next lifetime knows which
@@ -331,9 +703,40 @@ class ChargePacingWriter:
         await self._remember(entity_id)
         await hass.services.async_call(
             "number", "set_value",
-            {"entity_id": entity_id, "value": float(cap_w)},
+            {"entity_id": entity_id, "value": native},
             blocking=False)
         return "wrote"
+
+    async def _take_register(self, entity_id: str, register_w: float) -> None:
+        """(#820, 06.10, bug class 83) First cycle after adoption: the cap
+        from disk is not on the register, but the register holds a value
+        inside the deadband of the cap SEM wants now. That value becomes
+        SEM's cap, as if written and seen taken; no write goes out.
+
+        Only here, where no write of this lifetime was judged: writing the
+        register its own value can never read as taken (it does not
+        change), so a healthy inverter was "refusing" 90 s later. A cap
+        REFUSED in this lifetime is never retired this way — the 02.10
+        rule that it is not sent again is keyed to that verdict."""
+        self.last_written_w = register_w
+        self._own_cap_w = register_w
+        self._pre_write_w = None
+        self._accepted_w = register_w
+        self._taken = True
+        self.applied_differs = None
+        self._last_in_band_w = None
+        self._confirm(entity_id)
+        await self._remember(entity_id)
+
+    def _confirm(self, entity_id: str) -> None:
+        """The register shows SEM's cap: a refusal, if one was logged, is
+        over. The gate logs the change once."""
+        if not self._confirmed and self._unconfirmed_cycles >= 2:
+            log_on_change(
+                _LOGGER, f"charge_pacing:refused:{entity_id}", logging.INFO,
+                "charge pacing: %s now holds the cap", entity_id)
+        self._confirmed = True
+        self._unconfirmed_cycles = 0
 
     # ─── the engagement, across lifetimes (#949) ───────────────────────
 
@@ -360,10 +763,11 @@ class ChargePacingWriter:
             _LOGGER.info(
                 "charge pacing: releasing %s — it is no longer the "
                 "charge-limit entity (restoring %s)", stored, restore)
-            if restore is not None:
+            prepared = _fit(hass, stored, restore) if restore is not None else None
+            if prepared is not None:
                 await hass.services.async_call(
                     "number", "set_value",
-                    {"entity_id": stored, "value": float(restore)},
+                    {"entity_id": stored, "value": prepared[0]},
                     blocking=False)
             await self._forget()
             return
@@ -371,6 +775,34 @@ class ChargePacingWriter:
         self.engaged_entity = stored
         self.restore_value = restore
         self.last_written_w = _as_float(record.get("cap_w"))
+        self._own_cap_w = self.last_written_w
+        # (#820, review 3) A cap from disk is not a cap on the wire: the
+        # register may have been moved while SEM was down or observing.
+        # Taken is UNKNOWN until the first reading proves in-band against
+        # the persisted cap (no pre-write value, so in-band is the whole
+        # proof); the value the register had settled at, and the settled
+        # difference, come back from the record so the first reading can
+        # also be judged "moved by someone".
+        self._taken = None
+        self._accepted_w = _as_float(record.get("accepted_w"))
+        _ad = record.get("applied_differs")
+        self.applied_differs = (
+            (float(_ad[0]), float(_ad[1]))
+            if isinstance(_ad, (list, tuple)) and len(_ad) == 2
+            and _as_float(_ad[0]) is not None and _as_float(_ad[1]) is not None
+            else None)
+        self._pre_write_w = None
+        self._write_at = None
+        self._unconfirmed_cycles = 0
+        self._adopt_check = self.last_written_w is not None
+        # (#820) a record whose "value to restore" is SEM's own cap (a
+        # capture from before #949) is no value to restore at all
+        if (restore is not None and self.last_written_w is not None
+                and abs(restore - self.last_written_w) < 1.0):
+            self.restore_value = None
+            # (#820 review 5) the correction must reach the disk, or an
+            # unload that reads the record hands SEM's own cap back
+            await self._remember(stored)
         _LOGGER.info(
             "charge pacing: adopted the cap this install was left with — "
             "%s at %s W, restores to %s W",
@@ -394,6 +826,11 @@ class ChargePacingWriter:
                 "entity_id": str(entity_id),
                 "restore_value": self.restore_value,
                 "cap_w": self.last_written_w,
+                # (#820, review 3) what the register settled at, and the
+                # settled difference — so adoption trusts a proven value
+                "accepted_w": self._accepted_w,
+                "applied_differs": (list(self.applied_differs)
+                                    if self.applied_differs else None),
             })
         except Exception:  # noqa: BLE001 — persistence never costs a cycle
             _LOGGER.debug("charge pacing: could not persist the engagement",
@@ -425,6 +862,48 @@ def _read_number(hass, entity_id: str) -> float | None:
     return _as_float(getattr(state, "state", None))
 
 
+def _scale(hass, entity_id: str) -> float | None:
+    from .power_control import native_power_scale
+    scale = native_power_scale(hass, entity_id)
+    return scale if scale is not None and scale > 0 else None
+
+
+def _read_watts(hass, entity_id: str) -> float | None:
+    """The register's value in watts, or None when it cannot be read."""
+    value = _read_number(hass, entity_id)
+    scale = _scale(hass, entity_id)
+    if value is None or scale is None:
+        return None
+    return value * scale
+
+
+def _step_w(hass, entity_id: str) -> float:
+    state = hass.states.get(entity_id)
+    attrs = getattr(state, "attributes", None) if state is not None else None
+    scale = _scale(hass, entity_id)
+    if not isinstance(attrs, dict) or scale is None:
+        return 0.0
+    step = _as_float(attrs.get("step"))
+    return step * scale if step and step > 0 else 0.0
+
+
+def _fit(hass, entity_id: str, watts: float, *, ceiling: bool = False):
+    """(#820) ``(native value, watts)`` the register can take, or None.
+
+    Scaled to the entity's unit and clamped to its range by the ONE shared
+    clamp (``power_control.clamp_to_entity_range``, #523). A cap is a
+    ceiling, so it rounds DOWN to the step."""
+    from .power_control import clamp_to_entity_range
+    scale = _scale(hass, entity_id)
+    if scale is None:
+        return None
+    state = hass.states.get(entity_id)
+    attrs = getattr(state, "attributes", None) if state is not None else None
+    fitted = clamp_to_entity_range(attrs, float(watts), scale,
+                                   round_down_to_step=ceiling)
+    return round(fitted / scale, 6), fitted
+
+
 def pending_pacing_release(coordinator) -> tuple | None:
     """(#949) What a still-engaged pacer is holding down, as
     ``(entity_id, restore_value, store)``, or None.
@@ -439,10 +918,72 @@ def pending_pacing_release(coordinator) -> tuple | None:
     if writer is None or not getattr(writer, "engaged", False):
         return None
     entity = str(getattr(writer, "engaged_entity", "") or "")
+    if not entity:
+        return None
+    # (#820 review 5) "engaged, nothing to restore" is its own answer —
+    # ``(entity, None, store)`` — so the disk is read only when the writer
+    # is genuinely not engaged, never to override a corrected memory.
     value = _as_float(getattr(writer, "restore_value", None))
+    return (entity, value, getattr(writer, "_store", None))
+
+
+async def async_pending_pacing_release(coordinator) -> tuple | None:
+    """(#820, review 4) What the pacer holds down, read from the RECORD when
+    the writer's memory has nothing.
+
+    A writer that saw only observer cycles in its lifetime (HA came up with
+    observer on; "flip observer, then uninstall") never adopts the record,
+    so ``pending_pacing_release`` finds no engagement and the unload hands
+    nothing back — a real prior cap stays on the register forever, the
+    #949 failure class reopened. The record on disk is the truth; this
+    reads it. Observer cycles themselves stay fully read-only.
+
+    The value put back is the release rule's: the larger of the captured
+    value and the battery's full charge power. Never raises.
+    """
+    config = getattr(coordinator, "config", None) or {}
+    try:
+        hw_max = _as_float(config.get("battery_max_charge_power_w"))
+    except Exception:  # noqa: BLE001
+        hw_max = None
+
+    def _value(restore):
+        candidates = [v for v in (restore, hw_max) if v is not None and v > 0]
+        return max(candidates) if candidates else None
+
+    held = pending_pacing_release(coordinator)
+    if held:
+        entity, value, store = held
+        value = _value(value)
+        return (entity, value, store) if value is not None else None
+    writer = getattr(coordinator, "_charge_pacing_writer", None)
+    store = getattr(writer, "_store", None) if writer is not None else None
+    if store is None:
+        factory = getattr(coordinator, "_charge_pacing_store", None)
+        try:
+            store = factory() if callable(factory) else None
+        except Exception:  # noqa: BLE001
+            store = None
+    if store is None:
+        return None
+    try:
+        record = await store.async_load()
+    except Exception:  # noqa: BLE001 — a lost record is not a lost unload
+        return None
+    if not isinstance(record, dict):
+        return None
+    entity = str(record.get("entity_id") or "")
+    restore = _as_float(record.get("restore_value"))
+    cap = _as_float(record.get("cap_w"))
+    if restore is not None and cap is not None and abs(restore - cap) < 1.0:
+        # the #949 own-cap rule, on the disk copy too: a record whose
+        # value to restore is SEM's own cap restores nothing but the
+        # hardware maximum
+        restore = None
+    value = _value(restore)
     if not entity or value is None:
         return None
-    return (entity, value, getattr(writer, "_store", None))
+    return (entity, value, store)
 
 
 async def async_release_pacing(hass, held: tuple | None, reason: str) -> str | None:
@@ -450,10 +991,25 @@ async def async_release_pacing(hass, held: tuple | None, reason: str) -> str | N
     if not held:
         return None
     entity, value, store = held
+    if value is None:
+        return None  # engaged, nothing to put back: keep the record
     try:
+        # (#820) the captured value is in watts; the register takes its own
+        # unit and range
+        prepared = _fit(hass, entity, float(value))
+        if prepared is None:
+            # The register cannot be read now (unavailable, no unit). A raw
+            # watt value could land 1000x off on a kW register, and a
+            # refused write goes unheard. Keep the record: the next
+            # lifetime adopts it and releases then (#949, #820 review).
+            _LOGGER.warning(
+                "charge pacing: %s unreadable on %s — the limit stays held "
+                "and is released at the next start", entity, reason)
+            return None
+        native = prepared[0]
         await hass.services.async_call(
             "number", "set_value",
-            {"entity_id": entity, "value": float(value)}, blocking=False)
+            {"entity_id": entity, "value": native}, blocking=False)
     except Exception:  # noqa: BLE001 — an unload must not fail on this
         _LOGGER.warning("charge pacing: could not release %s on %s",
                         entity, reason)
@@ -468,7 +1024,7 @@ async def async_release_pacing(hass, held: tuple | None, reason: str) -> str | N
 
 def today_remaining_slots(*, now, sunrise, sunset, day_kwh, home_w_at,
                           builder, price_at=None, level_cheap_at=None,
-                          export_rate: float = 0.0):
+                          export_rate=0.0):
     """Today's remaining day, [now, sunset), in the planner's slot shape.
 
     The PROD campaign (26.08 morning) caught pacing hooked to the tomorrow
@@ -493,8 +1049,10 @@ def today_remaining_slots(*, now, sunrise, sunset, day_kwh, home_w_at,
         # (#924) Pacing reads surplus WATTS and never a price, so this
         # changes nothing today. It is threaded because the builder it
         # calls prices with it, and a builder handed no rate prices the
-        # sun at zero — the #755 defect, one call site over.
-        export_rate=float(export_rate or 0.0),
+        # sun at zero — the #755 defect, one call site over. (#1162) A rate
+        # per slot passes through as a function.
+        export_rate=(export_rate if callable(export_rate)
+                     else float(export_rate or 0.0)),
         **({"price_at": price_at} if price_at else {}),
         **({"level_cheap_at": level_cheap_at} if level_cheap_at else {}),
     )

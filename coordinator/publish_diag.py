@@ -47,8 +47,11 @@ def build_diagnostics(coord) -> Dict[str, Any]:
     out["diag_version"] = coord._get_version()
 
     _disc = getattr(reader, "_split_grid_discovery", None) or {}
+    # (#1224) half a saved pair the reader set aside is not the grid's mode
+    _read = getattr(reader, "_grid_source_key", None)
+    _aside = isinstance(_read, str) and not _read.startswith("manual:")
     if (coord.config.get("grid_import_power_entity")
-            or coord.config.get("grid_export_power_entity")):
+            or coord.config.get("grid_export_power_entity")) and not _aside:
         out["diag_grid_mode"] = "manual"
         # #461 follow-up: observe-only audit verdict — True when the manual
         # import/export assignment has contradicted the Energy Dashboard
@@ -69,13 +72,30 @@ def build_diagnostics(coord) -> Dict[str, Any]:
         }.get(_conf, "split-lowconf")
     else:
         out["diag_grid_mode"] = "combined"
-    out["diag_grid_sign"] = "negated" if reader._grid_sign_inverted else "normal"
+    # (#1215) what the learned lock does to this read: none on a pair
+    out["diag_grid_sign"] = (
+        "negated" if reader._grid_sign_inverted
+        and not reader.grid_read_is_pair() else "normal")
 
     # #588 — battery sign summary per bid (mirrors diag_grid_sign).
+    # (#1215) …and a one-battery pair takes no lock: its sign is known, as
+    # for the grid
+    _bat_inverted = dict(getattr(reader, "_battery_sign_inverted", {}))
+    _bat_detected = dict(getattr(reader, "_battery_sign_detected", {}))
+    _fleet = getattr(reader, "_FLEET_BID", "__fleet__")
+    # (#1210) …and only the locks the last read applied: the one-battery
+    # lock while it reads one battery, each combined battery's while it reads
+    # each. Any other saved lock stays saved but does nothing.
+    _applied = getattr(reader, "_battery_read_locks", None)
+    if isinstance(_applied, frozenset):
+        for _locks in (_bat_inverted, _bat_detected):
+            for _bid in [b for b in _locks if b not in _applied]:
+                del _locks[_bid]
+    if getattr(reader, "_battery_read_is_pair", False) is True:
+        _bat_inverted[_fleet] = False
+        _bat_detected[_fleet] = True
     out["diag_battery_sign"] = format_battery_sign_diag(
-        getattr(reader, "_battery_sign_inverted", {}),
-        getattr(reader, "_battery_sign_detected", {}),
-    )
+        _bat_inverted, _bat_detected)
 
     # #590 — the layered-trace health signal, surfaced as ONE queryable
     # binary sensor (binary_sensor.sem_layer_mismatch). ON when a control OR

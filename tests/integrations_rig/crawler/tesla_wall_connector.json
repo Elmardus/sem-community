@@ -1,0 +1,25 @@
+{
+ "chargers": [],
+ "meters": [],
+ "near_misses": [
+  {
+   "charger_roles": [
+    "charging",
+    "plug",
+    "power",
+    "session_energy"
+   ],
+   "choose_vehicle": 0,
+   "companions": 0,
+   "entities": 19,
+   "missing": [
+    "control"
+   ],
+   "offer": {},
+   "paired_vehicle": false,
+   "proposed_roles": []
+  }
+ ],
+ "proposals": [],
+ "vehicles": []
+}

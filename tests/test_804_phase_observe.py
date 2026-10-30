@@ -184,22 +184,22 @@ class TestSwitchValuesAndCommand:
         from custom_components.solar_energy_management.coordinator.ev_phases import (
             phase_switch_command,
         )
-        assert phase_switch_command("select.goe_psm", "3 Phasen") == (
+        assert phase_switch_command("select.goe_psm", "3 Phasen", None) == (
             "select", "select_option",
             {"entity_id": "select.goe_psm", "option": "3 Phasen"})
-        assert phase_switch_command("number.keba_phases", "3") == (
+        assert phase_switch_command("number.keba_phases", "3", None) == (
             "number", "set_value",
             {"entity_id": "number.keba_phases", "value": 3.0})
-        assert phase_switch_command("switch.openwb_phases", "on") == (
+        assert phase_switch_command("switch.openwb_phases", "on", None) == (
             "switch", "turn_on", {"entity_id": "switch.openwb_phases"})
-        assert phase_switch_command("switch.openwb_phases", "off") == (
+        assert phase_switch_command("switch.openwb_phases", "off", None) == (
             "switch", "turn_off", {"entity_id": "switch.openwb_phases"})
 
     def test_unknown_domain_returns_none(self):
         from custom_components.solar_energy_management.coordinator.ev_phases import (
             phase_switch_command,
         )
-        assert phase_switch_command("sensor.goe_phases", "3") is None
+        assert phase_switch_command("sensor.goe_phases", "3", None) is None
 
 
 class TestHelperDomainTwins:
@@ -224,13 +224,13 @@ class TestHelperDomainTwins:
         assert resolve_switch_values("input_boolean.tp", {}) == ("off", "on", True)
         _, _, ready = resolve_switch_values("input_select.psm", {})
         assert ready is False
-        assert phase_switch_command("input_select.psm", "3 Phasen") == (
+        assert phase_switch_command("input_select.psm", "3 Phasen", None) == (
             "input_select", "select_option",
             {"entity_id": "input_select.psm", "option": "3 Phasen"})
-        assert phase_switch_command("input_number.phases", "3") == (
+        assert phase_switch_command("input_number.phases", "3", None) == (
             "input_number", "set_value",
             {"entity_id": "input_number.phases", "value": 3.0})
-        assert phase_switch_command("input_boolean.tp", "on") == (
+        assert phase_switch_command("input_boolean.tp", "on", None) == (
             "input_boolean", "turn_on", {"entity_id": "input_boolean.tp"})
 
 

@@ -43,6 +43,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from custom_components.solar_energy_management.coordinator.types import (
+    PowerReadings,
+)
 from custom_components.solar_energy_management.coordinator.energy_calculator import (
     COMFORT_SPLIT_IN,
     COMFORT_SPLIT_OUT,
@@ -94,7 +97,7 @@ def _file(coord):
         SEMCoordinator,
     )
 
-    SEMCoordinator._file_device_energy(coord, TODAY)
+    SEMCoordinator._file_device_energy(coord, TODAY, PowerReadings())
     return coord._energy_calculator.accumulate_device_energy
 
 

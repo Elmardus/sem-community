@@ -51,9 +51,11 @@ that has broken Huawei installs before.
 
 ### Device discovery (`hardware_detection.py`)
 
-Pattern-based auto-discovery with confidence scoring. The pattern tables are per-domain
-(`EV_INTEGRATION_PATTERNS`, `GENERIC_EV_PATTERNS`, `_PV_STRING_PATTERNS`, …) — read the
-module rather than assuming a single flat table.
+One crawler reads what each integration offers. Role words live in
+`consts/role_lexicon.py`; the rules are in `hardware_detection.py`
+(`propose_roles_from_roster`, `read_charger_roles`). Never add code for one
+brand: teach the crawler a role, and prove it on the rig in
+`tests/integrations_rig/`.
 
 ### Labels (`consts/labels.py`)
 

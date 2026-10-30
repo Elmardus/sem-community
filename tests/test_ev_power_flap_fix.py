@@ -1,4 +1,4 @@
-"""EV flap fix (2026-07-10, Guido / KEBA P30): a UDP power blip must not
+"""EV flap fix (2026-07-10, KEBA P30): a UDP power blip must not
 collapse the EV budget.
 
 Root cause (proven): the KEBA charging-power sensor blips to ~0 for one

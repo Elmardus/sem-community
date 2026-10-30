@@ -151,6 +151,10 @@ class TestB1UserFlipFleet:
         ed.battery_power_pairs = []
         ed.battery_charge_energy_list = ["sensor.b1_charge", "sensor.b2_charge"]
         ed.battery_discharge_energy_list = ["sensor.b1_discharge", "sensor.b2_discharge"]
+        ed.battery_unit_counters = {                       # (#1193)
+            "sensor.b1_power": ("sensor.b1_charge", "sensor.b1_discharge"),
+            "sensor.b2_power": ("sensor.b2_charge", "sensor.b2_discharge"),
+        }
         r.set_energy_dashboard_config(ed)
 
         # Build a readings with pre-populated batteries dict (mock per-battery reading)

@@ -20,7 +20,7 @@ from homeassistant.helpers import entity_registry as er  # noqa: E402
 
 from custom_components.solar_energy_management.const import DOMAIN  # noqa: E402
 from custom_components.solar_energy_management.coordinator.install_modules import (  # noqa: E402
-    BATTERY_WIRING_KEYS, ENTITY_MODULES, Module, Presence,
+    BATTERY_WIRING_KEYS, ENTITY_MODULES, Module, Presence, entity_kept,
 )
 
 COORDINATOR_MODULE = "custom_components.solar_energy_management.coordinator.coordinator"
@@ -142,18 +142,23 @@ async def test_the_diagnostics_carry_the_verdict(
     entry = _minimal_entry()
     await _setup(hass, entry)
     diag = await async_get_config_entry_diagnostics(hass, entry)
-    assert diag["install_modules"] == {
-        "battery": "absent", "ev": "absent", "heat_pump": "absent", "hot_water": "absent"}
+    # (#996) the five capabilities ride along; a minimal install has none.
+    assert diag["install_modules"] == {m.value: "absent" for m in Module}
 
 
 @pytest.mark.asyncio
 async def test_a_battery_and_ev_install_loses_nothing_it_has(
         hass, enable_custom_integrations, monkeypatch, sem_config_entry):
     _dashboard(monkeypatch)
-    await _setup(hass, sem_config_entry)
+    coordinator = await _setup(hass, sem_config_entry)
+    presence = coordinator.setup_presence
+    assert presence[Module.BATTERY] is Presence.PRESENT
+    assert presence[Module.EV] is Presence.PRESENT
     wrong = []
-    for (platform, key), modules in ENTITY_MODULES.items():
-        expected = modules <= {Module.BATTERY, Module.EV}
+    for platform, key in ENTITY_MODULES:
+        # (#996) a row exists iff every module and capability it needs is
+        # not ABSENT on this install — the same verdict the platforms read.
+        expected = entity_kept(platform, key, presence)
         if _registered(hass, sem_config_entry, platform, key) is not expected:
             wrong.append((platform, key, "expected" if expected else "unexpected"))
     assert not wrong, wrong

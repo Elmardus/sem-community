@@ -69,12 +69,31 @@ class TestAdapterFactory:
         device = _make_device(charger_service="wallbox.set_charging_current")
         assert isinstance(adapter_for(device), WallboxAdapter)
 
-    def test_wallbox_via_entity_id_match(self):
+    def test_wallbox_via_registry_platform(self):
+        """(#976) The Wallbox integration owns the entity — the registry
+        says so. A word in the id does not (see test_976_named_wallbox)."""
+        eid = "number.wallbox_pulsar_charging_current"
         device = _make_device(
             charger_service="number.set_value",
-            charger_service_entity_id="number.wallbox_pulsar_charging_current",
+            charger_service_entity_id=eid,
         )
-        assert isinstance(adapter_for(device), WallboxAdapter)
+        registry = Mock()
+        registry.async_get = lambda e: (
+            Mock(platform="wallbox") if e == eid else None)
+        with patch("homeassistant.helpers.entity_registry.async_get",
+                   return_value=registry):
+            assert isinstance(adapter_for(device), WallboxAdapter)
+
+    def test_the_word_wallbox_in_an_id_is_not_a_wallbox(self):
+        """(#976) An OCPP charge point its owner named "wallbox"."""
+        eid = "switch.wallbox_charge_control"
+        device = _make_device(start_stop_entity=eid)
+        registry = Mock()
+        registry.async_get = lambda e: (
+            Mock(platform="ocpp") if e == eid else None)
+        with patch("homeassistant.helpers.entity_registry.async_get",
+                   return_value=registry):
+            assert type(adapter_for(device)) is GenericAdapter
 
     def test_keba_wins_when_service_keba(self):
         # Even if entity_id contains "wallbox" (mixed install), KEBA

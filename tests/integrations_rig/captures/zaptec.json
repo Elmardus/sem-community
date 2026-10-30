@@ -1,0 +1,701 @@
+{
+ "devices": {
+  "zaptec:chg1": {
+   "manufacturer": null,
+   "model": "charger",
+   "name": "Zaptec Go2 ZAP012345"
+  },
+  "zaptec:inst1": {
+   "manufacturer": null,
+   "model": "installation",
+   "name": "Abbastova"
+  }
+ },
+ "domain": "zaptec",
+ "entities": [
+  {
+   "attributes": {
+    "device_class": "connectivity"
+   },
+   "capabilities": {},
+   "device": "zaptec:inst1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.abbastova_active",
+   "original_device_class": "connectivity",
+   "state": null,
+   "translation_key": null,
+   "unique_id": "inst1_active",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "zaptec:inst1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.abbastova_is_required_authentication",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "authorization_required",
+   "unique_id": "inst1_is_required_authentication",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "connectivity"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.zaptec_go2_zap012345_active",
+   "original_device_class": "connectivity",
+   "state": null,
+   "translation_key": null,
+   "unique_id": "chg1_active",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.zaptec_go2_zap012345_authentication_required",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "authorization_required",
+   "unique_id": "chg1_authentication_required",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "connectivity"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.zaptec_go2_zap012345_is_online",
+   "original_device_class": "connectivity",
+   "state": null,
+   "translation_key": "online",
+   "unique_id": "chg1_is_online",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.zaptec_go2_zap012345_authorize_charge",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "authorize_charge",
+   "unique_id": "chg1_authorize_charge",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.zaptec_go2_zap012345_deauthorize_and_stop",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "deauthorize_and_stop",
+   "unique_id": "chg1_deauthorize_and_stop",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "button.zaptec_go2_zap012345_restart_charger",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "restart_charger",
+   "unique_id": "chg1_restart_charger",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.zaptec_go2_zap012345_resume_charging",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "resume_charging",
+   "unique_id": "chg1_resume_charging",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.zaptec_go2_zap012345_stop_charging_final",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "stop_charging",
+   "unique_id": "chg1_stop_charging_final",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "button.zaptec_go2_zap012345_upgrade_firmware",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "upgrade_firmware",
+   "unique_id": "chg1_upgrade_firmware",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "max": 0,
+    "min": 0,
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "max": 0,
+    "min": 0
+   },
+   "device": "zaptec:inst1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.abbastova_available_current",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "available_current",
+   "unique_id": "inst1_available_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "max": 32,
+    "min": 0,
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "max": 32,
+    "min": 0
+   },
+   "device": "zaptec:inst1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.abbastova_three_to_one_phase_switch_current",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "three_to_one_phase_switch_current",
+   "unique_id": "inst1_three_to_one_phase_switch_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "max": 32,
+    "min": 0,
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "max": 32,
+    "min": 0
+   },
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.zaptec_go2_zap012345_charger_max_current",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "charger_max_current",
+   "unique_id": "chg1_charger_max_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "max": 32,
+    "min": 0,
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "max": 32,
+    "min": 0
+   },
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.zaptec_go2_zap012345_charger_min_current",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "charger_min_current",
+   "unique_id": "chg1_charger_min_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.zaptec_go2_zap012345_hmi_brightness",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "hmi_brightness",
+   "unique_id": "chg1_hmi_brightness",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": "installation_authentication_type_list"
+   },
+   "capabilities": {
+    "options": "installation_authentication_type_list"
+   },
+   "device": "zaptec:inst1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.abbastova_authentication_type",
+   "original_device_class": "enum",
+   "state": null,
+   "translation_key": "authentication_type",
+   "unique_id": "inst1_authentication_type",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "zaptec:inst1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.abbastova_available_current_phase1",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "available_current_phase1",
+   "unique_id": "inst1_available_current_phase1",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "zaptec:inst1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.abbastova_available_current_phase2",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "available_current_phase2",
+   "unique_id": "inst1_available_current_phase2",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "zaptec:inst1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.abbastova_available_current_phase3",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "available_current_phase3",
+   "unique_id": "inst1_available_current_phase3",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": "installation_types_list"
+   },
+   "capabilities": {
+    "options": "installation_types_list"
+   },
+   "device": "zaptec:inst1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.abbastova_installation_type",
+   "original_device_class": "enum",
+   "state": null,
+   "translation_key": "installation_type",
+   "unique_id": "inst1_installation_type",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "zaptec:inst1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.abbastova_max_current",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "max_current",
+   "unique_id": "inst1_max_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": "network_types_list"
+   },
+   "capabilities": {
+    "options": "network_types_list"
+   },
+   "device": "zaptec:inst1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.abbastova_network_type",
+   "original_device_class": "enum",
+   "state": null,
+   "translation_key": "network_type",
+   "unique_id": "inst1_network_type",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_charge_current_set",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "charge_current_set",
+   "unique_id": "chg1_charge_current_set",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": "charger_operation_modes_list"
+   },
+   "capabilities": {
+    "options": "charger_operation_modes_list"
+   },
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_charger_operation_mode",
+   "original_device_class": "enum",
+   "state": null,
+   "translation_key": "charger_operation_mode",
+   "unique_id": "chg1_charger_operation_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_completed_session_energy",
+   "original_device_class": "energy",
+   "state": null,
+   "translation_key": "completed_session_energy",
+   "unique_id": "chg1_completed_session.Energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_current_phase1",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "current_phase1",
+   "unique_id": "chg1_current_phase1",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_current_phase2",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "current_phase2",
+   "unique_id": "chg1_current_phase2",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_current_phase3",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "current_phase3",
+   "unique_id": "chg1_current_phase3",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": "device_types_list"
+   },
+   "capabilities": {
+    "options": "device_types_list"
+   },
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.zaptec_go2_zap012345_device_type",
+   "original_device_class": "enum",
+   "state": null,
+   "translation_key": "device_type",
+   "unique_id": "chg1_device_type",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "humidity",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.zaptec_go2_zap012345_humidity",
+   "original_device_class": "humidity",
+   "state": null,
+   "translation_key": "humidity",
+   "unique_id": "chg1_humidity",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_signed_meter_value_kwh",
+   "original_device_class": "energy",
+   "state": null,
+   "translation_key": "signed_meter_value",
+   "unique_id": "chg1_signed_meter_value_kwh",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.zaptec_go2_zap012345_temperature_internal5",
+   "original_device_class": "temperature",
+   "state": null,
+   "translation_key": "temperature_internal5",
+   "unique_id": "chg1_temperature_internal5",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_total_charge_power",
+   "original_device_class": "power",
+   "state": null,
+   "translation_key": "total_charge_power",
+   "unique_id": "chg1_total_charge_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_total_charge_power_session",
+   "original_device_class": "energy",
+   "state": null,
+   "translation_key": "total_charge_power_session",
+   "unique_id": "chg1_total_charge_power_session",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_voltage_phase1",
+   "original_device_class": "voltage",
+   "state": null,
+   "translation_key": "voltage_phase1",
+   "unique_id": "chg1_voltage_phase1",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_voltage_phase2",
+   "original_device_class": "voltage",
+   "state": null,
+   "translation_key": "voltage_phase2",
+   "unique_id": "chg1_voltage_phase2",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.zaptec_go2_zap012345_voltage_phase3",
+   "original_device_class": "voltage",
+   "state": null,
+   "translation_key": "voltage_phase3",
+   "unique_id": "chg1_voltage_phase3",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "switch"
+   },
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.zaptec_go2_zap012345_charger_operation_mode",
+   "original_device_class": "switch",
+   "state": null,
+   "translation_key": "charger_operation_mode",
+   "unique_id": "chg1_charger_operation_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "zaptec:chg1",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "switch.zaptec_go2_zap012345_permanent_cable_lock",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "permanent_cable_lock",
+   "unique_id": "chg1_permanent_cable_lock",
+   "unit_of_measurement": null
+  }
+ ],
+ "services": {
+  "authorize_charging": [
+   "charger_id",
+   "device_id"
+  ],
+  "deauthorize_charging": [
+   "charger_id",
+   "device_id"
+  ],
+  "limit_current": [
+   "available_current",
+   "available_current_phase1",
+   "available_current_phase2",
+   "available_current_phase3",
+   "device_id",
+   "installation_id"
+  ],
+  "restart_charger": [
+   "charger_id",
+   "device_id"
+  ],
+  "resume_charging": [
+   "charger_id",
+   "device_id"
+  ],
+  "send_command": [
+   "charger_id",
+   "command",
+   "device_id"
+  ],
+  "stop_charging": [
+   "charger_id",
+   "device_id"
+  ],
+  "update_firmware": [
+   "charger_id",
+   "device_id"
+  ]
+ },
+ "source": {
+  "commit": "ba502a9971355e60b84b0356650a50e6ab403d11",
+  "dropped": [],
+  "kind": "declared",
+  "note": "read from the integration's entity descriptions; entity ids built the way it builds them; no live load (cloud-only)",
+  "repo": "custom-components/zaptec"
+ }
+}

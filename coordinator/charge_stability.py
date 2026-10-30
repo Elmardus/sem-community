@@ -53,7 +53,8 @@ from dataclasses import replace
 from typing import Dict, List, Optional, TYPE_CHECKING
 
 from ..const import DEFAULT_MAX_CHARGING_CURRENT
-from .charger_types import ChargerDecision, ChargerIntent, ChargerView
+from . import reason_codes as RC
+from .charger_types import ChargerDecision, ChargerIntent, ChargerView, rewrite
 from .decide import effective_min_amps
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -313,6 +314,11 @@ class ChargeStability:
         # that lands while the car happens to blip 0 W never reaches the
         # adapter, leaving last_intent=CHARGE forever).
         self._sem_session: set[str] = set()
+        # (#1069) Chargers inside a PEAK pause: the slot guard had no room
+        # for the minimum. Kept until the car runs again or the mode itself
+        # says idle, so the restart waits the enable delay in ANY mode —
+        # the one stability rule for surplus and peak.
+        self._peak_wait: set[str] = set()
 
     # ------------------------------------------------------------------ #
     # Restart-safe timer persistence (#589)                               #
@@ -536,7 +542,16 @@ class ChargeStability:
         # The latch/hold/escalation below is SHARED — one charging
         # behaviour for both, so a fussy car (a Zoe that won't start at
         # 6 A) is handled identically day or night.
-        night = bool(view.fleet.is_night)
+        # (#1069) A peak pause takes the same gate as a surplus deficit, in
+        # every mode and by night too: stop after the user's disable delay,
+        # restart after the enable delay. Outside the surplus modes nothing
+        # else here changes — the case ends when the car runs again.
+        if getattr(decision, "peak_paused", False):
+            self._peak_wait.add(cid)
+        elif decision.intent is ChargerIntent.IDLE:
+            self._peak_wait.discard(cid)     # the mode's own idle, not ours
+        peak = cid in self._peak_wait
+        night = bool(view.fleet.is_night) and not peak
 
         # (#975) This session's interruption budget widens the anti-flap
         # delays — the start delay and the TRANSIENT bridge only. The
@@ -548,13 +563,21 @@ class ChargeStability:
         # Out of scope → transparent. DISABLE (user off / self-resume
         # guard) and disconnects also clear all state: the next
         # session starts a fresh window with a cold history.
+        # (#1153) An ABSENT car, not an unknown one: a charger with no plug
+        # sensor reads "not connected" whenever it is not drawing, and
+        # resetting on that would re-open a fresh start ladder every cycle.
+        # Kept, the give-up streak and the #610 backoff bound the offers to
+        # a possibly empty charger: a few short ladders, then one per
+        # backoff period, ended at once by a real draw.
+        car_absent = view.power.car_absent
         if (
-            view.mode not in SURPLUS_DAY_MODES
-            or not view.power.connected
+            (view.mode not in SURPLUS_DAY_MODES and not peak)
+            or car_absent
             or decision.intent is ChargerIntent.DISABLE
             or decision.intent is ChargerIntent.RELEASE   # (#898) hands-off
         ):
             self._reset(cid)
+            self._peak_wait.discard(cid)
             # #610 — an unplug / mode change / DISABLE ends the full-car
             # backoff: a plug or user status change is exactly the signal
             # that should re-open start offers.
@@ -565,7 +588,7 @@ class ChargeStability:
             # (#975) A new PLUG-IN is a new interruption budget — and only a
             # plug-in. A mode change or a user OFF does not reset the
             # charger's own session counter, so it must not reset ours.
-            if not view.power.connected:
+            if car_absent:
                 self._session_stops.pop(cid, None)
             return decision
 
@@ -675,12 +698,13 @@ class ChargeStability:
                 # hole for the median to snap through on recovery.
                 self._median_amps(cid, held, smooth_window)
                 self._commit_amps(cid, held, now)
-                return replace(
+                return rewrite(
                     decision,
                     intent=ChargerIntent.CHARGE_AT_AMPS,
                     commanded_amps=held,
                     reason=(f"inputs degraded ({_dark_inputs_phrase(view)}) "
                             f"— holding {held}A"),
+                    reason_code=RC.CHARGER_INPUTS_MISSING, reason_params={},
                 )
 
         # #610 — declined-start backoff gate. MUST sit ABOVE the ``charge_wanted``
@@ -710,7 +734,7 @@ class ChargeStability:
         backoff_until = self._giveup_backoff_until.get(cid)
         if backoff_until is not None and not drawing:
             if now < backoff_until:
-                return replace(
+                return rewrite(
                     decision,
                     intent=ChargerIntent.IDLE,
                     commanded_amps=0,
@@ -721,6 +745,7 @@ class ChargeStability:
                         f"{max(0.0, backoff_until - now) / 60.0:.0f} min"
                         f"{_meanwhile(decision)} — {decision.reason}"
                     ),
+                    reason_code=RC.CHARGER_CAR_DECLINED, reason_params={},
                 )
             self._giveup_backoff_until.pop(cid, None)
 
@@ -759,7 +784,7 @@ class ChargeStability:
                 # _adjust's job, and the ease-below-floor is the one probe
                 # that lets the floor DECAY when the car's appetite changes.
                 self._reset(cid)
-                return replace(
+                return rewrite(
                     decision, intent=ChargerIntent.IDLE, commanded_amps=0,
                     # CAUSE: the guard above is `target < _floor and not
                     # drawing`, so both halves of this sentence — below the
@@ -771,6 +796,7 @@ class ChargeStability:
                         f"instead of cycling the contactor (#893) — "
                         f"{decision.reason}"
                     ),
+                    reason_code=RC.CHARGER_LOW_SUN, reason_params={},
                 )
             # Latch hysteresis: once a car has drawn, a single low/zero power
             # reading is almost always a transient (the car blips, a sensor
@@ -784,6 +810,8 @@ class ChargeStability:
             )
             if charging and (drawing or held_recently):
                 self._surplus_since.pop(cid, None)
+                if drawing:
+                    self._peak_wait.discard(cid)   # (#1069) running again
                 # First real draw of a SEM-initiated start → adopt the latch
                 # current as the steady hold and anchor the debounce clock so
                 # the existing ``ev_min_change_interval_sec`` holds it for a
@@ -812,6 +840,7 @@ class ChargeStability:
                 held = now - since
                 if night or held >= max(0.0, float(enable_delay_s)):
                     self._surplus_since.pop(cid, None)
+                    self._peak_wait.discard(cid)   # (#1069) restart granted
                     # (#893) same as the ladder default: a known latch
                     # floor starts AT the floor, not at a min the car
                     # already refused. Guard above ensures target >= floor.
@@ -822,16 +851,18 @@ class ChargeStability:
                     self._start_since[cid] = now
                     self._start_offer[cid] = start_a
                     self._commit_amps(cid, start_a, now)
-                    return replace(
+                    return rewrite(
                         decision, intent=ChargerIntent.CHARGE_AT_AMPS,
                         commanded_amps=start_a,
                         reason=(f"stability: starting at {start_a}A "
                                 f"(auto-raises if no draw) — {decision.reason}"),
+                        reason_code=RC.CHARGER_START, reason_params={},
                     )
-                return replace(
+                return rewrite(
                     decision, intent=ChargerIntent.IDLE, commanded_amps=0,
                     reason=(f"stability: surplus must hold {enable_delay_s:.0f}s "
                             f"before start ({held:.0f}s elapsed) — {decision.reason}"),
+                    reason_code=RC.CHARGER_WAIT_STEADY, reason_params={},
                 )
             # Commanded a charge but the car is NOT drawing. Some
             # vehicles refuse a gentle 6 A handshake and need a brief
@@ -889,7 +920,7 @@ class ChargeStability:
                         f" — backing off {backoff_s / 60.0:.0f} min "
                         f"after {streak} declined ladders"
                     )
-                return replace(
+                return rewrite(
                     decision,
                     intent=ChargerIntent.IDLE,
                     commanded_amps=0,
@@ -909,6 +940,7 @@ class ChargeStability:
                         f"{backoff_note}{_meanwhile(decision)} — "
                         f"{decision.reason}"
                     ),
+                    reason_code=RC.CHARGER_CAR_DECLINED, reason_params={},
                 )
             self._commit_amps(cid, offer, now)
             if offer > min_amps:
@@ -921,11 +953,12 @@ class ChargeStability:
                     f"stability: starting at {offer}A "
                     f"(auto-raises if no draw) — {decision.reason}"
                 )
-            return replace(
+            return rewrite(
                 decision,
                 intent=ChargerIntent.CHARGE_AT_AMPS,
                 commanded_amps=offer,
                 reason=reason,
+                reason_code=RC.CHARGER_START, reason_params={},
             )
 
         # charge no longer wanted (smoothed target below the floor).
@@ -972,6 +1005,12 @@ class ChargeStability:
         # policy (decide) says idle, and SEM cannot vouch for a session it
         # doesn't remember starting. (Restart mid-SURPLUS still adopts via
         # the charge_wanted branch above, unchanged.)
+        # (#1069) A peak pause in a mode this filter does not own (always_max,
+        # a night floor): the session is SEM's when SEM commanded the charge.
+        # Without this the gate below passed the pause straight through and
+        # the car stopped in one cycle — no disable delay at all.
+        if peak and getattr(adapter, "last_intent", None) in _CHARGE_INTENTS:
+            self._sem_session.add(cid)
         if cid not in self._sem_session:
             self._deficit_since.pop(cid, None)
             self._deep_deficit_since.pop(cid, None)
@@ -1043,7 +1082,10 @@ class ChargeStability:
             # (#975) …and spend one of this plug-in's interruptions. The count
             # is what widens the delays above on the next pass, so a charger
             # SEM keeps interrupting gets bridged instead of cycled.
-            self._session_stops[cid] = self._session_stops.get(cid, 0) + 1
+            # (#1153) Not on a charger whose car is not known: a stop of an
+            # offer nobody drew is no interruption of a session.
+            if getattr(view.power, "plug_known", True):
+                self._session_stops[cid] = self._session_stops.get(cid, 0) + 1
             # #552 — SEM ended this session; ownership ends WITH it. Without
             # this, a stability stop that lands while the car blips 0 W never
             # reaches the adapter (reconciler sees idle+no-draw → no-op), the
@@ -1054,7 +1096,7 @@ class ChargeStability:
             if stop_for_short:
                 # Re-stamp so the strategy sensor shows SEM CHOSE to stop;
                 # decision.reason already carries the structural cause.
-                return replace(
+                return rewrite(
                     decision, intent=ChargerIntent.IDLE, commanded_amps=0,
                     # CAUSE: `stop_for_short` is this scope's own variable
                     # (short_grace and deep_held past the floor), so "not
@@ -1064,12 +1106,14 @@ class ChargeStability:
                     # that evaluated it.
                     reason=f"stability: structural idle — not bridging — "
                            f"{decision.reason}",
+                    reason_code=RC.CHARGER_STOP_NOW,
                 )
             if decision.intent is ChargerIntent.IDLE:
                 return decision
-            return replace(
+            return rewrite(
                 decision, intent=ChargerIntent.IDLE, commanded_amps=0,
                 reason=f"stability: deficit persisted — {decision.reason}",
+                reason_code=RC.CHARGER_DIP_STOP, reason_params={},
             )
         # Hold the session: ramp down toward and hold minimum current
         # until the deficit outlives the disable window. (Transient dip,
@@ -1077,7 +1121,7 @@ class ChargeStability:
         last = self._last_amps.get(cid)
         hold = min_amps if last is None else max(min_amps, last - max(1, int(ramp_amps)))
         self._commit_amps(cid, hold, now)
-        return replace(
+        return rewrite(
             decision,
             intent=ChargerIntent.CHARGE_AT_AMPS,
             commanded_amps=hold,
@@ -1085,6 +1129,7 @@ class ChargeStability:
                 f"stability: deficit {held:.0f}s/{disable_delay_s:.0f}s — "
                 f"holding {hold}A before stop — {decision.reason}"
             ),
+            reason_code=RC.CHARGER_DIP_HOLD, reason_params={},
         )
 
     def _adjust(
@@ -1110,10 +1155,13 @@ class ChargeStability:
             if decision.intent is ChargerIntent.CHARGE_AT_AMPS \
                     and decision.commanded_amps == target:
                 return decision
-            return replace(
+            return rewrite(
                 decision, intent=ChargerIntent.CHARGE_AT_AMPS,
                 commanded_amps=target,
                 reason=f"stability: smoothed → {target}A — {decision.reason}",
+                # (#1174) nothing ramps here: the target is adopted as is,
+                # so the decision's own why stands
+                reason_code=decision.reason_code,
             )
 
         # (#905) A LIMIT lowering the current lands NOW. The ramp and the
@@ -1130,10 +1178,13 @@ class ChargeStability:
                     decision,
                     reason=f"stability: limit clamp → {target}A — {decision.reason}",
                 )
-            return replace(
+            return rewrite(
                 decision, intent=ChargerIntent.CHARGE_AT_AMPS,
                 commanded_amps=target,
                 reason=f"stability: limit clamp → {target}A — {decision.reason}",
+                # (#1174) the limit's own code, set where capped_by_limit
+                # was set (decide.py: the peak slot guard or the peak shed)
+                reason_code=decision.reason_code,
             )
         ramp = max(1, int(ramp_amps))
         ramped = max(last - ramp, min(last + ramp, target))
@@ -1159,9 +1210,11 @@ class ChargeStability:
             note = f"stability: ramping {amps}A toward {target}A"
         else:
             note = f"stability: smoothed → {amps}A"
-        return replace(
+        return rewrite(
             decision,
             intent=ChargerIntent.CHARGE_AT_AMPS,
             commanded_amps=amps,
             reason=f"{note} — {decision.reason}",
+            reason_code=(RC.CHARGER_HOLD_STEADY if suppressed
+                         else RC.CHARGER_RAMP),
         )

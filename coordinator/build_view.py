@@ -19,6 +19,7 @@ from .charger_types import (
     FleetContext,
     FleetCycleState,
 )
+from .ev_availability import charger_state, has_plug_sensor
 from .plan_verdict import NO_OPINION, PlanVerdict
 
 if TYPE_CHECKING:  # pragma: no cover — type-only
@@ -36,7 +37,7 @@ def _battery_may_assist_ev(config, charger_cfg=None) -> bool:
       UNSET resolves to True: the battery already assists the car when the
       #537 surplus gate passes, and defaulting it off would silently remove
       a working feature.
-    * **per charger** (#885) — may it be spent on *this* one? Guido, 31.08:
+    * **per charger** (#885) — may it be spent on *this* one? Rule, 31.08:
       *"on every individual device there is a setting whether it will charge
       with battery or not, and the same on the charger — therefore not every
       charger has to be activated."* Loads have had a per-device opt-in since
@@ -150,26 +151,26 @@ def build_charger_view(
         # charger's draw (W). Multi-charger always has a per-charger entry above.
         this_charger_w = float(getattr(power_reading, "ev_power", 0.0) or 0.0)
 
-    # Per-charger connected state — when no per-charger sensor is
-    # configured, fall back to the fleet OR (the legacy behaviour).
-    # Step 6 makes this per-charger native.
-    connected_per_charger = getattr(power_reading, "ev_connected_per_charger", None) or {}
-    if charger_id in connected_per_charger:
-        connected = bool(connected_per_charger[charger_id])
-    else:
-        connected = bool(getattr(power_reading, "ev_connected", False))
+    # Per-charger connected / charging state: this charger's own sensor
+    # first. Without one, the fleet flag is its own only when it is the
+    # one charger; in a fleet the flag is true when ANY charger has a car
+    # or charges, so a charger with no sensor answers from its own draw
+    # (#1150) — its car is then unknown at rest (#1153, below).
+    connected = charger_state(charger_id, power_reading, config, "connected")
+    charging = charger_state(charger_id, power_reading, config, "charging")
 
-    charging_per_charger = getattr(power_reading, "ev_charging_per_charger", None) or {}
-    if charger_id in charging_per_charger:
-        charging = bool(charging_per_charger[charger_id])
-    else:
-        charging = bool(getattr(power_reading, "ev_charging", False))
+    # (#1153) A charger with no plug sensor shows a car only while it
+    # draws (the physics defence); once the draw stops its "not
+    # connected" is no answer. Unknown is not gone: decide, the
+    # stability layer and the reconciler read ``car_absent``.
+    plug_known = connected or has_plug_sensor(charger_cfg, config)
 
     cp = ChargerPower(
         charger_id=charger_id,
         power_w=this_charger_w,
         connected=connected,
         charging=charging,
+        plug_known=plug_known,
     )
 
     ce = ChargerEnergy(charger_id=charger_id, day_kwh=daily_ev_kwh)
@@ -202,6 +203,9 @@ def build_charger_view(
         export_command=getattr(fleet_state, "export_command", None),
         export_guard_enabled=bool(getattr(fleet_state, "export_guard_enabled", False)),
         ev_morning_window_open=bool(getattr(fleet_state, "morning_window_open", False)),
+        # (#1025) the battery boost rides the same one-place thread
+        boost_charger_id=getattr(fleet_state, "boost_charger_id", None),
+        boost_floor_soc=getattr(fleet_state, "boost_floor_soc", None),
         home_w=float(getattr(power_reading, "home_consumption_power", 0.0) or 0.0),
         battery_charge_w=float(getattr(power_reading, "battery_charge_power", 0.0) or 0.0),
         battery_discharge_w=float(getattr(power_reading, "battery_discharge_power", 0.0) or 0.0),
@@ -222,6 +226,9 @@ def build_charger_view(
         peak_state=getattr(fleet_state, "peak_state", "normal"),
         # (#864) so does the slot-budget allowance.
         peak_slot_allowed_w=getattr(fleet_state, "peak_slot_allowed_w", None),
+        # (#1069) SEM's own forced battery charge yields to the car.
+        battery_forced_grid_w=float(
+            getattr(fleet_state, "battery_forced_grid_w", 0.0) or 0.0),
         # (#864/#885) what higher-priority chargers already claimed this
         # cycle — PER-CHARGER, like its two siblings above. It rode the
         # frozen ``fleet_state`` until #885: that object is built once,
@@ -313,7 +320,10 @@ def build_charger_view(
     # cascade: a 16 A charger commanded at 32 claims 22 kW of solar it
     # cannot draw, and the difference is taken off what the next charger
     # in the list is allowed to see.
-    for _key in ("ev_max_current", "ev_min_current", "ev_phases", "ev_voltage"):
+    # (#1069) ``peak_hysteresis`` is a house setting the peak slot clamp
+    # reads for the restart margin; no charger entry carries it.
+    for _key in ("ev_max_current", "ev_min_current", "ev_phases", "ev_voltage",
+                 "peak_hysteresis"):
         if cfg_resolved.get(_key) is None:
             _fleet_val = config.get(_key)
             if _fleet_val is not None:

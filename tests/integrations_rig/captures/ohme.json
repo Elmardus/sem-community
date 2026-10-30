@@ -1,0 +1,367 @@
+{
+ "devices": {
+  "ohme:ohme": {
+   "manufacturer": null,
+   "model": null,
+   "name": "ohme"
+  }
+ },
+ "domain": "ohme",
+ "entities": [
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.ohme_home_pro_approve_charge",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "unavailable",
+   "translation_key": "approve",
+   "unique_id": "chargerid_approve",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "max": 60.0,
+    "min": 0.0,
+    "step": 5.0,
+    "unit_of_measurement": "min"
+   },
+   "capabilities": {
+    "max": 60.0,
+    "min": 0.0,
+    "step": 5.0
+   },
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.ohme_home_pro_preconditioning_duration",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "15",
+   "translation_key": "preconditioning_duration",
+   "unique_id": "chargerid_preconditioning_duration",
+   "unit_of_measurement": "min"
+  },
+  {
+   "attributes": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.ohme_home_pro_state_of_charge_input",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "80",
+   "translation_key": "state_of_charge_input",
+   "unique_id": "chargerid_state_of_charge_input",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {
+    "max": 100.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.ohme_home_pro_target_percentage",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "50",
+   "translation_key": "target_percentage",
+   "unique_id": "chargerid_target_percentage",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "options": [
+     "smart_charge",
+     "max_charge",
+     "paused"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "smart_charge",
+     "max_charge",
+     "paused"
+    ]
+   },
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.ohme_home_pro_charge_mode",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "unknown",
+   "translation_key": "charge_mode",
+   "unique_id": "chargerid_charge_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "options": [
+     "Nissan Leaf",
+     "Tesla Model 3"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "Nissan Leaf",
+     "Tesla Model 3"
+    ]
+   },
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "select.ohme_home_pro_vehicle",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "Nissan Leaf",
+   "translation_key": "vehicle",
+   "unique_id": "chargerid_vehicle",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.ohme_home_pro_charge_slots",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "unknown",
+   "translation_key": "slot_list",
+   "unique_id": "chargerid_slot_list",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.ohme_home_pro_current",
+   "original_device_class": "current",
+   "platform": "ohme",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "chargerid_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.ohme_home_pro_power",
+   "original_device_class": "power",
+   "platform": "ohme",
+   "state": "0.0",
+   "translation_key": null,
+   "unique_id": "chargerid_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "unplugged",
+     "pending_approval",
+     "charging",
+     "plugged_in",
+     "paused",
+     "finished"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "unplugged",
+     "pending_approval",
+     "charging",
+     "plugged_in",
+     "paused",
+     "finished"
+    ]
+   },
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.ohme_home_pro_status",
+   "original_device_class": "enum",
+   "platform": "ohme",
+   "state": "charging",
+   "translation_key": "status",
+   "unique_id": "chargerid_status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.ohme_home_pro_vehicle_battery",
+   "original_device_class": "battery",
+   "platform": "ohme",
+   "state": "80",
+   "translation_key": "vehicle_battery",
+   "unique_id": "chargerid_battery",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.ohme_home_pro_voltage",
+   "original_device_class": "voltage",
+   "platform": "ohme",
+   "state": "0",
+   "translation_key": null,
+   "unique_id": "chargerid_voltage",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "switch.ohme_home_pro_lock_buttons",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "on",
+   "translation_key": "lock_buttons",
+   "unique_id": "chargerid_lock_buttons",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.ohme_home_pro_price_cap",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "on",
+   "translation_key": "price_cap",
+   "unique_id": "chargerid_price_cap",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "switch.ohme_home_pro_require_approval",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "on",
+   "translation_key": "require_approval",
+   "unique_id": "chargerid_require_approval",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "switch.ohme_home_pro_sleep_when_inactive",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "on",
+   "translation_key": "sleep_when_inactive",
+   "unique_id": "chargerid_sleep_when_inactive",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.ohme_home_pro_solar_boost",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "on",
+   "translation_key": "solar_boost",
+   "unique_id": "chargerid_solar_boost",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "ohme:ohme",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "time.ohme_home_pro_target_time",
+   "original_device_class": null,
+   "platform": "ohme",
+   "state": "08:00:00",
+   "translation_key": "target_time",
+   "unique_id": "chargerid_target_time",
+   "unit_of_measurement": null
+  }
+ ],
+ "services": {
+  "list_charge_slots": [
+   "config_entry"
+  ],
+  "set_price_cap": [
+   "config_entry",
+   "price_cap"
+  ]
+ },
+ "source": {
+  "files": [
+   "tests/components/ohme/snapshots/test_number.ambr",
+   "tests/components/ohme/snapshots/test_switch.ambr",
+   "tests/components/ohme/snapshots/test_sensor.ambr",
+   "tests/components/ohme/snapshots/test_select.ambr",
+   "tests/components/ohme/snapshots/test_button.ambr",
+   "tests/components/ohme/snapshots/test_time.ambr"
+  ],
+  "kind": "core-snapshot",
+  "note": "Home Assistant's own test output for this integration at the tag; the device grouping comes from unique_id",
+  "repo": "home-assistant/core",
+  "tag": "2026.8.2"
+ }
+}

@@ -14,6 +14,7 @@ from .const import DOMAIN
 from .coordinator import SEMCoordinator
 from .coordinator.install_modules import presence_of, presence_summary
 from .features.device_axes import has_control_handle, may_actuate, user_hands_off
+from .ha_energy_reader import unsourced_counters
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,6 +83,67 @@ def _call_dict_or_none(fn):
         return _dict_or_none(fn())
     except Exception:  # noqa: BLE001 — diagnostics never fail on a surface
         return None
+
+
+def _foreign_logs(hass: HomeAssistant) -> list[str]:
+    """(#820) The buffer's FOREIGN lines; never raises."""
+    from .utils.log_buffer import SEMLogBuffer
+    buffer = hass.data.get(f"{DOMAIN}_log_buffer")
+    if isinstance(buffer, SEMLogBuffer):
+        try:
+            return buffer.get_foreign_lines()
+        except Exception:  # noqa: BLE001
+            return []
+    return []
+
+
+def _decision_log_records(coordinator, stand_ins: dict | None = None) -> list:
+    """(#1084) The decision log's ring buffer; empty when there is none.
+
+    Each record's ``name`` is the SAME box-name privacy class #1092
+    already redacts for ``detection`` (``DecisionRecord.as_dict`` sets it
+    from the charger/battery's own configured name) — reintroduced here
+    because #1084 landed after #1092 and nothing wired this sibling path
+    through it. ``redact_box_names`` only matches its own
+    ``BOX_VALUE_FIELDS`` key names, so the field is renamed to
+    ``device_name`` for the swap and back — the shipped key stays
+    ``name``, only its value changes. ``stand_ins`` shared with
+    ``detection`` so the same box gets the same stand-in everywhere."""
+    from .coordinator.decision_log import DecisionLog
+    log = getattr(coordinator, "decision_log", None)
+    if not isinstance(log, DecisionLog):
+        return []
+    try:
+        records = log.records()
+    except Exception:  # noqa: BLE001 — a dump never fails on a field
+        return []
+    from .hardware_detection import redact_box_names
+
+    def _to_device_name(r):
+        if isinstance(r, dict) and "name" in r:
+            out = {k: v for k, v in r.items() if k != "name"}
+            out["device_name"] = r["name"]
+            return out
+        return r
+
+    def _back_to_name(r):
+        if isinstance(r, dict) and "device_name" in r:
+            out = {k: v for k, v in r.items() if k != "device_name"}
+            out["name"] = r["device_name"]
+            return out
+        return r
+
+    redacted = redact_box_names([_to_device_name(r) for r in records], stand_ins=stand_ins)
+    return [_back_to_name(r) for r in redacted]
+
+
+async def _pacing_actuation(hass: HomeAssistant, coordinator) -> dict:
+    """(#820) The charge-pacing register truth; never raises."""
+    try:
+        from .coordinator.battery_diag import pacing_actuation_diag
+        return await pacing_actuation_diag(hass, coordinator)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc)}
 
 
 async def _get_recent_sem_logs(hass: HomeAssistant) -> list[str]:
@@ -192,14 +254,28 @@ def _build_deye_diagnostics(adapters: dict[str, Any]) -> dict[str, Any] | None:
 
 # Config keys that could contain user-specific entity IDs (not secrets, but privacy)
 REDACT_CONFIG_KEYS = {
+    # (#1021) the grid operator's relay — an entity id, same class as below
+    "shed_signal_entity",
+    # (#1088) the user's grid CO2 sensor pick
+    "grid_co2_entity",
+    # (#1082) the user's outdoor temperature pick
+    "outdoor_temperature_entity",
     "ev_connected_sensor",
     "ev_charging_sensor",
     "ev_charging_power_sensor",
     "ev_charger_service",
     "ev_charger_service_entity_id",
+    # (#1097) the box's registry id the crawler now fills for device-keyed
+    # services — same class as the service entity above
+    "ev_service_device_id",
     "ev_daily_energy_sensor",
     "vehicle_soc_entity",
     "battery_discharge_control_entity",
+    # (#1089) its per-battery mirror, now filled from the Config tab
+    "battery_discharge_control_entities",
+    # (#1166) the pack's own end-of-charge level, shared and per battery
+    "battery_charge_end_soc_entity",
+    "battery_charge_end_soc_entities",
     # (#915, 06.09 audit) the split pair the sources step now fills for any
     # split-meter brand — same privacy class as the keys above
     "grid_import_power_entity",
@@ -306,14 +382,35 @@ async def async_get_config_entry_diagnostics(
                 return {"state": "missing"}
             return {"state": s.state, "unit": s.attributes.get("unit_of_measurement")}
 
+        # (#1171) two-sensor batteries: (discharge, charge) per battery
+        battery_pairs = [
+            list(p) for p in (getattr(ed_config, "battery_power_pairs", []) or [])
+            if isinstance(p, (list, tuple))]
+        unit_counters = getattr(ed_config, "battery_unit_counters", None)
+        derived_units = getattr(ed_config, "derived_units", None)
         per_source_lists = {
             "solar_power_list": list(getattr(ed_config, "solar_power_list", []) or []),
             "battery_power_list": list(getattr(ed_config, "battery_power_list", []) or []),
+            "battery_power_pairs": battery_pairs,
+            # (#1193) each battery's own (charge, discharge) counters
+            "battery_unit_counters": {
+                unit: list(pair) for unit, pair in unit_counters.items()
+                if isinstance(pair, (list, tuple))
+            } if isinstance(unit_counters, dict) else {},
             "grid_power_list": list(getattr(ed_config, "grid_power_list", []) or []),
+            # (#1226) each power sensor SEM found itself → the counter it
+            # was found from, and the counters it found none for
+            "derived_units": dict(derived_units)
+            if isinstance(derived_units, dict) else {},
+            "unsourced_counters": {
+                kind: unsourced_counters(ed_config, kind)
+                for kind in ("solar", "battery")},
         }
         per_source_readings = {
             "solar": {eid: _read_state(eid) for eid in per_source_lists["solar_power_list"]},
-            "battery": {eid: _read_state(eid) for eid in per_source_lists["battery_power_list"]},
+            "battery": {eid: _read_state(eid) for eid in (
+                per_source_lists["battery_power_list"]
+                + [e for pair in battery_pairs for e in pair])},
             "grid": {eid: _read_state(eid) for eid in per_source_lists["grid_power_list"]},
         }
 
@@ -521,6 +618,13 @@ async def async_get_config_entry_diagnostics(
                 "battery_reserve_soc": full_cfg.get("battery_reserve_soc"),
                 "battery_modes": full_cfg.get("battery_modes"),
                 "battery_reserve_socs": full_cfg.get("battery_reserve_socs"),
+                # (#1195) which battery each slot of those lists belongs to
+                "battery_slot_units": full_cfg.get("battery_slot_units"),
+                # (#1071) which of the two stores above drives the batteries
+                "battery_control_slugs": (
+                    list(coordinator.battery_control_slugs)
+                    if isinstance(getattr(coordinator, "battery_control_slugs", None), tuple)
+                    else None),
                 "battery_discharge_protection_enabled": full_cfg.get(
                     "battery_discharge_protection_enabled", True),
                 "battery_grid_arbitrage_enabled": full_cfg.get(
@@ -542,6 +646,11 @@ async def async_get_config_entry_diagnostics(
                 "state": str(getattr(getattr(sched, "state", None), "value", "")) or None,
             },
         }
+        # (#1180) each charge-target number SEM wrote and has not put back
+        from .coordinator.battery_adapters.charge_target import ChargeTargetHold
+        _hold = getattr(coordinator, "_charge_target_hold_obj", None)
+        if isinstance(_hold, ChargeTargetHold):
+            battery_info["charge_target_held"] = _hold.snapshot()
         # #709 — Deye forced-grid-charge observability. Read-only. Keep the
         # generic payload unchanged when no Deye adapter exists.
         deye_info = _build_deye_diagnostics(_adapters)
@@ -580,8 +689,24 @@ async def async_get_config_entry_diagnostics(
                   # (#887) cars found on a transport platform, named as cars
                   "vehicles",
                   # (#964) what the unit grouping could attribute to no box
-                  "unattributed")
+                  "unattributed",
+                  # (#1036) meters beside a charger, not offered as chargers
+                  "meters",
+                  # (#1092) each reported integration's services and their
+                  # fields: the crawler reads roles from what a service
+                  # takes, so a download without them cannot replay
+                  "services")
                  if _report.get(k) is not None}
+    # (#1092) A box name (go-e's ``charger_name``, a serial) is the name a
+    # person gave their charger, and the integration builds its entity ids
+    # from it. Every one becomes a stable stand-in — ``box_1`` — in the
+    # service data AND inside the entity ids, the same everywhere in the
+    # section, so the download names nobody's box and still replays.
+    from .hardware_detection import redact_box_names
+    # (#1092 sibling fix) the same stand-in table as decision_log below,
+    # so one box reads as the same box_N in both sections.
+    _box_stand_ins: dict = {}
+    detection = redact_box_names(detection, in_ids=True, stand_ins=_box_stand_ins)
 
     return {
         "detection": detection,
@@ -619,6 +744,9 @@ async def async_get_config_entry_diagnostics(
             "night_targets": _dict_or_none(
                 getattr(coordinator, "_night_target_per_charger_map", None)),
         },
+        # (#1084) why each command changed — the last 200 changes, oldest
+        # first. In memory only, so it starts empty after a restart.
+        "decision_log": _decision_log_records(coordinator, stand_ins=_box_stand_ins),
         "power": {
             "solar_w": data.get("solar_power"),
             "grid_w": data.get("grid_power"),
@@ -644,6 +772,9 @@ async def async_get_config_entry_diagnostics(
             "ev_kwh": data.get("daily_ev_energy"),
             "grid_import_kwh": data.get("daily_grid_import_energy"),
             "grid_export_kwh": data.get("daily_grid_export_energy"),
+            # (#1191) the part of the export the battery sold; the rest is
+            # the solar export the self-consumption rate takes away
+            "grid_export_battery_kwh": data.get("daily_grid_export_battery_kwh"),
             "battery_charge_kwh": data.get("daily_battery_charge_energy"),
             "battery_discharge_kwh": data.get("daily_battery_discharge_energy"),
             # (#628 visibility) per-category counter-backing today: how many
@@ -675,6 +806,7 @@ async def async_get_config_entry_diagnostics(
             "consecutive_peak_kw": data.get("consecutive_peak_15min"),
             "monthly_peak_kw": data.get("monthly_consecutive_peak"),
             "target_limit_kw": data.get("target_peak_limit"),
+            "unlimited": data.get("peak_limit_unlimited"),
             "percentage": data.get("current_vs_peak_percentage"),
             "status": data.get("load_management_status"),
         },
@@ -689,6 +821,8 @@ async def async_get_config_entry_diagnostics(
         "appliance_schedules": data.get("diag_appliance_schedules"),
         "load_management": load_info,
         "ev_stability": ev_stability,
+        "external_control": _safe(
+            lambda: coordinator._external_control.rows()) or [],
         "energy_dashboard": ed_info,
         "battery_sign": battery_sign_info,
         "split_grid_discovery": split_grid_info,
@@ -743,6 +877,62 @@ async def async_get_config_entry_diagnostics(
             "tomorrow_kwh": data.get("forecast_tomorrow_kwh"),
             "source": data.get("forecast_source"),
             "available": data.get("forecast_available"),
+            # (#1068) the rest of the day as measured so far: the factor the
+            # plan's day reads when the intraday flag is on, and its floor
+            "remaining_today_kwh": data.get("forecast_remaining_today_kwh"),
+            "dampening_factor": data.get("forecast_dampening_factor"),
+            "dampening_path": data.get("forecast_dampening_path"),
+            "corrected_factor": data.get("forecast_corrected_factor"),
+            "corrected_floor": data.get("forecast_corrected_floor"),
+            "intraday_forecast": bool((getattr(coordinator, "config", None) or {})
+                                      .get("intraday_forecast", False)),
+        },
+        # (#1088) grid CO2 intensity for the CO2 books: where it comes from
+        # (configured / detected / none — never the id), the value, whether
+        # the fixed 0.128 kg/kWh is in force, whether a forecast exists, and
+        # whether the live value counts (soak flag)
+        "grid_co2": {
+            **(getattr(coordinator, "_grid_co2_status", None) or {"source": "none"}),
+            "configured": bool((getattr(coordinator, "config", None) or {})
+                               .get("grid_co2_entity")),
+            "co2_live_intensity": bool((getattr(coordinator, "config", None) or {})
+                                       .get("co2_live_intensity", False)),
+        },
+        # (#1082) outdoor temperature: where it comes from (configured /
+        # detected / weather / none — never the id), the value, how many
+        # outdoor sensors the crawler found, and what the home-load forecast
+        # learned from it (slope in W per degree) and whether plans use it
+        "outdoor_temperature": {
+            **(getattr(coordinator, "_outdoor_temp_status", None) or {"source": "none"}),
+            "configured": bool((getattr(coordinator, "config", None) or {})
+                               .get("outdoor_temperature_entity")),
+            "forecast_rows": len(getattr(coordinator, "_temp_forecast", None) or []),
+            **{k: v for k, v in ((getattr(getattr(coordinator, "_predictor", None),
+                                          "get_diagnostics", lambda: {})() or {}).items())
+               if k.startswith("temperature_")},
+        },
+        # (#1083) the last 7 day tags the replay tool selects on — dates
+        # and tags only, no entity ids
+        "day_tags": {
+            "enabled": bool((getattr(coordinator, "config", None) or {})
+                            .get("day_tags", False)),
+            "last_7": [
+                {"date": t.get("date"), "tags": t.get("tags"),
+                 "gap_why": t.get("gap_why")}
+                for t in ((getattr(getattr(coordinator, "_storage", None),
+                                   "get_day_tags", lambda: [])() or [])[-7:])
+                if isinstance(t, dict)
+            ],
+        },
+        # (#1021) the grid operator's relay: whether one is set (never its
+        # id), what it says now, the limit, since when, which loads it holds
+        "shed_signal": {
+            "configured": bool(data.get("shed_signal_entity")),
+            "state": data.get("shed_signal_state"),
+            "active": data.get("shed_signal_active"),
+            "cap_kw": data.get("shed_signal_cap_kw"),
+            "since": data.get("shed_signal_since"),
+            "locked_devices": data.get("shed_signal_locked"),
         },
         "tariff": {
             "import_rate": data.get("tariff_current_import_rate"),
@@ -751,4 +941,8 @@ async def async_get_config_entry_diagnostics(
             "provider": data.get("tariff_provider"),
         },
         "recent_logs": recent_logs,
+        # (#820) other integrations' warnings that name an entity SEM writes
+        # to — a refused charge limit is logged there, never by SEM
+        "foreign_logs": _foreign_logs(hass),
+        "pacing_actuation": await _pacing_actuation(hass, coordinator),
     }

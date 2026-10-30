@@ -19,6 +19,7 @@
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semTheme, semFormatPower, semGetCurrency, semCardSurfaceCSS, SEM_COLORS, semDefineCard } from '../base/sem-shared.js';
 import { priceLevelColor, priceLevelKey } from '../util/price-level.js';
+import { MISSING, fmtValue, isMissing } from '../util/missing-value.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
 
@@ -75,7 +76,8 @@ class SEMGridCard extends SEMLitBase {
     get hass() { return this._hass; }
 
     /* ── Prefix-scoped helpers ── */
-    _val(suffix, fallback = 0) {
+    // (#1200) null for a sensor that is out: it prints "—", not 0.
+    _val(suffix, fallback = null) {
         return this._state(`${this._prefix}${suffix}`, fallback);
     }
 
@@ -132,8 +134,13 @@ class SEMGridCard extends SEMLitBase {
         const glowOpacity = (isImporting || isExporting) ? '0.45' : '0.1';
 
         const statusRaw = this._valStr('grid_status');
+        // (#1197) The status is out while the meter is dark, and so are the
+        // powers: their 0 is no reading, so nothing says the grid is idle.
+        const powerKnown = ['grid_power', 'grid_import_power', 'grid_export_power']
+            .some(s => !isMissing(this._hass?.states[`${this._prefix}${s}`]));
         const statusText = statusRaw !== '' && statusRaw !== '—'
             ? this._t(statusRaw.toLowerCase())
+            : !powerKnown ? MISSING
             : isExporting ? this._t('exporting')
             : isImporting ? this._t('importing')
             : this._t('idle');
@@ -142,8 +149,10 @@ class SEMGridCard extends SEMLitBase {
         // Today totals
         const dailyImport = this._val('daily_grid_import_energy');
         const dailyExport = this._val('daily_grid_export_energy');
-        const netToday = dailyImport - dailyExport;
-        const netColor = netToday <= 0 ? '#8353d1' : '#488fc2';
+        const netToday = dailyImport == null || dailyExport == null
+            ? null : dailyImport - dailyExport;
+        const netColor = netToday == null ? 'var(--secondary-text-color, #888)'
+            : netToday <= 0 ? '#8353d1' : '#488fc2';
 
         // Peak management
         const peakPct = this._val('current_vs_peak_percentage');
@@ -158,7 +167,6 @@ class SEMGridCard extends SEMLitBase {
         const fillW = (Math.min(Math.max(peakPct / 100, 0), 1) * 200).toFixed(1);
 
         // Load control
-        const loadStatus = this._valStr('load_management_status');
         const loadShed = this._val('loads_currently_shed');
         const loadReduction = this._val('available_load_reduction');
         const loadDevices = this._val('controllable_devices_count');
@@ -174,7 +182,8 @@ class SEMGridCard extends SEMLitBase {
         // Surplus
         const surplusTotal = this._val('surplus_total_w');
         const surplusUnalloc = this._val('surplus_unallocated_w');
-        const surplusAllocated = Math.max(0, surplusTotal - surplusUnalloc);
+        const surplusAllocated = surplusTotal == null || surplusUnalloc == null
+            ? null : Math.max(0, surplusTotal - surplusUnalloc);
         const surplusActive = this._val('surplus_active_devices');
         const surplusTotalDev = this._val('surplus_total_devices');
 
@@ -330,7 +339,7 @@ class SEMGridCard extends SEMLitBase {
                         <div class="metric-row net-row">
                             <span class="metric-label"><strong>${this._t(netToday <= 0 ? 'net_export' : 'net_import')}</strong></span>
                             <span class="metric-val" style="color:${netColor}">
-                                ${this._fmt(Math.abs(netToday), 2)} kWh
+                                ${this._fmt(netToday == null ? null : Math.abs(netToday), 2)} kWh
                             </span>
                         </div>
                     </div>
@@ -380,7 +389,7 @@ class SEMGridCard extends SEMLitBase {
                         <div class="section-title" style="color:#488fc2">${this._t('load_control')}</div>
                         <div class="metric-row">
                             <span class="metric-label">${this._t('status')}</span>
-                            <span class="metric-val">${loadStatus ? this._t(loadStatus) : '—'}</span>
+                            <span class="metric-val">${this._valLabel('load_management_status') || '—'}</span>
                         </div>
                         <div class="metric-row">
                             <span class="metric-label">${this._t('loads_shed')}</span>
@@ -402,13 +411,13 @@ class SEMGridCard extends SEMLitBase {
                         <div class="metric-row">
                             <span class="metric-label">${this._t('import_rate')}</span>
                             <span class="metric-val c-import">
-                                ${importRate !== 0 ? `${this._fmt(importRate, 4)} ${curr}/kWh` : '—'}
+                                ${importRate != null ? `${this._fmt(importRate, 4)} ${curr}/kWh` : '—'}
                             </span>
                         </div>
                         <div class="metric-row">
                             <span class="metric-label">${this._t('export_rate')}</span>
                             <span class="metric-val c-export">
-                                ${exportRate !== 0 ? `${this._fmt(exportRate, 4)} ${curr}/kWh` : '—'}
+                                ${exportRate != null ? `${this._fmt(exportRate, 4)} ${curr}/kWh` : '—'}
                             </span>
                         </div>
                         <div class="metric-row">
@@ -420,13 +429,13 @@ class SEMGridCard extends SEMLitBase {
                         <div class="metric-row">
                             <span class="metric-label">${this._t('today_min')}</span>
                             <span class="metric-val c-green">
-                                ${minPrice !== 0 ? this._fmt(minPrice, 4) : '—'}
+                                ${minPrice != null ? this._fmt(minPrice, 4) : '—'}
                             </span>
                         </div>
                         <div class="metric-row">
                             <span class="metric-label">${this._t('today_max')}</span>
                             <span class="metric-val c-solar">
-                                ${maxPrice !== 0 ? this._fmt(maxPrice, 4) : '—'}
+                                ${maxPrice != null ? this._fmt(maxPrice, 4) : '—'}
                             </span>
                         </div>
                     </div>
@@ -449,7 +458,7 @@ class SEMGridCard extends SEMLitBase {
                         <div class="metric-row">
                             <span class="metric-label">${this._t('active_devices')}</span>
                             <span class="metric-val">
-                                ${Math.round(surplusActive)} / ${Math.round(surplusTotalDev)}
+                                ${fmtValue(surplusActive, 0)} / ${fmtValue(surplusTotalDev, 0)}
                             </span>
                         </div>
                     </div>

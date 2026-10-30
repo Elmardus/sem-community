@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 import json
 import logging
+import re
 import time
 
 from .consts.core import (
@@ -38,9 +39,13 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import label_registry as lr
 
+from .utils.device_names import charger_display_name  # (#1053)
 from .const import SENSOR_LABEL_MAPPING
 from .consts.labels import SEM_LABELS
 from .coordinator import SEMCoordinator
+from .coordinator.energy_calculator import GRID_CO2_KG_PER_KWH
+from .coordinator.units import power_state_to_watts
+from .ha_energy_reader import battery_units
 from .coordinator.install_modules import (
     Module, keeps, kept_descriptions, presence_of, presence_summary,
 )
@@ -53,6 +58,11 @@ from .features.device_axes import (
 type SEMConfigEntry = ConfigEntry[SEMCoordinator]
 
 _LOGGER = logging.getLogger(__name__)
+
+#: (#1176) TOTAL sensors that count by the car day, not the calendar day:
+#: their ``last_reset`` is the car day's start. The per-charger daily rows
+#: are TOTAL_INCREASING: no last_reset, a drop starts a new cycle.
+CAR_DAY_SENSOR_KEYS = frozenset({"daily_ev_energy"})
 
 PARALLEL_UPDATES = 0  # Coordinator handles all updates
 
@@ -107,12 +117,15 @@ def _merge_plan_blocks(blocks: Any) -> List[Dict[str, Any]]:
     for b in blocks or []:
         if not isinstance(b, dict):
             continue
-        by_id.setdefault(b.get("id"), []).append({
+        row = {
             "id": b.get("id"),
             "start": b.get("start"),
             "end": b.get("end"),
             "power_w": b.get("power_w"),
-        })
+        }
+        if b.get("late"):
+            row["late"] = True      # (#1023) the top-up stays its own run
+        by_id.setdefault(b.get("id"), []).append(row)
     out: List[Dict[str, Any]] = []
     for rows in by_id.values():
         rows.sort(key=lambda r: str(r["start"]))
@@ -120,12 +133,27 @@ def _merge_plan_blocks(blocks: Any) -> List[Dict[str, Any]]:
         for row in rows:
             prev = run[-1] if run else None
             if (prev and prev["power_w"] == row["power_w"]
+                    and prev.get("late") == row.get("late")
                     and prev["end"] == row["start"]):
                 prev["end"] = row["end"]
                 continue
             run.append(row)
         out.extend(run)
     return out
+
+
+def _batt_runs(slots: Any) -> List[List[int]]:
+    """(#1063) ``[[first, last], ...]`` — the slot indexes the plan marked
+    ``batt`` (the battery covered the house), merged into runs."""
+    runs: List[List[int]] = []
+    for i, s in enumerate(slots or []):
+        if not (isinstance(s, dict) and s.get("batt")):
+            continue
+        if runs and runs[-1][1] == i - 1:
+            runs[-1][1] = i
+        else:
+            runs.append([i, i])
+    return runs
 
 
 def _energy_plan_attrs(
@@ -170,11 +198,23 @@ def _energy_plan_attrs(
             "price": s.get("price"), "cheap": s.get("cheap"),
             "home_grid_w": s.get("home_grid_w"),
         } for s in (plan.get("slots") or [])],
+        # (#1063) Where the plan drew the battery for the house, as
+        # inclusive index runs over ``slots``. A flag per slot cost 14
+        # bytes each and pushed a 15-minute day past the budget; the
+        # battery covers one or two stretches, so runs cost a few bytes.
+        # None for a plan stamped before #1063 (no ``has_battery``): it
+        # never marked a slot, and the card then keeps its old drawing.
+        "batt_runs": (_batt_runs(plan.get("slots"))
+                      if "has_battery" in plan else None),
         "blocks": _merge_plan_blocks(plan.get("blocks")),
         # A string here means the battery figures behind this plan came from
         # a SUBSET of the fleet (#638 finding #3) — the card says so rather
         # than presenting a degraded plan as a healthy one.
         "battery_fleet_partial": plan.get("battery_fleet_partial"),
+        # (#1063) False on a home with no battery — the card drops the
+        # battery icon and the hand-over time. None (a stash from before
+        # #1063) keeps the card's old drawing.
+        "has_battery": plan.get("has_battery"),
         # (#638 G4) True while the actuation switch is on — the plan's
         # blocks feed the night signals; the card swaps its shadow chip.
         "actuation": bool(plan.get("actuation", False)),
@@ -209,6 +249,7 @@ def _energy_plan_attrs(
     if _too_big():
         attrs["slots"] = []
         attrs["blocks"] = []
+        attrs["batt_runs"] = []
         attrs["timeline_omitted"] = True
     # (#758) The timeline is the biggest term, but it is not the only one,
     # and going over means the recorder keeps NOTHING. If dropping it was
@@ -752,6 +793,51 @@ SENSOR_TYPES = [
     ),
     SensorEntityDescription(
         key="yearly_export_revenue",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
+    # (#1077) What a kWh is worth, once tax, VAT and a feed-in fee make a
+    # bought and a sold kWh different money. Created only when a value
+    # field is set (install_modules: VALUE_TARIFF).
+    SensorEntityDescription(
+        key="daily_self_consumption_value",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="yearly_self_consumption_value",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="daily_export_value",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="yearly_export_value",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="daily_feed_in_fees",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="CHF",
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="yearly_feed_in_fees",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement="CHF",
@@ -1319,7 +1405,7 @@ SENSOR_TYPES = [
     # (#820) charge pacing — state is the cap in W (unknown while idle);
     # attributes carry reason/action/full_at. Daily-moving, no recorder churn.
     # State is the ACTION token (idle/wrote/held/restored/observer, and
-    # #949's no_limit_entity/limit_unreadable) — never
+    # #949's no_limit_entity/limit_unreadable, #820's write_refused) — never
     # None once evaluated, so the sensor is never `unavailable` and its
     # reason stays readable. The cap rides the attributes. (26.08: as a W
     # value it went unavailable whenever the cap was None — which is most
@@ -1519,6 +1605,15 @@ SENSOR_TYPES = [
         key="pv_degradation_trend",
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
+    ),
+    # (#1022) One colour: does the plant do what the forecast said? The
+    # numbers behind it (7-day ratio, dark minutes, days since a full day,
+    # snow) are attributes. No verdict yet reads as unknown, not unavailable.
+    SensorEntityDescription(
+        key="pv_health",
+        device_class=SensorDeviceClass.ENUM,
+        options=["green", "yellow", "orange", "red"],
+        icon="mdi:solar-panel",
     ),
 
     # ============================================================================
@@ -2009,6 +2104,29 @@ def _cleanup_stale_entities(
         _LOGGER.debug("Stale entity cleanup skipped: %s", e)
 
 
+def _device_tariff_descriptions(hass, coordinator) -> list:
+    """(#812) One daily cost sensor per device that has its own tariff."""
+    from .coordinator.device_tariff import tariff_of
+    controller = getattr(coordinator, "_surplus_controller", None)
+    devices = getattr(controller, "_devices", None) or {}
+    out = []
+    for did, device in sorted(devices.items()):
+        if not tariff_of(device).configured:
+            continue
+        name = str(getattr(device, "name", "") or did)
+        out.append(SensorEntityDescription(
+            key=f"daily_tariff_cost_{did}",
+            name=f"{name} Tariff Cost Today",
+            translation_key="per_device_tariff_cost",
+            translation_placeholders={"device": name},
+            device_class=SensorDeviceClass.MONETARY,
+            state_class=SensorStateClass.TOTAL,
+            native_unit_of_measurement=hass.config.currency,
+            suggested_display_precision=2,
+        ))
+    return out
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: SEMConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -2041,13 +2159,15 @@ async def async_setup_entry(
     ev_chargers = full_config.get("ev_chargers", [])
     _LOGGER.info("Per-charger setup: %d charger(s) in config", len(ev_chargers))
     per_charger_descriptions = []
-    for charger_cfg in ev_chargers:
+    for _cidx, charger_cfg in enumerate(ev_chargers):
         cid = charger_cfg.get("id", "ev_charger")
-        cname = charger_cfg.get("name", "EV Charger")
+        cname = charger_display_name(hass, charger_cfg, _cidx)  # (#1053)
         per_charger_descriptions.extend([
             SensorEntityDescription(
                 key=f"charger_{cid}_power",
                 name=f"{cname} Power",
+                translation_key="per_charger_power",
+                translation_placeholders={"charger": cname},
                 device_class=SensorDeviceClass.POWER,
                 state_class=SensorStateClass.MEASUREMENT,
                 native_unit_of_measurement=UnitOfPower.WATT,
@@ -2064,6 +2184,8 @@ async def async_setup_entry(
             SensorEntityDescription(
                 key=f"charger_{cid}_commanded_current",
                 name=f"{cname} Commanded Current",
+                translation_key="per_charger_commanded_current",
+                translation_placeholders={"charger": cname},
                 device_class=SensorDeviceClass.CURRENT,
                 state_class=SensorStateClass.MEASUREMENT,
                 native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
@@ -2073,6 +2195,8 @@ async def async_setup_entry(
             SensorEntityDescription(
                 key=f"charger_{cid}_session_energy",
                 name=f"{cname} Session Energy",
+                translation_key="per_charger_session_energy",
+                translation_placeholders={"charger": cname},
                 device_class=SensorDeviceClass.ENERGY,
                 state_class=SensorStateClass.TOTAL,
                 native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -2090,6 +2214,8 @@ async def async_setup_entry(
             SensorEntityDescription(
                 key=f"charger_{cid}_session_energy_external",
                 name=f"{cname} Session Energy (charger)",
+                translation_key="per_charger_session_energy_external",
+                translation_placeholders={"charger": cname},
                 device_class=SensorDeviceClass.ENERGY,
                 state_class=SensorStateClass.TOTAL,
                 native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -2098,16 +2224,22 @@ async def async_setup_entry(
             SensorEntityDescription(
                 key=f"charger_{cid}_session_solar_share",
                 name=f"{cname} Solar Share",
+                translation_key="per_charger_session_solar_share",
+                translation_placeholders={"charger": cname},
                 native_unit_of_measurement=PERCENTAGE,
                 suggested_display_precision=0,
             ),
             SensorEntityDescription(
                 key=f"charger_{cid}_taper_trend",
                 name=f"{cname} Taper Trend",
+                translation_key="per_charger_taper_trend",
+                translation_placeholders={"charger": cname},
             ),
             SensorEntityDescription(
                 key=f"charger_{cid}_taper_ratio",
                 name=f"{cname} Taper Ratio",
+                translation_key="per_charger_taper_ratio",
+                translation_placeholders={"charger": cname},
                 native_unit_of_measurement=PERCENTAGE,
                 suggested_display_precision=0,
             ),
@@ -2115,6 +2247,8 @@ async def async_setup_entry(
             SensorEntityDescription(
                 key=f"charger_{cid}_daily_energy",
                 name=f"{cname} Daily Energy",
+                translation_key="per_charger_daily_energy",
+                translation_placeholders={"charger": cname},
                 device_class=SensorDeviceClass.ENERGY,
                 state_class=SensorStateClass.TOTAL_INCREASING,
                 native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -2124,6 +2258,8 @@ async def async_setup_entry(
             SensorEntityDescription(
                 key=f"charger_{cid}_estimated_soc",
                 name=f"{cname} Estimated SOC",
+                translation_key="per_charger_estimated_soc",
+                translation_placeholders={"charger": cname},
                 device_class=SensorDeviceClass.BATTERY,
                 state_class=SensorStateClass.MEASUREMENT,
                 native_unit_of_measurement=PERCENTAGE,
@@ -2140,6 +2276,8 @@ async def async_setup_entry(
             SensorEntityDescription(
                 key=f"charger_{cid}_vehicle_soc",
                 name=f"{cname} Vehicle SOC",
+                translation_key="per_charger_vehicle_soc",
+                translation_placeholders={"charger": cname},
                 device_class=SensorDeviceClass.BATTERY,
                 state_class=SensorStateClass.MEASUREMENT,
                 native_unit_of_measurement=PERCENTAGE,
@@ -2151,6 +2289,8 @@ async def async_setup_entry(
             SensorEntityDescription(
                 key=f"charger_{cid}_taper_minutes_to_full",
                 name=f"{cname} Minutes to Full",
+                translation_key="per_charger_taper_minutes_to_full",
+                translation_placeholders={"charger": cname},
                 native_unit_of_measurement=UnitOfTime.MINUTES,
                 suggested_display_precision=0,
             ),
@@ -2163,13 +2303,15 @@ async def async_setup_entry(
     # would just clutter the entity registry. The dashboard generator's
     # Sankey card per-charger split (also v1.6.15) reads these entities.
     if len(ev_chargers) > 1:
-        for charger_cfg in ev_chargers:
+        for _cidx, charger_cfg in enumerate(ev_chargers):
             cid = charger_cfg.get("id", "ev_charger")
-            cname = charger_cfg.get("name", "EV Charger")
+            cname = charger_display_name(hass, charger_cfg, _cidx)  # (#1053)
             per_charger_descriptions.extend([
                 SensorEntityDescription(
                     key=f"charger_{cid}_flow_solar_to_ev_power",
                     name=f"{cname} Solar → EV Power",
+                    translation_key="per_charger_flow_solar_to_ev_power",
+                    translation_placeholders={"charger": cname},
                     device_class=SensorDeviceClass.POWER,
                     state_class=SensorStateClass.MEASUREMENT,
                     native_unit_of_measurement=UnitOfPower.WATT,
@@ -2178,6 +2320,8 @@ async def async_setup_entry(
                 SensorEntityDescription(
                     key=f"charger_{cid}_flow_grid_to_ev_power",
                     name=f"{cname} Grid → EV Power",
+                    translation_key="per_charger_flow_grid_to_ev_power",
+                    translation_placeholders={"charger": cname},
                     device_class=SensorDeviceClass.POWER,
                     state_class=SensorStateClass.MEASUREMENT,
                     native_unit_of_measurement=UnitOfPower.WATT,
@@ -2186,6 +2330,8 @@ async def async_setup_entry(
                 SensorEntityDescription(
                     key=f"charger_{cid}_flow_battery_to_ev_power",
                     name=f"{cname} Battery → EV Power",
+                    translation_key="per_charger_flow_battery_to_ev_power",
+                    translation_placeholders={"charger": cname},
                     device_class=SensorDeviceClass.POWER,
                     state_class=SensorStateClass.MEASUREMENT,
                     native_unit_of_measurement=UnitOfPower.WATT,
@@ -2197,6 +2343,8 @@ async def async_setup_entry(
                 SensorEntityDescription(
                     key=f"charger_{cid}_flow_solar_to_ev_energy",
                     name=f"{cname} Solar → EV Energy",
+                    translation_key="per_charger_flow_solar_to_ev_energy",
+                    translation_placeholders={"charger": cname},
                     device_class=SensorDeviceClass.ENERGY,
                     state_class=SensorStateClass.TOTAL,
                     native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -2205,6 +2353,8 @@ async def async_setup_entry(
                 SensorEntityDescription(
                     key=f"charger_{cid}_flow_grid_to_ev_energy",
                     name=f"{cname} Grid → EV Energy",
+                    translation_key="per_charger_flow_grid_to_ev_energy",
+                    translation_placeholders={"charger": cname},
                     device_class=SensorDeviceClass.ENERGY,
                     state_class=SensorStateClass.TOTAL,
                     native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -2213,6 +2363,8 @@ async def async_setup_entry(
                 SensorEntityDescription(
                     key=f"charger_{cid}_flow_battery_to_ev_energy",
                     name=f"{cname} Battery → EV Energy",
+                    translation_key="per_charger_flow_battery_to_ev_energy",
+                    translation_placeholders={"charger": cname},
                     device_class=SensorDeviceClass.ENERGY,
                     state_class=SensorStateClass.TOTAL,
                     native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -2228,6 +2380,14 @@ async def async_setup_entry(
             d for d in per_charger_descriptions if "_flow_battery_to_ev_" not in d.key]
 
     for desc in per_charger_descriptions:
+        sensors.append(SEMSolarSensor(coordinator, desc, entry.entry_id))
+
+    # (#812) A device on its own tariff gets a daily cost sensor: its grid
+    # kWh priced at that tariff. No tariff set, no sensor — and since this
+    # list feeds the stale sweep below, clearing the tariff removes it.
+    per_device_tariff_descriptions = _device_tariff_descriptions(
+        hass, coordinator)
+    for desc in per_device_tariff_descriptions:
         sensors.append(SEMSolarSensor(coordinator, desc, entry.entry_id))
 
     if per_charger_descriptions:
@@ -2285,13 +2445,13 @@ async def async_setup_entry(
 
     # Phase A of per-battery card mirror — auto-discover the multi-
     # battery surface from the coordinator's sensor reader (single-
-    # battery installs leave ``battery_power_list`` at length 1 and
-    # produce zero per-battery sensors, preserving today's fleet-
-    # sensor behaviour). Same gating + getattr pattern as per-PV-
-    # string surface above.
+    # battery installs have one battery unit and produce zero
+    # per-battery sensors, preserving today's fleet-sensor behaviour).
+    # (#1171) A unit is a combined sensor or a two-sensor pair. Same
+    # gating + getattr pattern as per-PV-string surface above.
     per_battery_descriptions = []
     _ed = getattr(_sr, "_energy_dashboard_config", None) if _sr is not None else None
-    batt_list = list(getattr(_ed, "battery_power_list", []) or []) if _ed is not None else []
+    batt_list = battery_units(_ed)
     if len(batt_list) > 1:
         for idx in range(len(batt_list)):
             bid = f"b{idx + 1}"
@@ -2349,12 +2509,58 @@ async def async_setup_entry(
         + per_charger_descriptions
         + per_string_descriptions
         + per_battery_descriptions
+        + per_device_tariff_descriptions
     )
     _fix_entity_ids(hass, entry, all_descriptions, "sensor")
     _cleanup_stale_entities(hass, entry, all_descriptions, "sensor")
 
     # Apply labels to entities after they are created
     await _apply_labels_to_sensors(hass, sensors)
+
+
+def _decision_attributes(coordinator, key: str) -> Dict[str, Any]:
+    """(#1084) ``last_decision`` / ``strategy`` attributes for ``key``.
+
+    ``charging_state`` carries the per-charger maps (there is no per-charger
+    state entity; ``charger_<id>_charging_state`` is a key on it),
+    ``battery_status`` / ``battery_<id>_status`` the battery's, and
+    ``load_management_status`` the loads'.
+    """
+    from .coordinator.decision_log import (
+        KIND_BATTERY, KIND_CHARGER, KIND_LOAD, DecisionLog)
+    try:
+        log = getattr(coordinator, "decision_log", None)
+        if not isinstance(log, DecisionLog):
+            return {}
+        if key == "charging_state":
+            data = getattr(coordinator, "data", None) or {}
+            strategies = {
+                k[len("charger_"):-len("_strategy")]: v
+                for k, v in data.items()
+                if isinstance(k, str) and k.startswith("charger_")
+                and k.endswith("_strategy")}
+            return {"per_charger_last_decision": log.last_by_kind(KIND_CHARGER),
+                    "per_charger_strategy": strategies}
+        if key == "battery_status":
+            return {"per_battery_last_decision": log.last_by_kind(KIND_BATTERY)}
+        if key.startswith("battery_") and key.endswith("_status"):
+            bid = key[len("battery_"):-len("_status")]
+            # per-battery sensors only (b1, b2 …), not battery_priority_status
+            if re.fullmatch(r"b\d+", bid):
+                return {"last_decision": log.last(KIND_BATTERY, bid)}
+        if key == "load_management_status":
+            return {"per_device_last_decision": log.last_by_kind(KIND_LOAD)}
+    except Exception:  # noqa: BLE001 — attributes never break the entity
+        _LOGGER.debug("decision attributes skipped", exc_info=True)
+    return {}
+
+
+# (#1170) A battery's own status is built from its own power reading, so it
+# blinks and blanks on that reading's clock: held through the dark-read grace
+# like the number beside it. (#1197) So are the fleet battery status and the
+# grid status, each built from its fleet power. Every other text sensor shows
+# its None at once.
+_HELD_TEXT_KEY = re.compile(r"battery(_b\d+)?_status|grid_status")
 
 
 class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
@@ -2390,6 +2596,11 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         "device_list",
         "per_charger_states",
         "per_charger_plans",
+        # (#1023/#1025) the EV card's departure and boost rows — config
+        # echoes and a live "kWh left", no charting value
+        "per_charger_departure",
+        "battery_boost",
+        "battery_boost_preview",
         "today_plan",
         "upcoming",
         "schedule_today",
@@ -2428,6 +2639,11 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         "battery_needs_priority",
         "charging_strategy",
         "strategy_reason",
+        # (#1084) the per-charger twin of the two above — live context
+        "per_charger_strategy",
+        # (#1084) one row per load, rewritten on each change; the event
+        # and the logbook keep the history, the recorder need not
+        "per_device_last_decision",
         "per_charger_phases",
         # (#944) the stand-down's countdown moves every cycle of an episode;
         # the Repair is the record, this is live card context.
@@ -2446,6 +2662,10 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         # live-card helper rebuilt from the registry on demand: nothing about
         # it charts, and the diagnostics download carries the full report.
         "detection_report",
+        # (#1221) the Energy Impact card's line under the daily CO2 avoided
+        # (0.1 kWh, 1 g/kWh) — the state is the record, these are its parts
+        "solar_used_kwh",
+        "co2_kg_per_kwh_today",
     })
 
     # Sensors disabled by default (not used by dashboard template)
@@ -2476,7 +2696,10 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         self.entity_description = description
 
         self._attr_unique_id = f"sem_{description.key}"
-        self._attr_translation_key = description.key
+        # (#1053) A per-charger sensor carries its own translation key with
+        # the charger's name as a placeholder; its key (charger_<id>_power)
+        # can never be declared in strings.json.
+        self._attr_translation_key = description.translation_key or description.key
         self._attr_device_info = coordinator.device_info
         self._attr_suggested_object_id = f"sem_{description.key}"
         # Force stable entity ID regardless of HA language
@@ -2625,16 +2848,15 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         total = 0.0
         any_valid = False
         for eid in self._ev_power_upstream_entities:
-            st = self.hass.states.get(eid)
-            if st is None or st.state in ("unavailable", "unknown", None):
-                continue
-            try:
-                total += float(st.state)
-                any_valid = True
-            except (ValueError, TypeError):
-                # Upstream momentarily unparseable — skip; the coordinator
+            # (#1202) Only a number counts: "nan" parsed and went into the
+            # sum. In watts, as the coordinator's read of the same sensor.
+            w = power_state_to_watts(self.hass.states.get(eid))
+            if w is None:
+                # Upstream momentarily unreadable — skip; the coordinator
                 # cycle will re-read on its own cadence either way.
                 continue
+            total += w
+            any_valid = True
 
         if not any_valid:
             # Don't flip to None mid-session over a transient
@@ -2711,14 +2933,9 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 }
                 value = grid_status_map.get(value, value.capitalize() if isinstance(value, str) else value)
 
-            # Calculate self-consumption if not provided
-            elif self.entity_description.key == "self_consumption_rate" and value is None:
-                solar = self.coordinator.data.get("solar_production_total", 0)
-                grid_export = max(0, -self.coordinator.data.get("grid_power", 0))
-                if solar > 0:
-                    value = round((solar - grid_export) / solar * 100, 1)
-                else:
-                    value = 0
+            # (#1191) No second formula for ``self_consumption_rate`` here:
+            # the cycle always publishes it. A live-watt copy took the whole
+            # export (a battery sale too) away from solar.
 
             # Convert ISO timestamp strings to datetime for TIMESTAMP sensors
             if (isinstance(value, str)
@@ -2746,8 +2963,9 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
             # Set values and mark as available (but unavailable if value is None)
             # Exception: timestamp sensors (e.g. ev_last_full_charge) are available
             # even when None — "no event yet" is a valid state, not unavailable.
-            # Dark-read grace (03.09, Guido: "it was very stable before"). A
-            # numeric measurement whose source is unreadable THIS cycle keeps
+            # Dark-read grace (03.09: "it was very stable before"). A
+            # numeric measurement (and a battery's own status, #1170:
+            # ``_HELD_TEXT_KEY``) whose source is unreadable THIS cycle keeps
             # its last good value for SENSOR_DARK_READ_GRACE_S and reports
             # ``stale_s``; only a sustained outage blanks it. Never invents:
             # a value that was never read stays unavailable (#875), and the
@@ -2765,11 +2983,20 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 self._last_good_value = None
                 self._last_good_at = None
             self._stale_s = 0
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if ((isinstance(value, (int, float)) and not isinstance(value, bool))
+                    or (isinstance(value, str) and _HELD_TEXT_KEY.fullmatch(
+                        self.entity_description.key))):
                 self._last_good_value = value
                 self._last_good_at = _now
             self._attr_native_value = value
-            if self.entity_description.device_class == SensorDeviceClass.TIMESTAMP:
+            if (self.entity_description.device_class in (
+                    SensorDeviceClass.TIMESTAMP, SensorDeviceClass.ENUM)
+                    or _HELD_TEXT_KEY.fullmatch(self.entity_description.key)):
+                # (#1022) an enum with no verdict yet is "unknown", a state
+                # of its own — the sensor is there and says "not yet".
+                # (#1197) So is a status SEM cannot tell while its power is
+                # dark: the entity stays, and with it the decision
+                # attributes the Why card reads (#1084).
                 self._attr_available = True
             else:
                 self._attr_available = value is not None
@@ -2803,6 +3030,15 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         # Unbound on purpose: a test double may call the property's fget on
         # a MagicMock ``self`` (test_708) — the real base must still run.
         attrs = SEMSolarSensor._extra_state_attributes_base(self)
+        # (#1053) The EV card names a charger from its power sensor. It used
+        # to cut " Power" off the friendly name, which breaks once the name
+        # is translated ("EV-lader Vermogen"); the name itself rides along.
+        _desc = getattr(self, "entity_description", None)
+        _ph = getattr(_desc, "translation_placeholders", None) or {}
+        if (_ph.get("charger") and getattr(_desc, "translation_key", "")
+                == "per_charger_power"):
+            attrs = dict(attrs or {})
+            attrs["charger_name"] = _ph["charger"]
         if getattr(self, "_stale_s", 0):
             attrs = dict(attrs or {})
             attrs["stale_s"] = int(self._stale_s)
@@ -2916,6 +3152,14 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                         "phase_verdict": self.coordinator.data.get(
                             f"charger_{cid}_phase_verdict"),
                     }
+            # (#1023/#1025) The EV card's departure rows per charger: the
+            # default time, each weekday's own, the next departure, the two
+            # plan knobs, the stamped top-up and the boost permission.
+            _per_charger_departure = {}
+            for k, v in self.coordinator.data.items():
+                if k.startswith("charger_") and k.endswith("_departure"):
+                    cid = k[len("charger_"):-len("_departure")]
+                    _per_charger_departure[cid] = v
             attrs.update({
                 "battery_soc": self.coordinator.data.get("battery_soc"),
                 "calculated_current": self.coordinator.data.get("calculated_current"),
@@ -2959,7 +3203,34 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 # ``sensor.sem_export_guard_state``.
                 "sink_verdicts": self.coordinator.data.get("sink_verdicts") or {},
                 "export_guard": self.coordinator.data.get("export_guard") or {},
+                "per_charger_departure": _per_charger_departure,
+                # (#1025) the boost that runs or how the last one ended, and
+                # what the card needs to say what one would give
+                "battery_boost": self.coordinator.data.get("battery_boost"),
+                "battery_boost_preview": self.coordinator.data.get(
+                    "battery_boost_preview"),
             })
+        elif self.entity_description.key.startswith("daily_tariff_cost_"):
+            # (#812) What the cost rests on: the device's grid kWh today and
+            # its price and level now.
+            did = self.entity_description.key[len("daily_tariff_cost_"):]
+            attrs["grid_kwh_today"] = self.coordinator.data.get(
+                f"daily_tariff_grid_kwh_{did}")
+            attrs["price_now"] = self.coordinator.data.get(f"tariff_price_{did}")
+            attrs["price_level"] = self.coordinator.data.get(f"tariff_level_{did}")
+            # "house" while the own price cannot be read: the kWh are then
+            # priced at the house rate
+            attrs["price_source"] = self.coordinator.data.get(
+                f"tariff_price_source_{did}")
+        elif self.entity_description.key == "yearly_feed_in_fees":
+            # (#1077) Where a tiered fee stands: this year's export, the fee
+            # on the next kWh, and where the next tier starts.
+            attrs["export_this_year_kwh"] = self.coordinator.data.get(
+                "tariff_export_ytd_kwh")
+            attrs["fee_per_kwh_now"] = self.coordinator.data.get(
+                "tariff_feed_in_fee_rate")
+            attrs["next_tier_at_kwh"] = self.coordinator.data.get(
+                "tariff_next_fee_tier_kwh")
         elif self.entity_description.key in (
             "roi_payback_years", "roi_annual_savings",
         ):
@@ -3216,6 +3487,9 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 "soc": cp.get("soc"),
                 "soc_stale_s": cp.get("soc_stale_s"),
             })
+        elif self.entity_description.key == "pv_health":
+            # (#1022) the numbers behind the colour
+            attrs.update(self.coordinator.data.get("pv_health_attrs") or {})
         elif self.entity_description.key == "battery_spendable_kwh":
             # (#778) Everything a user needs to argue with the number, on the
             # number itself. A budget nobody can check is one nobody trusts.
@@ -3308,6 +3582,42 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 "pre_clamp": d.get("forecast_dampening_pre_clamp"),
                 "correction_factor_historical": d.get("forecast_correction_factor"),
             })
+        elif self.entity_description.key == "forecast_remaining_today_kwh":
+            # (#1068) The state stays raw (#598: same basis as "Forecast
+            # today"). The attributes say what the rest of the day looks
+            # like once today's real yield is counted — the number the
+            # plan's day reads while the intraday flag is on.
+            d = self.coordinator.data
+            factor = d.get("forecast_corrected_factor")
+            raw = d.get("forecast_remaining_today_kwh")
+            corrected = None
+            if isinstance(factor, (int, float)) and isinstance(raw, (int, float)):
+                corrected = round(max(0.0, raw) * factor, 2)
+            attrs.update({
+                "corrected_kwh": corrected,
+                "correction_floor": d.get("forecast_corrected_floor"),
+                "correction_path": d.get("forecast_dampening_path"),
+                "intraday_forecast": bool(self.coordinator.config.get(
+                    "intraday_forecast", False)),
+            })
+        elif self.entity_description.key == "daily_co2_avoided":
+            # (#1088) which grid intensity the CO2 books use right now: the
+            # source kind (never its entity id), the value, whether the fixed
+            # Swiss average is in force, and whether the live value counts.
+            st = getattr(self.coordinator, "_grid_co2_status", None) or {}
+            d = self.coordinator.data
+            attrs.update({
+                "co2_source": st.get("source", "none"),
+                "co2_kg_per_kwh": st.get("kg_per_kwh"),
+                "co2_fallback_kg_per_kwh": GRID_CO2_KG_PER_KWH,
+                "co2_live": bool(self.coordinator.config.get(
+                    "co2_live_intensity", False)),
+                # (#1221) the kWh this sensor counts and the kg per kWh it
+                # used today — the Energy Impact card shows these, so it
+                # never works the figure out again on its own
+                "solar_used_kwh": d.get("daily_co2_solar_used_kwh"),
+                "co2_kg_per_kwh_today": d.get("daily_co2_kg_per_kwh"),
+            })
         elif self.entity_description.key == "forecast_correction_factor":
             d = self.coordinator.data
             attrs.update({
@@ -3326,6 +3636,12 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
                 "state_decision_path", "process_path", "action_path",
                 "last_error", "shed_path", "shed_futile",
                 "shed_need_w", "shed_sheddable_w", "uncontrolled_w",
+                # (#1048) the phase guard's verdict and its held loads
+                "phase_shed_path", "phase_held",
+                # (#1021) the grid operator's relay — the Control banner
+                "shed_signal_state", "shed_signal_active",
+                "shed_signal_cap_kw", "shed_signal_since",
+                "shed_signal_locked",
             ):
                 attrs[key] = self.coordinator.data.get(key)
             # Add device list details for dashboard table
@@ -3404,7 +3720,7 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
             # AVERAGE labelled "Current Peak" and nothing about the budget
             # that actually bounds the next command, which is how 4.9 kW of
             # charging and a 4.36 kW "margin" could appear side by side and
-            # read as a contradiction (Guido, 03.09). None when the install is
+            # read as a contradiction (03.09). None when the install is
             # uncapped or the guard has not published yet — never 0, which
             # would draw a slot nobody measured.
             attrs["peak_slot_allowed_w"] = self.coordinator.data.get(
@@ -3466,6 +3782,10 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
             if _sr is not None:
                 attrs["string_name"] = _sr.pv_string_display_name(slot)
 
+        # (#1084) The newest command change per device, and the strategy per
+        # charger — on the sensors that already exist, never a new entity.
+        # One record each (not the buffer): the recorder's 16 KB cap.
+        attrs.update(_decision_attributes(self.coordinator, _key))
         return attrs
 
     @property
@@ -3553,6 +3873,16 @@ class SEMSolarSensor(CoordinatorEntity, RestoreSensor):
         yearly_reset_patterns = [
             "yearly_",  # All yearly_* sensors
         ]
+
+        # (#1176) The car's daily energy falls to 0 at the car day's start
+        # (the Charge-by time), not at midnight. Saying midnight made the
+        # recorder book the night's kWh again at 00:00 and a drop at the
+        # car day's start.
+        if sensor_key in CAR_DAY_SENSOR_KEYS:
+            calc = getattr(self.coordinator, "_energy_calculator", None)
+            start = calc.ev_last_reset() if calc is not None else None
+            if start is not None:
+                return start
 
         # Check if sensor resets daily
         if any(pattern in sensor_key for pattern in daily_reset_patterns):

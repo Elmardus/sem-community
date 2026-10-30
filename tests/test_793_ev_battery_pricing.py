@@ -103,7 +103,11 @@ def _host(*, import_rate=0.30, battery_cost_rate=0.0):
 
 
 def _tick(h, flows):
-    p = SimpleNamespace(ev_connected=True, ev_power=4000.0,
+    # (#1024) The session total is this charger's own draw (no meter in
+    # this host), split by the flows — so the draw IS the flow sum here,
+    # and these tests stay about pricing.
+    draw = flows.solar_to_ev + flows.grid_to_ev + flows.battery_to_ev
+    p = SimpleNamespace(ev_connected=True, ev_power=draw or 4000.0,
                         ev_connected_per_charger=None)
     EVControlMixin._confirm_ev_connection(h, p)
     EVControlMixin._update_session_tracking(h, p, flows)

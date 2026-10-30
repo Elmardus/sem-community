@@ -22,7 +22,7 @@ charge the home battery. The battery is a draggable **sink**; a device **above**
 reclaims that charge power, a device **below** it yields. Gated only by the reserve
 floor (`battery_priority_soc`) and the commanded-charge guard. No toggle.
 
-### Implementation architecture — build it via the 3-layer arc (decided — Guido 2026-07-11)
+### Implementation architecture — build it via the 3-layer arc (decided 2026-07-11)
 
 Implement #576 through the **management → process → integration** layered arc
 (`coordinator/cycle_trace.py`, 1.7.5-beta.1). Each device in the priority list is a
@@ -67,7 +67,7 @@ the battery row rendering + drag persisting; confirm `battery_commanded` covers 
 
 ### Step 1 — P2.1 the device list is the SINGLE priority axis (retire multi-charger priority)
 
-**Decision (Guido, 2026-07-11): put every EV charger in the device list and use its list
+**Decision (2026-07-11): put every EV charger in the device list and use its list
 position as the priority — instead of the separate `ev_surplus_priority` knob.** One
 draggable list (loads + every charger + battery) is the one true ordering. This subsumes
 "unify the store" and goes further — it retires the parallel multi-charger priority as a
@@ -151,7 +151,7 @@ load-above-the-EV test, not by assertion.**
 - SOC < `battery_priority_soc` → battery first regardless of position (U4).
 - Toggle-free — position is the only control.
 
-### Default order & battery representation (decided with Guido 2026-07-11)
+### Default order & battery representation (decided 2026-07-11)
 
 - **Default seed order: EV chargers → home battery → loads.** REVERSES the current Phase-1
   default (battery seeded at bottom, prio 100). Rationale: clearest mental model for new
@@ -167,7 +167,7 @@ load-above-the-EV test, not by assertion.**
   `sensor.sem_battery_charge_power` / `sensor.sem_battery_soc` (SEM sums multi-battery
   installs upstream). No per-module rows.
 
-### All controllable devices are first-class active participants (decided — Guido 2026-07-11)
+### All controllable devices are first-class active participants (decided 2026-07-11)
 
 The single priority list governs **every** controllable device with an **active role** —
 not just the EV charger(s) and the battery. In scope, all in the one list, all allocated
@@ -189,7 +189,7 @@ ordering (the EV/HP/HW keep their own *actuators*, but consume the *shared order
 is the generic-device arc's uniformity goal made concrete — see
 [[project_generic_device_arc]].
 
-**No double-add (Guido 2026-07-11 — critical):** if a device is ALREADY in the list —
+**No double-add (decision 2026-07-11 — critical):** if a device is ALREADY in the list —
 auto-discovered from the Energy Dashboard, service-registered, or manually mapped as a
 generic pump/switch — the HP/HW/climate integration must **not** add a second row or a
 second controller for the same physical device (two controllers on one entity WILL fight).
@@ -204,13 +204,13 @@ collision.
 path) and route its surplus claim through the list position; enforce the no-double-add
 dedup; add a per-type acceptance case + the collision regression test.
 
-### Extend "Today's Plan" to all devices (decided — Guido 2026-07-11)
+### Extend "Today's Plan" to all devices (decided 2026-07-11)
 
 The **Today's Plan** timeline (`coordinator/today_plan.py`, #282/#298 → `sensor.sem_charging_
 state.attributes.today_plan` → `sem-today-plan-card`) already shows, forward-looking, **when
 the home battery will be charged (full ETA) or drained (empty ETA)** and the EV rows
 (charge-start / Min / target / deadline / wait) plus the tariff / solar-peak / night
-transitions. **Guido wants the same "when will it be active" projection for the OTHER
+transitions. **Wanted: the same "when will it be active" projection for the OTHER
 surplus devices** — pool pump, heat pump, hot water, climate, generic loads.
 
 **Requirement:** the plan composer emits forward-looking rows per surplus device — e.g.
@@ -232,7 +232,7 @@ the natural companion to the #576 list.
 active window; wire the coordinator to compute it from forecast + position + goal; add
 kinds + translations + card rendering; unit-test the composer per device type.
 
-### Interaction rules (confirmed with Guido 2026-07-11 — build + test as acceptance cases)
+### Interaction rules (confirmed 2026-07-11 — build + test as acceptance cases)
 
 Layered gate order: **battery reserve zone → list position → EV mode.**
 
@@ -283,7 +283,7 @@ the resolved plan to #576.
 
 ### Open decisions (carry into build)
 
-1. **Single priority axis — ALL DECIDED (Guido 2026-07-11):** device-list position replaces
+1. **Single priority axis — ALL DECIDED (2026-07-11):** device-list position replaces
    `ev_surplus_priority`.
    - ✅ **Migration** — seed each charger's list position from its current
      `ev_surplus_priority` on upgrade (config schema bump); byte-identical behaviour after.

@@ -1,6 +1,6 @@
 """#830 — the option surface is shrink-only.
 
-Guido, 22.08: *"SEM is getting complicated and complicated, users are getting
+22.08: *"SEM is getting complicated and complicated, users are getting
 more lost in all the options we provide."*
 
 **Every option is a decision SEM could not make for itself.** So the count is
@@ -54,7 +54,17 @@ def _baseline():
     return json.loads(BASELINE.read_text())
 
 
-KINDS = ("config_fields", "number_entities", "switch_entities")
+KINDS = ("config_fields", "number_entities", "switch_entities", "select_entities")
+
+# (#1019) Why each global select exists — a select is a decision SEM could
+# not make for itself, and it says which. A new select without a line here
+# fails ``test_every_select_says_why``.
+SELECT_DECISIONS = {
+    "pause_duration": "a user's own pause length — chosen in the moment, "
+                      "not something SEM can know (#980)",
+    "hints": "whether a person wants messages cannot be decided for them; "
+             "off by default, one control for five categories (#1019)",
+}
 
 REGEN = ("Run  python3 scripts/audit_options.py --baseline  and commit the "
          "result, so the change is visible in the diff.")
@@ -99,7 +109,17 @@ def test_the_baseline_matches_what_the_audit_reports():
     m = _live()
     inv = m["inventory"]
     assert (len(inv["config_fields"]) + len(inv["number_entities"])
-            + len(inv["switch_entities"])) == m["user_facing_controls"]
+            + len(inv["switch_entities"])
+            + len(inv["select_entities"])) == m["user_facing_controls"]
+
+
+def test_every_select_says_why():
+    live = set(_live()["inventory"]["select_entities"])
+    missing = sorted(live - set(SELECT_DECISIONS))
+    stale = sorted(set(SELECT_DECISIONS) - live)
+    assert not missing, f"select(s) with no recorded decision: {missing}"
+    assert not stale, f"decision(s) for select(s) that no longer exist: {stale}"
+    assert all(len(r.split()) >= 5 for r in SELECT_DECISIONS.values())
 
 
 def test_the_audit_script_still_runs():

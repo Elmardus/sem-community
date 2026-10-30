@@ -6,13 +6,15 @@
 // A near miss with an offer is unreachable on a healthy rig by construction:
 // every brand present is detected, and a near miss for a detected brand is
 // filtered as noise. So the simulator grows a fixture — `unmapped_charger` —
-// that publishes the installation device alone: a power reading and the
-// site's grid-guard current, with no cable state, no charging state and no
-// charger-level throttle. SEM can describe it and cannot map it.
+// that publishes the charger with its power reading and its max current, and
+// no cable state, no charging state and no resume button. The installation
+// keeps the site's grid-guard current. SEM can describe the charger and
+// cannot map it.
 //
 //   C1  turning the fixture on produces a near miss, named from the roster
-//   C2  ...carrying the role the integration declares (available_current)
+//   C2  ...carrying the role the integration declares (charger_max_current)
 //   C3  ...and an offer, because the device has a power sensor
+//   C3c ...that never names the site's grid guard (#1141)
 //   C4  the card shows "Add this charger" rather than "please report"
 //   C5  clicking it creates a charger wired to the proposed entities
 //   C6  turning the fixture off puts the rig back and the offer disappears
@@ -44,7 +46,7 @@ async function setFixture(page, on) {
     const res = await L.api(`config/config_entries/flow/${flow.flow_id}`, {
         method: 'POST',
         body: JSON.stringify({
-            device_prefix: 'Guido Coppes',
+            device_prefix: 'Jan Jansen',
             expose_charger_current: true,
             unmapped_charger: !!on,
         }),
@@ -78,20 +80,25 @@ async function report(page) {
         await page.waitForTimeout(20000);
 
         const r = await report(page);
-        const miss = (r.near_misses || []).find(m => String(m.platform).startsWith('zaptec'));
+        const miss = (r.near_misses || []).find(m => String(m.platform).startsWith('zaptec')
+                                                 && m.suggested_charger?.id)
+            || (r.near_misses || []).find(m => String(m.platform).startsWith('zaptec'));
         L.check('C1 the fixture produces a near miss', !!miss,
                 (r.near_misses || []).map(m => m.platform).join(',') || 'none');
         L.check('C1b it is named from the roster',
                 miss?.roster?.name === 'Zaptec EV charger', miss?.roster?.name);
         L.check('C2 it carries the role the integration declares',
-                miss?.proposed_roles?.ev_current_control?.matched_key === 'available_current',
+                miss?.proposed_roles?.ev_current_control?.matched_key === 'charger_max_current',
                 JSON.stringify(miss?.proposed_roles || {}));
         const offer = miss?.suggested_charger;
         L.check('C3 it comes with a ready charger', !!offer?.id, JSON.stringify(offer || {}));
         L.check('C3b the offer wires the proposed control and a power sensor',
-                offer?.ev_current_control_entity?.includes('beschikbare_stroom')
+                offer?.ev_current_control_entity?.includes('maximale_laadstroom')
                 && !!offer?.ev_charging_power_sensor,
                 `${offer?.ev_current_control_entity} / ${offer?.ev_charging_power_sensor}`);
+        L.check('C3c the offer never names the site limit',
+                !JSON.stringify(offer || {}).includes('beschikbare_stroom'),
+                JSON.stringify(offer || {}));
 
         const text = await L.cardText(page);
         L.check('C4 the card offers the action, not a bug report',

@@ -346,3 +346,77 @@ class TestFullCarBackoff:
         assert st._giveup_streak == {"ok": 2}
         assert list(st._giveup_backoff_until) == ["ok"]
         assert st._giveup_backoff_until["ok"] == pytest.approx(400.0)
+
+
+def _unknown_view(*, power_w=0.0, cid="wb", mode="min_plus_solar"):
+    """(#1153) A charger with no plug sensor, not drawing: "not connected"
+    is no answer there (``plug_known=False``)."""
+    return ChargerView(
+        power=ChargerPower(charger_id=cid, power_w=power_w, connected=False,
+                           charging=False, plug_known=False),
+        energy=ChargerEnergy(charger_id=cid),
+        mode=mode,
+        config={"ev_min_current": 6, "ev_phases": 3, "ev_voltage": 230,
+                "ev_max_current": 16},
+        fleet=FleetContext(is_night=False, solar_w=3000.0,
+                           min_solar_w=200.0, tariff_level=None),
+    )
+
+
+@pytest.mark.unit
+class TestAnUnknownPlugIsNotAnUnplug:
+    """#1153 — the backoff is what bounds the offers to a charger with no
+    plug sensor, so its "not connected" must not end it the way an unplug
+    does."""
+
+    def test_the_ladder_runs_on_an_unknown_plug(self):
+        st = ChargeStability()
+        adapter = FakeAdapter()
+        d, _ = _run_ladder_to_giveup(st, adapter, 0.0, view=_unknown_view(),
+                                     first=True)
+        assert "did not accept the start" in d.reason
+
+    def test_an_unknown_plug_keeps_the_streak_and_the_backoff(self):
+        st = ChargeStability()
+        adapter = FakeAdapter()
+        t = 0.0
+        d = None
+        for n in range(FULL_CAR_GIVEUP_STREAK):
+            d, t = _run_ladder_to_giveup(st, adapter, t, view=_unknown_view(),
+                                         first=(n == 0))
+            t += 10.0
+        assert "backing off" in d.reason
+        d2 = _filter(st, _unknown_view(), adapter, now=t + 30.0)
+        assert d2.intent is ChargerIntent.IDLE
+        assert "start backoff" in d2.reason
+        assert st._giveup_streak["wb"] == FULL_CAR_GIVEUP_STREAK
+
+    def test_a_draw_on_the_sensorless_charger_still_clears_it(self):
+        st = ChargeStability()
+        adapter = FakeAdapter()
+        t = 0.0
+        for n in range(FULL_CAR_GIVEUP_STREAK):
+            _, t = _run_ladder_to_giveup(st, adapter, t, view=_unknown_view(),
+                                         first=(n == 0))
+            t += 10.0
+        # Drawing: the physics defence makes the car known and connected.
+        _filter(st, _view(power_w=4140.0), adapter, now=t + 30.0)
+        assert "wb" not in st._giveup_backoff_until
+        assert "wb" not in st._giveup_streak
+
+    @pytest.mark.parametrize("known", [True, False])
+    def test_a_stop_of_an_offer_nobody_drew_spends_no_interruption(self, known):
+        """(#975 budget) Stopping an offer to a charger whose car is not
+        known is no interruption of a session."""
+        st = ChargeStability()
+        adapter = FakeAdapter()
+        view = _view(power_w=120.0) if known else _unknown_view()
+        _filter(st, view, adapter, now=0.0)                 # arm enable delay
+        d = _filter(st, view, adapter, now=60.0)            # start offer
+        assert d.intent is ChargerIntent.CHARGE_AT_AMPS
+        adapter.last_intent = ChargerIntent.CHARGE_AT_AMPS
+        t = 60.0
+        for _ in range(40):                                 # surplus gone
+            t += 10.0
+            _filter(st, view, adapter, now=t, decision=_idle())
+        assert st._session_stops.get("wb", 0) == (1 if known else 0)

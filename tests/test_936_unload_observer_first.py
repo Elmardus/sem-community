@@ -7,7 +7,7 @@ register going 750 → 5000 W at that second — while PROD was holding it at
 750. An observer rig, which by definition commands nothing, wrote PROD's
 battery on its way out.
 
-Guido's rule (08.09.2026): *"on uninstall SEM should go to observation mode
+Rule (08.09.2026): *"on uninstall SEM should go to observation mode
 on and then uninstall."* Together with #908 (release what SEM started, leave
 the rest): flip observer on first, then hand back ONLY what SEM itself
 commanded in this lifetime.

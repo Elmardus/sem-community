@@ -12,7 +12,7 @@
 import { SEMLitBase, html, css, nothing, semGlassCss } from '../base/sem-lit-base.js';
 import {
     semTheme, semFormatPower, semCardSurfaceCSS, SEM_COLORS, semDefineCard,
-    semDiscoverPVStrings, semPVStringsCSS,
+    semDiscoverPVStrings, semPVStringKW, semPVStringsCSS,
 } from '../base/sem-shared.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
@@ -109,7 +109,8 @@ class SEMSolarCard extends SEMLitBase {
     }
 
     // ── Prefix-scoped entity helpers ──
-    _val(suffix, fallback = 0) {
+    // (#1200) null for a sensor that is out: it prints "—", not 0.
+    _val(suffix, fallback = null) {
         return this._state(`${this._prefix}${suffix}`, fallback);
     }
 
@@ -156,7 +157,7 @@ class SEMSolarCard extends SEMLitBase {
         const fcRemaining = this._val('forecast_remaining_today_kwh');
         const peakW       = this._val('forecast_peak_power_today_w');
         const peakTime    = this._valStr('forecast_peak_time_today');
-        // (#867) Only Solcast publishes a peak-power value. Forecast.Solar
+        // (#867) Only Solcast and Helios publish a peak-power value. Forecast.Solar
         // and Open-Meteo publish the peak TIME but no peak power, and expose
         // no series to derive one from - so a dash there means unsupported,
         // not broken, and the tooltip says which.
@@ -172,7 +173,7 @@ class SEMSolarCard extends SEMLitBase {
         const degradation = this._val('pv_estimated_annual_degradation');
         const trend      = this._valStr('pv_degradation_trend');
 
-        const vsFCText  = vsFC !== 0 ? this._fmt(vsFC, 0) + '%' : '—';
+        const vsFCText  = vsFC ? this._fmt(vsFC, 0) + '%' : '—';
         const vsFCColor = vsFC >= 0 ? '#8DC892' : '#f06292';
 
         // v1.7.1 / #312: per-PV-string chip strip. Auto-shown when ≥ 2
@@ -346,9 +347,9 @@ class SEMSolarCard extends SEMLitBase {
                                 <div class="pv-chip"
                                      title="${s.entityId}"
                                      data-entity="${s.entityId}"
-                                     @click=${() => this._fireMoreInfo?.(s.entityId)}>
+                                     @click=${() => this._fireMoreInfo(s.entityId)}>
                                     <span class="pv-chip-label">${s.name}</span>
-                                    <span class="pv-chip-value">${(Math.abs(s.watts)/1000).toFixed(2)} kW</span>
+                                    <span class="pv-chip-value">${semPVStringKW(s.watts)}</span>
                                 </div>
                             `)}
                         </div>
@@ -444,7 +445,7 @@ class SEMSolarCard extends SEMLitBase {
                                 ${pvStrings.map(s => html`
                                     <div class="flow-row"
                                          style="cursor:pointer"
-                                         @click=${() => this._fireMoreInfo?.(s.entityId)}>
+                                         @click=${() => this._fireMoreInfo(s.entityId)}>
                                         <div class="flow-dot" style="background:#ff9800"></div>
                                         <span class="flow-label">${s.name}</span>
                                         <div class="flow-vals">
@@ -501,7 +502,7 @@ class SEMSolarCard extends SEMLitBase {
                             </div>
                             <div class="metric-row">
                                 <span class="metric-label">${this._t('degradation')}</span>
-                                <span class="metric-val">${degradation !== 0 ? this._fmt(degradation, 2) + '%/yr' : '—'}</span>
+                                <span class="metric-val">${degradation ? this._fmt(degradation, 2) + '%/yr' : '—'}</span>
                             </div>
                             <div class="metric-row">
                                 <span class="metric-label">${this._t('trend')}</span>

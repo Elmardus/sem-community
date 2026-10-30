@@ -234,6 +234,11 @@ read-only by design — SEM can't suppress it), but the cards will load.
 > applied to the new source; the sign diagnostics show `user_flip_applies:
 > false` and the log says so once. Tap again on the new source if it really is
 > inverted, or run `reset_sign_detection` to start clean.
+>
+> A tap made while SEM reads no grid meter (grid shows 0 W) changes nothing,
+> and it does not flip a meter SEM finds later (#1192): the diagnostics show
+> `user_flip_source: none`. Fix the missing meter first, then tap if the sign
+> is wrong.
 
 **Symptom:** SEM shows grid import when the house is actually exporting (or vice versa). The `sensor.sem_grid_power` sign is the opposite of the hardware power meter.
 
@@ -262,13 +267,23 @@ On a solar install a second voter runs first: solar production has no sign ambig
 | Fronius | + = import, - = export | Auto-negated |
 | Template sensor (HA convention) | + = import, - = export | Auto-negated |
 
-**If you configured the grid entities manually** (`grid_import_power_entity` / `grid_export_power_entity` in the SEM options): SEM uses exactly what you configured and does NOT auto-correct the sign — manual config is treated as explicit intent. Since v1.7.3-beta.7 SEM cross-checks your manual entities against the Energy Dashboard counters and logs a WARNING (`Manual grid power entities CONTRADICT…`) plus sets `diag_grid_manual_mismatch: true` in the diagnose dump when the two fields appear swapped. Checklist for the manual fields:
+**If you configured the grid entities manually** (`grid_import_power_entity` / `grid_export_power_entity` on the **Configuration** tab, **Sensor sources**): SEM uses exactly what you configured and does NOT auto-correct the sign — manual config is treated as explicit intent. Since v1.7.3-beta.7 SEM cross-checks your manual entities against the Energy Dashboard counters and logs a WARNING (`Manual grid power entities CONTRADICT…`) plus sets `diag_grid_manual_mismatch: true` in the diagnose dump when the two fields appear swapped. Checklist for the manual fields:
 
 - The **import** field takes the sensor that is non-zero while you draw from the grid; the **export** field the one that is non-zero while you feed in. When unsure, watch both in Developer Tools → States at a moment of known heavy import (e.g. EV charging at night).
 - Both fields must be **power** sensors (W/kW) — an energy counter (kWh) in either field is flagged with a WARNING and produces garbage values.
 - Configure **both** fields or neither. With only one side set, the other reads a hard 0 W and that flow direction can never show ("always exporting").
 
 **Dutch dual-tariff (DSMR) meters:** your meter splits each direction into *tarief 1* and *tarief 2* counters (`…verbruik_tarief_1/2`, `…productie_tarief_1/2`). Configure **all four** in the HA Energy Dashboard (Settings → Dashboards → Energy → Grid — you can add multiple flows per direction). With only one tariff's counters configured, SEM's grid energy statistics undercount during the other tariff's hours and the sign cross-check is blind in those windows.
+
+---
+
+## The Energy Flow Sankey shows no Grid lines
+
+**Symptom:** the Sankey shows the right Grid total, but no line goes into or out of the Grid node: no Grid → House, no Grid → Battery, no Solar → Grid.
+
+**Cause (#1172):** SEM reads 0 W from the grid. The totals come from your meter's kWh counters; the lines come from live power. When the grid entry in HA's Energy Dashboard has no power sensor, SEM looks for one on the meter's own device. It used to match English words in the entity id only, so a HomeWizard P1 meter (`sensor.p1_meter_power`, in Dutch `sensor.p1_meter_vermogen`) was missed. SEM now also asks the meter's integration what it calls the sensor (HomeWizard, the DSMR meter's import and export pair since #1189, DSMR Reader's since #1223, and P1 Monitor's and a Tibber Pulse's since #1222, a SlimmeLezer's since #1225), and that does not change with your language. A sensor for one phase is never taken as the whole meter. The HA log says `No grid power sensor found` when nothing matched.
+
+**Fix:** add the meter's power sensor to the grid entry in the Energy Dashboard, or set **Sensor sources → Grid power** on SEM's ⚙ **Configuration** tab (**All settings**). The lines start from then on; earlier hours of that day stay without them.
 
 ---
 
@@ -290,11 +305,22 @@ not steered on at all until it is corroborated — see the next section. While
 SEM is still checking, grid power reads 0 rather than a number nobody stands
 behind.
 
-**Fix:** open *Settings → Integrations → SEM → Configure → Sensors* and set
-**Grid import power** and **Grid export power** to your real meter entities
-(both positive-only, in W). The Repair clears on the next read. If your
-inverter only exposes per-phase registers, a template sensor summing them
-works — see `grid_import_power_entity` in the setup guide.
+**Fix:** pick your meter yourself. On the SEM dashboard, open the ⚙
+**Configuration** tab and pick **All settings** at the top (both places below
+are hidden in **Everyday**):
+
+- one signed sensor for the grid (most meters — SolarEdge, Huawei, Shelly
+  EM): section **Sensor sources**, set **Grid power**. SEM finds its sign.
+- one sensor for import and one for export (both positive, in W): section
+  **Tariff & pricing**, set **Grid import sensor** and **Grid export sensor**.
+
+The Repair clears on the next read. If your inverter only exposes per-phase
+registers, a template sensor summing them works — see
+`grid_import_power_entity` in the setup guide.
+
+SEM never guesses one of its own sensors, and ignores one picked by hand:
+`sensor.sem_grid_import_power` is SEM's own result, worked out from the meter.
+Older versions could offer it here (#1103).
 
 ## SEM could not find your grid power meters
 
@@ -337,12 +363,37 @@ outcomes, and they are three, not two:
 A pick from tier 1 or tier 2 is not a guess and never enters the corroboration
 path.
 
-**Fix:** name the real meters. Open *Settings → Integrations → SEM →
-Configure → Sensors* and set **Grid import power** and **Grid export
-power**. If your inverter or cloud integration publishes no fast grid power
+**Fix:** name the real meter, as in the section above: the ⚙
+**Configuration** tab in **All settings**, then **Sensor sources → Grid
+power** for one signed sensor, or **Tariff & pricing → Grid import sensor /
+Grid export sensor** for a pair. The same notice shows when SEM found only an
+export sensor by name: SEM never reads a guessed export sensor alone as the
+grid. If your inverter or cloud integration publishes no fast grid power
 at all — vendor cloud APIs such as FusionSolar's northbound API typically do
 not — then leaving both empty is the correct answer, and SEM saying it is
 blind on grid is the honest reading, not a fault to work around.
+
+## Another party writes to a device
+
+**Symptom:** a Repair says *Another party writes to* a charger or the battery. The device's setting keeps changing back, and SEM's commands do not hold.
+
+**Cause (#1079):** a supplier, an aggregator or a grid operator also controls this device, and SEM and that party undo each other. You set the device to *SEM drives, tell me*, and SEM saw writes it did not make.
+
+**Fix:** if the other party should win while it is active, open SEM's ⚙ **Configuration** tab, pick **All settings**, find the device (**Steered by another party**) and choose *Yes, SEM yields*. Pick the switch, binary sensor or select that shows when the other party is in control. If the other party should not control it, stop that programme. The Repair clears when the writes stop.
+
+## SEM found no power sensor
+
+**Symptom:** a Repair says *No power sensor for* a kWh counter of your grid, solar or battery. That source reads 0 W on every SEM card, and the energy flows and the surplus are wrong.
+
+**Fix:** pick the sensor in the Configuration tab: [Sensor source overrides](SETUP_GUIDE.md#sensor-source-overrides). During a new setup, SEM asks for it on its own screen: [Step 1](SETUP_GUIDE.md#when-sem-asks-one-more-question).
+
+**Cause (#1188):** the Energy Dashboard entry counts energy (kWh) but has no power sensor (W), and SEM found none on the counter's own device. For the grid, SEM also looked for an import and export pair. SEM reads power, not kWh, to steer, so it reads 0 W. Before, only the HA log said `No grid power sensor found`. SEM waits 5 minutes after Home Assistant has started, so a meter that loads late does not raise it.
+
+**Fix:** add the power sensor to that entry in the Energy Dashboard (*Settings → Dashboards → Energy*). Or set it on SEM's ⚙ **Configuration** tab: pick **All settings**, then **Sensor sources** → **Grid power**, **Solar power sensor** or **Battery power sensor**. A grid meter with one sensor for import and one for export goes in **Tariff & pricing** → **Grid import sensor** and **Grid export sensor**. The Repair clears on the next read.
+
+If the device has no power sensor at all (some cloud integrations publish only kWh), you can ignore the Repair. SEM then reads that power as 0 W.
+
+**Two inverters or batteries (#1226):** SEM looks for a power sensor for each entry on its own. When one entry has none, SEM adds up only the others, and the Repair names that entry's counter. Add its power sensor to that entry in the Energy Dashboard. The pick on SEM's Configuration tab stands for all of solar (or the battery), so it would drop the entries that read. SEM does not take a second sensor from a device it already reads power from, because it could count the same power twice.
 
 ## The battery platform is pinned to generic
 
@@ -367,6 +418,8 @@ cycle.
 **Symptom:** SEM shows battery charging when it's actually discharging (or vice versa). The `sensor.sem_battery_power` sign is opposite of what the hardware reports.
 
 **How SEM detects battery direction:** SEM compares the battery power sensor's sign against the charge/discharge energy counters from the Energy Dashboard. If the discharge counter is growing while battery power is positive, SEM knows positive means discharge (opposite of SEM convention) and auto-corrects.
+
+**Did you mark the battery "Inverted" in the Energy Dashboard?** Then it shows charging the right way from the start, with one or more batteries. A battery that showed the right way before an update still does.
 
 **Requirements:**
 - HA Energy Dashboard must be configured with battery charge AND discharge energy sensors
@@ -415,6 +468,17 @@ armed — and every per-device setting that goes through the device registry
    about 38 kW for a 200 A North-American service). The field accepts 1–80 kW.
 4. Check that controllable devices have been discovered: `sensor.sem_controllable_devices_count` should be > 0
 5. The 15-minute rolling average (`sensor.sem_consecutive_peak_15min`) must exceed the target before shedding activates
+
+---
+
+## SEM did something I did not expect — look in the Logbook first
+
+Open **Settings → Logbook** and find the time. SEM writes one line each
+time it changes a command to a charger, battery or load, with the reason.
+Lines ending in *(observer: not sent)* were not sent: Observer Mode was on.
+The diagnostics download keeps the last 200 lines under `decision_log`. Add
+them to a bug report. See
+[Why did SEM do that?](USER_GUIDE.md#why-did-sem-do-that).
 
 ---
 
@@ -547,6 +611,18 @@ Update to SEM v1.2.0 or newer. This issue does not occur on v1.2.0+.
 **Cause:** The Tesla Wall Connector does not expose a power sensor or current control entity in Home Assistant. This is a hardware/integration limitation — the Wall Connector's API does not support external current control.
 
 **Status:** Monitoring-only. SEM can read voltage and current values if available, but cannot start/stop charging or adjust the charging current.
+
+---
+
+## Zaptec: which current control SEM uses
+
+SEM never writes your Zaptec installation's "Available current". It limits every charger on your site, not one. A setup that saved it loses it when SEM starts; the log says so. SEM then uses the charger's own "Charger max current", or only its start and stop buttons. Open the charger's settings in SEM's Configuration tab and check its current control.
+
+---
+
+## Zaptec: SEM shows the car charging all day
+
+SEM reads whether your car charges from the "Charger mode" sensor. The "Charger" sensor only says the box is online, so SEM no longer reads it as charging. A setup that saved it is fixed when SEM starts.
 
 ---
 
@@ -828,7 +904,20 @@ SEM reads a sensor you named during setup and Home Assistant reports it
 that needs this value is degraded. **Fix:** check the integration that
 provides the sensor (Settings → Devices & Services) — restart it if it shows
 an error; if you renamed or removed the entity, point SEM at the replacement
-in the Configuration tab. The notice clears itself when the sensor returns.
+in the Configuration tab. The notice clears itself when the sensor returns —
+or, once you point SEM at another sensor, about five minutes after you save
+(within the hour when you changed it in the Energy Dashboard).
+
+While a sensor is out, the tab headers show "—" for its figure, not 0. A real
+0 still shows 0. When the battery or grid power sensor is out, its status shows
+"—", not Idle. The Battery card and the Home diagram keep updating from the
+sensors that still work. A solar string whose sensor is out shows "—"; the
+other strings still show their power. The cards do the same: EV power,
+battery health, costs and peak show "—" while their sensor is out.
+
+The battery, grid and solar on/off sensors show **unknown**, not Off, once
+their power sensor has been out for 3 minutes. A power sensor that reports
+text such as "none" or "nan" counts as out, not as 0 W.
 
 ## A sensor stopped updating (stale)
 
@@ -933,7 +1022,47 @@ integration declares). If it holds by hand but not for SEM, the integration
 may need a companion switch or mode first; tell us the brand and the entity
 and it becomes a row in the support matrix.
 
+Every battery is checked, not only the first one. The Repair names the
+entity, so you can see which battery did not keep the value.
+
 The Repair clears itself the moment a write is reflected.
+
+## The battery charge limit does not follow SEM's pacing (2.2, #820)
+
+Press **Diagnose** in the Battery section of the Configuration tab. The
+`pacing_actuation` block shows:
+
+- `register` — what the limit entity holds now, and its min, max and step.
+- `writer` — what SEM last sent, and whether the register ever showed it.
+- `decision` — the cap SEM wants and its `action`: `held` is fine;
+  `write_refused` means the register did not show SEM's last value within
+  90 seconds and is still away from the cap SEM wants now;
+  `applied_differs` means the inverter took the write as another number.
+- `foreign_log` — lines other integrations logged about that entity.
+
+The usual causes:
+
+- **A template number drops a write while its script runs.** Home Assistant
+  logs "set_value: Already running". SEM now writes at most every five
+  minutes, so this should be gone. If the lines keep coming, something else
+  writes the same entity: an automation, a second energy manager, a wallbox
+  that manages the battery.
+- **The inverter applies its own value or ignores the register in its
+  current mode.** Set the number by hand in Developer Tools → States and
+  watch whether it holds. If it does not hold by hand, SEM cannot do better;
+  check the inverter's mode and the integration's unit.
+- **Writes are coming faster than the inverter can take.** They are not any
+  more: one per five minutes, and only for a real change.
+
+## A control is missing from the dashboard (2.2, #996)
+
+SEM does not create a control your house cannot use. On a flat tariff there
+are no price thresholds; without an export-limit entity no export guard;
+without a forecast no forecast rows; without a plant size no kWh-per-kWp
+sensors; without an investment figure no ROI rows. Wire the thing and the
+control appears after one reload. SEM never removes a control because of an
+outage, and when it has not looked yet it keeps the control. What SEM
+decided is on `sensor.sem_diag_ed_config` (attribute `install_modules`).
 
 ## A charger control entity is broken
 
@@ -942,6 +1071,9 @@ rejects writes or reports unavailable — commonly after the charger's
 integration was reinstalled and entity ids changed. **Fix:** open the
 charger's settings in SEM's Configuration tab and re-select the current
 control entity. The repair names the exact entity it means.
+
+A control the charger turns off on purpose, for example while no car is
+plugged in, is not broken. SEM raises no Repair for it.
 
 ## KEBA failsafe is fighting SEM
 
@@ -966,8 +1098,9 @@ On a KEBA the settings are `Curr FS` (fallback current) and `Tmo FS`
 (timeout); on a Modbus-driven box they usually sit in the register block the
 integration already uses. **If this is a KEBA on the official integration**,
 the timer is SEM's own: SEM arms the box's failsafe at every start (600 s,
-charging floor) so a dead controller still charges the car, and asks for 0 A
-at every stop — which the KEBA refuses (its floor is 6 A). Turn SEM's arming
+charging floor) so a dead controller still charges the car. At every stop it
+asks for 0 A, up to 3 times. If the box still turns itself back on, it kept
+its fallback after every try. Turn SEM's arming
 off first (`solar_energy_management.set_option` with `keba_arm_failsafe:
 false`), then set the box. Until then, Off and Pause hold for about the
 interval the notice names. Rule out another controller (a second SEM, an
@@ -1205,6 +1338,17 @@ then press the button again. Nothing is lost by waiting — SEM reads the
 counter's history, so pressing it a month from now recovers that month too.
 Live recording continues meanwhile at one night per day, so the wait is a
 delay, never a dead end.
+
+## SEM found my charger but set up nothing (2.2, #1032)
+
+Since 2.2 SEM reads what any integration offers — a start and a stop button,
+a charge-mode select, a car's own charging amps and switch, a service with
+current fields — and turns that into an **offer**. The offer pre-fills the
+setup wizard and the add-charger step. It is never saved by itself: you
+confirm it. A charger that is already configured, or already driven through
+its services, gets no offer. If the offer picks the wrong entity, the
+detection report in the diagnostics download shows what it read; attach it
+to an issue.
 
 ## SEM proposed a service for my charger, but there is no button (2.1, #956)
 

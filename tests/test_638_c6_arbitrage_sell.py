@@ -143,7 +143,7 @@ class TestTheSellFiresOnlyInTheBlock:
 
 @pytest.mark.unit
 class TestTheScenarioMatrix:
-    """The scenario sweep Guido asked for (15.08) — every mode × gate ×
+    """The scenario sweep asked for (15.08) — every mode × gate ×
     floor combination the three suites above did not already pin."""
 
     def test_the_arbitrage_reserve_binds_above_the_user_reserve(self):

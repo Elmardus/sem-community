@@ -1,0 +1,837 @@
+{
+ "devices": {
+  "easee:EH123456": {
+   "manufacturer": null,
+   "model": "charger",
+   "name": "Easee Home EH123456"
+  },
+  "easee:QP123456": {
+   "manufacturer": null,
+   "model": "equalizer",
+   "name": "Easee Equalizer QP123456"
+  }
+ },
+ "domain": "easee",
+ "entities": [
+  {
+   "attributes": {
+    "device_class": "connectivity"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.easee_equalizer_qp123456_online",
+   "original_device_class": "connectivity",
+   "state": null,
+   "translation_key": "online",
+   "unique_id": "QP123456_online",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "lock"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.easee_home_eh123456_cable_locked",
+   "original_device_class": "lock",
+   "state": null,
+   "translation_key": "cable_locked",
+   "unique_id": "EH123456_cable_locked",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "connectivity"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.easee_home_eh123456_online",
+   "original_device_class": "connectivity",
+   "state": null,
+   "translation_key": "online",
+   "unique_id": "EH123456_online",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.easee_home_eh123456_update_available",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "update_available",
+   "unique_id": "EH123456_update_available",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "button.easee_home_eh123456_override_schedule",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "override_schedule",
+   "unique_id": "EH123456_override_schedule",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "light.easee_home_eh123456_led_strip",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "led_strip",
+   "unique_id": "EH123456_led_strip",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_equalizer_qp123456_current",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "current",
+   "unique_id": "QP123456_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_equalizer_qp123456_export_energy",
+   "original_device_class": "energy",
+   "state": null,
+   "translation_key": "export_energy",
+   "unique_id": "QP123456_export_energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.easee_equalizer_qp123456_export_power",
+   "original_device_class": "power",
+   "state": null,
+   "translation_key": "export_power",
+   "unique_id": "QP123456_export_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_equalizer_qp123456_export_reactive_energy",
+   "original_device_class": "energy",
+   "state": null,
+   "translation_key": "export_reactive_energy",
+   "unique_id": "QP123456_export_reactive_energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.easee_equalizer_qp123456_export_reactive_power",
+   "original_device_class": "power",
+   "state": null,
+   "translation_key": "export_reactive_power",
+   "unique_id": "QP123456_export_reactive_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_equalizer_qp123456_import_energy",
+   "original_device_class": "energy",
+   "state": null,
+   "translation_key": "import_energy",
+   "unique_id": "QP123456_import_energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.easee_equalizer_qp123456_import_power",
+   "original_device_class": "power",
+   "state": null,
+   "translation_key": "import_power",
+   "unique_id": "QP123456_import_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_equalizer_qp123456_import_reactive_energy",
+   "original_device_class": "energy",
+   "state": null,
+   "translation_key": "import_reactive_energy",
+   "unique_id": "QP123456_import_reactive_energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.easee_equalizer_qp123456_import_reactive_power",
+   "original_device_class": "power",
+   "state": null,
+   "translation_key": "import_reactive_power",
+   "unique_id": "QP123456_import_reactive_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_equalizer_qp123456_temp_max",
+   "original_device_class": "temperature",
+   "state": null,
+   "translation_key": "internal_temperature",
+   "unique_id": "QP123456_temp_max",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_equalizer_qp123456_voltage",
+   "original_device_class": "voltage",
+   "state": null,
+   "translation_key": "voltage",
+   "unique_id": "QP123456_voltage",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_circuit_current",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "circuit_current",
+   "unique_id": "EH123456_circuit_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "monetary"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_cost_day",
+   "original_device_class": "monetary",
+   "state": null,
+   "translation_key": "cost_day",
+   "unique_id": "EH123456_cost_day",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "monetary"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_cost_month",
+   "original_device_class": "monetary",
+   "state": null,
+   "translation_key": "cost_month",
+   "unique_id": "EH123456_cost_month",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "monetary"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_cost_per_kwh",
+   "original_device_class": "monetary",
+   "state": null,
+   "translation_key": "cost_per_kwh",
+   "unique_id": "EH123456_cost_per_kwh",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "monetary"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_cost_year",
+   "original_device_class": "monetary",
+   "state": null,
+   "translation_key": "cost_year",
+   "unique_id": "EH123456_cost_year",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_current",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "current",
+   "unique_id": "EH123456_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_dynamic_charger_limit",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "dynamic_charger_limit",
+   "unique_id": "EH123456_dynamic_charger_limit",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_dynamic_circuit_limit",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "dynamic_circuit_limit",
+   "unique_id": "EH123456_dynamic_circuit_limit",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_energy_last_hour",
+   "original_device_class": "energy",
+   "state": null,
+   "translation_key": "energy_last_hour",
+   "unique_id": "EH123456_energy_last_hour",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_equalizer_limit",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "equalizer_limit",
+   "unique_id": "EH123456_equalizer_limit",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_lifetime_energy",
+   "original_device_class": "energy",
+   "state": null,
+   "translation_key": "lifetime_energy",
+   "unique_id": "EH123456_lifetime_energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_max_charger_limit",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "max_charger_limit",
+   "unique_id": "EH123456_max_charger_limit",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_max_circuit_limit",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "max_circuit_limit",
+   "unique_id": "EH123456_max_circuit_limit",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_offline_circuit_limit",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "offline_circuit_limit",
+   "unique_id": "EH123456_offline_circuit_limit",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.easee_home_eh123456_operator",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "operator",
+   "unique_id": "EH123456_operator",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_output_limit",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "output_limit",
+   "unique_id": "EH123456_output_limit",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_phase_mode",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "phase_mode",
+   "unique_id": "EH123456_phase_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_pilot_mode",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "pilot_mode",
+   "unique_id": "EH123456_pilot_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.easee_home_eh123456_power",
+   "original_device_class": "power",
+   "state": null,
+   "translation_key": "power",
+   "unique_id": "EH123456_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "easee__reason_no_current"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": null,
+   "entity_id": "sensor.easee_home_eh123456_reason_for_no_current",
+   "original_device_class": "easee__reason_no_current",
+   "state": null,
+   "translation_key": "easee_reason_no_current",
+   "unique_id": "EH123456_reason_for_no_current",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_session_energy",
+   "original_device_class": "energy",
+   "state": null,
+   "translation_key": "session_energy",
+   "unique_id": "EH123456_session_energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.easee_home_eh123456_status",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "easee_status",
+   "unique_id": "EH123456_status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_temp_max",
+   "original_device_class": "temperature",
+   "state": null,
+   "translation_key": "internal_temperature",
+   "unique_id": "EH123456_temp_max",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.easee_home_eh123456_voltage",
+   "original_device_class": "voltage",
+   "state": null,
+   "translation_key": "voltage",
+   "unique_id": "EH123456_voltage",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "current"
+   },
+   "capabilities": {},
+   "device": "easee:QP123456",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "switch.easee_equalizer_qp123456_surplus",
+   "original_device_class": "current",
+   "state": null,
+   "translation_key": "surplus",
+   "unique_id": "QP123456_surplus",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "config",
+   "entity_id": "switch.easee_home_eh123456_basic_schedule",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "basic_schedule",
+   "unique_id": "EH123456_basic_schedule",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "switch.easee_home_eh123456_cable_locked_permanently",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "cable_locked_permanently",
+   "unique_id": "EH123456_cable_locked_permanently",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "switch.easee_home_eh123456_enable_idle_current",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "idle_current",
+   "unique_id": "EH123456_enable_idle_current",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "switch.easee_home_eh123456_enable_smart_button",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "smart_button",
+   "unique_id": "EH123456_enable_smart_button",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.easee_home_eh123456_is_enabled",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "is_enabled",
+   "unique_id": "EH123456_is_enabled",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "switch.easee_home_eh123456_smart_charging",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "smart_charging",
+   "unique_id": "EH123456_smart_charging",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "easee:EH123456",
+   "disabled_by": "integration",
+   "entity_category": "config",
+   "entity_id": "switch.easee_home_eh123456_weekly_schedule",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "weekly_schedule",
+   "unique_id": "EH123456_weekly_schedule",
+   "unit_of_measurement": null
+  }
+ ],
+ "services": {
+  "action_command": [
+   "action_command",
+   "device_id"
+  ],
+  "set_basic_charge_plan": [
+   "current",
+   "device_id",
+   "repeat",
+   "start_datetime",
+   "stop_datetime"
+  ],
+  "set_charger_access": [
+   "access_level",
+   "device_id"
+  ],
+  "set_charger_dynamic_limit": [
+   "current",
+   "device_id",
+   "time_to_live"
+  ],
+  "set_charger_max_limit": [
+   "current",
+   "device_id"
+  ],
+  "set_charger_ocpp": [
+   "device_id",
+   "enable",
+   "ocpp_url"
+  ],
+  "set_charger_phase_mode": [
+   "device_id",
+   "phase_mode"
+  ],
+  "set_charging_cost": [
+   "cost_per_kwh",
+   "currency_id",
+   "device_id",
+   "vat"
+  ],
+  "set_circuit_dynamic_limit": [
+   "current_p1",
+   "current_p2",
+   "current_p3",
+   "device_id",
+   "time_to_live"
+  ],
+  "set_circuit_max_limit": [
+   "current_p1",
+   "current_p2",
+   "current_p3",
+   "device_id"
+  ],
+  "set_circuit_offline_limit": [
+   "current_p1",
+   "current_p2",
+   "current_p3",
+   "device_id"
+  ],
+  "set_operator": [
+   "device_id",
+   "operator_id"
+  ],
+  "set_surplus_charging": [
+   "current",
+   "device_id",
+   "enable"
+  ],
+  "set_weekly_charge_plan": [
+   "current",
+   "day",
+   "device_id",
+   "start_time",
+   "stop_time"
+  ],
+  "smart_charging": [
+   "device_id",
+   "enable"
+  ]
+ },
+ "source": {
+  "commit": "ea85bb5fa9f093594a50606a786ee9fd03d6a662",
+  "dropped": [],
+  "kind": "declared",
+  "note": "read from the integration's entity descriptions; entity ids built the way it builds them; no live load (cloud-only)",
+  "repo": "nordicopen/easee_hass"
+ }
+}

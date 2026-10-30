@@ -11,6 +11,8 @@ Mixin class providing all EV charging control logic:
 """
 from __future__ import annotations
 
+from ..utils.device_names import charger_display_name  # (#1053)
+
 import logging
 import math
 from typing import Any, Optional
@@ -23,10 +25,13 @@ from ..const import (
     DEFAULT_MAX_CHARGING_CURRENT,
     DEFAULT_PEAK_LIMIT_UNLIMITED,
     DEFAULT_PHASES,
+    DEFAULT_TARGET_PEAK_LIMIT,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_VOLTAGE_PER_PHASE,
 )
+from . import reason_codes as RC  # (#1174)
 from .types import PowerReadings, PowerFlows, SessionData
+from .departure import departure_for, departure_hhmm
 from .ev_tariff_planner import NightChargePlan, plan_night_charge
 from .units import power_state_to_watts
 
@@ -118,6 +123,78 @@ def _power_on_offer_w(decision, charger_cfg: dict, config: dict,
     return offer
 
 
+def _session_charger_id(host: Any) -> Optional[str]:
+    """(#1024) Which charger the swapped-in session belongs to.
+
+    Inside the per-charger loop ``host._ev_device`` is that charger's
+    device, so the id is the key it is stored under. A legacy install
+    with no per-charger devices has no id to give.
+    """
+    dev = getattr(host, "_ev_device", None)
+    for cid, candidate in (getattr(host, "_ev_devices", None) or {}).items():
+        if candidate is dev:
+            return cid
+    return getattr(dev, "device_id", None)
+
+def _charger_meter_entity(host: Any, key: str) -> Optional[str]:
+    """(#1024) THIS charger's own meter entity for ``key``.
+
+    Per-charger config first; the top-level keys belong to the primary
+    charger only (the #639 convention), never to its siblings."""
+    cfg = getattr(host, "config", None) or {}
+    chargers = cfg.get("ev_chargers") or []
+    cid = _session_charger_id(host)
+    per = next((c for c in chargers if c.get("id") == cid), {}) or {}
+    is_primary = not chargers or (chargers[0].get("id") == cid)
+    return per.get(key) or (cfg.get(key) if is_primary else None)
+
+
+def _charger_meter_readings(host: Any):
+    """(#1024) THIS charger's own meters, in kWh, or None when unknown or
+    unreadable this cycle: (session counter, lifetime counter)."""
+    from .units import energy_state_to_kwh
+
+    def _read(key):
+        entity = _charger_meter_entity(host, key)
+        if not entity:
+            return None
+        hass = getattr(host, "hass", None)
+        try:
+            return energy_state_to_kwh(hass.states.get(entity), default=None)
+        except Exception:  # noqa: BLE001 — an unreadable meter is "no reading"
+            return None
+
+    return _read("ev_session_energy_sensor"), _read("ev_total_energy_sensor")
+
+
+def _finished_session_record(host: Any) -> dict:
+    """(#1024) The stored shape of a finished session — everything the
+    EV card's session list and the CSV export show."""
+    cid = _session_charger_id(host)
+    det = (getattr(host, "_ev_taper_detectors", None) or {}).get(cid)
+    if det is None:
+        try:
+            det = host._ev_taper_detector
+        except Exception:  # noqa: BLE001 — a bare double has no detector
+            det = None
+    currency = getattr(getattr(getattr(host, "hass", None), "config", None),
+                       "currency", None)
+    return {
+        "timestamp": host._session_data.start_time,
+        "end": dt_util.now().isoformat(),
+        "charger_id": cid,
+        "energy_kwh": round(host._session_data.energy_kwh, 2),
+        "solar_share_pct": round(host._session_data.solar_share_pct, 1),
+        "cost": round(float(host._session_data.cost_chf or 0.0), 2),
+        # (#1088) the session's grid CO2, kg
+        "co2_kg": round(float(getattr(host._session_data, "co2_kg", 0.0) or 0.0), 2),
+        "currency": currency if isinstance(currency, str) else "",
+        "duration_min": round(host._session_data.duration_minutes, 1),
+        "energy_source": getattr(host._session_data, "energy_source", "sem_estimate"),
+        "taper_detected": bool(getattr(det, "full_detected", False)),
+    }
+
+
 class EVControlMixin:
     """EV control methods for SEMCoordinator.
 
@@ -175,12 +252,9 @@ class EVControlMixin:
         ) in MODE_USES_TARIFF
 
     def _charger_target_time(self, charger_cfg: dict) -> str:
-        """Per-charger ``HH:MM`` charge-by deadline (#246), or global / default."""
-        cfg = charger_cfg or {}
-        val = cfg.get("ev_target_time")
-        if val is None:
-            val = self.config.get("ev_target_time", DEFAULT_EV_TARGET_TIME)
-        return val or DEFAULT_EV_TARGET_TIME
+        """Per-charger ``HH:MM`` charge-by deadline (#246), or global / default
+        — the one resolver's answer (#1023)."""
+        return departure_hhmm(charger_cfg, self.config)
 
     def _compute_night_plan(
         self, charger_cfg: dict, remaining_to_min_kwh: float, energy: Any = None,
@@ -283,8 +357,9 @@ class EVControlMixin:
         # dwell hysteresis died with the selector: it damped the selector's
         # own price flapping, and plan blocks do not flap — the packer's
         # min_run/min_gap quantization protects the contactor instead.
+        now = dt_util.now()
         plan = plan_night_charge(
-            now=dt_util.now(),
+            now=now,
             remaining_to_min_kwh=remaining_to_min_kwh,
             min_amps=min_amps,
             max_amps=max_amps,
@@ -299,6 +374,9 @@ class EVControlMixin:
             # joint plan covers the car.
             level_at=getattr(getattr(self, "_tariff_provider", None),
                              "get_price_level_at", None),
+            # (#1023) The next departure as a moment: a weekday's time may
+            # be more than a day away.
+            deadline_at=departure_for(cfg, now, self.config),
         )
         return plan
 
@@ -319,10 +397,14 @@ class EVControlMixin:
         off), matching the mode's documented daytime behaviour.
         """
         try:
-            night_start, night_end = self.time_manager.get_night_window()
+            night_start, _ = self.time_manager.get_night_window()
             window_h = self.time_manager.get_night_window_hours()
             cfg = charger_cfg if isinstance(charger_cfg, dict) else {}
-            deadline = str(cfg.get("ev_target_time") or night_end)
+            # (#1023) The departure the card shows, not the window's end —
+            # the next one, so tonight's window ends at tomorrow's weekday
+            # time.
+            deadline = departure_for(cfg, dt_util.now(), self.config).strftime(
+                "%H:%M")
             sh, sm = night_start.split(":")[:2]
             dh, dm = deadline.split(":")[:2]
             start_min = int(sh) * 60 + int(sm)
@@ -389,7 +471,7 @@ class EVControlMixin:
         nm = getattr(self, "_notification_manager", None)
         if nm is None or plan.deadline_dt is None:
             return
-        name = (charger_cfg or {}).get("name") or "EV"
+        name = charger_display_name(getattr(self, "hass", None), charger_cfg)  # (#1053)
         flag_key = cid or (charger_cfg or {}).get("id") or name  # dedup by id (#274/M3)
         # Only warn when the user opted into deadline/tariff behaviour (#274/C1) —
         # plan.should_warn_unreachable already encodes (not reachable) AND
@@ -434,15 +516,55 @@ class EVControlMixin:
         an explicit boolean and never inferred — a limit that fails open is how
         a 5 kW house got handed a 10 kW EV slot (#638 finding #5).
         """
-        if self._peak_limit_unlimited():
-            return math.inf
+        # (#1021) The grid operator's limit lowers the user's while its
+        # relay is on — and holds even when the user has none of their own.
+        cap = self._operator_cap_kw()
+        saved_w = (math.inf if self._peak_limit_unlimited()
+                   else self._target_peak_limit_kw() * 1000)
+        if cap is None:
+            return saved_w
+        return min(saved_w, cap * 1000)
+
+    def _operator_cap_kw(self) -> Optional[float]:
+        """(#1021) The grid operator's limit while its relay is on, or None.
+
+        Read from the relay the coordinator reads once per cycle. Never
+        saved anywhere: the user's own limit stays underneath it."""
+        sig = getattr(self, "_shed_signal", None)
+        if sig is None or not getattr(sig, "active", False):
+            return None
+        try:
+            cap = float(getattr(sig, "cap_kw", None))
+        except (TypeError, ValueError):
+            return None
+        return cap if cap > 0 else None
+
+    def _target_peak_limit_kw(self) -> float:
+        """The saved grid ceiling in kW — always the number, never infinity.
+
+        (#1055) ONE reader for the EV sizing above AND the published
+        ``target_peak_limit`` sensor. The live LoadManagementCoordinator wins
+        (the slider writes through it without a reload); with load
+        management off there is none, and the saved option is the truth. The
+        sensor used to read the load manager only, so with it off the Control
+        tab showed the 5.0 kW dataclass default whatever the user saved —
+        while this method sized the car against the real value.
+        """
         if self._load_manager:
             try:
                 lm_info = self._load_manager.get_load_management_data()
-                return lm_info.get("target_peak_limit", 5.0) * 1000
+                return float(lm_info.get(
+                    "target_peak_limit", DEFAULT_TARGET_PEAK_LIMIT))
             except Exception:
                 pass
-        return self.config.get("target_peak_limit", 5.0) * 1000
+        try:
+            return float(self.config.get(
+                "target_peak_limit", DEFAULT_TARGET_PEAK_LIMIT))
+        except (TypeError, ValueError):
+            # A saved value that is not a number keeps the default limit —
+            # never "no limit" — and must not stop the update cycle that
+            # publishes it.
+            return float(DEFAULT_TARGET_PEAK_LIMIT)
 
     def _planning_peak_w(self) -> float:
         """The peak level PLANNING may size against — cap minus hysteresis.
@@ -466,8 +588,19 @@ class EVControlMixin:
         try:
             peak_w = float(self._get_peak_limit_w())
         except Exception:  # noqa: BLE001 — no load manager yet (early startup)
-            peak_w = float(
-                self.config.get("target_peak_limit", 0.0) or 0.0) * 1000.0
+            # An unreadable authority must still cap (test_638_shadow_mode),
+            # so this stays broad. (#1021 review) The saved
+            # option alone dropped the operator's cap from the plan on the
+            # very cycle the live read failed — the cap still applies here.
+            try:
+                peak_w = float(
+                    self.config.get("target_peak_limit", 0.0) or 0.0) * 1000.0
+            except (TypeError, ValueError):
+                peak_w = 0.0
+            cap = self._operator_cap_kw()
+            if cap is not None:
+                peak_w = (cap * 1000.0 if peak_w <= 0.0
+                          else min(peak_w, cap * 1000.0))
         if peak_w > 0.0 and math.isfinite(peak_w):
             hyst_w = float(self.config.get(
                 "peak_hysteresis", DEFAULT_PEAK_HYSTERESIS) or 0.0) * 1000.0
@@ -782,19 +915,23 @@ class EVControlMixin:
             intent=intent,
             reason=f"night gate — {mode} opts out of night charging; "
                    "policing only (#740)",
+            reason_code=(RC.CHARGER_OFF if mode == "off"
+                         else RC.CHARGER_NO_NIGHT),
             bridgeable=False,
         )
+        # (#1150) build_view's resolution for the car too: in a fleet, a
+        # charger with no sensor of its own never takes the fleet OR.
+        # (#1153) …and an unknown plug is not a departure the reconciler
+        # parks on.
+        from .ev_availability import charger_state, has_plug_sensor
+        _config = getattr(self, "config", {}) or {}
+        _connected = charger_state(cid, power, _config, "connected")
         cp = ChargerPower(
             charger_id=cid,
             power_w=this_w,
-            connected=bool(
-                (getattr(power, "ev_connected_per_charger", None) or {})
-                .get(cid, getattr(power, "ev_connected", False)),
-            ),
-            charging=bool(
-                (getattr(power, "ev_charging_per_charger", None) or {})
-                .get(cid, getattr(power, "ev_charging", False)),
-            ),
+            connected=_connected,
+            charging=charger_state(cid, power, _config, "charging"),
+            plug_known=_connected or has_plug_sensor(charger_cfg, _config),
         )
         await actuate(
             decision, adapter, cp, reconciler,
@@ -836,9 +973,7 @@ class EVControlMixin:
         if not charger_cfg.get("ev_phase_switching_enabled", False):
             return decision
 
-        from dataclasses import replace
-
-        from .charger_types import ChargerIntent
+        from .charger_types import ChargerIntent, rewrite
         from .ev_phase_sequencer import (
             STOP_WAIT_S, PhaseAutoPlanner, PhaseSwitchSequencer,
         )
@@ -972,7 +1107,7 @@ class EVControlMixin:
 
         if r.issue_switch is not None:
             value = v1 if r.issue_switch == 1 else v3
-            cmd = phase_switch_command(entity, value)
+            cmd = phase_switch_command(entity, value, self.hass)
             if cmd is not None:
                 domain, service, data = cmd
                 planner.note_switched(now)
@@ -1014,9 +1149,10 @@ class EVControlMixin:
         # ~5 minutes after the command.
         if r.hold_charging and decision.intent in (
                 ChargerIntent.CHARGE_AT_AMPS, ChargerIntent.CHARGE_MAX):
-            return replace(
+            return rewrite(
                 decision, intent=ChargerIntent.DISABLE, commanded_amps=0,
-                reason=f"phase switch: {r.state} (#804)", bridgeable=False)
+                reason=f"phase switch: {r.state} (#804)", bridgeable=False,
+                reason_code=RC.CHARGER_PHASE_SWITCH, reason_params={})
         return decision
 
     def _this_charger_power(self, ev, power) -> float:
@@ -1124,7 +1260,8 @@ class EVControlMixin:
             power.ev_connected_per_charger = confirmed_map
         power.ev_connected = fleet or any(confirmed_map.values())
 
-    def _update_session_tracking(self, power: PowerReadings, power_flows: PowerFlows) -> None:
+    def _update_session_tracking(self, power: PowerReadings, power_flows: PowerFlows,
+                                 plug_known: bool = True) -> None:
         """Track per-session energy, cost, and source attribution.
 
         Runs every cycle. Detects session start (ev_power > 50W), accumulates
@@ -1134,6 +1271,9 @@ class EVControlMixin:
         Args:
             power: Current sensor readings (ev_power, ev_connected).
             power_flows: Instantaneous power flow distribution (solar/grid/battery to EV).
+            plug_known: (#1153) False for a charger with no plug sensor of
+                its own: its "no car" only means its draw stopped, so the
+                session is not ended on it.
         """
         update_interval = self.config.get("update_interval", DEFAULT_UPDATE_INTERVAL)
         hours = update_interval / 3600.0
@@ -1147,7 +1287,10 @@ class EVControlMixin:
         # absorbing the KEBA UDP blip family #35/#595). Debouncing again
         # here would cost a real unplug six cycles and split the cycle's one
         # answer back in two, which is the bug that moved it to the source.
-        if self._last_ev_connected and not power.ev_connected:
+        # (#1153) Unknown is not gone: a charger with no plug sensor reads
+        # "no car" three cycles after its draw stops, which is a pause, not
+        # an unplug. Its session is not ended on it.
+        if self._last_ev_connected and not power.ev_connected and plug_known:
             # Session ended — update lifetime stats and keep data for display
             if self._session_data.active and self._session_data.energy_kwh > 0.1:
                 if self._storage:
@@ -1164,6 +1307,19 @@ class EVControlMixin:
                         self._session_data.solar_share_pct,
                         self._storage.get_lifetime_ev_stats(),
                     )
+            # (#1024) The session record — ONE writer, here, where the
+            # session ends with THIS charger's data swapped in. It used to
+            # be written from ``_update_ev_intelligence`` on the fleet-wide
+            # disconnect with the primary's data, so a second charger's
+            # sessions were never recorded.
+            # Only a session that is still ACTIVE ends here. A finished
+            # session's data is kept for display, so gating on energy alone
+            # re-recorded it on every later plug + unplug without a charge —
+            # the old writer's bug, every August session stored twice.
+            if (self._session_data.active and self._session_data.energy_kwh > 0
+                    and self._storage):
+                self._storage.add_session_to_history(
+                    _finished_session_record(self))
             self._session_data.active = False
             self._last_ev_connected = False
             return
@@ -1186,19 +1342,13 @@ class EVControlMixin:
         if not self._session_data.active:
             return
 
-        # Accumulate energy from flow sources (W → kWh)
+        # (#1024) The flows say how this cycle's draw SPLITS. They do not
+        # say how much it was: on PROD they covered 69–90 % of KEBA's own
+        # session meter. The total comes from the charger's meter
+        # (session_energy.step); the split is scaled up to it.
         solar_increment = power_flows.solar_to_ev * hours / 1000.0
         grid_increment = power_flows.grid_to_ev * hours / 1000.0
         battery_increment = power_flows.battery_to_ev * hours / 1000.0
-
-        self._session_data.solar_energy_kwh += solar_increment
-        self._session_data.grid_energy_kwh += grid_increment
-        self._session_data.battery_energy_kwh += battery_increment
-        self._session_data.energy_kwh = (
-            self._session_data.solar_energy_kwh
-            + self._session_data.grid_energy_kwh
-            + self._session_data.battery_energy_kwh
-        )
 
         # Cost: direct grid at the current import rate, battery-sourced at
         # what its stored energy cost to put in — the provenance pool's rate,
@@ -1206,10 +1356,59 @@ class EVControlMixin:
         # was priced at ZERO, so a car charged off a grid-filled battery
         # looked free while the grid purchase sat in the import cost.)
         import_rate = self._energy_calculator._import_rate
-        self._session_data.cost_chf += (
+        cost_increment = (
             grid_increment * import_rate
             + battery_increment * self._energy_calculator.ev_battery_cost_rate()
         )
+
+        from .session_energy import seed_from_legacy, step as _session_step
+        sd = self._session_data
+        if not isinstance(getattr(sd, "meter", None), dict):
+            sd.meter = {}
+        if not sd.meter and sd.energy_kwh > 0:
+            seed_from_legacy(sd.meter, sd.energy_kwh, sd.solar_energy_kwh,
+                             sd.grid_energy_kwh, sd.battery_energy_kwh, sd.cost_chf)
+        session_kwh, lifetime_kwh = _charger_meter_readings(self)
+        # (#1101) …less a lifetime step this cycle that no box drew, and
+        # without a rise the step check has not seen yet.
+        lifetime_entity = _charger_meter_entity(self, "ev_total_energy_sensor")
+        not_drawn = getattr(self._energy_calculator,
+                            "ev_counter_step_not_drawn", None)
+        lifetime_skip = not_drawn(lifetime_entity) if not_drawn else None
+        judged = getattr(self._energy_calculator, "ev_counter_judged_kwh", None)
+        held = judged(lifetime_entity, lifetime_kwh) if judged else None
+        if isinstance(held, (int, float)) and not isinstance(held, bool):
+            lifetime_kwh = held
+        totals = _session_step(
+            sd.meter,
+            solar_kwh=solar_increment, grid_kwh=grid_increment,
+            battery_kwh=battery_increment, cost=cost_increment,
+            power_w=this_power_w, hours=hours,
+            session_meter_kwh=session_kwh, lifetime_meter_kwh=lifetime_kwh,
+            import_rate=import_rate, lifetime_skip=lifetime_skip,
+        )
+        sd.energy_kwh = totals.energy_kwh
+        sd.solar_energy_kwh = totals.solar_kwh
+        sd.grid_energy_kwh = totals.grid_kwh
+        sd.battery_energy_kwh = totals.battery_kwh
+        sd.cost_chf = totals.cost
+        sd.energy_source = totals.source
+        # (#1088) CO2 of the car's grid energy: this cycle's grid kWh at the
+        # grid's intensity now (the live reading when the CO2 soak flag is
+        # on, else the fixed average — the same rule as the CO2-avoided
+        # books). Energy-weighted: the session's grid kWh times the mean
+        # intensity over the kWh it drew, so a meter-corrected total keeps
+        # the right weight.
+        try:
+            kg_now = self._energy_calculator.grid_co2_kg_now()
+            if grid_increment > 0:
+                sd.meter["flow_co2_kg"] = sd.meter.get("flow_co2_kg", 0.0) + grid_increment * kg_now
+                sd.meter["flow_co2_grid_kwh"] = sd.meter.get("flow_co2_grid_kwh", 0.0) + grid_increment
+            g = sd.meter.get("flow_co2_grid_kwh", 0.0)
+            mean_kg = (sd.meter.get("flow_co2_kg", 0.0) / g) if g > 0 else kg_now
+            sd.co2_kg = round(max(0.0, float(sd.grid_energy_kwh or 0.0)) * mean_kg, 3)
+        except Exception:  # noqa: BLE001 — CO2 is reporting; never costs a session
+            pass
 
         # Solar share
         if self._session_data.energy_kwh > 0:

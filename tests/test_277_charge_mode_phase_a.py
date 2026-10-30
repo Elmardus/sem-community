@@ -172,7 +172,7 @@ class TestChargeModeOptions:
         """(#885 matrix, decision 3) supersedes the #277 Q1 HIDE rule.
 
         Hiding kept the ghost option un-pickable but also undiscoverable —
-        Guido looked for the mode and could not find it. The protection
+        A user looked for the mode and could not find it. The protection
         moved: the option is ALWAYS listed and the ``tariff_available``
         attribute tells the card to render it disabled with the reason.
         Both properties survive: cannot be mis-picked, can be seen.

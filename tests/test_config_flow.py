@@ -10,6 +10,11 @@ load_management) live on the OptionsFlowHandler now and have their own
 coverage further down this file.
 """
 import pytest
+
+from custom_components.solar_energy_management.consts.core import DEFAULT_OBSERVER_MODE
+from custom_components.solar_energy_management.hardware_detection import (  # noqa: E402
+    EVChargerDetector,
+)
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.data_entry_flow import FlowResultType
@@ -94,7 +99,9 @@ class TestSolarEnergyManagementConfigFlow:
 
         assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "user"
-        assert "summary" in result.get("description_placeholders", {})
+        # (#1213) watts, not sensor names
+        assert set(result["description_placeholders"]) == {
+            "solar", "grid", "battery", "why"}
 
     @pytest.mark.asyncio
     async def test_discovery_no_longer_stands_down_on_a_bare_dashboard(self, mock_hass):
@@ -175,8 +182,7 @@ class TestSolarEnergyManagementConfigFlow:
         energy_config = _make_energy_dashboard_config()
         flow = _create_flow(mock_hass)
 
-        mock_detector = MagicMock()
-        mock_detector.get_suggested_ev_defaults.return_value = {}
+        mock_detector = MagicMock(spec=EVChargerDetector)
         mock_detector.validate_ev_configuration.return_value = {}
 
         with patch(
@@ -193,22 +199,18 @@ class TestSolarEnergyManagementConfigFlow:
             "custom_components.solar_energy_management.config_flow.discover_inverter_from_registry",
             return_value=None,
         ):
-            result = await flow.async_step_user(user_input={"observer_mode": False})
+            result = await flow.async_step_user(user_input={})
 
         assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "hardware"
-        # observer_mode value is persisted into self._data so the hardware step
-        # can include it in the created entry
-        assert flow._data.get("observer_mode") is False
 
     @pytest.mark.asyncio
-    async def test_user_step_observer_mode_persisted(self, mock_hass):
-        """observer_mode=True survives into self._data."""
+    async def test_a_new_install_starts_watch_only(self, mock_hass):
+        """(#1213) The switch left the first screen; the default stands."""
         energy_config = _make_energy_dashboard_config()
         flow = _create_flow(mock_hass)
 
-        mock_detector = MagicMock()
-        mock_detector.get_suggested_ev_defaults.return_value = {}
+        mock_detector = MagicMock(spec=EVChargerDetector)
         mock_detector.validate_ev_configuration.return_value = {}
 
         with patch(
@@ -225,9 +227,9 @@ class TestSolarEnergyManagementConfigFlow:
             "custom_components.solar_energy_management.config_flow.discover_inverter_from_registry",
             return_value=None,
         ):
-            await flow.async_step_user(user_input={"observer_mode": True})
+            await flow.async_step_user(user_input={})
 
-        assert flow._data.get("observer_mode") is True
+        assert flow._data.get("observer_mode") is DEFAULT_OBSERVER_MODE is True
 
     @pytest.mark.asyncio
     async def test_ev_charger_step_validation(self, mock_hass):
@@ -236,8 +238,7 @@ class TestSolarEnergyManagementConfigFlow:
         flow = _create_flow(mock_hass)
         flow._energy_dashboard_config = energy_config
 
-        mock_detector = MagicMock()
-        mock_detector.get_suggested_ev_defaults.return_value = {}
+        mock_detector = MagicMock(spec=EVChargerDetector)
         mock_detector.validate_ev_configuration.return_value = {
             "ev_connected_sensor": "Required sensor not configured",
             "ev_charging_sensor": "Entity not found or invalid",
@@ -271,9 +272,8 @@ class TestSolarEnergyManagementConfigFlow:
         flow._energy_dashboard_config = energy_config
         flow._data = energy_config.to_dict()
 
-        mock_detector = MagicMock()
+        mock_detector = MagicMock(spec=EVChargerDetector)
         mock_detector.validate_ev_configuration.return_value = {}
-        mock_detector.get_suggested_ev_defaults.return_value = {}
 
         with patch(
             "custom_components.solar_energy_management.config_flow.HardwareDetector",
@@ -346,8 +346,7 @@ class TestSolarEnergyManagementConfigFlow:
         flow = _create_flow(mock_hass)
         flow._energy_dashboard_config = energy_config
 
-        mock_detector = MagicMock()
-        mock_detector.get_suggested_ev_defaults.return_value = {}
+        mock_detector = MagicMock(spec=EVChargerDetector)
 
         with patch(
             "custom_components.solar_energy_management.config_flow.HardwareDetector",
@@ -445,8 +444,7 @@ class TestSolarEnergyManagementConfigFlow:
         energy_config = _make_energy_dashboard_config()
         flow = _create_flow(mock_hass)
 
-        mock_detector = MagicMock()
-        mock_detector.get_suggested_ev_defaults.return_value = {}
+        mock_detector = MagicMock(spec=EVChargerDetector)
         mock_detector.validate_ev_configuration.return_value = {}
 
         flow.async_set_unique_id = AsyncMock()
@@ -487,8 +485,12 @@ class TestSolarEnergyManagementConfigFlow:
         assert data["enable_charger_notifications"] is True
 
     @pytest.mark.asyncio
-    async def test_duplicate_entry_prevention(self, mock_hass):
-        """Duplicate setup is caught by the unique-id guard in the hardware step."""
+    async def test_duplicate_entry_prevention(self, mock_hass, caplog):
+        """(#1133) A second install aborts as "already configured".
+
+        The abort used to be caught by the step's broad ``except``: logged
+        as "Unexpected exception creating entry" and the form shown again.
+        """
         flow = _create_flow(mock_hass)
         flow._data = {}
         flow._energy_dashboard_config = _make_energy_dashboard_config()
@@ -504,13 +506,11 @@ class TestSolarEnergyManagementConfigFlow:
         with patch(
             "custom_components.solar_energy_management.config_flow.discover_inverter_from_registry",
             return_value=None,
-        ):
-            result = await flow.async_step_hardware(user_input=VALID_HARDWARE_INPUT)
+        ), pytest.raises(AbortFlow) as raised:
+            await flow.async_step_hardware(user_input=VALID_HARDWARE_INPUT)
 
-        # AbortFlow caught by the generic except, form re-displayed with base error
-        assert result["type"] == FlowResultType.FORM
-        assert result["step_id"] == "hardware"
-        assert result["errors"]["base"] == "unknown"
+        assert raised.value.reason == "already_configured"
+        assert "Unexpected exception" not in caplog.text
         flow._abort_if_unique_id_configured.assert_called_once()
 
     @pytest.mark.asyncio
@@ -523,10 +523,18 @@ class TestSolarEnergyManagementConfigFlow:
 
     @pytest.mark.asyncio
     async def test_options_flow_init_shows_ev_charger(self, mock_hass, config_entry):
-        """OptionsFlow init still routes to the ev_charger sub-step."""
+        """OptionsFlow init still routes to the ev_charger sub-step — for a
+        home WITH a charger. A home without one opens on the charger menu
+        (#990, tests/test_990_no_charger_dialog.py)."""
         options_flow = OptionsFlowHandler(config_entry)
         options_flow.hass = mock_hass
-        config_entry.options = {}
+        # (#1054) a charger whose page can be submitted — a primary missing
+        # a required field opens on the charger list instead
+        config_entry.options = {"ev_chargers": [{
+            "id": "ev_charger", "name": "Box",
+            "ev_connected_sensor": "binary_sensor.plug",
+            "ev_charging_sensor": "binary_sensor.charging",
+            "ev_charging_power_sensor": "sensor.ev_power"}]}
 
         with patch.object(
             type(options_flow),
@@ -540,7 +548,7 @@ class TestSolarEnergyManagementConfigFlow:
 
     @pytest.mark.asyncio
     async def test_energy_dashboard_summary_content(self, mock_hass):
-        """User-step summary lists every detected category."""
+        """(#1213) A battery the dashboard has is shown, not "not found"."""
         energy_config = _make_energy_dashboard_config(
             has_solar=True, has_grid=True, has_battery=True, has_ev=True
         )
@@ -553,15 +561,13 @@ class TestSolarEnergyManagementConfigFlow:
         ):
             result = await flow.async_step_user()
 
-        summary = result["description_placeholders"]["summary"]
-        assert "Solar" in summary
-        assert "Grid" in summary
-        assert "Battery" in summary
-        assert "EV" in summary
+        shown = result["description_placeholders"]
+        assert shown["battery"] != "not found"
+        assert shown["solar"] != "not found"
 
     @pytest.mark.asyncio
     async def test_energy_dashboard_summary_without_optional(self, mock_hass):
-        """Summary excludes categories that are not configured."""
+        """(#1213) No battery in the dashboard says so in plain words."""
         energy_config = _make_energy_dashboard_config(
             has_solar=True, has_grid=True, has_battery=False, has_ev=False
         )
@@ -574,8 +580,4 @@ class TestSolarEnergyManagementConfigFlow:
         ):
             result = await flow.async_step_user()
 
-        summary = result["description_placeholders"]["summary"]
-        assert "Solar" in summary
-        assert "Grid" in summary
-        assert "Battery" not in summary
-        assert "EV" not in summary
+        assert result["description_placeholders"]["battery"] == "not found"

@@ -30,7 +30,7 @@ from typing import Any, Dict, Final
 SCHEMA: Final = 1
 
 
-ROSTER_META: Final[Dict[str, Any]] = {'generated_at': '2026-09-24T22:33:37Z', 'sources': {'core_analytics': 'https://analytics.home-assistant.io/data.json', 'core_index': 'https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/generated/integrations.json', 'custom_installs': 'https://analytics.home-assistant.io/custom_integrations.json', 'hacs': 'https://data-v2.hacs.xyz/integration/data.json', 'website': 'https://www.home-assistant.io/integrations.json'}, 'install_floor': 50, 'candidates': 1365, 'kept': 198, 'with_roles': 64, 'roles_mined': 181}
+ROSTER_META: Final[Dict[str, Any]] = {'generated_at': '2026-10-28T11:49:57Z', 'sources': {'core_analytics': 'https://analytics.home-assistant.io/data.json', 'core_index': 'https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/generated/integrations.json', 'custom_installs': 'https://analytics.home-assistant.io/custom_integrations.json', 'hacs': 'https://data-v2.hacs.xyz/integration/data.json', 'website': 'https://www.home-assistant.io/integrations.json'}, 'install_floor': 50, 'candidates': 1365, 'kept': 202, 'with_roles': 67, 'roles_mined': 191}
 
 #: domain -> what the ecosystem says this integration is.
 ROSTER: Final[Dict[str, Dict[str, Any]]] = {
@@ -58,11 +58,12 @@ ROSTER: Final[Dict[str, Dict[str, Any]]] = {
     'dessmonitor': {'name': 'DessMonitor Solar System Integration', 'repo': 'andreas-glaser/ha-dessmonitor', 'origin': 'hacs', 'installs': 260, 'kind': 'energy', 'kind_from': 'keyword'},
     'dewarmte': {'name': 'DeWarmte', 'repo': 'ronald-willems/dewarmte-homeassistant', 'origin': 'hacs', 'installs': 52, 'kind': 'other', 'kind_from': 'keyword'},
     'discovergy': {'name': 'inexogy', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 762, 'kind': 'other', 'kind_from': 'keyword'},
-    'dsmr': {'name': 'DSMR Smart Meter', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 5745, 'kind': 'energy', 'kind_from': 'keyword'},
+    'dsmr': {'name': 'DSMR Smart Meter', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 5745, 'kind': 'energy', 'kind_from': 'vocabulary'},
+    'dsmr_reader': {'name': 'DSMR Reader', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 1380, 'kind': 'energy', 'kind_from': 'vocabulary'},
     'dynamic_energy_cost': {'name': 'Dynamic Energy Cost', 'repo': 'martinarva/dynamic_energy_cost', 'origin': 'hacs', 'installs': 1195, 'kind': 'other', 'kind_from': 'keyword'},
     'easee': {'name': 'Easee EV Charger', 'repo': 'nordicopen/easee_hass', 'origin': 'hacs', 'installs': 3620, 'kind': 'charger', 'kind_from': 'vocabulary_name_only'},
     'ecotracker': {'name': 'Ecotracker', 'repo': 'stefanseeger/ecotracker', 'origin': 'hacs', 'installs': 392, 'kind': 'other', 'kind_from': 'keyword'},
-    'edl21': {'name': 'EDL21', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 664, 'kind': 'appliance', 'kind_from': 'keyword'},
+    'edl21': {'name': 'EDL21', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 664, 'kind': 'other', 'kind_from': 'keyword'},
     'ef_ble': {'name': 'EcoFlow BLE', 'repo': 'rabits/ha-ef-ble', 'origin': 'hacs', 'installs': 1275, 'kind': 'energy', 'kind_from': 'vocabulary'},
     'eg4_web_monitor': {'name': 'EG4 Web Monitor', 'repo': 'joyfulhouse/eg4_web_monitor', 'origin': 'hacs', 'installs': 257, 'kind': 'energy', 'kind_from': 'vocabulary'},
     'elgato': {'name': 'Elgato', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 3779, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
@@ -139,6 +140,8 @@ ROSTER: Final[Dict[str, Dict[str, Any]]] = {
     'omnik_inverter': {'name': 'Omnik Inverter Solar Sensor (No Cloud)', 'repo': 'robbinjanssen/home-assistant-omnik-inverter', 'origin': 'hacs', 'installs': 334, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
     'open_meteo_solar_forecast': {'name': 'Open-Meteo Solar Forecast', 'repo': 'rany2/ha-open-meteo-solar-forecast', 'origin': 'hacs', 'installs': 2525, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
     'openevse': {'name': 'OpenEVSE', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 360, 'kind': 'charger', 'kind_from': 'vocabulary'},
+    'opentherm_gw': {'name': 'OpenTherm Gateway', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 352, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
+    'p1_monitor': {'name': 'P1 Monitor', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 341, 'kind': 'energy', 'kind_from': 'vocabulary'},
     'peblar': {'name': 'Peblar', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 765, 'kind': 'charger', 'kind_from': 'vocabulary'},
     'pirateweather': {'name': 'Pirate Weather', 'repo': 'Pirate-Weather/pirate-weather-ha', 'origin': 'hacs', 'installs': 8427, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
     'polestar_api': {'name': 'Polestar API', 'repo': 'pypolestar/polestar_api', 'origin': 'hacs', 'installs': 1034, 'kind': 'vehicle', 'kind_from': 'vocabulary'},
@@ -194,6 +197,7 @@ ROSTER: Final[Dict[str, Dict[str, Any]]] = {
     'solstice_season': {'name': 'Solstice Season', 'repo': 'moerk-o/SolsticeHub', 'origin': 'hacs', 'installs': 77, 'kind': 'energy', 'kind_from': 'keyword'},
     'stiebel_eltron': {'name': 'STIEBEL ELTRON', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 152, 'kind': 'energy', 'kind_from': 'keyword'},
     'stiebel_eltron_http': {'name': 'Stiebel Eltron', 'repo': 'pmq/stiebel-eltron-http', 'origin': 'hacs', 'installs': 59, 'kind': 'energy', 'kind_from': 'keyword'},
+    'stiebel_eltron_isg': {'name': 'Stiebel Eltron ISG', 'repo': 'pail23/stiebel_eltron_isg_component', 'origin': 'hacs', 'installs': 816, 'kind': 'energy', 'kind_from': 'vocabulary_name_only'},
     'stromligning': {'name': 'Strømligning', 'repo': 'MTrab/stromligning', 'origin': 'hacs', 'installs': 575, 'kind': 'energy', 'kind_from': 'keyword'},
     'subaru': {'name': 'Subaru', 'repo': 'home-assistant/core', 'origin': 'core', 'installs': 556, 'kind': 'vehicle', 'kind_from': 'vocabulary'},
     'sungrow': {'name': 'Sungrow iSolarCloud', 'repo': 'KRoperUK/sungrow-hass', 'origin': 'hacs', 'installs': 595, 'kind': 'energy', 'kind_from': 'vocabulary'},
@@ -259,6 +263,14 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'vehicle_range': {'platform': 'sensor', 'keys': ('hybrid_range', 'primary_engine_range', 'range', 'secondary_engine_range'), 'options': (), 'exact_only': ('range',)},
         'vehicle_soc': {'platform': 'sensor', 'keys': ('state_of_charge',), 'options': (), 'exact_only': ('state_of_charge',)},
     },
+    'dsmr': {
+        'grid_export_power': {'platform': 'sensor', 'keys': ('current_electricity_delivery',), 'options': ()},
+        'grid_import_power': {'platform': 'sensor', 'keys': ('current_electricity_usage',), 'options': ()},
+    },
+    'dsmr_reader': {
+        'grid_export_power': {'platform': 'sensor', 'keys': ('current_power_return',), 'options': ()},
+        'grid_import_power': {'platform': 'sensor', 'keys': ('current_power_usage',), 'options': ()},
+    },
     'ef_ble': {
         'battery_charge_limit': {'platform': 'number', 'keys': ('charging_grid_power_limit',), 'options': ()},
         'battery_discharge_limit': {'platform': 'number', 'keys': ('discharging_power_limit',), 'options': ()},
@@ -304,8 +316,8 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'ev_current_control': {'platform': 'number', 'keys': ('amp',), 'options': (), 'exact_only': ('amp',)},
     },
     'goodwe': {
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('soc_upper_limit',), 'options': ()},
         'battery_strategy': {'platform': 'select', 'keys': ('operation_mode',), 'options': ('backup', 'eco', 'eco_charge', 'eco_discharge', 'general', 'off_grid', 'peak_shaving')},
-        'battery_target_soc': {'platform': 'number', 'keys': ('soc_upper_limit',), 'options': ()},
     },
     'growatt_modbus': {
         'battery_power': {'platform': 'sensor', 'keys': ('battery_power',), 'options': ()},
@@ -326,6 +338,7 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
     },
     'huawei_solar': {
         'battery_capacity_spec': {'platform': 'sensor', 'keys': ('rated_ess_capacity', 'storage_rated_capacity'), 'options': ()},
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('storage_charging_cutoff_capacity',), 'options': ()},
         'battery_charge_limit': {'platform': 'number', 'keys': ('storage_maximum_charging_power',), 'options': ()},
         'battery_discharge_limit': {'platform': 'number', 'keys': ('storage_maximum_discharging_power',), 'options': ()},
         'battery_power': {'platform': 'sensor', 'keys': ('battery_charge_discharge_power', 'storage_charge_discharge_power'), 'options': ()},
@@ -348,6 +361,7 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'ev_current_control': {'platform': 'service', 'keys': ('keba.set_current',), 'options': (), 'services': {'keba.set_current': {'fields': ('current',), 'target': None}}},
     },
     'marstek_venus_energy_manager': {
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('charging_cutoff_capacity',), 'options': ()},
         'battery_charge_limit': {'platform': 'number', 'keys': ('max_charge_power', 'system_max_charge_power'), 'options': (), 'exact_only': ('max_charge_power',)},
         'battery_discharge_limit': {'platform': 'number', 'keys': ('max_discharge_power', 'system_max_discharge_power'), 'options': (), 'exact_only': ('max_discharge_power',)},
         'battery_power': {'platform': 'sensor', 'keys': ('battery_power',), 'options': ()},
@@ -375,6 +389,10 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'ev_current_control': {'platform': 'number', 'keys': ('charge_rate',), 'options': ()},
         'vehicle_range': {'platform': 'sensor', 'keys': ('vehicle_range',), 'options': ()},
     },
+    'p1_monitor': {
+        'grid_export_power': {'platform': 'sensor', 'keys': ('power_production',), 'options': ()},
+        'grid_import_power': {'platform': 'sensor', 'keys': ('power_consumption',), 'options': ()},
+    },
     'peblar': {
         'ev_current_control': {'platform': 'number', 'keys': ('charge_current_limit',), 'options': ()},
     },
@@ -400,9 +418,9 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'battery_power_strategy': {'platform': 'select', 'keys': ('battery_strategy',), 'options': ('api', 'eco', 'idle', 'nom', 'roi', 'sessy_connect')},
     },
     'sigen': {
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('plant_charge_cut_off_soc',), 'options': ()},
         'battery_charge_limit': {'platform': 'number', 'keys': ('dc_charger_max_charging_power_limit',), 'options': ()},
         'battery_discharge_limit': {'platform': 'number', 'keys': ('dc_charger_max_discharging_power_limit',), 'options': ()},
-        'battery_target_soc': {'platform': 'number', 'keys': ('plant_charge_cut_off_soc',), 'options': ()},
         'ev_current_control': {'platform': 'number', 'keys': ('ac_charger_output_current',), 'options': ()},
     },
     'silla_prism': {
@@ -428,7 +446,8 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'solar_power': {'platform': 'sensor', 'keys': ('pv_power',), 'options': ()},
     },
     'solis_cloud_control': {
-        'battery_target_soc': {'platform': 'number', 'keys': ('battery_force_charge_soc', 'battery_max_charge_soc'), 'options': ()},
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('battery_max_charge_soc',), 'options': ()},
+        'battery_target_soc': {'platform': 'number', 'keys': ('battery_force_charge_soc',), 'options': ()},
     },
     'solis_cloud_monitoring': {
         'battery_power': {'platform': 'sensor', 'keys': ('battery_power',), 'options': ()},
@@ -440,7 +459,8 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'vehicle_soc': {'platform': 'sensor', 'keys': ('ev_battery_level',), 'options': ()},
     },
     'sungrow': {
-        'battery_target_soc': {'platform': 'number', 'keys': ('forced_charging_target_soc_1', 'forced_charging_target_soc_2', 'soc_upper_limit'), 'options': ()},
+        'battery_charge_end_soc': {'platform': 'number', 'keys': ('soc_upper_limit',), 'options': ()},
+        'battery_target_soc': {'platform': 'number', 'keys': ('forced_charging_target_soc_1', 'forced_charging_target_soc_2'), 'options': ()},
     },
     'sunsynk': {
         'battery_target_soc': {'platform': 'number', 'keys': ('target_soc',), 'options': ()},
@@ -465,8 +485,8 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
     },
     'tibber': {
         'battery_capacity_spec': {'platform': 'sensor', 'keys': ('storage_rated_capacity',), 'options': ()},
-        'grid_export_power': {'platform': 'sensor', 'keys': ('power_flow_to_grid',), 'options': ()},
-        'grid_import_power': {'platform': 'sensor', 'keys': ('power_flow_from_grid',), 'options': ()},
+        'grid_export_power': {'platform': 'sensor', 'keys': ('power_flow_to_grid', 'power_production'), 'options': ()},
+        'grid_import_power': {'platform': 'sensor', 'keys': ('power', 'power_flow_from_grid'), 'options': (), 'exact_only': ('power',)},
         'grid_power': {'platform': 'sensor', 'keys': ('power_flow_grid',), 'options': ()},
         'system_size_spec': {'platform': 'sensor', 'keys': ('storage_rated_power',), 'options': ()},
     },
@@ -536,7 +556,7 @@ ROLE_VOCAB: Final[Dict[str, Dict[str, Dict[str, Any]]]] = {
         'vehicle_soc': {'platform': 'sensor', 'keys': ('state_of_charge',), 'options': ()},
     },
     'zaptec': {
-        'ev_current_control': {'platform': 'number', 'keys': ('available_current', 'charger_max_current'), 'options': ()},
+        'ev_current_control': {'platform': 'number', 'keys': ('charger_max_current',), 'options': ()},
     },
     'zendure_ha': {
         'grid_power': {'platform': 'sensor', 'keys': ('grid_power',), 'options': ()},

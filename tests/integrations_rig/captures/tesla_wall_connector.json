@@ -1,0 +1,426 @@
+{
+ "devices": {
+  "tesla_wall_connector:abc123": {
+   "manufacturer": "Tesla",
+   "model": "Wall Connector",
+   "name": "Tesla Wall Connector"
+  }
+ },
+ "domain": "tesla_wall_connector",
+ "entities": [
+  {
+   "attributes": {
+    "device_class": "battery_charging",
+    "friendly_name": "Tesla Wall Connector Contactor closed"
+   },
+   "capabilities": {},
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.tesla_wall_connector_contactor_closed",
+   "original_device_class": "battery_charging",
+   "state": "on",
+   "translation_key": "contactor_closed",
+   "unique_id": "abc123-contactor_closed",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "plug",
+    "friendly_name": "Tesla Wall Connector Vehicle connected"
+   },
+   "capabilities": {},
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.tesla_wall_connector_vehicle_connected",
+   "original_device_class": "plug",
+   "state": "on",
+   "translation_key": "vehicle_connected",
+   "unique_id": "abc123-vehicle_connected",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Tesla Wall Connector Lifetime energy",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.tesla_wall_connector_energy",
+   "original_device_class": "energy",
+   "state": "988.022",
+   "translation_key": "energy_kwh",
+   "unique_id": "abc123-energy_kWh",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "frequency",
+    "friendly_name": "Tesla Wall Connector Grid frequency",
+    "state_class": "measurement",
+    "unit_of_measurement": "Hz"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_grid_frequency",
+   "original_device_class": "frequency",
+   "state": "50.021",
+   "translation_key": "grid_hz",
+   "unique_id": "abc123-grid_hz",
+   "unit_of_measurement": "Hz"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "friendly_name": "Tesla Wall Connector Grid voltage",
+    "state_class": "measurement",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_grid_voltage",
+   "original_device_class": "voltage",
+   "state": "230.2",
+   "translation_key": "grid_v",
+   "unique_id": "abc123-grid_v",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "friendly_name": "Tesla Wall Connector Handle temperature",
+    "state_class": "measurement",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_handle_temperature",
+   "original_device_class": "temperature",
+   "state": "25.5",
+   "translation_key": "handle_temp_c",
+   "unique_id": "abc123-handle_temp_c",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "friendly_name": "Tesla Wall Connector MCU temperature",
+    "state_class": "measurement",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_mcu_temperature",
+   "original_device_class": "temperature",
+   "state": "42.0",
+   "translation_key": "mcu_temp_c",
+   "unique_id": "abc123-mcu_temp_c",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "friendly_name": "Tesla Wall Connector PCB temperature",
+    "state_class": "measurement",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_pcb_temperature",
+   "original_device_class": "temperature",
+   "state": "30.5",
+   "translation_key": "pcba_temp_c",
+   "unique_id": "abc123-pcba_temp_c",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "friendly_name": "Tesla Wall Connector Phase A current",
+    "state_class": "measurement",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_phase_a_current",
+   "original_device_class": "current",
+   "state": "10",
+   "translation_key": "current_a_a",
+   "unique_id": "abc123-current_a_a",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "friendly_name": "Tesla Wall Connector Phase A voltage",
+    "state_class": "measurement",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_phase_a_voltage",
+   "original_device_class": "voltage",
+   "state": "230.1",
+   "translation_key": "voltage_a_v",
+   "unique_id": "abc123-voltage_a_v",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "friendly_name": "Tesla Wall Connector Phase B current",
+    "state_class": "measurement",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_phase_b_current",
+   "original_device_class": "current",
+   "state": "11.1",
+   "translation_key": "current_b_a",
+   "unique_id": "abc123-current_b_a",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "friendly_name": "Tesla Wall Connector Phase B voltage",
+    "state_class": "measurement",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_phase_b_voltage",
+   "original_device_class": "voltage",
+   "state": "231",
+   "translation_key": "voltage_b_v",
+   "unique_id": "abc123-voltage_b_v",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "friendly_name": "Tesla Wall Connector Phase C current",
+    "state_class": "measurement",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_phase_c_current",
+   "original_device_class": "current",
+   "state": "12",
+   "translation_key": "current_c_a",
+   "unique_id": "abc123-current_c_a",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "friendly_name": "Tesla Wall Connector Phase C voltage",
+    "state_class": "measurement",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_phase_c_voltage",
+   "original_device_class": "voltage",
+   "state": "232.1",
+   "translation_key": "voltage_c_v",
+   "unique_id": "abc123-voltage_c_v",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "friendly_name": "Tesla Wall Connector Session energy",
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.tesla_wall_connector_session_energy",
+   "original_device_class": "energy",
+   "state": "1.23456",
+   "translation_key": "session_energy_wh",
+   "unique_id": "abc123-session_energy_wh",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "friendly_name": "Tesla Wall Connector Status",
+    "options": [
+     "booting",
+     "not_connected",
+     "connected",
+     "ready",
+     "negotiating",
+     "error",
+     "charging_finished",
+     "waiting_car",
+     "charging_reduced",
+     "charging"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "booting",
+     "not_connected",
+     "connected",
+     "ready",
+     "negotiating",
+     "error",
+     "charging_finished",
+     "waiting_car",
+     "charging_reduced",
+     "charging"
+    ]
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.tesla_wall_connector_status",
+   "original_device_class": "enum",
+   "state": "charging",
+   "translation_key": "status",
+   "unique_id": "abc123-status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": "integration",
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_status_code",
+   "original_device_class": null,
+   "state": null,
+   "translation_key": "status_code",
+   "unique_id": "abc123-evse_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "friendly_name": "Tesla Wall Connector Total power",
+    "state_class": "measurement",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.tesla_wall_connector_total_power",
+   "original_device_class": "power",
+   "state": "7.6503",
+   "translation_key": "total_power_w",
+   "unique_id": "abc123-total_power_w",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "friendly_name": "Tesla Wall Connector Vehicle current",
+    "state_class": "measurement",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_vehicle_current",
+   "original_device_class": "current",
+   "state": "32",
+   "translation_key": "vehicle_current_a",
+   "unique_id": "abc123-vehicle_current_a",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "signal_strength",
+    "friendly_name": "Tesla Wall Connector Wi-Fi RSSI",
+    "state_class": "measurement",
+    "unit_of_measurement": "dBm"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": "tesla_wall_connector:abc123",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.tesla_wall_connector_wifi_rssi",
+   "original_device_class": "signal_strength",
+   "state": "-50",
+   "translation_key": "wifi_rssi",
+   "unique_id": "abc123-wifi_rssi",
+   "unit_of_measurement": "dBm"
+  }
+ ],
+ "services": {},
+ "source": {
+  "client": "tesla-wall-connector==1.2.0",
+  "data": "core tests/components/tesla_wall_connector/conftest.py values; evse_state 11 (charging)",
+  "kind": "live-load",
+  "repo": "home-assistant/core",
+  "tag": "2026.8.2"
+ }
+}

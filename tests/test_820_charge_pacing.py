@@ -156,8 +156,18 @@ class TestTheWriter:
             ChargePacingWriter,
         )
         w = ChargePacingWriter(); h = self._hass()
+        # (#820, 02.10) the register takes the write; a rewrite needs more
+        # than the deadband (max of step, 100 W, 5 %) AND five minutes
+        t = [1000.0]
+        w._clock = lambda: t[0]
+
+        async def _take(domain, service, data, blocking=False):
+            h.states.get.return_value = SimpleNamespace(state=str(data["value"]))
+        h.services.async_call.side_effect = _take
         self._run(w.apply(h, "number.x", 2000.0, observer=False))
         assert self._run(w.apply(h, "number.x", 2050.0, observer=False)) == "held"
+        assert self._run(w.apply(h, "number.x", 2200.0, observer=False)) == "held"
+        t[0] += 300
         assert self._run(w.apply(h, "number.x", 2200.0, observer=False)) == "wrote"
 
     def test_observer_never_writes(self):

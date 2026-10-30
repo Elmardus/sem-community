@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
 from homeassistant.util import dt as dt_util
 
@@ -127,6 +127,31 @@ OPEN_METEO_UNIQUE_SUFFIXES = {
     "forecast_d2": "_energy_production_d2",
 }
 
+# (#1050) Helios Forecast (ReikanYsora/Helios-Forecast): unique_id =
+# ``{entry_id}_{key}`` with keys of its own, and entity ids that carry the
+# entry's title, so it is registry-only like Open-Meteo. Read off the rig's
+# ``helios_forecast`` capture (2026.9.6): ``energy_day_1`` is TODAY — it
+# equals today's 15-minute curve summed — so its ``energy_day_3`` is our d2.
+# Power next hour, peak power, peak time and day 3 ship disabled; they are
+# mapped so an install that switches them on is read.
+HELIOS_PLATFORM = "helios_forecast"
+HELIOS_UNIQUE_SUFFIXES = {
+    "forecast_today": "_energy_day_1",
+    "forecast_tomorrow": "_energy_day_2",
+    "forecast_remaining": "_energy_today_remaining",
+    "power_now": "_power_now",
+    "power_next_hour": "_power_next_hour",
+    "peak_power_today": "_peak_power_day_1",
+    "peak_time_today": "_peak_time_day_1",
+    "forecast_d2": "_energy_day_3",
+}
+
+#: The suffix map per suffix-matched platform; any other is Forecast.Solar's.
+_SUFFIX_MAPS = {
+    OPEN_METEO_SOLAR_PLATFORM: OPEN_METEO_UNIQUE_SUFFIXES,
+    HELIOS_PLATFORM: HELIOS_UNIQUE_SUFFIXES,
+}
+
 # (#819) The ladder below is an ORDER, not a preference. Someone running
 # several forecast integrations side by side to compare accuracy could
 # only reach the second one by deactivating the first — and the setup
@@ -142,12 +167,30 @@ OPEN_METEO_UNIQUE_SUFFIXES = {
 #: minute of quiet before we conclude anything.
 PREFERRED_GRACE_CYCLES: int = 6
 
+def ha_is_running(hass) -> bool:
+    """(#996) True only once Home Assistant has finished starting. A
+    registry probe before that can miss an integration that loads later."""
+    return getattr(hass, "state", None) is CoreState.running
+
+
 FORECAST_SOURCES: dict = {
     "solcast": (SOLCAST_PLATFORM, "SOLCAST_ENTITIES"),
     "forecast_solar": (FORECAST_SOLAR_PLATFORM, "FORECAST_SOLAR_ENTITIES"),
     # Open-Meteo is registry-only: device-prefixed entity_ids, so there
     # is no hardcoded fallback map to hand the locator (#687).
     "open_meteo": (OPEN_METEO_SOLAR_PLATFORM, None),
+    # Helios too: its entity ids carry the entry's title (#1050).
+    "helios": (HELIOS_PLATFORM, None),
+}
+FORECAST_PLATFORMS = frozenset(platform for platform, _ in FORECAST_SOURCES.values())
+
+#: (#1050) Which roles each source publishes at all, enabled or not — what
+#: separates "switched off" from "not published" when a role reads nothing.
+_SOURCE_ROLES = {
+    "solcast": frozenset(SOLCAST_UNIQUE_IDS),
+    "forecast_solar": frozenset(FORECAST_SOLAR_UNIQUE_SUFFIXES),
+    "open_meteo": frozenset(OPEN_METEO_UNIQUE_SUFFIXES),
+    "helios": frozenset(HELIOS_UNIQUE_SUFFIXES),
 }
 
 
@@ -356,12 +399,9 @@ class ForecastReader:
                 # naming, which is why it worked at all — and why the one
                 # role it does NOT share was invisible. Forecast.Solar has no
                 # day-2 sensor and must not gain a phantom one, so the maps
-                # are separate rather than merged.
-                _suffixes = (
-                    OPEN_METEO_UNIQUE_SUFFIXES
-                    if platform == OPEN_METEO_SOLAR_PLATFORM
-                    else FORECAST_SOLAR_UNIQUE_SUFFIXES
-                )
+                # are separate rather than merged. Helios has its own (#1050).
+                _suffixes = _SUFFIX_MAPS.get(
+                    platform, FORECAST_SOLAR_UNIQUE_SUFFIXES)
                 for role, suffix in _suffixes.items():
                     # Suffix-match per-plane sensor: collect EVERY plane so
                     # the read path can sum them (#838).
@@ -484,6 +524,39 @@ class ForecastReader:
     @_last_source_detection_path.setter
     def _last_source_detection_path(self, value: Optional[str]) -> None:
         self.__detection_path = value
+
+    def installed_answer(self) -> Optional[bool]:
+        """(#996) Does this house HAVE a forecast integration? A registry
+        fact — an enabled entity of Solcast, Forecast.Solar, Open-Meteo or
+        Helios — not "can I read a forecast right now". A cloud outage leaves the
+        entities registered and so cannot make the forecast rows ABSENT;
+        only removing or disabling the integration can. The live read
+        (``read_forecast``) keeps driving control decisions as before.
+
+        True at any time; False only while Home Assistant is running (an
+        integration may register after SEM on a restart); None when the
+        registry cannot be read. A hit is cached 60 s — a full registry walk
+        per cycle is waste, and removal is judged over minutes anyway."""
+        now = self._mono_time()
+        cached = getattr(self, "_installed_cache", None)
+        if cached is not None and now - cached[0] < 60:
+            found = cached[1]
+        else:
+            try:
+                from homeassistant.helpers import entity_registry as er
+                entries = list(er.async_get(self.hass).entities.values())
+            except Exception:  # noqa: BLE001 — no registry, no answer
+                return None
+            found = any(
+                getattr(e, "platform", None) in FORECAST_PLATFORMS
+                and getattr(e, "disabled_by", None) is None
+                for e in entries)
+            # Only a hit is cached: a miss is looked at again next cycle, so
+            # an integration installed or enabled is seen at once.
+            self._installed_cache = (now, True) if found else None
+        if found:
+            return True
+        return False if ha_is_running(self.hass) else None
 
     @property
     def requested_source(self) -> Optional[str]:
@@ -660,6 +733,18 @@ class ForecastReader:
             self._clear_no_forecast_repair()
             return self._source
 
+        # Check Helios Forecast (#1050) — registry-only, and last: an install
+        # that already reads one of the three above keeps it.
+        entities = self._locate_integration(HELIOS_PLATFORM, {})
+        if entities:
+            self._entities = entities
+            self._capture_entity_groups(HELIOS_PLATFORM)   # (#838)
+            self._source = "helios"
+            self._last_source_detection_path = "helios"
+            _LOGGER.info("Detected Helios Forecast integration")
+            self._clear_no_forecast_repair()
+            return self._source
+
         self._last_source_detection_path = "none_available"
         # Log once per outage; subsequent cycles stay silent.
         if not self._no_forecast_logged:
@@ -824,11 +909,17 @@ class ForecastReader:
         data.power_next_hour_w = self._read_role_power_w("power_next_hour", 0.0)
         # (#841) NOT _read_role_power_w: that sums, and peaks do not add.
         data.peak_power_today_w = self._read_role_peak_w("peak_power_today", 0.0)
-        # (#867) Say WHICH kind of zero this is. Only Solcast publishes a
-        # peak-power sensor; on the others the honest answer is that the
-        # source cannot supply it, not that the peak is 0 W.
+        # (#867) Say WHICH kind of zero this is. Only Solcast and Helios
+        # publish a peak-power sensor; on the others the honest answer is
+        # that the source cannot supply it, not that the peak is 0 W.
         if not self._entities.get("peak_power_today"):
-            data.peak_power_path = "unsupported_by_source"
+            # (#1050) A source that publishes a peak power and whose sensor
+            # reads nothing has not said "none": Helios ships it disabled.
+            data.peak_power_path = (
+                "no_entity"
+                if "peak_power_today" in _SOURCE_ROLES.get(self._source, ())
+                else "unsupported_by_source"
+            )
         elif data.peak_power_today_w > 0:
             data.peak_power_path = "read"
         else:
@@ -884,6 +975,14 @@ class ForecastReader:
                 seen += 1
                 hay = f"{entry.unique_id or ''} {entry.entity_id or ''}"
                 if any(n in hay for n in needles):
+                    return True
+                # (#1050) Helios's day 3, and only while Helios is the source:
+                # another integration's switched-off sensor says nothing about
+                # the one SEM reads.
+                if (self._source == "helios"
+                        and entry.platform == HELIOS_PLATFORM
+                        and str(entry.unique_id or "").endswith(
+                            HELIOS_UNIQUE_SUFFIXES["forecast_d2"])):
                     return True
         except Exception as e:  # noqa: BLE001 — a hint never costs a read
             # Previously `self._hass` (the reader has `self.hass`), and this
@@ -1007,7 +1106,8 @@ class ForecastReader:
                 continue
             name = (state.attributes or {}).get("friendly_name") or entity_id
             for suffix in (" Energy production today",
-                           " Estimated energy production - today"):
+                           " Estimated energy production - today",
+                           " Energy day 1"):  # Helios (#1050)
                 if name.endswith(suffix):
                     name = name[: -len(suffix)]
                     break
@@ -1078,15 +1178,13 @@ class ForecastReader:
         any_available = False
         for entity_id in entity_ids:
             state = self.hass.states.get(entity_id)
-            if not state or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE, None):
-                continue
-            try:
-                float(state.state)
-            except (ValueError, TypeError):
+            # (#1202) a plane that gives no number ("nan" too) is left out
+            watts = power_state_to_watts(state)
+            if watts is None:
                 continue
             if power_unit_scale(state) != 1.0:
                 self._last_unit_conversion_count += 1
-            total += power_state_to_watts(state, default=0.0)
+            total += watts
             any_available = True
         return total if any_available else default
 
@@ -1117,14 +1215,10 @@ class ForecastReader:
         if not entity_id:
             return default
         state = self.hass.states.get(entity_id)
-        if not state or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE, None):
-            return default
-        try:
-            # Load-bearing: a non-numeric state must return the CALLER's
-            # default, which units.py can't know. Once this succeeds the
-            # ``default=`` below is unreachable (#641).
-            value = float(state.state)
-        except (ValueError, TypeError):
+        # (#1202) A state that gives no number ("nan" too) returns the
+        # CALLER's default.
+        watts = power_state_to_watts(state)
+        if watts is None:
             return default
         # #641 — this rule (strip + lower + long-form synonyms) was the most
         # robust of the five inline copies, so it became the shared one in
@@ -1132,7 +1226,7 @@ class ForecastReader:
         # proved #575.
         if power_unit_scale(state) != 1.0:
             self._last_unit_conversion_count += 1
-        return power_state_to_watts(state, default=value)
+        return watts
 
     def _remaining_day_fraction(self) -> float:
         """Estimate fraction of daylight remaining (rough)."""

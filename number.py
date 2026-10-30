@@ -25,7 +25,8 @@ from homeassistant.const import (
 
 from homeassistant.helpers.entity import EntityCategory
 
-from .const import DEFAULT_MAX_CHARGING_CURRENT
+from .utils.device_names import charger_display_name  # (#1053)
+from .const import DEFAULT_ELECTRICITY_IMPORT_RATE, DEFAULT_MAX_CHARGING_CURRENT
 from .consts.bounds import BOUNDS      # (#870) one range per field
 from .coordinator import SEMCoordinator
 from .coordinator.install_modules import kept_descriptions, presence_of
@@ -271,14 +272,6 @@ NUMBER_TYPES = [
         native_step=0.5,
         mode=NumberMode.SLIDER,
     ),
-    NumberEntityDescription(
-        key="hot_water_max_temperature",
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        native_min_value=40,
-        native_max_value=80,
-        native_step=1,
-        mode=NumberMode.SLIDER,
-    ),
     # Hot water solar boost + Legionella prevention (#92)
     NumberEntityDescription(
         key="hot_water_solar_target",
@@ -363,9 +356,9 @@ async def async_setup_entry(
     ev_chargers = full_config.get("ev_chargers", [])
     per_charger_descriptions = []
     if len(ev_chargers) >= 1:
-        for charger_cfg in ev_chargers:
+        for _cidx, charger_cfg in enumerate(ev_chargers):
             cid = charger_cfg.get("id", "ev_charger")
-            cname = charger_cfg.get("name", "EV Charger")
+            cname = charger_display_name(hass, charger_cfg, _cidx)  # (#1053)
             for base_desc, config_key, default_val in [
                 (NumberEntityDescription(
                     key=f"charger_{cid}_daily_ev_target",
@@ -711,7 +704,6 @@ class SEMNumberEntity(CoordinatorEntity, NumberEntity):
             DEFAULT_CHEAP_PRICE_THRESHOLD,
             DEFAULT_EXPENSIVE_PRICE_THRESHOLD,
             DEFAULT_HEAT_PUMP_BOOST_OFFSET,
-            DEFAULT_HOT_WATER_MAX_TEMP,
             DEFAULT_SYSTEM_SIZE_KWP,
             DEFAULT_EV_MIN_CURRENT,
             DEFAULT_BATTERY_CAPACITY_KWH,
@@ -737,7 +729,6 @@ class SEMNumberEntity(CoordinatorEntity, NumberEntity):
             "cheap_price_threshold": DEFAULT_CHEAP_PRICE_THRESHOLD,
             "expensive_price_threshold": DEFAULT_EXPENSIVE_PRICE_THRESHOLD,
             "heat_pump_boost_offset": DEFAULT_HEAT_PUMP_BOOST_OFFSET,
-            "hot_water_max_temperature": DEFAULT_HOT_WATER_MAX_TEMP,
             "hot_water_solar_target": 50.0,
             "legionella_target_temp": 65.0,
             "legionella_interval_hours": 72,
@@ -747,7 +738,7 @@ class SEMNumberEntity(CoordinatorEntity, NumberEntity):
             "ev_disable_delay_seconds": 300,
             "ev_phases": 3,
             "ev_kwh_per_100km": 18,
-            "electricity_import_rate": 0.3387,
+            "electricity_import_rate": DEFAULT_ELECTRICITY_IMPORT_RATE,
             "electricity_export_rate": 0.075,
             "battery_buffer_soc": 70,
             "battery_auto_start_soc": 90,
@@ -919,7 +910,6 @@ class SEMPerBatteryNumber(CoordinatorEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Persist the reserve SOC (no reload). ``idx is None`` is the
         SINGLE-battery install → scalar ``battery_reserve_soc`` key."""
-        self._attr_native_value = value
         if self._idx is None:
             from . import persist_global_option
             persist_global_option(
@@ -928,10 +918,13 @@ class SEMPerBatteryNumber(CoordinatorEntity, NumberEntity):
             )
             _LOGGER.info("Updated battery reserve SOC to %s", value)
         else:
+            # (#1204) refused when this battery is gone (reload due)
             from . import persist_per_battery_option
             persist_per_battery_option(
                 self.hass, self._entry, self.coordinator,
                 self._idx, "battery_reserve_socs", value, self._count,
+                read_units=getattr(self.coordinator, "battery_control_units", None),
             )
             _LOGGER.info("Updated battery %d reserve SOC to %s", self._idx, value)
+        self._attr_native_value = value
         self.async_write_ha_state()

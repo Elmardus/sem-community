@@ -32,6 +32,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from custom_components.solar_energy_management.coordinator.types import (
+    PowerReadings,
+)
 from custom_components.solar_energy_management.coordinator.energy_calculator import (
     EnergyCalculator,
 )
@@ -376,7 +379,7 @@ class TestTheCoordinatorFilesTheIncrement:
         )
         coord = self._coord({"heat_pump": hp, "pool": pool})
 
-        SEMCoordinator._file_device_energy(coord, TODAY)
+        SEMCoordinator._file_device_energy(coord, TODAY, PowerReadings())
 
         calls = coord._energy_calculator.accumulate_device_energy.call_args_list
         assert len(calls) == 2
@@ -393,7 +396,7 @@ class TestTheCoordinatorFilesTheIncrement:
             device_id="pool", last_cycle_energy_kwh=0.0, energy_split_label=None,
         )
         coord = self._coord({"pool": idle})
-        SEMCoordinator._file_device_energy(coord, TODAY)
+        SEMCoordinator._file_device_energy(coord, TODAY, PowerReadings())
         coord._energy_calculator.accumulate_device_energy.assert_not_called()
 
     def test_a_legacy_device_without_the_fields_is_skipped_quietly(self) -> None:
@@ -404,7 +407,7 @@ class TestTheCoordinatorFilesTheIncrement:
         )
 
         coord = self._coord({"old": SimpleNamespace(device_id="old")})
-        SEMCoordinator._file_device_energy(coord, TODAY)
+        SEMCoordinator._file_device_energy(coord, TODAY, PowerReadings())
         coord._energy_calculator.accumulate_device_energy.assert_not_called()
 
 

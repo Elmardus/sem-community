@@ -1,7 +1,7 @@
 """#854 — a stop must never ENABLE the charger.
 
-Guido, 28.08.2026, watching his own box: *"the issue is sem is even
-sending commands like this, not the charger."* He was right, and it
+28.08.2026, watching the PROD box: *"the issue is sem is even
+sending commands like this, not the charger."* That was right, and it
 overturned two of my diagnoses in a row.
 
 The KEBA quota-hold stopped by *enabling*: `set_current(min)` +
@@ -79,7 +79,7 @@ async def test_a_stop_disables_the_box():
 
 @pytest.mark.asyncio
 async def test_the_stop_is_exactly_one_call():
-    """Guido's automation is the specification:
+    """PROD's own automation is the specification:
 
         alias: Keba Disable
         actions: [ {action: keba.disable} ]

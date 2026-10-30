@@ -1,0 +1,187 @@
+{
+ "devices": {},
+ "domain": "keba",
+ "entities": [
+  {
+   "attributes": {
+    "device_class": "power"
+   },
+   "capabilities": {},
+   "device": null,
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.keba_p30_charging_state",
+   "original_device_class": "power",
+   "state": "off",
+   "translation_key": null,
+   "unique_id": "keba_wallbox_23694070_charging_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "safety"
+   },
+   "capabilities": {},
+   "device": null,
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.keba_p30_failsafe_mode",
+   "original_device_class": "safety",
+   "state": "on",
+   "translation_key": null,
+   "unique_id": "keba_wallbox_23694070_failsafe_mode_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "plug"
+   },
+   "capabilities": {},
+   "device": null,
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.keba_p30_plug",
+   "original_device_class": "plug",
+   "state": "off",
+   "translation_key": null,
+   "unique_id": "keba_wallbox_23694070_plug_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "connectivity"
+   },
+   "capabilities": {},
+   "device": null,
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.keba_p30_status",
+   "original_device_class": "connectivity",
+   "state": "on",
+   "translation_key": null,
+   "unique_id": "keba_wallbox_23694070_device_state",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": null,
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "lock.keba_p30_authentication",
+   "original_device_class": null,
+   "state": "unlocked",
+   "translation_key": null,
+   "unique_id": "keba_wallbox_23694070_authentication",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "kW"
+   },
+   "capabilities": {
+    "state_class": "measurement"
+   },
+   "device": null,
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.keba_p30_charging_power",
+   "original_device_class": "power",
+   "state": "0.0",
+   "translation_key": null,
+   "unique_id": "keba_wallbox_23694070_charging_power",
+   "unit_of_measurement": "kW"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": null,
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.keba_p30_energy_target",
+   "original_device_class": "energy",
+   "state": "0.0",
+   "translation_key": null,
+   "unique_id": "keba_wallbox_23694070_energy_target",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": null,
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.keba_p30_max_current",
+   "original_device_class": "current",
+   "state": "8.0",
+   "translation_key": null,
+   "unique_id": "keba_wallbox_23694070_max_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": null,
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.keba_p30_session_energy",
+   "original_device_class": "energy",
+   "state": "2.13",
+   "translation_key": null,
+   "unique_id": "keba_wallbox_23694070_session_energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {
+    "state_class": "total_increasing"
+   },
+   "device": null,
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.keba_p30_total_energy",
+   "original_device_class": "energy",
+   "state": "9380.33",
+   "translation_key": null,
+   "unique_id": "keba_wallbox_23694070_total_energy",
+   "unit_of_measurement": "kWh"
+  }
+ ],
+ "services": {
+  "authorize": [],
+  "deauthorize": [],
+  "disable": [],
+  "enable": [],
+  "request_data": [],
+  "set_current": [
+   "current"
+  ],
+  "set_energy": [
+   "energy"
+  ],
+  "set_failsafe": [
+   "failsafe_fallback",
+   "failsafe_persist",
+   "failsafe_timeout"
+  ]
+ },
+ "source": {
+  "kind": "live-install",
+  "note": "the registry rows and states of a real KEBA P30 on the .175 test install (observer on), 02.10.2026; services from core's keba services.yaml at the pinned tag. KEBA registers no device.",
+  "repo": "home-assistant/core",
+  "tag": "2026.7.2"
+ }
+}

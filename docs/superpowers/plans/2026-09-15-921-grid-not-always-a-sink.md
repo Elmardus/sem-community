@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.13/3.14, Home Assistant custom integration, pytest + pytest-homeassistant-custom-component. Tests run from the CI layout: `rsync -a --delete --exclude=.git --exclude=node_modules ./ /tmp/ha-config-arc/custom_components/solar_energy_management/ && cd /tmp/ha-config-arc && PYTHONPATH=/tmp/ha-config-arc python3.12 -m pytest custom_components/solar_energy_management/tests/<file> -q -p no:warnings` — abbreviated below as `semtest <file>`. Lint: `/tmp/venv-ci/bin/ruff check <files>` (ruff 0.16.3, the CI pin).
 
-**Spec:** `docs/superpowers/specs/2026-09-15-921-grid-not-always-a-sink-design.md`. **Branch:** `feature/921-grid-not-always-a-sink` in the worktree `/home/sem/sem-arc-921` (stages 1–3, Tasks 1–17). **Stage 4 (#956, Tasks 18–24) is its own branch `feature/956-roster-services`, cut from develop after the arc merges** — Guido, 15.09: adapters first, #956 after — and completes the arc.
+**Spec:** `docs/superpowers/specs/2026-09-15-921-grid-not-always-a-sink-design.md`. **Branch:** `feature/921-grid-not-always-a-sink` in the worktree `/home/sem/sem-arc-921` (stages 1–3, Tasks 1–17). **Stage 4 (#956, Tasks 18–24) is its own branch `feature/956-roster-services`, cut from develop after the arc merges** — decision 15.09: adapters first, #956 after — and completes the arc.
 
 ---
 
@@ -2304,14 +2304,14 @@ class TestParity:
 - Full suite green; ruff clean; CI green on the PR.
 - Challenge record `~/claude-jobs/challenge-feature-956-roster-services.md` — ask ruflo to REFUTE: *"no service is ever proposed without its release, without being registered on the install, or without explicit consent; and the entity roles' proposals are byte-for-byte what they were."*
 - Live check on .46: the Config tab lists Huawei's zero-export service with its device; accepting writes `inverter_device_id`; the guard (Task 7) then has a device without any manual config.
-- Merge on Guido's word with `SEM_FEAT_OK`.
+- Merge on approval with `SEM_FEAT_OK`.
 
 ## Before merge
 
 - Full suite green from `/tmp/ha-config-arc`; `/tmp/venv-ci/bin/ruff check .` clean; CI green on the pushed branch (3.13 and 3.14 rungs).
 - **Challenge record** at `~/claude-jobs/challenge-feature-921-grid-not-always-a-sink.md` — ask a ruflo reviewer to REFUTE, directly: *"No consumer of a sink verdict reads a price; the export guard can never engage on an unknown price or before its hold; every switch OFF reproduces beta.25's behaviour byte-for-byte; unload releases the cut before observer mode flips."*
 - **Live on .175, observer ON, once** (build once, test many): hold the feed-in entity negative through `~/bin/sem-sim-compress.sh` on a compressed day; read `would_decisions` + `withheld_commands` for the WOULD `set_zero_power_grid_connection` on the real Huawei after the engage hold; read `sensor.sem_charging_state` for the `export_closed`/`export_reopens` rows and the pacer's trimmed landing time; confirm `curtailment.state == held_by_export_guard`; release the hold and read the WOULD `reset_maximum_feed_grid_power` after the release hold; toggle the guard off and confirm the guard state returns to `idle` with no write.
-- Merge on Guido's word with `SEM_FEAT_OK="#921 whole: verdicts + guard + adapters + sinks, all default-off, .175-proven" git push origin develop`.
+- Merge on approval with `SEM_FEAT_OK="#921 whole: verdicts + guard + adapters + sinks, all default-off, .175-proven" git push origin develop`.
 
 ## Self-review notes
 

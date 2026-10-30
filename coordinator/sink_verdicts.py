@@ -19,10 +19,12 @@ around for no reason.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 from .price_signal import CHEAP_LEVELS as _CHEAP_LEVELS, is_cheap_name
+from ..tariff.value_layer import DEFAULT_EXPORT_VALUE_THRESHOLD, export_not_worth
+from . import reason_codes as RC
 
 OPEN = "open"
 HELD = "held"
@@ -42,10 +44,19 @@ class SinkVerdict:
     state: str
     reason: str
     until: Optional[datetime] = None
+    #: (#1174) why, as a stable code and its numbers — recorded only, left
+    #: out of equality (``reason_codes``)
+    reason_code: str = field(default="", compare=False)
+    reason_params: Dict[str, Any] = field(default_factory=dict, compare=False)
 
     def to_dict(self) -> Dict[str, Any]:
         return {"sink": self.sink, "state": self.state, "reason": self.reason,
                 "until": self.until.isoformat() if self.until else None}
+
+
+def _money(v) -> str:
+    """(#1174) A per-kWh value as the sentence shows it: up to 3 decimals."""
+    return f"{round(float(v), 3):g}"
 
 
 class _Verdicts(dict):
@@ -60,8 +71,14 @@ def _level(p) -> str:
     return str(getattr(lv, "value", lv) or "").lower()
 
 
-def next_closed_window(now: datetime, upcoming) -> Optional[Tuple[datetime, datetime]]:
+def next_closed_window(now: datetime, upcoming,
+                       closed_at: Optional[Callable[[datetime], bool]] = None,
+                       ) -> Optional[Tuple[datetime, datetime]]:
     """The first run of NEGATIVE slots at or after ``now`` as ``(start, end)``.
+
+    (#1090) ``closed_at(slot_start)`` replaces the level test when given: on
+    a value tariff the meter closes on the export VALUE, and a Dutch import
+    curve with energy tax never reads "negative".
 
     ``end`` is the closing boundary — the first non-negative slot's start, or
     the last negative slot plus its cadence when the curve ends negative. A run
@@ -79,7 +96,8 @@ def next_closed_window(now: datetime, upcoming) -> Optional[Tuple[datetime, date
     for p in pts:
         if p.timestamp + slot <= now:
             continue                                   # already over
-        if _level(p) == "negative":
+        if (closed_at(p.timestamp) if closed_at is not None
+                else _level(p) == "negative"):
             if start is None:
                 start = max(now, p.timestamp)
             end = p.timestamp + slot
@@ -94,8 +112,17 @@ def sink_verdicts(*, now: datetime, tariff_level: Optional[str], upcoming,
                   house_sink_enabled: bool, morning_window_enabled: bool,
                   departure: Optional[datetime], morning_hours: float,
                   forecast_refills_pack: bool,
-                  pacing_horizon_end: Optional[datetime]) -> Dict[str, SinkVerdict]:
-    """One verdict per sink. Unknown is OPEN, never CLOSED."""
+                  pacing_horizon_end: Optional[datetime],
+                  export_threshold: float = DEFAULT_EXPORT_VALUE_THRESHOLD,
+                  export_at: Optional[Callable[[datetime], Any]] = None,
+                  ) -> Dict[str, SinkVerdict]:
+    """One verdict per sink. Unknown is OPEN, never CLOSED.
+
+    (#1090) ``export_rate`` is the export VALUE; the meter closes when
+    ``export_not_worth`` says so against ``export_threshold``. ``export_at``
+    (the value per slot) moves the closed window onto the same rule; without
+    it the window follows the NEGATIVE level, as before.
+    """
     level = str(tariff_level or "").lower()
     out: _Verdicts = _Verdicts()
     readable = export_guard_enabled and export_rate_known and export_rate is not None
@@ -104,26 +131,45 @@ def sink_verdicts(*, now: datetime, tariff_level: Optional[str], upcoming,
     # same curve as the import level; on a static feed-in with a dynamic
     # import it is not, and a negative IMPORT hour must not close the meter
     # for a kWh that still earns 7.5 ct. The level still drives the house.
-    try:
-        export_negative = readable and float(export_rate) < 0.0
-    except (TypeError, ValueError):
-        export_negative = False
-    win = next_closed_window(now, upcoming) if readable else None
+    # (#1090) One rule for "not worth exporting": value below the threshold.
+    # At the default 0.0 that is the old ``< 0.0`` — zero still exports.
+    export_negative = readable and bool(export_not_worth(export_rate, export_threshold))
+
+    def _value_closed_at(ts) -> bool:
+        try:
+            return bool(export_not_worth(export_at(ts), export_threshold))
+        except Exception:  # noqa: BLE001 — an unread slot is OPEN
+            return False
+    win = (next_closed_window(
+        now, upcoming, _value_closed_at if export_at is not None else None)
+        if readable else None)
 
     # grid export — CLOSED only on a READ negative level with the guard on
     if not export_guard_enabled:
-        out["grid_export"] = SinkVerdict("grid_export", OPEN, "export guard off")
+        out["grid_export"] = SinkVerdict("grid_export", OPEN, "export guard off",
+                                         reason_code=RC.EXPORT_GUARD_OFF)
     elif not export_rate_known:
         out["grid_export"] = SinkVerdict(
-            "grid_export", OPEN, "export price unknown — not closing on a guess")
+            "grid_export", OPEN, "export price unknown — not closing on a guess",
+            reason_code=RC.EXPORT_PRICE_UNKNOWN)
     elif export_negative:
         out["grid_export"] = SinkVerdict(
-            "grid_export", CLOSED, "export price negative — the meter is closed",
-            until=win[1] if win else None)
+            "grid_export", CLOSED,
+            ("export price negative — the meter is closed"
+             if export_threshold == DEFAULT_EXPORT_VALUE_THRESHOLD else
+             f"export value below {export_threshold:g} — the meter is closed"),
+            until=win[1] if win else None,
+            reason_code=(RC.EXPORT_NEGATIVE_PRICE
+                         if export_threshold == DEFAULT_EXPORT_VALUE_THRESHOLD
+                         else RC.EXPORT_NOT_WORTH),
+            reason_params=({} if export_threshold == DEFAULT_EXPORT_VALUE_THRESHOLD
+                           else {"value": _money(export_rate),
+                                 "threshold": _money(export_threshold)}))
     else:
         out["grid_export"] = SinkVerdict(
             "grid_export", OPEN, "export price not negative",
-            until=win[0] if win else None)
+            until=win[0] if win else None,
+            reason_code=RC.EXPORT_RELEASED)
 
     # battery — HELD headroom when a CLOSED window starts inside the pacing horizon (#926)
     if win and pacing_horizon_end is not None and win[0] < pacing_horizon_end:

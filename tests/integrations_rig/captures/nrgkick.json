@@ -1,0 +1,1193 @@
+{
+ "devices": {
+  "nrgkick:nrgkick": {
+   "manufacturer": null,
+   "model": null,
+   "name": "nrgkick"
+  }
+ },
+ "domain": "nrgkick",
+ "entities": [
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.nrgkick_test_charge_permitted",
+   "original_device_class": null,
+   "platform": "nrgkick",
+   "state": "on",
+   "translation_key": "charge_permitted",
+   "unique_id": "TEST123456_charge_permitted",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "max": 32.0,
+    "min": 6.0,
+    "step": 0.1,
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "max": 32.0,
+    "min": 6.0,
+    "step": 0.1
+   },
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.nrgkick_test_charging_current",
+   "original_device_class": "current",
+   "platform": "nrgkick",
+   "state": "16.0",
+   "translation_key": "current_set",
+   "unique_id": "TEST123456_current_set",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "max": 100000.0,
+    "min": 0.0,
+    "step": 1.0,
+    "unit_of_measurement": "Wh"
+   },
+   "capabilities": {
+    "max": 100000.0,
+    "min": 0.0,
+    "step": 1.0
+   },
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.nrgkick_test_energy_limit",
+   "original_device_class": "energy",
+   "platform": "nrgkick",
+   "state": "0",
+   "translation_key": "energy_limit",
+   "unique_id": "TEST123456_energy_limit",
+   "unit_of_measurement": "Wh"
+  },
+  {
+   "attributes": {
+    "max": 3.0,
+    "min": 1.0,
+    "step": 1.0
+   },
+   "capabilities": {
+    "max": 3.0,
+    "min": 1.0,
+    "step": 1.0
+   },
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.nrgkick_test_phase_count",
+   "original_device_class": null,
+   "platform": "nrgkick",
+   "state": "3",
+   "translation_key": "phase_count",
+   "unique_id": "TEST123456_phase_count",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "no_service",
+     "gsm",
+     "lte_cat_m1",
+     "lte_nb_iot"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "no_service",
+     "gsm",
+     "lte_cat_m1",
+     "lte_nb_iot"
+    ]
+   },
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_cellular_mode",
+   "original_device_class": "enum",
+   "platform": "nrgkick",
+   "state": "lte_cat_m1",
+   "translation_key": "cellular_mode",
+   "unique_id": "TEST123456_cellular_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_cellular_operator",
+   "original_device_class": null,
+   "platform": "nrgkick",
+   "state": "Test operator",
+   "translation_key": "cellular_operator",
+   "unique_id": "TEST123456_cellular_operator",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "signal_strength",
+    "unit_of_measurement": "dBm"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_cellular_signal_strength",
+   "original_device_class": "signal_strength",
+   "platform": "nrgkick",
+   "state": "-85",
+   "translation_key": "cellular_rssi",
+   "unique_id": "TEST123456_cellular_rssi",
+   "unit_of_measurement": "dBm"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "cycles"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_charge_count",
+   "original_device_class": null,
+   "platform": "nrgkick",
+   "state": "5",
+   "translation_key": "charge_count",
+   "unique_id": "TEST123456_charge_count",
+   "unit_of_measurement": "cycles"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_charged_energy",
+   "original_device_class": "energy",
+   "platform": "nrgkick",
+   "state": "5.0",
+   "translation_key": "charged_energy",
+   "unique_id": "TEST123456_charged_energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_charging_current",
+   "original_device_class": "current",
+   "platform": "nrgkick",
+   "state": "16.0",
+   "translation_key": "charging_current",
+   "unique_id": "TEST123456_charging_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "unit_of_measurement": "km/h"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_charging_rate",
+   "original_device_class": null,
+   "platform": "nrgkick",
+   "state": "11.0",
+   "translation_key": "charging_rate",
+   "unique_id": "TEST123456_charging_rate",
+   "unit_of_measurement": "km/h"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_charging_voltage",
+   "original_device_class": "voltage",
+   "platform": "nrgkick",
+   "state": "230.0",
+   "translation_key": "charging_voltage",
+   "unique_id": "TEST123456_charging_voltage",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_connector_l1_temperature",
+   "original_device_class": "temperature",
+   "platform": "nrgkick",
+   "state": "28.0",
+   "translation_key": "connector_l1_temperature",
+   "unique_id": "TEST123456_connector_l1_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_connector_l2_temperature",
+   "original_device_class": "temperature",
+   "platform": "nrgkick",
+   "state": "29.0",
+   "translation_key": "connector_l2_temperature",
+   "unique_id": "TEST123456_connector_l2_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_connector_l3_temperature",
+   "original_device_class": "temperature",
+   "platform": "nrgkick",
+   "state": "28.5",
+   "translation_key": "connector_l3_temperature",
+   "unique_id": "TEST123456_connector_l3_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_connector_max_current",
+   "original_device_class": "current",
+   "platform": "nrgkick",
+   "state": "32.0",
+   "translation_key": "connector_max_current",
+   "unique_id": "TEST123456_connector_max_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_connector_phase_count",
+   "original_device_class": null,
+   "platform": "nrgkick",
+   "state": "3",
+   "translation_key": "connector_phase_count",
+   "unique_id": "TEST123456_connector_phase_count",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_connector_serial",
+   "original_device_class": null,
+   "platform": "nrgkick",
+   "state": "unknown",
+   "translation_key": "connector_serial",
+   "unique_id": "TEST123456_connector_serial",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "cee",
+     "domestic",
+     "type2",
+     "wall",
+     "aus"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "cee",
+     "domestic",
+     "type2",
+     "wall",
+     "aus"
+    ]
+   },
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_connector_type",
+   "original_device_class": "enum",
+   "platform": "nrgkick",
+   "state": "type2",
+   "translation_key": "connector_type",
+   "unique_id": "TEST123456_connector_type",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_domestic_plug_1_temperature",
+   "original_device_class": "temperature",
+   "platform": "nrgkick",
+   "state": "25.0",
+   "translation_key": "domestic_plug_1_temperature",
+   "unique_id": "TEST123456_domestic_plug_1_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_domestic_plug_2_temperature",
+   "original_device_class": "temperature",
+   "platform": "nrgkick",
+   "state": "25.0",
+   "translation_key": "domestic_plug_2_temperature",
+   "unique_id": "TEST123456_domestic_plug_2_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "no_error",
+     "general_error",
+     "32a_attachment_on_16a_unit",
+     "voltage_drop_detected",
+     "unplug_detection_triggered",
+     "type2_not_authorized",
+     "residual_current_detected",
+     "cp_signal_voltage_error",
+     "cp_signal_impermissible",
+     "ev_diode_fault",
+     "pe_self_test_failed",
+     "rcd_self_test_failed",
+     "relay_self_test_failed",
+     "pe_and_rcd_self_test_failed",
+     "pe_and_relay_self_test_failed",
+     "rcd_and_relay_self_test_failed",
+     "pe_and_rcd_and_relay_self_test_failed",
+     "supply_voltage_error",
+     "phase_shift_error",
+     "overvoltage_detected",
+     "undervoltage_detected",
+     "overvoltage_without_pe_detected",
+     "undervoltage_without_pe_detected",
+     "underfrequency_detected",
+     "overfrequency_detected",
+     "unknown_frequency_type",
+     "unknown_grid_type",
+     "general_overtemperature",
+     "housing_overtemperature",
+     "attachment_overtemperature",
+     "domestic_plug_overtemperature"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "no_error",
+     "general_error",
+     "32a_attachment_on_16a_unit",
+     "voltage_drop_detected",
+     "unplug_detection_triggered",
+     "type2_not_authorized",
+     "residual_current_detected",
+     "cp_signal_voltage_error",
+     "cp_signal_impermissible",
+     "ev_diode_fault",
+     "pe_self_test_failed",
+     "rcd_self_test_failed",
+     "relay_self_test_failed",
+     "pe_and_rcd_self_test_failed",
+     "pe_and_relay_self_test_failed",
+     "rcd_and_relay_self_test_failed",
+     "pe_and_rcd_and_relay_self_test_failed",
+     "supply_voltage_error",
+     "phase_shift_error",
+     "overvoltage_detected",
+     "undervoltage_detected",
+     "overvoltage_without_pe_detected",
+     "undervoltage_without_pe_detected",
+     "underfrequency_detected",
+     "overfrequency_detected",
+     "unknown_frequency_type",
+     "unknown_grid_type",
+     "general_overtemperature",
+     "housing_overtemperature",
+     "attachment_overtemperature",
+     "domestic_plug_overtemperature"
+    ]
+   },
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_error",
+   "original_device_class": "enum",
+   "platform": "nrgkick",
+   "state": "no_error",
+   "translation_key": "error_code",
+   "unique_id": "TEST123456_error_code",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "frequency",
+    "unit_of_measurement": "Hz"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_grid_frequency",
+   "original_device_class": "frequency",
+   "platform": "nrgkick",
+   "state": "50.0",
+   "translation_key": "grid_frequency",
+   "unique_id": "TEST123456_grid_frequency",
+   "unit_of_measurement": "Hz"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_grid_voltage",
+   "original_device_class": "voltage",
+   "platform": "nrgkick",
+   "state": "230",
+   "translation_key": "grid_voltage",
+   "unique_id": "TEST123456_grid_voltage",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_housing_temperature",
+   "original_device_class": "temperature",
+   "platform": "nrgkick",
+   "state": "35.0",
+   "translation_key": "housing_temperature",
+   "unique_id": "TEST123456_housing_temperature",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_l1_active_power",
+   "original_device_class": "power",
+   "platform": "nrgkick",
+   "state": "3680",
+   "translation_key": "l1_active_power",
+   "unique_id": "TEST123456_l1_active_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "apparent_power",
+    "unit_of_measurement": "VA"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l1_apparent_power",
+   "original_device_class": "apparent_power",
+   "platform": "nrgkick",
+   "state": "3680",
+   "translation_key": "l1_apparent_power",
+   "unique_id": "TEST123456_l1_apparent_power",
+   "unit_of_measurement": "VA"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_l1_current",
+   "original_device_class": "current",
+   "platform": "nrgkick",
+   "state": "16.0",
+   "translation_key": "l1_current",
+   "unique_id": "TEST123456_l1_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power_factor",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l1_power_factor",
+   "original_device_class": "power_factor",
+   "platform": "nrgkick",
+   "state": "100",
+   "translation_key": "l1_power_factor",
+   "unique_id": "TEST123456_l1_power_factor",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "reactive_power",
+    "unit_of_measurement": "var"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l1_reactive_power",
+   "original_device_class": "reactive_power",
+   "platform": "nrgkick",
+   "state": "0",
+   "translation_key": "l1_reactive_power",
+   "unique_id": "TEST123456_l1_reactive_power",
+   "unit_of_measurement": "var"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l1_voltage",
+   "original_device_class": "voltage",
+   "platform": "nrgkick",
+   "state": "230.0",
+   "translation_key": "l1_voltage",
+   "unique_id": "TEST123456_l1_voltage",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_l2_active_power",
+   "original_device_class": "power",
+   "platform": "nrgkick",
+   "state": "3680",
+   "translation_key": "l2_active_power",
+   "unique_id": "TEST123456_l2_active_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "apparent_power",
+    "unit_of_measurement": "VA"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l2_apparent_power",
+   "original_device_class": "apparent_power",
+   "platform": "nrgkick",
+   "state": "3680",
+   "translation_key": "l2_apparent_power",
+   "unique_id": "TEST123456_l2_apparent_power",
+   "unit_of_measurement": "VA"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_l2_current",
+   "original_device_class": "current",
+   "platform": "nrgkick",
+   "state": "16.0",
+   "translation_key": "l2_current",
+   "unique_id": "TEST123456_l2_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power_factor",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l2_power_factor",
+   "original_device_class": "power_factor",
+   "platform": "nrgkick",
+   "state": "100",
+   "translation_key": "l2_power_factor",
+   "unique_id": "TEST123456_l2_power_factor",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "reactive_power",
+    "unit_of_measurement": "var"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l2_reactive_power",
+   "original_device_class": "reactive_power",
+   "platform": "nrgkick",
+   "state": "0",
+   "translation_key": "l2_reactive_power",
+   "unique_id": "TEST123456_l2_reactive_power",
+   "unit_of_measurement": "var"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l2_voltage",
+   "original_device_class": "voltage",
+   "platform": "nrgkick",
+   "state": "230.0",
+   "translation_key": "l2_voltage",
+   "unique_id": "TEST123456_l2_voltage",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_l3_active_power",
+   "original_device_class": "power",
+   "platform": "nrgkick",
+   "state": "3680",
+   "translation_key": "l3_active_power",
+   "unique_id": "TEST123456_l3_active_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "apparent_power",
+    "unit_of_measurement": "VA"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l3_apparent_power",
+   "original_device_class": "apparent_power",
+   "platform": "nrgkick",
+   "state": "3680",
+   "translation_key": "l3_apparent_power",
+   "unique_id": "TEST123456_l3_apparent_power",
+   "unit_of_measurement": "VA"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_l3_current",
+   "original_device_class": "current",
+   "platform": "nrgkick",
+   "state": "16.0",
+   "translation_key": "l3_current",
+   "unique_id": "TEST123456_l3_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power_factor",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l3_power_factor",
+   "original_device_class": "power_factor",
+   "platform": "nrgkick",
+   "state": "100",
+   "translation_key": "l3_power_factor",
+   "unique_id": "TEST123456_l3_power_factor",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "reactive_power",
+    "unit_of_measurement": "var"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l3_reactive_power",
+   "original_device_class": "reactive_power",
+   "platform": "nrgkick",
+   "state": "0",
+   "translation_key": "l3_reactive_power",
+   "unique_id": "TEST123456_l3_reactive_power",
+   "unit_of_measurement": "var"
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_l3_voltage",
+   "original_device_class": "voltage",
+   "platform": "nrgkick",
+   "state": "230.0",
+   "translation_key": "l3_voltage",
+   "unique_id": "TEST123456_l3_voltage",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_neutral_current",
+   "original_device_class": "current",
+   "platform": "nrgkick",
+   "state": "0.0",
+   "translation_key": "n_current",
+   "unique_id": "TEST123456_n_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_peak_power",
+   "original_device_class": "power",
+   "platform": "nrgkick",
+   "state": "11000",
+   "translation_key": "peak_power",
+   "unique_id": "TEST123456_peak_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "frequency",
+    "unit_of_measurement": "Hz"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_powerflow_grid_frequency",
+   "original_device_class": "frequency",
+   "platform": "nrgkick",
+   "state": "50.0",
+   "translation_key": "powerflow_grid_frequency",
+   "unique_id": "TEST123456_powerflow_grid_frequency",
+   "unit_of_measurement": "Hz"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_rated_current",
+   "original_device_class": "current",
+   "platform": "nrgkick",
+   "state": "32.0",
+   "translation_key": "rated_current",
+   "unique_id": "TEST123456_rated_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "no_fault",
+     "ac_30ma_fault",
+     "ac_60ma_fault",
+     "ac_150ma_fault",
+     "dc_positive_6ma_fault",
+     "dc_negative_6ma_fault"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "no_fault",
+     "ac_30ma_fault",
+     "ac_60ma_fault",
+     "ac_150ma_fault",
+     "dc_positive_6ma_fault",
+     "dc_negative_6ma_fault"
+    ]
+   },
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_rcd_trigger",
+   "original_device_class": "enum",
+   "platform": "nrgkick",
+   "state": "no_fault",
+   "translation_key": "rcd_trigger",
+   "unique_id": "TEST123456_rcd_trigger",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "signal_strength",
+    "unit_of_measurement": "dBm"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_signal_strength",
+   "original_device_class": "signal_strength",
+   "platform": "nrgkick",
+   "state": "unknown",
+   "translation_key": "network_rssi",
+   "unique_id": "TEST123456_network_rssi",
+   "unit_of_measurement": "dBm"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_ssid",
+   "original_device_class": null,
+   "platform": "nrgkick",
+   "state": "unknown",
+   "translation_key": "network_ssid",
+   "unique_id": "TEST123456_network_ssid",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "standby",
+     "connected",
+     "charging",
+     "error",
+     "wakeup"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "standby",
+     "connected",
+     "charging",
+     "error",
+     "wakeup"
+    ]
+   },
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_status",
+   "original_device_class": "enum",
+   "platform": "nrgkick",
+   "state": "charging",
+   "translation_key": "status",
+   "unique_id": "TEST123456_status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_total_active_power",
+   "original_device_class": "power",
+   "platform": "nrgkick",
+   "state": "11000",
+   "translation_key": "total_active_power",
+   "unique_id": "TEST123456_total_active_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "apparent_power",
+    "unit_of_measurement": "VA"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_total_apparent_power",
+   "original_device_class": "apparent_power",
+   "platform": "nrgkick",
+   "state": "11040",
+   "translation_key": "total_apparent_power",
+   "unique_id": "TEST123456_total_apparent_power",
+   "unit_of_measurement": "VA"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_total_charged_energy",
+   "original_device_class": "energy",
+   "platform": "nrgkick",
+   "state": "100.0",
+   "translation_key": "total_charged_energy",
+   "unique_id": "TEST123456_total_charged_energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power_factor",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_total_power_factor",
+   "original_device_class": "power_factor",
+   "platform": "nrgkick",
+   "state": "100",
+   "translation_key": "total_power_factor",
+   "unique_id": "TEST123456_total_power_factor",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "reactive_power",
+    "unit_of_measurement": "var"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_total_reactive_power",
+   "original_device_class": "reactive_power",
+   "platform": "nrgkick",
+   "state": "0",
+   "translation_key": "total_reactive_power",
+   "unique_id": "TEST123456_total_reactive_power",
+   "unit_of_measurement": "var"
+  },
+  {
+   "attributes": {
+    "device_class": "duration",
+    "unit_of_measurement": "min"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_vehicle_charging_time",
+   "original_device_class": "duration",
+   "platform": "nrgkick",
+   "state": "0.833333333333333",
+   "translation_key": "vehicle_charging_time",
+   "unique_id": "TEST123456_vehicle_charging_time",
+   "unit_of_measurement": "min"
+  },
+  {
+   "attributes": {
+    "device_class": "timestamp"
+   },
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.nrgkick_test_vehicle_connected_since",
+   "original_device_class": "timestamp",
+   "platform": "nrgkick",
+   "state": "2023-10-20T23:58:20+00:00",
+   "translation_key": "vehicle_connected_since",
+   "unique_id": "TEST123456_vehicle_connected_since",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "no_warning",
+     "no_pe",
+     "blackout_protection",
+     "energy_limit_reached",
+     "ev_does_not_comply_standard",
+     "unsupported_charging_mode",
+     "no_attachment_detected",
+     "no_comm_with_type2_attachment",
+     "increased_temperature",
+     "increased_housing_temperature",
+     "increased_attachment_temperature",
+     "increased_domestic_plug_temperature"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "no_warning",
+     "no_pe",
+     "blackout_protection",
+     "energy_limit_reached",
+     "ev_does_not_comply_standard",
+     "unsupported_charging_mode",
+     "no_attachment_detected",
+     "no_comm_with_type2_attachment",
+     "increased_temperature",
+     "increased_housing_temperature",
+     "increased_attachment_temperature",
+     "increased_domestic_plug_temperature"
+    ]
+   },
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.nrgkick_test_warning",
+   "original_device_class": "enum",
+   "platform": "nrgkick",
+   "state": "no_warning",
+   "translation_key": "warning_code",
+   "unique_id": "TEST123456_warning_code",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "nrgkick:nrgkick",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "switch.nrgkick_test_charging_enabled",
+   "original_device_class": null,
+   "platform": "nrgkick",
+   "state": "on",
+   "translation_key": "charging_enabled",
+   "unique_id": "TEST123456_charging_enabled",
+   "unit_of_measurement": null
+  }
+ ],
+ "services": {},
+ "source": {
+  "files": [
+   "tests/components/nrgkick/snapshots/test_number.ambr",
+   "tests/components/nrgkick/snapshots/test_switch.ambr",
+   "tests/components/nrgkick/snapshots/test_sensor.ambr",
+   "tests/components/nrgkick/snapshots/test_binary_sensor.ambr"
+  ],
+  "kind": "core-snapshot",
+  "note": "Home Assistant's own test output for this integration at the tag; the device grouping comes from unique_id",
+  "repo": "home-assistant/core",
+  "tag": "2026.8.2"
+ }
+}

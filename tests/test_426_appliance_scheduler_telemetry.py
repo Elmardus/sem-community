@@ -169,7 +169,12 @@ def test_transition_running_too_short_skip(mock_hass):
 # ──────────────────────────────────────────────
 
 
-def test_summary_includes_transitions_and_missed_count(mock_hass):
+def test_summary_includes_transitions_and_missed_count(mock_hass, freezer):
+    # Pinned, not live: "5 minutes ago" crosses midnight into yesterday for
+    # the first 5 minutes after it, and appliance_missed_today compares the
+    # deadline's date against today's — a real CI run landed exactly there
+    # and got 0, not 1.
+    freezer.move_to("2026-01-15 12:00:00")
     s = ApplianceScheduler(mock_hass)
     device = _seed_device(s)
     device._started = False

@@ -38,6 +38,7 @@ def _battery(bid: str, power_w: float, soc: float = 50.0, capacity: float = 10.0
         soc_pct=soc,
         capacity_kwh=capacity,
         name=f"sensor.battery_{bid}_power",
+        power_read=True,   # (#1170) a unit not read publishes no power
     )
 
 

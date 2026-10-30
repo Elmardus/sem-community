@@ -114,3 +114,80 @@ def battery_actuation_diag(hass, coordinator) -> dict:
         except Exception as exc:  # noqa: BLE001 — one battery never costs the rest
             out[str(bid)] = {"error": str(exc)}
     return out
+
+
+async def pacing_actuation_diag(hass, coordinator) -> dict:
+    """(#820) The charge-pacing actuation truth, for the Diagnose button.
+
+    @ArneGollin1987's charge limit sat at 1560 W for days while SEM's own
+    surface said ``cap_w 2443``. The download held the decision but nothing
+    about the register, so neither possible cause could be told apart:
+
+    * ``register`` — the limit entity as Home Assistant holds it now: live
+      state, unit, min, max and step (a cap off the step or outside the
+      range is refused);
+    * ``writer`` — what SEM believes: engaged, the value it would put back,
+      the last cap it sent, and whether the register ever showed it;
+    * ``record`` — the engagement persisted across restarts (#949), whose
+      value to put back is the second suspect;
+    * ``decision`` — the cap, reason and action the last cycle published.
+
+    Async only to read the persisted record. Never raises.
+    """
+    try:
+        config = getattr(coordinator, "config", None) or {}
+        entity = str(config.get("battery_charge_power_limit_entity") or "") or None
+        if entity is None:
+            register = {"entity": None, "note": "no charge-limit entity is set"}
+        else:
+            st = hass.states.get(entity)
+            if st is None:
+                register = {"entity": entity, "state": "<missing>"}
+            else:
+                attrs = getattr(st, "attributes", None) or {}
+                register = {
+                    "entity": entity,
+                    "state": st.state,
+                    "unit": attrs.get("unit_of_measurement"),
+                    "min": attrs.get("min"),
+                    "max": attrs.get("max"),
+                    "step": attrs.get("step"),
+                }
+
+        writer = getattr(coordinator, "_charge_pacing_writer", None)
+        record = None
+        if writer is None:
+            writer_out: dict = {"note": "pacing has not run yet"}
+        else:
+            writer_out = {
+                "engaged": bool(getattr(writer, "engaged", False)),
+                "engaged_entity": getattr(writer, "engaged_entity", "") or None,
+                "restore_value": getattr(writer, "restore_value", None),
+                "last_written_w": getattr(writer, "last_written_w", None),
+                "own_cap_w": getattr(writer, "_own_cap_w", None),
+                "confirmed": bool(getattr(writer, "_confirmed", False)),
+                "unconfirmed_cycles": int(
+                    getattr(writer, "_unconfirmed_cycles", 0) or 0),
+                # (02.10) taken, but as another number — Arne's 1550 → 1449
+                "applied_differs": (
+                    {"register_w": _ad[0], "written_w": _ad[1]}
+                    if (_ad := getattr(writer, "applied_differs", None))
+                    else None),
+            }
+            store = getattr(writer, "_store", None)
+            if store is not None:
+                try:
+                    loaded = await store.async_load()
+                    record = dict(loaded) if isinstance(loaded, dict) else None
+                except Exception as exc:  # noqa: BLE001
+                    record = {"error": str(exc)}
+
+        state = getattr(coordinator, "_charge_pacing_state", None) or {}
+        decision = {k: state.get(k) for k in (
+            "enabled", "cap_w", "action", "reason", "reason_code", "soc",
+            "hw_max_charge_w", "entity")} if state else None
+
+        return {"register": register, "writer": writer_out,
+                "record": record, "decision": decision}
+    except Exception as exc:  # noqa: BLE001 — the diagnose surface never fails
+        return {"error": str(exc)}

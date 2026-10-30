@@ -7,7 +7,9 @@ story. Three series, none recorded anywhere before this module:
 * **Overnight drain** — flow-attributed (``battery_to_home`` only). A SOC
   delta would conflate house drain with evening EV assist and export,
   poisoning the series the moment the assist feature this feeds ever
-  runs. Assist and export are recorded beside it for attribution.
+  runs. Assist and export are recorded beside it for attribution, and so
+  is the night's charge (#1045): the capacity reader divides energy by a
+  SOC span, and that span counts all of them.
 * **Morning refill** — when the pack first reached full, against the
   dampened forecast's promise captured at day start.
 * **Clipping hours** — SOC full while export runs: the only possible
@@ -93,6 +95,10 @@ class Sample:
     # here: the daily one resets at midnight while a night does not, so
     # comparing them condemned ordinary nights. See flow_invariant.
     battery_discharge_w: Optional[float] = None
+    # (#1045) The pack's own charge power. The SOC span is net of any charge
+    # taken in the same night, so the capacity reader needs it to compare
+    # like with like.
+    battery_charge_w: float = 0.0
     soc: Optional[float] = None
     soc_available: bool = True
     export_w: float = 0.0
@@ -138,6 +144,11 @@ class BatteryNightTracker:
         self._flow_violation_s = 0.0
         self._assist_j = 0.0
         self._export_j = 0.0
+        self._charge_j = 0.0
+        # (#1045) False for a night restored from a store written before the
+        # charge was counted: what went in before the restart is unknown, and
+        # the record says so rather than claiming 0.
+        self._charge_known = True
         self._gap_s = 0.0
         # (#837) The night's OWN gap/hold, frozen at dawn. gap_s and held_s
         # keep accumulating through the day phase — they have to, the day is
@@ -198,7 +209,7 @@ class BatteryNightTracker:
             # pack's SOC kept counting the whole time, so ask the pack what
             # happened rather than writing the interval off. Without this a
             # reboot silently UNDER-states the drain — and users reboot.
-            self._bridge_hole(dt, s)
+            self._bridge_hole(dt, s, in_night)
             self._gap_s += dt
             dt = 0.0                    # never integrate across a hole
             self._last_good = None      # …and never hold across one
@@ -248,6 +259,7 @@ class BatteryNightTracker:
                 self._drain_j += s.battery_to_home_w * dt
                 self._assist_j += s.battery_to_ev_w * dt
                 self._export_j += s.battery_to_grid_w * dt
+                self._charge_j += s.battery_charge_w * dt
                 self._night_grid_j += s.grid_to_home_w * dt
             if s.soc_available and s.soc is not None:
                 if self._soc_start is None:
@@ -305,7 +317,8 @@ class BatteryNightTracker:
         still refuse a night."""
         return max(0.0, self._night_gap() - self._bridged_s)
 
-    def _bridge_hole(self, dt: float, s: "Sample") -> None:
+    def _bridge_hole(self, dt: float, s: "Sample",
+                     in_night: bool = True) -> None:
         """Recover a sampling hole's energy from the battery's own SOC.
 
         Only ever ADDS: an SOC that rose across the hole means the pack was
@@ -321,6 +334,11 @@ class BatteryNightTracker:
         or an SOC jump too large to be real) leaves the night refused, which is
         the honest outcome: better an unusable night than a confidently wrong
         one.
+
+        (#1045) A hole that ends after dawn hands its energy to the night, so
+        the SOC it ended on is the night's morning value too. Without that the
+        energy covers more time than the SOC span, and the capacity reader
+        reads the pack big.
         """
         if self._phase != "night":
             return
@@ -335,6 +353,12 @@ class BatteryNightTracker:
         drop_pct = float(before) - float(after)
         if drop_pct <= 0:
             self._bridged_s += dt      # covered, and nothing left the pack
+            # (#1045) …but something went IN. The drain must not shrink (see
+            # above), and the charge must still be seen: the SOC span is net
+            # of it, so a hole that hid a grid charge would read the pack big.
+            self._charge_j += cap * -drop_pct / 100.0 * 3.6e6
+            if not in_night:
+                self._soc_morning = float(after)
             return
 
         # A pack cannot lose more than a plausible fraction of itself in the
@@ -347,6 +371,8 @@ class BatteryNightTracker:
 
         self._bridged_j += cap * drop_pct / 100.0 * 3.6e6
         self._bridged_s += dt
+        if not in_night:
+            self._soc_morning = float(after)
 
     @property
     def phase(self) -> str:
@@ -371,6 +397,9 @@ class BatteryNightTracker:
             "drain_kwh": round((self._drain_j + self._bridged_j) / 3.6e6, 3),
             "assist_kwh": round(self._assist_j / 3.6e6, 3),
             "export_kwh": round(self._export_j / 3.6e6, 3),
+            # (#1045) What went back IN during the night — the SOC span is net.
+            "charge_kwh": (round(self._charge_j / 3.6e6, 3)
+                           if self._charge_known else None),
             "soc_start": self._soc_start,
             "soc_morning": self._soc_morning,
             "reserve_hit": self._reserve_hit,
@@ -423,7 +452,9 @@ class BatteryNightTracker:
             "phase": self._phase, "date": self._date,
             "last_ts": self._last_ts,
             "drain_j": self._drain_j, "assist_j": self._assist_j,
-            "export_j": self._export_j, "gap_s": self._gap_s,
+            "export_j": self._export_j, "charge_j": self._charge_j,
+            "charge_known": self._charge_known,
+            "gap_s": self._gap_s,
             "reserve_hit": self._reserve_hit,
             "soc_start": self._soc_start,
             "soc_morning": self._soc_morning,
@@ -472,6 +503,8 @@ class BatteryNightTracker:
         self._bridge_failed = bool(d.get("bridge_failed", False))
         self._assist_j = float(d.get("assist_j", 0.0) or 0.0)
         self._export_j = float(d.get("export_j", 0.0) or 0.0)
+        self._charge_j = float(d.get("charge_j", 0.0) or 0.0)
+        self._charge_known = bool(d.get("charge_known", "charge_j" in d))
         self._gap_s = float(d.get("gap_s", 0.0) or 0.0)
         self._reserve_hit = bool(d.get("reserve_hit", False))
         self._soc_start = d.get("soc_start")

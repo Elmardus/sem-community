@@ -285,6 +285,9 @@ class TestStructuralKeysVisibility:
             "heat_pump_energy_sensor", "hot_water_energy_sensor",
             "heat_pump_rated_power", "hot_water_rated_power",
             "heat_pump_invert_sg_ready",
+            # (#812) the pump's own tariff decides whether its cost sensor exists
+            "heat_pump_tariff_rate", "heat_pump_tariff_entity",
+            "heat_pump_tariff_meter",
             "hot_water_entity", "hot_water_power_sensor",
             "hot_water_temperature_sensor",
             "ev_chargers",
@@ -293,6 +296,8 @@ class TestStructuralKeysVisibility:
             "battery_discharge_protection_enabled",  # #528 — no runtime switch → explicit reload
             "battery_force_discharge_entities",
             "battery_discharge_control_entities",
+            # (#1166) the pack's own end-of-charge level, shared and per battery
+            "battery_charge_end_soc_entity", "battery_charge_end_soc_entities",
             "battery_strategy_entities",
             "battery_strategy_control_entity",
             "battery_setpoint_bidirectional",
@@ -316,6 +321,9 @@ class TestStructuralKeysVisibility:
             "ev_energy_sensor", "ev_phase_switch_entity", "ev_plug_sensor",
             "ev_session_energy_sensor", "ev_start_stop_entity",
             "ev_total_energy_sensor",
+            # (#1040) the Schedule helper Calendar mode reads its times
+            # from — read when the tariff provider is built
+            "tariff_schedule_entity",
         }
         assert _SET_OPTION_STRUCTURAL_KEYS == expected
 

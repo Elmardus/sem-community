@@ -18,6 +18,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from ...utils.switch_sense import reads_running, switch_service
+
 _LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover — type-only
@@ -206,7 +208,9 @@ class ChargerAdapter(ABC):
           reads anything other than ``on``/``off`` (``unavailable`` /
           ``unknown``, Wallbox locked / eco-smart). SEM cannot drive it →
           surface.
-        - ``(True/False, True)`` — switch on / off.
+        - ``(True/False, True)`` — the switch lets the charge run / stops
+          it: on / off, or off / on for a switch named for the pause
+          (#1042, V2C's "Pause session").
         """
         dev = self._device
         ent = getattr(dev, "start_stop_entity", None)
@@ -218,14 +222,17 @@ class ChargerAdapter(ABC):
         # box of refusing an assertion it was never coherently told, which
         # is this issue's whole shape — so it joins the unreadable case and
         # waits out the hold.
-        if st is None or st.state not in ("on", "off"):
+        running = reads_running(dev.hass, ent, getattr(st, "state", None))
+        if running is None:
             return (None, False)
-        return (st.state == "on", True)
+        return (running, True)
 
     async def ensure_enabled(self) -> None:
         """Idempotently assert the start/stop surface ON.
 
-        ``switch.``/``input_boolean.`` → ``turn_on`` (idempotent by nature).
+        ``switch.``/``input_boolean.`` → ``turn_on``. Not idempotent everywhere
+        (#976: on OCPP it asks for a new transaction), which is why the
+        reconciler only emits ENABLE while the switch reads ``off``.
         ``button.`` → ``press`` — (#804 B4a) a button start entity used to be
         INVISIBLE here (early return), while the only presser in the tree
         string-mangled the entity id and was unreachable after a latching
@@ -240,8 +247,11 @@ class ChargerAdapter(ABC):
             return
         ent = str(ent)
         if ent.startswith(("switch.", "input_boolean.")):
-            await dev.send(ent.split(".")[0], "turn_on", {"entity_id": ent},
-                           why="ensure_enabled")
+            # (#1042) turn_off for a switch named for the pause
+            await dev.send(ent.split(".")[0],
+                           switch_service(getattr(dev, "hass", None), ent,
+                                          run=True),
+                           {"entity_id": ent}, why="ensure_enabled")
         elif ent.startswith("button."):
             await dev.send("button", "press", {"entity_id": ent},
                            why="ensure_enabled (#804 resume surface)")

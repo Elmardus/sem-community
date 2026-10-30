@@ -59,11 +59,14 @@ HIS_DAILY_HOME = 1.81
 
 
 def _members(devices):
-    """What the coordinator hands the check."""
+    """What the coordinator hands the check: the devices, and SEM's own
+    chargers among them (#1044 — named by identity, not by type)."""
     from custom_components.solar_energy_management.coordinator.health_check import (
         home_member_totals,
     )
-    return home_member_totals(devices)
+    chargers = [d for d in devices
+                if getattr(d, "device_type", None) is DeviceType.CURRENT_CONTROL]
+    return home_member_totals(devices, chargers)
 
 
 class TestTheEvIsNotAMemberOfHome:

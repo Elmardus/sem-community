@@ -19,6 +19,7 @@ from homeassistant.core import HomeAssistant
 
 from .base import SetpointDevice, DeviceState
 from ..consts.devices import CONTACT_VALUE_SERVICES
+from ..utils.select_option import listed_option
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -377,6 +378,9 @@ class HeatPumpController(SetpointDevice):
             )
             return None
         svc_domain, service, key = spec
+        if service == "select_option":
+            # (#1039) the option the select lists, never its label
+            value = listed_option(self.hass, entity_id, value)
         if svc_domain in ("number", "input_number"):
             try:
                 value = float(value)
@@ -411,6 +415,11 @@ class HeatPumpController(SetpointDevice):
         on_value, off_value = self._contact_values.get(idx, (None, None))
         if on_value is None or off_value is None:
             return None
+        if CONTACT_VALUE_SERVICES[domain][1] == "select_option":
+            # (#1039) a select READS the option it lists, so compare with the
+            # option SEM writes — a configured label would never match
+            on_value = listed_option(self.hass, entity_id, on_value)
+            off_value = listed_option(self.hass, entity_id, off_value)
         if self._same_value(domain, raw, on_value):
             return True
         if self._same_value(domain, raw, off_value):
@@ -592,6 +601,9 @@ class HeatPumpController(SetpointDevice):
                         "state %d — verify the mapping (#801)",
                         self.sg_ready_state_entity, got, int(state))
                     self._last_relay_path = "service_unverified"
+            # Keep the successful command like the relay path below. A
+            # lagging read-back is reported separately, not a NORMAL command.
+            self._hp_status.sg_ready_state = state
             return True
 
         # Prior relay1 value (for restore on a partial relay2 failure, I3).
@@ -646,12 +658,13 @@ class HeatPumpController(SetpointDevice):
         if self.temperature_entity_id:
             state = self.hass.states.get(self.temperature_entity_id)
             if state and state.state not in ("unknown", "unavailable"):
-                try:
-                    val = float(state.state)
+                # (#1118) the sensor's own unit decides — °C out
+                from ..coordinator.units import temperature_state_to_celsius
+                val = temperature_state_to_celsius(state, None)
+                if val is not None:
                     self._last_temperature_reading_path = "sensor"
                     return val
-                except (ValueError, TypeError):
-                    self._last_temperature_reading_path = "sensor_invalid"
+                self._last_temperature_reading_path = "sensor_invalid"
             elif state:
                 self._last_temperature_reading_path = "sensor_unavailable"
             else:

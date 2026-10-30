@@ -1,0 +1,381 @@
+{
+ "devices": {
+  "v2c:v2c": {
+   "manufacturer": null,
+   "model": null,
+   "name": "v2c"
+  }
+ },
+ "domain": "v2c",
+ "entities": [
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "max": 500.0,
+    "min": 1.0,
+    "step": 1.0,
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {
+    "max": 500.0,
+    "min": 1.0,
+    "step": 1.0
+   },
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.evse_1_1_1_1_installation_voltage",
+   "original_device_class": "voltage",
+   "platform": "v2c",
+   "state": "230",
+   "translation_key": "voltage_installation",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_voltage_installation",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "max": 32.0,
+    "min": 6.0,
+    "step": 1.0,
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "max": 32.0,
+    "min": 6.0,
+    "step": 1.0
+   },
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "number.evse_1_1_1_1_intensity",
+   "original_device_class": "current",
+   "platform": "v2c",
+   "state": "6",
+   "translation_key": "intensity",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_intensity",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "max": 32.0,
+    "min": 6.0,
+    "step": 1.0,
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "max": 32.0,
+    "min": 6.0,
+    "step": 1.0
+   },
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.evse_1_1_1_1_max_intensity",
+   "original_device_class": "current",
+   "platform": "v2c",
+   "state": "16",
+   "translation_key": "max_intensity",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_max_intensity",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "max": 32.0,
+    "min": 6.0,
+    "step": 1.0,
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "max": 32.0,
+    "min": 6.0,
+    "step": 1.0
+   },
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.evse_1_1_1_1_min_intensity",
+   "original_device_class": "current",
+   "platform": "v2c",
+   "state": "6",
+   "translation_key": "min_intensity",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_min_intensity",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "options": [
+     "monophasic",
+     "threephasic",
+     "mixed"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "monophasic",
+     "threephasic",
+     "mixed"
+    ]
+   },
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "select.evse_1_1_1_1_charge_mode",
+   "original_device_class": null,
+   "platform": "v2c",
+   "state": "threephasic",
+   "translation_key": "charge_mode",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_charge_mode",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.evse_1_1_1_1_battery_power",
+   "original_device_class": "power",
+   "platform": "v2c",
+   "state": "0.0",
+   "translation_key": "battery_power",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_battery_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.evse_1_1_1_1_charge_energy",
+   "original_device_class": "energy",
+   "platform": "v2c",
+   "state": "1.8",
+   "translation_key": "charge_energy",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_charge_energy",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.evse_1_1_1_1_charge_power",
+   "original_device_class": "power",
+   "platform": "v2c",
+   "state": "1500.27",
+   "translation_key": "charge_power",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_charge_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "duration",
+    "unit_of_measurement": "s"
+   },
+   "capabilities": {},
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.evse_1_1_1_1_charge_time",
+   "original_device_class": "duration",
+   "platform": "v2c",
+   "state": "4355",
+   "translation_key": "charge_time",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_charge_time",
+   "unit_of_measurement": "s"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.evse_1_1_1_1_house_power",
+   "original_device_class": "power",
+   "platform": "v2c",
+   "state": "0.0",
+   "translation_key": "house_power",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_house_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.evse_1_1_1_1_ip_address",
+   "original_device_class": null,
+   "platform": "v2c",
+   "state": "unknown",
+   "translation_key": "ip_address",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_ip_address",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "no_error",
+     "communication",
+     "reading",
+     "meter",
+     "waiting_wifi",
+     "waiting_communication",
+     "wrong_ip",
+     "meter_not_found",
+     "wrong_meter",
+     "no_response",
+     "clamp_not_connected",
+     "illegal_function",
+     "illegal_data_address",
+     "illegal_data_value",
+     "server_device_failure",
+     "acknowledge",
+     "server_device_busy",
+     "negative_acknowledge",
+     "memory_parity_error",
+     "gateway_path_unavailable",
+     "gateway_target_no_resp",
+     "server_rtu_inactive244_timeout",
+     "invalid_server",
+     "crc_error",
+     "fc_mismatch",
+     "server_id_mismatch",
+     "packet_length_error",
+     "parameter_count_error",
+     "parameter_limit_error",
+     "request_queue_full",
+     "illegal_ip_or_port",
+     "ip_connection_failed",
+     "tcp_head_mismatch",
+     "empty_message",
+     "undefined_error"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "no_error",
+     "communication",
+     "reading",
+     "meter",
+     "waiting_wifi",
+     "waiting_communication",
+     "wrong_ip",
+     "meter_not_found",
+     "wrong_meter",
+     "no_response",
+     "clamp_not_connected",
+     "illegal_function",
+     "illegal_data_address",
+     "illegal_data_value",
+     "server_device_failure",
+     "acknowledge",
+     "server_device_busy",
+     "negative_acknowledge",
+     "memory_parity_error",
+     "gateway_path_unavailable",
+     "gateway_target_no_resp",
+     "server_rtu_inactive244_timeout",
+     "invalid_server",
+     "crc_error",
+     "fc_mismatch",
+     "server_id_mismatch",
+     "packet_length_error",
+     "parameter_count_error",
+     "parameter_limit_error",
+     "request_queue_full",
+     "illegal_ip_or_port",
+     "ip_connection_failed",
+     "tcp_head_mismatch",
+     "empty_message",
+     "undefined_error"
+    ]
+   },
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.evse_1_1_1_1_meter_error",
+   "original_device_class": "enum",
+   "platform": "v2c",
+   "state": "waiting_wifi",
+   "translation_key": "meter_error",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_meter_error",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.evse_1_1_1_1_photovoltaic_power",
+   "original_device_class": "power",
+   "platform": "v2c",
+   "state": "0.0",
+   "translation_key": "fv_power",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_fv_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.evse_1_1_1_1_signal_status",
+   "original_device_class": null,
+   "platform": "v2c",
+   "state": "unknown",
+   "translation_key": "signal_status",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_signal_status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "v2c:v2c",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.evse_1_1_1_1_ssid",
+   "original_device_class": null,
+   "platform": "v2c",
+   "state": "unknown",
+   "translation_key": "ssid",
+   "unique_id": "da58ee91f38c2406c2a36d0a1a7f8569_ssid",
+   "unit_of_measurement": null
+  }
+ ],
+ "services": {},
+ "source": {
+  "files": [
+   "tests/components/v2c/snapshots/test_number.ambr",
+   "tests/components/v2c/snapshots/test_sensor.ambr",
+   "tests/components/v2c/snapshots/test_select.ambr"
+  ],
+  "kind": "core-snapshot",
+  "note": "Home Assistant's own test output for this integration at the tag; the device grouping comes from unique_id",
+  "repo": "home-assistant/core",
+  "tag": "2026.8.2"
+ }
+}

@@ -78,11 +78,17 @@ DECLARED: dict[str, str] = {
         "a lifetime's first verdict always acts (pinned in test_933)",
     "coordinator/coordinator.py::SEMCoordinator._raise_or_clear_battery_write_repair":
         "the entity a reflected write proves is cleared once per lifetime "
-        "(last_verified_entity, _battery_write_reconciled, #933)",
+        "(last_verified_entity, _battery_write_reconciled, #933); only that "
+        "entity, and not while another battery still misses there (#1124)",
     "coordinator/coordinator.py::SEMCoordinator._run_battery_pipeline":
         "the mode watch's first expected reading is a clear edge "
         "(BatteryModeWatch._settled, #933); a restart drops the "
         "non-persistent Repair, an options reload does not",
+    "coordinator/coordinator.py::SEMCoordinator._sweep_orphan_repairs":
+        "the memo is the sweep's clock, never a 'raised' flag: it starts at "
+        "None, so a fresh coordinator sweeps once its first window is up "
+        "(#1140); the sweep IS the answer for a Repair whose owner is gone, "
+        "and an owner still here clears its own on its first verdict (#933)",
     "coordinator/coordinator.py::SEMCoordinator._update_analytics_phases":
         "the relay and hot-water Repairs raise or clear on the current state "
         "every cycle; the memo only gates the once-per-lifetime orphan sweep",
@@ -97,6 +103,15 @@ DECLARED: dict[str, str] = {
         "which reloads), a declared pair, a combined sensor — clears the "
         "guess Repair once per reader (_split_guess_reconciled, #933); the "
         "startup sweep never runs on a reload",
+    "coordinator/coordinator.py::SEMCoordinator._refresh_external_control":
+        "not an edge memo: the book is only the window state of the "
+        "indicator; the Repair is decided afresh each cycle for every known "
+        "device and is non-persistent, so a restart drops it (#1079)",
+    "coordinator/sensor_reader.py::SensorReader.report_unsourced_power":
+        "each source's first 'found' answer of a reader lifetime clears once "
+        "(_unsourced_reconciled, a set per source, #1188), also when the "
+        "source is found only after the first cycle; the Repair is "
+        "non-persistent, so a restart drops it anyway",
     "coordinator/sensor_reader.py::SensorReader._read_sensor":
         "the first live read of each reader lifetime clears once "
         "(_sensor_repair_reconciled, #933)",

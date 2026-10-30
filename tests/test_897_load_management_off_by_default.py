@@ -7,7 +7,7 @@ said ``false`` — while the code seeded ``True`` at install, sized the ceiling
 at 5 kW without asking, and the Config card hid the arm switch outside
 *Advanced*. Three surfaces, three answers.
 
-The decision (Guido, 01.09.2026): **off** for a fresh install. A shedder that
+The decision (01.09.2026): **off** for a fresh install. A shedder that
 switches off house circuits is not something a first run arms unasked. An
 existing install is untouched: the install flow has seeded the key since
 v1.0.0, so every entry carries its own value and never sees the default.

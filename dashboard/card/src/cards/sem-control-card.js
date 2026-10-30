@@ -17,6 +17,8 @@
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semTheme, semFormatPower, semGetCurrency, semDefineCard } from '../base/sem-shared.js';
 import { priceLevelKey } from '../util/price-level.js';
+import { isUncapped } from '../util/peak-slot.js';
+import { fmtValue, readNumber, socDisplay } from '../util/missing-value.js';
 
 // EV section removed in #282 audit: every control (charging mode, night
 // charging, smart night, target, currents, phases, stall cooldown) is
@@ -28,19 +30,20 @@ const SECTIONS = [
     {
         id: 'surplus', icon: 'mdi:solar-power', color: '#ff9800', titleKey: 'surplus_control',
         subtitleFn: (c) => {
-            const active = c._valNum('surplus_active_devices').toFixed(0);
-            const total = c._valNum('surplus_total_devices').toFixed(0);
-            const alloc = c._valNum('surplus_allocated_w').toFixed(0);
+            const active = fmtValue(c._valNum('surplus_active_devices'), 0);
+            const total = fmtValue(c._valNum('surplus_total_devices'), 0);
+            const alloc = fmtValue(c._valNum('surplus_allocated_w'), 0);
             return `${active}/${total} ${c._t('devices')} · ${alloc}W`;
         },
     },
     {
         id: 'battery', icon: 'mdi:battery-medium', color: '#4db6ac', titleKey: 'battery_management',
         subtitleFn: (c) => {
-            const soc = c._valNum('battery_soc').toFixed(0);
+            // (#1197) the dash, not 0 %, beside the dash for the status
+            const soc = socDisplay(c._valNum('battery_soc', null)).label;
             const statusRaw = c._val('battery_status') || '';
             const status = statusRaw ? c._t(statusRaw.toLowerCase()) : '—';
-            return `SOC ${soc}% · ${status}`;
+            return `SOC ${soc} · ${status}`;
         },
     },
     {
@@ -61,15 +64,16 @@ const SECTIONS = [
             // configured" — the contradiction RienduPre reported.
             if (!c._bin('heat_pump_registered')) return '';
             const state = c._val('heat_pump_sg_ready_state');
-            const mode = c._val('heat_pump_mode');
             if (!state) return '';
-            return `${mode || '—'} · ${state}`;
+            // (#1053) the mode in the user's language, and the number
+            // says what it counts: "normal · 2" read as two of something.
+            return `${c._valLabel('heat_pump_mode') || '—'} · SG-Ready ${state}`;
         },
     },
     {
         id: 'tariff', icon: 'mdi:cash-multiple', color: '#96CAEE', titleKey: 'tariff_pricing',
         subtitleFn: (c) => {
-            const provider = c._val('tariff_provider') || '—';
+            const provider = c._valLabel('tariff_provider') || '—';
             const level = c._val('tariff_price_level') || '';
             return level ? `${provider} · ${c._t(priceLevelKey(level))}` : provider;
         },
@@ -77,8 +81,8 @@ const SECTIONS = [
     {
         id: 'peak', icon: 'mdi:flash-alert', color: '#ff9800', titleKey: 'peak_load_management',
         subtitleFn: (c) => {
-            const peak = c._valNum('consecutive_peak_15min').toFixed(1);
-            const monthly = c._valNum('monthly_consecutive_peak').toFixed(1);
+            const peak = fmtValue(c._valNum('consecutive_peak_15min'), 1);
+            const monthly = fmtValue(c._valNum('monthly_consecutive_peak'), 1);
             return `${c._t('peak')} ${peak} kW · ${c._t('monthly_peak')} ${monthly} kW`;
         },
     },
@@ -115,10 +119,21 @@ const WATCHED = [
     'sensor.sem_peak_margin', 'sensor.sem_available_load_reduction',
     'sensor.sem_controllable_devices_count',
     'switch.sem_observer_mode',
+    // (#1055 follow-up) the peak section and the grid sign row read these
+    'sensor.sem_target_peak_limit', 'sensor.sem_diag_grid_sign',
 ];
+
+const PEAK_FLAG = {
+    'sensor.sem_target_peak_limit': ['peak_limit_unlimited'],
+    // (#1021) the grid operator's relay rides the load-management sensor
+    'sensor.sem_load_management_status': [
+        'shed_signal_active', 'shed_signal_cap_kw', 'shed_signal_since'],
+};
 
 class SEMControlCard extends SEMLitBase {
     static get watchedEntities() { return WATCHED; }
+    // (#1055 follow-up) "no grid limit" changes the attribute, not the state.
+    static get watchedAttributes() { return PEAK_FLAG; }
 
     static get properties() {
         return { ...super.properties };
@@ -147,18 +162,15 @@ class SEMControlCard extends SEMLitBase {
         return (e && e.state !== 'unavailable' && e.state !== 'unknown') ? e.state : '';
     }
 
-    /** Numeric state for a sensor.sem_ suffixed entity. */
-    _valNum(suffix, fallback = 0) {
-        const e = this._hass?.states[`${this._prefix}${suffix}`];
-        if (!e || e.state === 'unavailable' || e.state === 'unknown') return fallback;
-        return parseFloat(e.state) ?? fallback;
+    /** Numeric state for a sensor.sem_ suffixed entity — (#1200) null when
+     *  out, so it prints "—", not 0. */
+    _valNum(suffix, fallback = null) {
+        return readNumber(this._hass?.states[`${this._prefix}${suffix}`]) ?? fallback;
     }
 
     /** Numeric state for a number.sem_ suffixed entity. */
-    _numVal(suffix, fallback = 0) {
-        const e = this._hass?.states[`number.sem_${suffix}`];
-        if (!e || e.state === 'unavailable' || e.state === 'unknown') return fallback;
-        return parseFloat(e.state) ?? fallback;
+    _numVal(suffix, fallback = null) {
+        return readNumber(this._hass?.states[`number.sem_${suffix}`]) ?? fallback;
     }
 
     /** Boolean: is switch.sem_<suffix> on? */
@@ -184,15 +196,15 @@ class SEMControlCard extends SEMLitBase {
 
     // ── Shared control renderers ──
 
-    _renderStepper(entityId, labelKey, T, helpKey) {
+    _renderStepper(entityId, labelKey, T) {
         const entity = this._hass?.states[entityId];
         if (!entity) return nothing;
         const frozen = this._frozenEntities[entityId];
-        const val = frozen ? frozen.value : (parseFloat(entity.state) || 0);
+        const val = frozen ? frozen.value : readNumber(entity);
         const step = parseFloat(entity.attributes.step) || 1;
         const unit = entity.attributes.unit_of_measurement || '';
         const decimals = step < 1 ? 1 : 0;
-        const displayVal = val.toFixed(decimals) + (unit ? ' ' + unit : '');
+        const displayVal = fmtValue(val, decimals) + (unit ? ' ' + unit : '');
 
         return html`
             <div class="stepper-cell">
@@ -216,7 +228,6 @@ class SEMControlCard extends SEMLitBase {
                         >+</button>
                     </div>
                 </div>
-                ${(this._showHelp && helpKey) ? html`<div class="setting-help-text">${this._t(helpKey)}</div>` : nothing}
             </div>
         `;
     }
@@ -245,10 +256,10 @@ class SEMControlCard extends SEMLitBase {
     // ── Section content renderers ──
 
     _renderSurplusSection(T) {
-        const total = this._valNum('surplus_total_w').toFixed(0);
-        const dist = this._valNum('surplus_distributable_w').toFixed(0);
-        const alloc = this._valNum('surplus_allocated_w').toFixed(0);
-        const free = this._valNum('surplus_unallocated_w').toFixed(0);
+        const total = fmtValue(this._valNum('surplus_total_w'), 0);
+        const dist = fmtValue(this._valNum('surplus_distributable_w'), 0);
+        const alloc = fmtValue(this._valNum('surplus_allocated_w'), 0);
+        const free = fmtValue(this._valNum('surplus_unallocated_w'), 0);
 
         return html`
             <div class="info-tiles">
@@ -284,7 +295,7 @@ class SEMControlCard extends SEMLitBase {
         // #461: grid-sign read-out only. The fix / re-learn buttons moved
         // to the Configuration tab's Advanced section (the settings home);
         // this card stays live-ops/monitoring.
-        const gridSign = this._val('diag_grid_sign') || '—';
+        const gridSign = this._valLabel('diag_grid_sign') || '—';
 
         return html`
             <div class="readonly-row">
@@ -315,14 +326,14 @@ class SEMControlCard extends SEMLitBase {
             </div>`;
         }
         const sgStateRaw = this._val('heat_pump_sg_ready_state');
-        const mode = this._val('heat_pump_mode') || '—';
+        const mode = this._valLabel('heat_pump_mode') || '—';
         const boosted = this._switchOn('heat_pump_solar_boost');
         const accent = boosted ? '#ff9800' : '#4db6ac';
         return html`
             <div class="readonly-row">
                 <ha-icon icon="mdi:heat-pump-outline" style="--mdc-icon-size:18px;color:${accent}"></ha-icon>
                 <span class="ctrl-label" style="flex:1">${this._t('heat_pump_mode')}</span>
-                <span class="readonly-value">${this._t(mode.toLowerCase()) || mode}</span>
+                <span class="readonly-value">${mode}</span>
             </div>
             <div class="readonly-row">
                 <ha-icon icon="mdi:transmission-tower" style="--mdc-icon-size:18px;color:${accent}"></ha-icon>
@@ -369,16 +380,21 @@ class SEMControlCard extends SEMLitBase {
     _renderPeakSection(T) {
         const peakPct = this._valNum('current_vs_peak_percentage');
         const peakColor = peakPct > 90 ? '#f44336' : peakPct > 70 ? '#ff9800' : '#8DC892';
-        const shedDevices = this._valNum('controllable_devices_count').toFixed(0);
+        const shedDevices = fmtValue(this._valNum('controllable_devices_count'), 0);
         const shed = this._valNum('available_load_reduction');
+        // (#1055) No grid limit: there is no "% of limit" and no margin to
+        // show. The sensors keep the saved number, which is not in force.
+        const uncapped = isUncapped(this._hass?.states[`${this._prefix}target_peak_limit`]);
 
         return html`
             <div class="peak-hero">
-                <span class="peak-pct" style="color:${peakColor}">${peakPct.toFixed(0)}%</span>
-                <span class="peak-of-limit">${this._t('of_limit')}</span>
+                ${uncapped
+                    ? html`<span class="peak-pct" style="color:#8DC892">${this._t('uncapped')}</span>`
+                    : html`<span class="peak-pct" style="color:${peakColor}">${fmtValue(peakPct, 0)}%</span>
+                <span class="peak-of-limit">${this._t('of_limit')}</span>`}
             </div>
             <div class="peak-detail">
-                <span class="peak-status">${(() => { const s = this._val('load_management_status'); return s ? this._t(s) : '—'; })()}</span>
+                <span class="peak-status">${this._valLabel('load_management_status') || '—'}</span>
                 <span class="peak-sep">·</span>
                 <span class="peak-rec">${(() => { const r = this._val('load_management_recommendation'); return r ? this._t(r) : ''; })()}</span>
             </div>
@@ -387,14 +403,14 @@ class SEMControlCard extends SEMLitBase {
                     <ha-icon icon="mdi:shield-check" style="--mdc-icon-size:18px;color:#8DC892"></ha-icon>
                     <div class="info-tile-content">
                         <span class="info-tile-label">${this._t('peak_margin')}</span>
-                        <span class="info-tile-value">${this._valNum('peak_margin').toFixed(1)} kW</span>
+                        <span class="info-tile-value">${uncapped ? this._t('uncapped') : `${fmtValue(this._valNum('peak_margin'), 1)} kW`}</span>
                     </div>
                 </div>
                 <div class="info-tile">
                     <ha-icon icon="mdi:power-plug-off" style="--mdc-icon-size:18px;color:#ff9800"></ha-icon>
                     <div class="info-tile-content">
                         <span class="info-tile-label">${this._t('sheddable')}</span>
-                        <span class="info-tile-value">${shed.toFixed(1)} kW · ${shedDevices} ${this._t('devices')}</span>
+                        <span class="info-tile-value">${fmtValue(shed, 1)} kW · ${shedDevices} ${this._t('devices')}</span>
                     </div>
                 </div>
             </div>
@@ -451,6 +467,10 @@ class SEMControlCard extends SEMLitBase {
         const isDark = T.isDark !== false;
         const accent = T.accent || '#42a5f5';
         const obsOn = this._switchOn('observer_mode');
+        // (#1021) the grid operator's relay, while it is on
+        const lmAttrs = this._hass?.states?.['sensor.sem_load_management_status']?.attributes || {};
+        const opOn = lmAttrs.shed_signal_active === true;
+        const opText = opOn ? this._operatorBanner(lmAttrs) : '';
 
         const sectionRenderers = {
             surplus:  (T) => this._renderSurplusSection(T),
@@ -489,6 +509,16 @@ class SEMControlCard extends SEMLitBase {
                     opacity: ${obsOn ? '1' : '0'};
                     margin-bottom: ${obsOn ? '12px' : '0'};
                     padding: ${obsOn ? '12px 16px' : '0 16px'};
+                }
+
+                /* ── (#1021) Grid operator's relay ── */
+                .operator-banner {
+                    display: flex; align-items: center; gap: 10px;
+                    border-radius: 12px; margin-bottom: 12px; padding: 12px 16px;
+                    background: rgba(255,152,0,0.08);
+                    border: 1px solid #ff9800;
+                    color: #ff9800;
+                    font-size: 13px; font-weight: 500;
                 }
 
                 /* ── Sections (polish: color accent + EV-card-matching typography) ── */
@@ -706,9 +736,29 @@ class SEMControlCard extends SEMLitBase {
                     <ha-icon icon="mdi:eye-outline" style="--mdc-icon-size:20px;color:#f44336"></ha-icon>
                     <span>${this._t('observer_mode_active')} — ${this._t('observer_mode_readonly')}</span>
                 </div>
+                ${opOn ? html`
+                <div class="operator-banner">
+                    <ha-icon icon="mdi:transmission-tower-export" style="--mdc-icon-size:20px;color:#ff9800"></ha-icon>
+                    <span>${opText}</span>
+                </div>` : nothing}
                 ${SECTIONS.map(s => this._renderSection(s, sectionRenderers[s.id], T))}
             </div>
         `;
+    }
+
+    // (#1021) "Grid operator: limit 4.2 kW since 14:05 — solar on top is fine"
+    _operatorBanner(a) {
+        const kw = typeof a.shed_signal_cap_kw === 'number'
+            ? a.shed_signal_cap_kw.toFixed(1) : '?';
+        let time = '?';
+        if (a.shed_signal_since) {
+            const d = new Date(a.shed_signal_since);
+            if (!isNaN(d)) {
+                time = d.toLocaleTimeString(this._hass?.language || undefined,
+                    { hour: '2-digit', minute: '2-digit' });
+            }
+        }
+        return this._t('operator_limit_banner').replace('{kw}', kw).replace('{time}', time);
     }
 
     getCardSize() { return 12; }

@@ -109,7 +109,7 @@ class TestHuaweiDryRun:
         assert yes["service"] == "huawei_solar.set_zero_power_grid_connection"
 
     def test_a_release_on_a_rig_that_never_cut_is_derived_from_the_readback(self):
-        """Guido's standing mode since 17.09: the hand-back the real release
+        """The standing mode since 17.09: the hand-back the real release
         would capture and restore is `percent 100` — the verb proven to land."""
         with _registry():
             row = _huawei().export_dry_run(ExportIntent.RELEASE, 0.0)
@@ -187,7 +187,7 @@ class TestDeyeDryRun:
         a._system_work_mode_entity = "select.deye_work_mode"
         a._system_work_mode_options = {"zero_export_to_load": "Zero Export To Load",
                                        "selling_first": "Selling First"}
-        a._get_state = MagicMock(return_value=current)
+        a._get_state = MagicMock(return_value=SimpleNamespace(state=current))  # a State, as HA returns (#1117)
         return a
 
     def test_a_cut_selects_zero_export_and_a_release_the_mode_it_found(self):

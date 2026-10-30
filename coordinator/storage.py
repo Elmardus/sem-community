@@ -36,6 +36,21 @@ ENERGY_SAVE_INTERVAL = 300
 # async_save_daily_throttled writes immediately at most this often instead.
 DAILY_SAVE_INTERVAL = 120
 
+# (#1024) Finished charging sessions kept for the EV card's session list —
+# a year of daily sessions. ~120 bytes each; the whole list is well under
+# the energy store's size, and it never rides on an entity attribute.
+SESSION_HISTORY_MAX = 400
+
+# (#1083) One small record per finished day (its tags), for the replay
+# tool. ~200 bytes each; 400 days stay far under the daily store's size.
+DAY_TAGS_MAX = 400
+
+# (#1083) The Simulation tab keeps its last runs in the daily store: at most
+# this many, each at most ``SIMULATION_RUN_DAYS_MAX`` day rows (~200 bytes:
+# a year of rows is ~75 KB, three runs ~220 KB).
+SIMULATION_RUNS_MAX = 3
+SIMULATION_RUN_DAYS_MAX = 365
+
 # (#668) The keys of ``EnergyCalculator.get_state()`` that this layer carries.
 #
 # ONE list, deliberately. Before #668 the export and the import each had their
@@ -62,6 +77,16 @@ CALCULATOR_STATE_KEYS: tuple[str, ...] = (
     "solar_counter_baselines",
     # (#658) EV wallbox-counter baselines
     "ev_counter_baselines",
+    # (#812) a device's own meter baseline: without it the first step after
+    # every restart is re-baselined and its kWh are never priced
+    "device_meter_last",
+    # (#1228) an own meter's step over an outage, waiting for the house rows
+    # over the same time: lost, a restart inside the wait drops it
+    "device_meter_gaps",
+    # (#1049) each charger's own counter baselines, and what each box drew
+    # since its counter last moved
+    "charger_counter_baselines",
+    "ev_counter_pending",
     # (#628) grid/battery meter baselines, keyed by category
     "meter_baselines",
     # (#628) the CALENDAR-day EV mirror the home balance subtracts, and the
@@ -75,6 +100,9 @@ CALCULATOR_STATE_KEYS: tuple[str, ...] = (
     # is the very thing ``_ev_reset_day`` defers.
     "ev_day_offset",
     "ev_day_key",
+    # (#1176) the car day daily_ev last read from, and when it last rolled
+    "ev_seen_day",
+    "ev_rolled_at",
     # (#668) lifetime running totals, summed at each day rollover. Dropped
     # since they were introduced, so ``lifetime_total_savings`` fell back to a
     # 7-day-average-rate ESTIMATE of the entire history after every restart
@@ -101,6 +129,15 @@ CALCULATOR_STATE_KEYS: tuple[str, ...] = (
     # "too little history" silence for two weeks after every reboot — the
     # exact window a post-upgrade sensor fault most needs catching in.
     "baseload_history",
+    # (#1044) the first day the mirror held home members only. Lost, every
+    # restart would look like the upgrade day and seal no day clean.
+    "home_members_since",
+    # (#1043) the counters the lifetime seed added up, per category. Lost,
+    # every restart would read as a seed from before #1043 and re-seed.
+    "lifetime_seed_counters",
+    # (#1046) the EV day the car's flow rows were first booked on. Lost,
+    # every restart would read as the upgrade day.
+    "ev_flow_since",
 )
 
 
@@ -137,6 +174,7 @@ class SEMStorage:
         self._loaded = False
         self._shutdown_listener: Optional[Callable] = None
         self._last_daily_save_ts: float = 0.0  # monotonic, for the throttle
+        self._closed = False   # (#1209) set by async_close on unload
 
     @property
     def is_loaded(self) -> bool:
@@ -289,8 +327,11 @@ class SEMStorage:
                     )
                     dropped.append(key)
                     continue
-                # Daily accumulators should never be negative
-                if acc_key == "daily_accumulators" and value < -0.01:
+                # Daily accumulators should never be negative — except
+                # (#1088) the CO2 correction, which is negative whenever the
+                # grid is cleaner than the fixed average (it is kg, not kWh).
+                if (acc_key == "daily_accumulators" and value < -0.01
+                        and not str(key).startswith("co2_live_correction_")):
                     _LOGGER.warning(
                         "Negative daily accumulator %s=%.2f kWh — resetting to 0",
                         key, value,
@@ -462,6 +503,16 @@ class SEMStorage:
         """Persist EV session state (survives restarts)."""
         self._daily_data["ev_session"] = state
 
+    # (#1069) The current 15-minute peak slot — a restart resumes it spent.
+    def get_peak_slot_state(self) -> Dict[str, Any]:
+        """The slot tracker's saved state (``PeakSlotTracker.to_state``)."""
+        return self._daily_data.get("peak_slot", {})
+
+    def set_peak_slot_state(self, state: Dict[str, Any]) -> None:
+        """Rides the daily store: written on a clean stop and every two
+        minutes, so a restart lands back inside the same slot with it."""
+        self._daily_data["peak_slot"] = dict(state)
+
     # EV intelligence persistence (survives restarts and daily resets)
     def get_pv_performance_state(self) -> Dict[str, Any]:
         """(#867) The PV analyzer's monthly history.
@@ -538,7 +589,7 @@ class SEMStorage:
     def get_energy_plan_state(self) -> Dict[str, Any]:
         """(#638) Tonight's stamped plan + period + demand signature —
         a reboot must not silently reshuffle a night the actuation is
-        steering by (Guido's Aug-5 note, made acute 00:20 on 08-09).
+        steering by (the Aug-5 note, made acute 00:20 on 08-09).
 
         ``overnight_plan`` is the same state under the planner's old name.
         An upgrade at 23:50 is still a reboot mid-night, and the whole point
@@ -604,6 +655,15 @@ class SEMStorage:
         """Persist the per-charger measured-W/A EMA."""
         self._energy_data["ev_wpa_ema"] = dict(state)
 
+    # (#1019) The hint engine's small state: what fired (so a restart
+    # repeats nothing), past nights' load, the last days' totals.
+    def get_hints_state(self) -> Dict[str, Any]:
+        state = self._energy_data.get("hints")
+        return dict(state) if isinstance(state, dict) else {}
+
+    def set_hints_state(self, state: Dict[str, Any]) -> None:
+        self._energy_data["hints"] = dict(state)
+
     # Sign-detection persistence (#476 item 5) — locked grid/battery
     # sign flags survive restarts so the autodetect can't re-learn a
     # wrong sign from ambiguous post-reboot samples.
@@ -614,6 +674,16 @@ class SEMStorage:
     def set_sign_state(self, state: Dict[str, Any]) -> None:
         """Persist sign-detection lock state."""
         self._energy_data["sign_state"] = state
+
+    def get_battery_sign_basis(self) -> Optional[Dict[str, Any]]:
+        """(#1208) The one-battery sign as a build since #1208 last saved it
+        (``SensorReader.export_battery_basis``). A key of its own: an older
+        build writes ``sign_state`` again from the keys it knows, but keeps
+        the store's other keys."""
+        return self._energy_data.get("battery_sign_basis")
+
+    def set_battery_sign_basis(self, basis: Dict[str, Any]) -> None:
+        self._energy_data["battery_sign_basis"] = dict(basis)
 
     # VPP event history persistence (#580) — per-event energy accounting
     # for payment reconciliation (bounded to ~20 records by VppDispatcher).
@@ -629,6 +699,24 @@ class SEMStorage:
     # Legionella timestamp persistence (#508 I2) — without this, driving
     # the legionella cycle (#508 C1) would force a disinfection run on
     # every restart, since a None timestamp reads as "overdue".
+    def get_capability_verdicts(self) -> Dict[str, bool]:
+        """(#996) The last verdict each runtime capability had from a read
+        taken while Home Assistant was running — the fallback at setup,
+        when the live read has not been asked yet."""
+        raw = self._energy_data.get("capability_verdicts")
+        if not isinstance(raw, dict):
+            return {}
+        return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, bool)}
+
+    def set_capability_verdict(self, name: str, value: bool) -> bool:
+        """(#996) Store one running-time verdict. True when it changed."""
+        current = self.get_capability_verdicts()
+        if current.get(name) is value:
+            return False
+        current[name] = bool(value)
+        self._energy_data["capability_verdicts"] = current
+        return True
+
     def get_legionella_time(self) -> Optional[str]:
         """Get the persisted last-legionella ISO timestamp, or None."""
         return self._energy_data.get("legionella_last_time")
@@ -654,19 +742,75 @@ class SEMStorage:
             self._energy_data["last_decay_date"] = iso_date
 
     def add_session_to_history(self, session: Dict[str, Any]) -> None:
-        """Append a completed session to bounded history (max 90 entries)."""
+        """Append a completed session to bounded history.
+
+        (#1024) The bound is ``SESSION_HISTORY_MAX`` — a year of daily
+        sessions — so the session list on the EV card can show a month
+        view with totals. ONE writer: ``ev_control._update_session_tracking``,
+        where the session ends, per charger.
+        """
         state = self.get_ev_intelligence_state()
         history = state.get("session_history", [])
         history.append(session)
-        if len(history) > 90:
-            history = history[-90:]
+        if len(history) > SESSION_HISTORY_MAX:
+            history = history[-SESSION_HISTORY_MAX:]
         state["session_history"] = history
         self._energy_data["ev_intelligence"] = state
 
     def get_session_history(self) -> list:
-        """Get EV session history (bounded to 90 entries)."""
+        """Get EV session history (bounded to ``SESSION_HISTORY_MAX``)."""
         state = self.get_ev_intelligence_state()
         return state.get("session_history", [])
+
+    def get_day_tags(self) -> list:
+        """(#1083) The stored day tags, oldest first."""
+        tags = self._daily_data.get("day_tags")
+        return list(tags) if isinstance(tags, list) else []
+
+    def put_day_tag(self, record: Dict[str, Any]) -> None:
+        """(#1083) Store one day's tags; a second record for the same date
+        replaces the first. Bounded to ``DAY_TAGS_MAX`` days."""
+        date = str(record.get("date") or "")
+        if not date:
+            return
+        tags = [t for t in self.get_day_tags()
+                if isinstance(t, dict) and t.get("date") != date]
+        tags.append(dict(record))
+        tags.sort(key=lambda t: str(t.get("date")))
+        self._daily_data["day_tags"] = tags[-DAY_TAGS_MAX:]
+
+    def get_simulation_runs(self) -> list:
+        """(#1083) The stored Simulation runs, oldest first."""
+        runs = self._daily_data.get("simulation_runs")
+        return [r for r in runs if isinstance(r, dict)] if isinstance(runs, list) else []
+
+    def put_simulation_run(self, run: Dict[str, Any]) -> None:
+        """(#1083) Store one Simulation run; the same ``run_id`` replaces the
+        old record. Last ``SIMULATION_RUNS_MAX`` kept, each with at most
+        ``SIMULATION_RUN_DAYS_MAX`` day rows."""
+        run_id = str(run.get("run_id") or "")
+        if not run_id:
+            return
+        record = dict(run)
+        result = record.get("result")
+        if isinstance(result, dict) and isinstance(result.get("days"), list):
+            result = dict(result)
+            result["days"] = result["days"][-SIMULATION_RUN_DAYS_MAX:]
+            record["result"] = result
+        runs = [r for r in self.get_simulation_runs() if r.get("run_id") != run_id]
+        runs.append(record)
+        self._daily_data["simulation_runs"] = runs[-SIMULATION_RUNS_MAX:]
+
+    def note_start(self, iso_date: str) -> None:
+        """(#1083) Remember the days SEM started on — a restart makes that
+        day's data less trustworthy for a replay. Last 30 kept."""
+        starts = [d for d in (self._daily_data.get("sem_starts") or [])
+                  if isinstance(d, str) and d != iso_date]
+        starts.append(str(iso_date))
+        self._daily_data["sem_starts"] = sorted(starts)[-30:]
+
+    def started_on(self, iso_date: str) -> bool:
+        return iso_date in (self._daily_data.get("sem_starts") or [])
 
     # Save operations
     async def async_save_energy_delayed(self) -> None:
@@ -674,6 +818,8 @@ class SEMStorage:
 
         Batches multiple updates within ENERGY_SAVE_DELAY seconds.
         """
+        if self._ended("delayed energy save"):
+            return
         try:
             def get_data() -> Dict[str, Any]:
                 return {
@@ -700,6 +846,8 @@ class SEMStorage:
         Only for rare, restart-critical writes — the decay date changes at most
         once a day. Do NOT reach for this in the per-cycle path.
         """
+        if self._ended("energy save"):
+            return
         try:
             await self._energy_store.async_save({
                 **self._energy_data,
@@ -728,6 +876,8 @@ class SEMStorage:
 
     async def async_save_daily(self) -> None:
         """Save daily data immediately."""
+        if self._ended("daily save"):
+            return
         try:
             await self._daily_store.async_save(self._daily_data)
             _LOGGER.debug("Saved daily data to storage")
@@ -753,6 +903,13 @@ class SEMStorage:
 
     async def async_save_all(self) -> None:
         """Save all data immediately (for shutdown)."""
+        if self._ended("save of all data"):
+            return
+        await self._async_write_all()
+
+    async def _async_write_all(self) -> None:
+        """Write both stores now. Only ``async_save_all`` (which asks
+        ``_ended``) and ``async_close`` (which ends the store first) call it."""
         try:
             # Save energy data immediately
             energy_data = {
@@ -781,8 +938,44 @@ class SEMStorage:
 
     async def _handle_shutdown(self, event: Event) -> None:
         """Save all data before shutdown."""
+        self._shutdown_listener = None   # a once-listener: HA dropped it
         _LOGGER.info("Handling shutdown, saving all SEM data...")
         await self.async_save_all()
+
+    async def async_close(self) -> None:
+        """(#1209) End this lifetime: write both stores now, then never again.
+
+        A reload builds a new store that reads the files. A change still
+        queued in ``async_delay_save`` is not on them: that save re-arms on
+        every cycle, so it lands only once the cycles stop. The new lifetime
+        started from the old state — "Reset sign detection" got its old signs
+        back. And this store went on: its queued write and its HA-stop
+        listener wrote the old lifetime's data over the new one's, and
+        brought the files of a removed SEM back. ``async_unload_entry`` calls
+        this on every unload.
+        """
+        if getattr(self, "_closed", False):
+            return
+        # Ended BEFORE the write: a cycle still running must not queue a
+        # new write on this store while the one below waits for the disk.
+        self._closed = True
+        if getattr(self, "_shutdown_listener", None) is not None:
+            self._shutdown_listener()
+            self._shutdown_listener = None
+        if getattr(self, "_loaded", False):   # never write the empty containers of a failed load
+            # also drops a queued write and its final-write hook (HA Store)
+            await self._async_write_all()
+
+    def _ended(self, what: str) -> bool:
+        """(#1209) After ``async_close`` nothing of this lifetime writes:
+        the files belong to the next store, or to nobody after a removal."""
+        if getattr(self, "_closed", False):
+            # the cycle's own queued save is expected here; any other write
+            # is a change that will not be kept, so say it
+            _LOGGER.log(logging.DEBUG if what == "delayed energy save" else logging.INFO,
+                        "Skipped the %s: this SEM lifetime has ended", what)
+            return True
+        return False
 
     # State export/import for calculators
     def export_energy_calculator_state(self) -> Dict[str, Any]:

@@ -10,6 +10,7 @@ Device Types:
 - ScheduleDevice: start signal with deadline (dishwasher, washer)
 """
 import asyncio
+from functools import partial
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -18,8 +19,10 @@ from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from ..consts.devices import names_a_reboot
+from ..consts.devices import DEFAULT_LOAD_PHASE, names_a_reboot
 from ..utils.log_gate import log_on_change
+from ..utils.select_option import listed_option
+from ..utils.switch_sense import reads_running, switch_service
 
 # #392: KEBA's failsafe watchdog (and similar device-side timers on other
 # chargers) requires periodic *writes* to refresh — reads alone don't
@@ -76,6 +79,13 @@ FAILSAFE_OFF_TIMEOUT_S = 10
 # is one honest look, not a heartbeat.
 FAILSAFE_READBACK_DELAY_S = 30
 
+# #1163 — a box's own integration may poll it the instant a stop lands, and
+# a command arriving in the same moment is dropped without an answer (PROD
+# 24.10.2026: 14 of 16 dead-man's OFFs lost). Wait out that burst first,
+# and resend while the read-back still shows a non-zero fallback.
+DEADMAN_SETTLE_S = 0.5
+DEADMAN_MAX_TRIES = 3
+
 #: (#935) How long a teardown will wait on a charger before giving up on it.
 #: ``hass.services.async_call`` is unbounded, and a removal that hangs on a
 #: stalled integration never completes — HA awaits ``async_remove_entry``
@@ -104,8 +114,10 @@ _MAX_PLAUSIBLE_LOAD_W = 100_000.0
 from ..consts.core import (
     DEFAULT_DEVICE_RATED_POWER,
     DEFAULT_MAX_CHARGING_CURRENT,
+    RATED_POWER_HOLD_S,
 )
 from ..coordinator.units import energy_state_to_kwh, power_state_to_watts
+from .held_power import HeldPower
 
 from homeassistant.core import HomeAssistant, callback
 
@@ -208,6 +220,55 @@ class ControllableDevice(ABC):
     to each device that meets its minimum threshold.
     """
 
+    # (#812) The device's own tariff — none set = the house tariff. Set by
+    # ``coordinator.device_tariff.apply_tariff`` (heat pump config row, or a
+    # device goal); ``_tariff_level`` / ``tariff_inputs`` are stamped each
+    # cycle by ``DeviceTariffs.stamp``.
+    tariff_rate: float = 0.0
+    tariff_entity: str = ""
+    tariff_meter: str = ""
+    _tariff_level: Optional[str] = None
+    tariff_inputs: Optional[Dict[str, Any]] = None
+
+    @property
+    def control_mode(self) -> DeviceControlMode:
+        """What SEM may do with this device NOW (#49): the scheduled mode
+        while the device's Schedule helper is on (#1020), else the stored
+        one. Substituted here, where every reader reads it; the stored mode
+        is never written, so a restart, an unavailable helper or a deleted
+        one needs no restore."""
+        scheduled = self.scheduled_control_mode()
+        return scheduled if scheduled is not None else self.stored_control_mode
+
+    @control_mode.setter
+    def control_mode(self, mode: DeviceControlMode) -> None:
+        """Writers set the STORED mode — the one a schedule hands back."""
+        self._control_mode = mode
+
+    @property
+    def stored_control_mode(self) -> DeviceControlMode:
+        """The mode the user chose, whatever a schedule says now."""
+        return self.__dict__.get("_control_mode", DeviceControlMode.PEAK_ONLY)
+
+    def scheduled_control_mode(self) -> Optional[DeviceControlMode]:
+        """(#1020) The schedule's mode while its helper is ON, else None.
+        A helper that is unavailable, unknown or gone is no schedule."""
+        entity = getattr(self, "schedule_entity", "") or ""
+        mode = getattr(self, "schedule_mode", "") or ""
+        hass = getattr(self, "hass", None)
+        if not entity or not mode or hass is None:
+            return None
+        try:
+            state = hass.states.get(entity)
+        except Exception:  # noqa: BLE001 — no state machine, no schedule
+            return None
+        if state is None or state.state != "on":
+            return None
+        try:
+            return DeviceControlMode(mode)
+        except ValueError:
+            return None
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -234,7 +295,19 @@ class ControllableDevice(ABC):
         self._status = DeviceStatus()
         self._enabled = True
         self._managed_externally = False
+        # (#1020) A Schedule helper that sets the mode while it is on —
+        # switch loads only (the device registry applies it). Empty = none.
+        self.schedule_entity: str = ""
+        self.schedule_mode: str = ""
         self.control_mode = DeviceControlMode.PEAK_ONLY  # Default: peak protection only (#49)
+        # (#1048) the supply phase it sits on — the phase guard sheds a
+        # phase's own loads first. Unknown until the user says.
+        self.phase: str = DEFAULT_LOAD_PHASE
+        # (#1048) the phase guard's hold, set each cycle by the coordinator:
+        # the phase it is held for (None = free). A held load does not
+        # start; one the guard took for its phase is also backed off.
+        self._phase_hold: Optional[str] = None
+        self._phase_shed: bool = False
 
         # Power-change cooldown
         self._min_power_change_interval: float = 0.0  # seconds, 0 = disabled
@@ -315,6 +388,10 @@ class ControllableDevice(ABC):
         # CONSUMES these flags lands in surplus_controller (#620 Phase 2).
         self.battery_assist_enabled: bool = False
         self.battery_eligible_overnight: bool = False
+        # (#1021) Wiring, not a choice: this load sits behind the grid
+        # operator's ripple relay (CH). While the relay is on, the relay cuts
+        # it and SEM stops counting on it. Default off.
+        self.behind_operator_relay: bool = False
 
         # (#559) Goal engine — grounded core. daily_min_runtime_sec (above,
         # pre-#559 "Feature 2") is the only target; solar_only default means
@@ -351,6 +428,9 @@ class ControllableDevice(ABC):
         # shower light stayed pinned at 1 kW forever when the "rating" it
         # was defending was never measured at all. This is how they tell.
         self.rated_power_measured: bool = True
+        # (#1067) The run of readings ``calibrate_rated_power`` learns from:
+        # a level counts once the load has held it, never from one reading.
+        self._held_power = HeldPower()
 
         # Appliance dependencies (#122): device only activates when dependencies are met
         self.depends_on: List[str] = []  # device_ids that must be active
@@ -374,6 +454,10 @@ class ControllableDevice(ABC):
         # that would have gone to the box, which is the thing the old
         # decision-level WOULD could not say (#854 hid an enable here).
         self.withheld_commands: list = []
+        # (#1079) Set each cycle by the coordinator from the user's
+        # external-control mode; True = another party steers, SEM yields.
+        self.external_yield: bool = False
+        self.yielded_commands: list = []
         self._commanded_claim: bool = False  # backing field, see _sem_commanded
         # Monotonic anchor for the "belief says on but the entity reads off"
         # drift grace window (a transient unavailable/poll gap must not flip us).
@@ -522,6 +606,8 @@ class ControllableDevice(ABC):
 
         if self.is_active:
             self.calibrate_rated_power()
+        else:
+            self._held_power.reset()     # (#1067) a hold is one unbroken run
 
         self._daily_runtime_last_check = now
 
@@ -771,12 +857,14 @@ class ControllableDevice(ABC):
             return self._energy_deriver.update(energy, time.monotonic(), max_power_w=cap)
         return None
 
-    def calibrate_rated_power(self) -> None:
+    def calibrate_rated_power(self, now: Optional[float] = None) -> None:
         """(#559/#576) Learn the device's real draw from its power sensor.
 
-        Runs every cycle while the device is ON: if the sensor reports a
-        larger draw than the current ``rated_power``, adopt it as both the
-        rated power and the surplus-activation threshold. Promoted from
+        Runs every cycle while the device is ON: if the sensor HELD a larger
+        draw than the current ``rated_power`` for ``RATED_POWER_HOLD_S``
+        (#1067 — one reading is a start peak, not a draw), adopt it as both
+        the rated power and the surplus-activation threshold. ``now`` is a
+        monotonic time, for tests. Promoted from
         ``SwitchDevice`` to the base (#576) so EVERY device type — switch,
         heat pump, climate — "sees where it goes", not just switches.
 
@@ -786,6 +874,7 @@ class ControllableDevice(ABC):
         (e.g. the modulating EV, which measures draw its own way)."""
         rated = getattr(self, "rated_power", None)
         if rated is None or not self.hass or not self.is_active:
+            self._held_power.reset()
             return
         # (#744) CALIBRATION ONLY FROM A REAL POWER SENSOR. The energy
         # deriver is a display/runtime-credit estimate: a 0.01 kWh tick
@@ -798,20 +887,31 @@ class ControllableDevice(ABC):
         observed = self.observed_power_w()
         if observed is None:
             return
+        # (#1067) The up-only ratchet below keeps the highest number it is
+        # ever shown, so it must only be shown levels the load HELD. Fed raw
+        # readings, a compressor start (a 200 W dehumidifier reading ~1.4 kW
+        # for a moment) became the rating for life, and SEM then waited for
+        # 1.4 kW of surplus before it would switch the load on.
+        held = self._held_power.add(
+            time.monotonic() if now is None else now, observed)
+        if held is None:
+            return
         # (#744) The up-only ratchet defends a MEASURED peak. It must not
         # defend an invented one: while ``rated_power`` is still the 1 kW
-        # placeholder, the first real reading REPLACES it — downward too.
+        # placeholder, the first real level REPLACES it — downward too.
         # That is the whole of Azlinon's "nothing below 1 kW": a 8 W bulb
         # could never argue its way past a number nobody had measured.
-        first_real = not self.rated_power_measured and observed > 0
-        if first_real or observed > self.rated_power:
+        first_real = not self.rated_power_measured and held > 0
+        if first_real or held > self.rated_power:
             _LOGGER.info(
-                "%s: calibrated rated_power %.0fW -> %.0fW from %s",
-                self.name, self.rated_power, observed,
+                "%s: calibrated rated_power %.0fW -> %.0fW from %s "
+                "(held %.0f s)",
+                self.name, self.rated_power, held,
                 self.power_entity_id or self.energy_entity_id,
+                RATED_POWER_HOLD_S,
             )
-            self.rated_power = observed
-            self.min_power_threshold = observed
+            self.rated_power = held
+            self.min_power_threshold = held
             self.rated_power_measured = True
 
     @property
@@ -848,6 +948,13 @@ class ControllableDevice(ABC):
         """True if device has a runtime deficit, is enabled, and not already
         active. The activation-side view of ``has_runtime_deficit``."""
         return self.has_runtime_deficit and not self.is_active
+
+    @property
+    def runs_without_surplus(self) -> bool:
+        """(#1121) A run the device started for its own reason and ends
+        itself — it needs no sun, so a deficit must not stop it. Peak and
+        phase sheds still do. None by default."""
+        return False
 
     # --- (#559) goal engine — grounded core (runtime target + stop condition) ---
 
@@ -901,7 +1008,7 @@ class ControllableDevice(ABC):
         ``hass.services.async_call``; ``tests/test_855_one_seam.py`` pins
         that.
 
-        Guido, 29.08.2026, on what the arc is for:
+        Rule, 29.08.2026, on what the arc is for:
 
             "the 2nd layer has one communication string to the 3rd layer
              for ev charger ... and the observation should not be a matter
@@ -928,6 +1035,34 @@ class ControllableDevice(ABC):
         withheld. Returns True when the command actually went to hardware.
         """
         payload = dict(data or {})
+        # (#1039) A select takes the option it LISTS, never the label HA
+        # shows for it (``max_charge``, not "Max charge"). Mapped here, before
+        # the observer record, so what SEM WOULD send is what it would send.
+        if (service == "select_option" and domain in ("select", "input_select")
+                and "option" in payload):
+            payload["option"] = listed_option(
+                getattr(self, "hass", None), payload.get("entity_id"),
+                payload["option"])
+        # (#1079) Another party steers this device and the user said SEM
+        # yields: nothing goes out. The failsafe arming is the one
+        # exception — it does not steer, it keeps the box's own safety net
+        # set, and withholding it would let that net lapse. A device nobody
+        # told is a device that acts (same default as observer_mode).
+        if (getattr(self, "external_yield", False) is True
+                and service != "set_failsafe"):
+            if not hasattr(self, "yielded_commands"):
+                self.yielded_commands = []
+            self.yielded_commands.append(
+                {"service": f"{domain}.{service}", "data": payload,
+                 "why": why or "-"})
+            del self.yielded_commands[:-20]
+            log_on_change(
+                _LOGGER, f"yield:send:{self.device_id}:{domain}.{service}",
+                logging.INFO,
+                "YIELD · %s is steered by another party, SEM withholds %s.%s%s",
+                self.name, domain, service, f" — {why}" if why else "",
+            )
+            return False
         # getattr, not attribute access: devices built without __init__
         # (test fixtures, legacy construction paths) must still SEND. The
         # documented default is False — "a device nobody told is a device
@@ -982,6 +1117,10 @@ class ControllableDevice(ABC):
 
     def can_activate(self) -> bool:
         """Check if device can be activated (respects dependencies, min_off, activation_delay)."""
+        # (#1048) a phase over its limit, or not yet recovered: a fuse
+        # outranks surplus, schedules and the cheap hours alike
+        if isinstance(self._phase_hold, str):
+            return False
         # (#620) daily maximum cap — a capped-out device never re-activates
         # today. Gated first: it overrides surplus, off-peak and deadline
         # passes alike (the cap is a hard "done for today").
@@ -1040,6 +1179,17 @@ class ControllableDevice(ABC):
             if self.dependency_mode == "must_inactive" and dep_active:
                 return dep_id
         return None
+
+    @property
+    def locked_by_operator(self) -> bool:
+        """(#1021) Behind the operator's ripple relay and the relay is on.
+
+        The relay cuts the power itself; SEM only stops counting on the
+        load: not planned, not started, not judged."""
+        if not getattr(self, "behind_operator_relay", False):
+            return False
+        sig = getattr(self._controller, "shed_signal", None) if self._controller else None
+        return bool(sig is not None and getattr(sig, "active", False))
 
     def reset_surplus_timer(self) -> None:
         """Reset surplus timer when surplus drops below device threshold."""
@@ -1337,6 +1487,19 @@ class ComfortBandMixin:
         except Exception:  # noqa: BLE001 — unit lookup must never kill the band
             unit = ""
         return unit in ("°F", "F", "fahrenheit", "Fahrenheit")
+
+    def _attribute_temp_c(self, raw):
+        """An entity ATTRIBUTE temperature (``current_temperature``,
+        ``temperature``) in °C, or None. Attributes carry no unit — they are
+        in the install's display unit. (#1062) One copy for every device
+        that reads one; the climate unit and the hot water tank both do."""
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return None
+        if self._install_unit_is_f():
+            return (value - 32.0) * 5.0 / 9.0
+        return value
 
     def _comfort_thresholds_c(self):
         """(target, offset, limit) in °C.
@@ -1906,13 +2069,7 @@ class ClimateDevice(ComfortBandMixin, ControllableDevice):
             raw = attrs.get("target_temp_high"
                             if self._comfort_direction() == "cool"
                             else "target_temp_low")
-        try:
-            value = float(raw)
-        except (TypeError, ValueError):
-            return None
-        if self._install_unit_is_f():
-            return (value - 32.0) * 5.0 / 9.0
-        return value
+        return self._attribute_temp_c(raw)
 
     def _comfort_fallback_reading(self):
         """Zero-config thermometer: the climate entity's own
@@ -1925,13 +2082,7 @@ class ClimateDevice(ComfortBandMixin, ControllableDevice):
         if state is None:
             return None
         raw = (state.attributes or {}).get("current_temperature")
-        try:
-            value = float(raw)
-        except (TypeError, ValueError):
-            return None
-        if self._install_unit_is_f():
-            return (value - 32.0) * 5.0 / 9.0
-        return value
+        return self._attribute_temp_c(raw)
 
     def adopt_if_running(self) -> bool:
         """(#559) Re-own a climate unit that SEM is running at (re-)registration.
@@ -2090,6 +2241,19 @@ class CurrentControlDevice(ControllableDevice):
     Supports multi-phase charging with configurable current limits.
     """
 
+
+    @property
+    def _session_active(self) -> bool:
+        return bool(self.__dict__.get("_session_active_flag", False))
+
+    @_session_active.setter
+    def _session_active(self, value: bool) -> None:
+        # (#1163) Every way a session starts passes here, so a start voids
+        # any dead-man's OFF still waiting or resending.
+        if value:
+            self._deadman_gen = getattr(self, "_deadman_gen", 0) + 1
+        self.__dict__["_session_active_flag"] = bool(value)
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -2167,6 +2331,10 @@ class CurrentControlDevice(ControllableDevice):
         self.charging_status_entity: str = ""
         self.service_param_name: str = "current"  # Overridden per integration (#82)
         self.service_device_id: Optional[str] = None  # For Easee/Zaptec device_id
+        # (#1054) static fields the current service needs beside the amps —
+        # e.g. a service that takes the box's own name in a name field.
+        # Set from the ``ev_charger_service_data`` the crawler offered.
+        self.service_extra_data: Dict[str, Any] = {}
         self.needs_pilot_cycle: bool = False  # True = disable/enable cycle for session start
         self.global_services: bool = True  # True = services don't need entity_id (KEBA-style)
         # Start/stop control — per-integration (#82)
@@ -2398,6 +2566,32 @@ class CurrentControlDevice(ControllableDevice):
         place."""
         return (self.session_start_mechanism()
                 == SESSION_START_STOP_ENTITY)
+
+    def _start_switch_reads_running(self) -> bool:
+        """(#976) The start/stop switch already shows a running session.
+
+        A start then has nothing left to do, and it is not always harmless
+        to send: a charge-control switch can be on exactly while the box's
+        transaction runs, with a turn_on that asks for a NEW transaction —
+        which the box refuses ("Rejected"), and its integration reports each
+        refusal as a notification. The reconciler's #536 ENABLE fires only on
+        ``off``; this is the other half of that rule.
+
+        Only a definite running state from a switch that reports its device
+        counts: ``on``, or ``off`` for a switch named for the pause (#1042).
+        Anything unreadable still sends, as before, and so does a switch
+        with ``assumed_state`` (an optimistic template / REST / command-line
+        switch): its state may only echo SEM's last command."""
+        ent = str(self.start_stop_entity or "")
+        if not ent.startswith(("switch.", "input_boolean.")) or self.hass is None:
+            return False
+        try:
+            st = self.hass.states.get(ent)
+            if st is None or reads_running(self.hass, ent, st.state) is not True:
+                return False
+            return not (getattr(st, "attributes", None) or {}).get("assumed_state")
+        except Exception:  # noqa: BLE001 — a read never costs a start
+            return False
 
     @property
     def contactor_surface(self) -> bool:
@@ -2705,7 +2899,8 @@ class CurrentControlDevice(ControllableDevice):
             elif self.charger_service:
                 # Service-based control — param name varies per integration (#82)
                 domain, service = self.charger_service.split(".", 1)
-                service_data = {self.service_param_name: current}
+                service_data = {**(self.service_extra_data or {}),
+                                self.service_param_name: current}
                 # Some integrations need device_id (Easee, Zaptec)
                 if self.service_device_id:
                     service_data["device_id"] = self.service_device_id
@@ -3081,7 +3276,7 @@ class CurrentControlDevice(ControllableDevice):
         """Arm a NON-TRIPPING managed failsafe (#546 — managed-neutralize).
 
         Background: SEM's old failsafe (30 s, persist=0) left the box reverting
-        to its built-in 6 A floor mid-charge → the 6↔9 A flap (Guido PROD
+        to its built-in 6 A floor mid-charge → the 6↔9 A flap (PROD
         2026-06-24). evcc avoids this by DISABLING the KEBA failsafe — but live
         testing on a real P30 showed the failsafe can't be disabled over UDP
         (``timeout=0`` is accepted but the box keeps it on; likely a safety
@@ -3096,6 +3291,8 @@ class CurrentControlDevice(ControllableDevice):
         can be set False for boxes that CAN disable the failsafe at the charger
         (evcc-style); then SEM doesn't touch it and a Repair guides the user to
         disable it. ``steady_failsafe`` (default on) controls persistence."""
+        # (#1163) A start voids any dead-man's OFF still waiting or resending.
+        self._deadman_gen = getattr(self, "_deadman_gen", 0) + 1
         if not bool(getattr(self, "arm_failsafe_enabled", True)):
             _LOGGER.debug(
                 "%s: not arming the charger failsafe (arm-failsafe option "
@@ -3120,7 +3317,7 @@ class CurrentControlDevice(ControllableDevice):
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning("Failed to set charger failsafe: %s", e)
 
-    async def arm_failsafe_off(self) -> None:
+    async def arm_failsafe_off(self, attempt: int = 1) -> None:
         """(#740) Re-arm the failsafe as a dead-man's OFF after a stop.
 
         The charging arm (``arm_failsafe``) points the fallback at the
@@ -3136,10 +3333,20 @@ class CurrentControlDevice(ControllableDevice):
         """
         if not bool(getattr(self, "arm_failsafe_enabled", True)):
             return
+        # (#1079) Another party steers this charger and SEM yields: a
+        # persisted 0 A dead-man would end THEIR session ~10 s into any
+        # masterless window (restart, unload; #1163). Nothing is armed.
+        if getattr(self, "external_yield", False) is True:
+            return
         domain = (self.charger_service or "").split(".", 1)[0]
         if not domain or not self.hass.services.has_service(domain, "set_failsafe"):
             return
+        self._deadman_gen = getattr(self, "_deadman_gen", 0) + 1
+        gen = self._deadman_gen
         try:
+            await asyncio.sleep(DEADMAN_SETTLE_S)
+            if gen != self._deadman_gen:
+                return      # a start or a newer stop came in while we waited
             sent = await self.send(domain, "set_failsafe", {"failsafe_timeout": FAILSAFE_OFF_TIMEOUT_S,
                  "failsafe_fallback": 0, "failsafe_persist": 1})
             # (#1009) "Asked", not "re-armed". A brand integration may floor
@@ -3152,21 +3359,22 @@ class CurrentControlDevice(ControllableDevice):
             _LOGGER.info(
                 "%s: asked the box for a dead-man's OFF (failsafe timeout=%ds, "
                 "fallback 0 A, persisted); read-back in %ds says whether it "
-                "took (#740, #1009)", self.name, FAILSAFE_OFF_TIMEOUT_S,
-                FAILSAFE_READBACK_DELAY_S,
+                "took (#740, #1009, try %d of %d)", self.name, FAILSAFE_OFF_TIMEOUT_S,
+                FAILSAFE_READBACK_DELAY_S, attempt, DEADMAN_MAX_TRIES,
             )
             if sent:
-                self._schedule_failsafe_readback()
+                self._schedule_failsafe_readback(gen, attempt)
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning(
                 "Failed to arm the dead-man's-off failsafe: %s", e)
 
-    def _schedule_failsafe_readback(self) -> None:
+    def _schedule_failsafe_readback(self, gen: int = 0, attempt: int = 1) -> None:
         """(#1009) One delayed look at the box's failsafe, after asking."""
         try:
             from homeassistant.helpers.event import async_call_later
             async_call_later(self.hass, FAILSAFE_READBACK_DELAY_S,
-                             self._failsafe_readback)
+                             partial(self._failsafe_readback, gen=gen,
+                                     attempt=attempt))
         except Exception as e:  # noqa: BLE001
             _LOGGER.debug("%s: failsafe read-back not scheduled: %s",
                           self.name, e)
@@ -3196,8 +3404,11 @@ class CurrentControlDevice(ControllableDevice):
         return None
 
     @callback
-    def _failsafe_readback(self, _now=None) -> None:
+    def _failsafe_readback(self, _now=None, *, gen: int = 0,
+                           attempt: int = DEADMAN_MAX_TRIES) -> None:
         """(#1009) Say what the box did with the dead-man's OFF, once."""
+        if gen and gen != getattr(self, "_deadman_gen", 0):
+            return      # SEM has armed the box again since: this ask is stale
         st = self._failsafe_readback_state()
         if st is None:
             _LOGGER.debug("%s: no failsafe read-back entity — the dead-man's "
@@ -3213,6 +3424,15 @@ class CurrentControlDevice(ControllableDevice):
             self._deadman_refused_logged = False   # fixed: a relapse is worth saying again
             _LOGGER.info("%s: dead-man's OFF confirmed on read-back (%s: "
                          "%.0f s / 0 A)", self.name, st.entity_id, timeout)
+            return
+        # (#1163) A dropped command, not a refusal, until it fails every
+        # try. Only while the car is still stopped: a resend during a
+        # session would point a charging box at 0 A.
+        if attempt < DEADMAN_MAX_TRIES and not getattr(self, "_session_active", False):
+            _LOGGER.info("%s: the box still shows %.0f s / %.0f A — asking "
+                         "again (try %d of %d)", self.name, timeout, fallback,
+                         attempt + 1, DEADMAN_MAX_TRIES)
+            self.hass.async_create_task(self.arm_failsafe_off(attempt + 1))
             return
         if getattr(self, "_deadman_refused_logged", False):
             return
@@ -3366,8 +3586,15 @@ class CurrentControlDevice(ControllableDevice):
                 await self.send("select", "select_option", {"entity_id": self.charge_mode_entity, "option": self.charge_mode_start})
             elif mechanism == SESSION_START_STOP_ENTITY:
                 domain = self.start_stop_entity.split(".")[0]
-                if domain in ("switch", "input_boolean"):
-                    await self.send(domain, "turn_on", {"entity_id": self.start_stop_entity})
+                if self._start_switch_reads_running():
+                    _LOGGER.debug(
+                        "%s: %s already shows a running session, no "
+                        "start sent (#976)", self.name, self.start_stop_entity)
+                elif domain in ("switch", "input_boolean"):
+                    # (#1042) turn_off for a switch named for the pause
+                    await self.send(domain, switch_service(
+                        self.hass, self.start_stop_entity, run=True),
+                        {"entity_id": self.start_stop_entity})
                 elif domain == "button":
                     await self.send("button", "press", {"entity_id": self.start_stop_entity})
             elif mechanism == SESSION_START_CHARGER_SERVICE:
@@ -3423,23 +3650,28 @@ class CurrentControlDevice(ControllableDevice):
         auto-charge this exists to prevent. A gone car gets a plain disable
         (contactor open) plus the dead-man's-off failsafe, held until SEM
         next decides to charge (which re-enables via ``start_session``).
-        Guido's pre-SEM automation did exactly this — ``keba.disable`` after
-        every charge — which is why a plug-in never auto-started for him.
+        The pre-SEM automation on PROD did exactly this — ``keba.disable`` after
+        every charge — which is why a plug-in never auto-started there.
         """
         domain = (self.charger_service or "").split(".", 1)[0]
         _parked_it = False
         try:
             if domain and self.hass.services.has_service(domain, "disable"):
-                await self.send(domain, "disable", {})
-                _parked_it = True
-                _LOGGER.info(
-                    "%s: parked OFF on disconnect via %s.disable — the box "
-                    "holds the no until the next charge", self.name, domain)
+                # (#1027) The claim comes from the send, not from "it did not
+                # raise": ``send`` returns False when the command was withheld
+                # and the box therefore never heard it.
+                _parked_it = bool(await self.send(domain, "disable", {}))
+                if _parked_it:
+                    _LOGGER.info(
+                        "%s: parked OFF on disconnect via %s.disable — the box "
+                        "holds the no until the next charge", self.name, domain)
             elif self.start_stop_entity:
                 sdomain = self.start_stop_entity.split(".")[0]
                 if sdomain in ("switch", "input_boolean"):
-                    await self.send(sdomain, "turn_off", {"entity_id": self.start_stop_entity})
-                    _parked_it = True
+                    _parked_it = bool(await self.send(
+                        sdomain, switch_service(
+                            self.hass, self.start_stop_entity, run=False),
+                        {"entity_id": self.start_stop_entity}))
         except Exception as e:  # noqa: BLE001 — surfaced, never fatal
             _LOGGER.error("park_off(%s): disable failed: %s", self.name, e)
 
@@ -3491,6 +3723,33 @@ class CurrentControlDevice(ControllableDevice):
         nothing on the system that knew why — the precise sentence this whole
         issue opens with. Same hole #949 had just closed one layer over, for
         the inverter's charge limit.
+
+        (#1027) THE ONE GATE for the whole debt. While SEM is only watching,
+        ``send`` withholds every command and returns False — but both callers
+        read "the call did not raise" as "the box was parked" and took the debt
+        anyway. A rig watching a box another SEM controls wrote a park record
+        on every disconnect, adopted it after a restart, and handed the charger
+        back on removal — the first real command of its life, on hardware it
+        had never touched. Watching takes no debt and pays none, in either
+        direction: the record belongs to the lifetime that really parked the
+        box, and is left exactly as it is.
+        """
+        if getattr(self, "observer_mode", False):
+            _LOGGER.debug(
+                "%s: watching only — no park debt recorded (wanted %s)",
+                self.name, parked)
+            return
+        await self._write_park_record(parked)
+
+    async def _write_park_record(self, parked: bool) -> None:
+        """The record itself, with no gate in front of it.
+
+        (#1027 review) Separate from ``_remember_parked`` for one caller:
+        ``release_to_user`` has ALREADY decided, and it has awaited several
+        sends since. If the switch is flipped during those awaits, a gate
+        read a second time would keep the debt on a box that was just handed
+        back — and the next setup would adopt a park already paid, the
+        "#935, live on PROD 13.09" bug. One decision, one lifetime.
         """
         self._sem_parked = bool(parked)
         store = getattr(self, "_park_store", None)
@@ -3510,7 +3769,15 @@ class CurrentControlDevice(ControllableDevice):
                           exc_info=True)
 
     def adopt_park_state(self, parked_ids) -> None:
-        """Take over a park this install left behind in a previous lifetime."""
+        """Take over a park this install left behind in a previous lifetime.
+
+        (#1027) Not while SEM is only watching. Taking over a park is taking
+        on the duty to hand the box back, and a lifetime that commands nothing
+        cannot owe that. The record stays where it is — the first lifetime that
+        can command adopts it (see ``_push_observer_mode_to_devices``).
+        """
+        if getattr(self, "observer_mode", False):
+            return
         key = str(getattr(self, "charger_id", "") or self.name)
         if key in set(parked_ids or ()):
             self._sem_parked = True
@@ -3548,6 +3815,13 @@ class CurrentControlDevice(ControllableDevice):
         """
         if not getattr(self, "_sem_parked", False):
             return None
+        if getattr(self, "observer_mode", False):
+            # (#1027) A watching SEM has parked nothing, so it has nothing to
+            # hand back. #936 wrote this rule for batteries and #955 for the
+            # export cut; the charger was the one that still said yes here.
+            _LOGGER.info("#1027 %s: watching only — the box is left exactly "
+                         "as it is on %s", self.name, reason)
+            return None
         did: list[str] = []
         # (#935 review) BOUNDED. ``hass.services.async_call`` takes no timeout
         # and neither did anything here, so a charger integration whose
@@ -3577,11 +3851,15 @@ class CurrentControlDevice(ControllableDevice):
                 did.append(f"{self.charge_mode_entity}={self.charge_mode_start}")
             elif mechanism == SESSION_START_STOP_ENTITY:
                 domain = self.start_stop_entity.split(".")[0]
-                if domain in ("switch", "input_boolean"):
+                if self._start_switch_reads_running():
+                    pass    # (#976) already on: nothing to hand back
+                elif domain in ("switch", "input_boolean"):
+                    service = switch_service(
+                        self.hass, self.start_stop_entity, run=True)
                     await _bounded(self.send(
-                        domain, "turn_on",
+                        domain, service,
                         {"entity_id": self.start_stop_entity}))
-                    did.append(f"{self.start_stop_entity} on")
+                    did.append(f"{self.start_stop_entity} {service}")
             elif mechanism == SESSION_START_CHARGER_SERVICE:
                 domain = self.charger_service.split(".", 1)[0]
                 if self.hass.services.has_service(domain, "enable"):
@@ -3603,8 +3881,10 @@ class CurrentControlDevice(ControllableDevice):
         # `sem.parked.<entry>` still naming this charger, so the next setup
         # adopted a park that had already been handed back — and the next
         # disable would "enable" a box SEM had not disabled. The debt is paid;
-        # the ledger has to say so.
-        await self._remember_parked(False)
+        # the record has to say so. (#1027) Written straight, without the
+        # gate: the decision was made at the top of this method, and the
+        # switch may have flipped during the awaits since.
+        await self._write_park_record(False)
         if not did:
             return None
         said = f"{self.name}: handed back on {reason} — " + ", ".join(did)
@@ -3637,8 +3917,11 @@ class CurrentControlDevice(ControllableDevice):
             elif self.start_stop_entity:
                 domain = self.start_stop_entity.split(".")[0]
                 if domain in ("switch", "input_boolean"):
-                    await self.send(domain, "turn_off", {"entity_id": self.start_stop_entity})
-                    stop_method = f"{domain}.turn_off={self.start_stop_entity}"
+                    # (#1042) turn_on for a switch named for the pause
+                    service = switch_service(
+                        self.hass, self.start_stop_entity, run=False)
+                    await self.send(domain, service, {"entity_id": self.start_stop_entity})
+                    stop_method = f"{domain}.{service}={self.start_stop_entity}"
                 elif domain == "button":
                     # (#804 B4a) The old code GUESSED a stop button by
                     # string-rewriting the start entity's id (resume→stop,
@@ -3681,7 +3964,7 @@ class CurrentControlDevice(ControllableDevice):
                 # quota is already met/stale. No target sensor → rewrite,
                 # exactly today's behaviour: an unverifiable box gets the
                 # safe default.
-                # (#853/#854, Guido 28.08) A STOP MUST NEVER ENABLE.
+                # (#853/#854, rule 28.08) A STOP MUST NEVER ENABLE.
                 #
                 # The quota-hold did exactly that: set_current(min) +
                 # set_energy(quota) + ENABLE, so the box would charge to a
@@ -3705,7 +3988,7 @@ class CurrentControlDevice(ControllableDevice):
                 # rogue session while SEM is DOWN (#553) — and it writes a
                 # target without ever enabling, which is the whole point.
                 if self.hass.services.has_service(domain, "disable"):
-                    # (#854) THE STOP IS ONE CALL. Guido's automation, which
+                    # (#854) THE STOP IS ONE CALL. PROD's own automation, which
                     # has run this exact box for two years:
                     #
                     #     alias: Keba Disable
@@ -3746,7 +4029,7 @@ class CurrentControlDevice(ControllableDevice):
                     )
 
             # (#854) A KEBA disable IS the stop — send nothing after it.
-            # Guido's automation is one call and has run this hardware for
+            # PROD's own automation is one call and has run this hardware for
             # two years; every extra command SEM sent around it cost energy
             # or started a fight with itself. The 0 A write and the dead-man
             # arm stay for the other brands, where a current write IS the

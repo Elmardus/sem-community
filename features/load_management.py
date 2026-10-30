@@ -31,6 +31,13 @@ from ..const import (
 from ..devices.power_setpoint import SETPOINT_DOMAINS, setpoint_domain
 from .device_axes import may_actuate
 from .load_device_discovery import LoadDeviceDiscovery
+from ..consts.devices import load_phase
+from .phase_shed import (
+    DEFAULT_VOLTAGE_V,
+    draws_on,
+    order_candidates,
+    relief_a,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -170,6 +177,10 @@ class LoadManagementCoordinator:
             _cfg.get("peak_limit_unlimited", DEFAULT_PEAK_LIMIT_UNLIMITED)
         )
         self._logged_ladder_repair = False
+        # (#1021) The grid operator's temporary limit (§14a), kW, or None.
+        # Set by the coordinator each cycle from the relay; NEVER persisted —
+        # the user's saved limit above is untouched underneath it.
+        self._operator_cap_kw: Optional[float] = None
 
         # Device management
         self._device_discovery = LoadDeviceDiscovery(hass)
@@ -197,6 +208,9 @@ class LoadManagementCoordinator:
         # Observer mode: skip all hardware control (same merged view — the
         # switch writes options, so options still wins when present)
         self._observer_mode = _cfg.get("observer_mode", False)
+        # (#1084) the decision log, handed over by the coordinator each
+        # cycle; None = record nothing
+        self.decision_log = None
 
         # #433 — telemetry surface mirroring classifier_path /
         # dampening_path / legionella_path. Focus on the high-leverage
@@ -225,6 +239,19 @@ class LoadManagementCoordinator:
         # (#933) has this shedder reconciled the persistent Repair once?
         self._futile_reconciled: bool = False
         self._shed_notified: bool = False
+        # (#1048) the phase guard's shed path: surplus-owned loads held for
+        # a phase (device → phase), whether shed loads may return yet, the
+        # cycle's verdict, and the episode's notification
+        self._phase_held: Dict[str, str] = {}
+        # …and this manager's own loads it switched off for a phase. Kept
+        # HERE, not on the device row: a registry rebuild (a drag, a config
+        # change, the re-discovery after a start) replaces the rows, and a
+        # phase shed that read as a peak shed would come back before the
+        # guard's latch clears.
+        self._phase_shed_ids: Dict[str, str] = {}
+        self._phase_may_restore: bool = True
+        self._phase_shed_path: str = "clear"
+        self._phase_notified: bool = False
 
     async def async_initialize(self):
         """Initialize the load management system."""
@@ -428,6 +455,8 @@ class LoadManagementCoordinator:
         charger_name: str = "EV Charger",
         start_stop_entity: str = None,
         status_entity: str = None,
+        start_stop_service: str = None,
+        charge_mode_entity: str = None,
     ):
         """Register EV charger as a load management device.
 
@@ -449,6 +478,16 @@ class LoadManagementCoordinator:
             charger_name: Per-charger friendly name from
                 ``ev_chargers[i].name`` (#436). Falls back to the
                 control entity's friendly_name if unset.
+            start_stop_service: (#1148) the charger's start or stop service,
+                when it is started and stopped by service.
+            charge_mode_entity: (#1148) the charge-mode select SEM starts and
+                stops it with, if any.
+
+        (#1148) A charger with no current control — SEM only starts and stops
+        it, by switch, button, service or charge mode — is registered too, with
+        ``control_type`` ``"start_stop"`` and no current control on its row.
+        Before, it was refused with an ERROR at every start, and a row saved
+        earlier kept its old control (e.g. a Zaptec site limit, #1144).
         """
         try:
             # #436: key on per-charger id. Pre-fix used a hardcoded
@@ -458,9 +497,21 @@ class LoadManagementCoordinator:
             # shedding throttled the wrong charger.
             device_id = f"load_device_{charger_id}"
 
-            # Need at least one control method
-            if not current_control_entity and not charger_service:
-                _LOGGER.error("EV charger registration requires either current_control_entity or charger_service")
+            # (#1148) A current control is one way to act, not the only one.
+            # A charger SEM only starts and stops (switch, button, service or
+            # charge mode) passes the builder's gate (``charger_is_complete``,
+            # #1095) and must get its row too: refusing it logged an ERROR at
+            # every start and left a row saved earlier with its OLD control —
+            # the Zaptec site limit (#1144). Its row is written below with no
+            # current control, so a stale one is cleared.
+            has_current_control = bool(current_control_entity or charger_service)
+            has_start_stop = bool(
+                start_stop_entity or start_stop_service or charge_mode_entity)
+            if not has_current_control and not has_start_stop:
+                _LOGGER.warning(
+                    "EV charger %s has no current control and no start/stop "
+                    "control; not registered for load management", charger_id,
+                )
                 return False
 
             # (#991) An absence read HERE is not an answer. Registration runs
@@ -527,12 +578,20 @@ class LoadManagementCoordinator:
             max_power = 22000.0
 
             # Register as load management device
+            # (#1148) The WHOLE row is replaced, never merged: a start/stop
+            # charger's row carries no current control, so a control saved
+            # under this id before (the site limit, #1144) goes with it.
+            control_type = "current" if has_current_control else "start_stop"
             self._devices[device_id] = {
                 "switch_entity": current_control_entity,  # Number entity (may be None)
                 "charger_service": charger_service,  # Service-based control (e.g., "keba.set_current")
                 "power_entity": power_entity,
                 "device_type": "ev_charger",
-                "description": f"EV Charger (Current Control) — {charger_id}",
+                "description": (
+                    f"EV Charger (Current Control) — {charger_id}"
+                    if has_current_control
+                    else f"EV Charger (Start/Stop) — {charger_id}"
+                ),
                 "friendly_name": friendly_name,
                 "power_rating": max_power,
                 "is_available": True,
@@ -543,7 +602,10 @@ class LoadManagementCoordinator:
                 "has_control_handle": True,
                 "user_hands_off": False,
                 "is_controllable": True,  # LEGACY-WRITE (#780) — derived
-                "control_type": "current",  # Special flag: use current control instead of switch
+                # "current": current control instead of a switch. (#1148)
+                # "start_stop": no current control at all — nothing may write
+                # a current for this row.
+                "control_type": control_type,
                 "charger_id": charger_id,  # #436: lets callers / card map back to ev_chargers[i].id
                 # (#748) the charger's stop switch / status sensor. Stored so
                 # pattern discovery can EXCLUDE them: a switch already claimed
@@ -557,7 +619,11 @@ class LoadManagementCoordinator:
             # Save configuration
             await self._save_device_configuration()
 
-            control_method = current_control_entity if current_control_entity else charger_service
+            control_method = (
+                current_control_entity or charger_service
+                or "start/stop: "
+                f"{start_stop_entity or start_stop_service or charge_mode_entity}"
+            )
             _LOGGER.info(
                 "Registered EV charger for load management: %s "
                 "(control: %s, power: %s, priority: %s, max: %skW)",
@@ -615,9 +681,16 @@ class LoadManagementCoordinator:
         would still win at the target, making SHEDDING unreachable. The ratios
         put each level back on its own side with a stage's worth of room.
         """
+        # (#1021) Against the limit in force. Under the operator's limit the
+        # warning moves below it (repair_ladder's ratio) and the emergency
+        # level — the user's fuse — stays unless it sits under the limit.
+        # That repair is the operator's doing, not a mistake to report.
+        target = self._active_target_kw()
         warning, emergency = repair_ladder(
-            self._target_peak_limit, self._warning_level, self._emergency_level
+            target, self._warning_level, self._emergency_level
         )
+        if getattr(self, "_operator_cap_kw", None) is not None:
+            return warning, emergency
         if not self._logged_ladder_repair and (
             warning != self._warning_level or emergency != self._emergency_level
         ):
@@ -627,11 +700,39 @@ class LoadManagementCoordinator:
                 "%.1f kW) — using %.1f / %.1f / %.1f for shedding decisions. "
                 "Warning must be below the target and emergency above it; fix "
                 "them under Configure → Load Management.",
-                self._warning_level, self._target_peak_limit,
+                self._warning_level, target,
                 self._emergency_level,
-                warning, self._target_peak_limit, emergency,
+                warning, target, emergency,
             )
         return warning, emergency
+
+    # ── (#1021) the one live limit ──────────────────────────────────────
+    def set_operator_cap(self, cap_kw: Optional[float]) -> None:
+        """(#1021) The grid operator's limit while its relay is on, or None.
+
+        Temporary and never saved: a relay switching on and off must not
+        overwrite the limit the user chose."""
+        try:
+            cap = float(cap_kw) if cap_kw is not None else None
+        except (TypeError, ValueError):
+            cap = None
+        self._operator_cap_kw = cap if cap is not None and cap > 0 else None
+
+    def _limit_active(self) -> bool:
+        """Is there a limit to defend: the user's, or the operator's."""
+        return (not self._peak_unlimited
+                or getattr(self, "_operator_cap_kw", None) is not None)
+
+    def _active_target_kw(self) -> float:
+        """(#1021) THE limit every shedding decision defends: the user's,
+        lowered by the operator's while its relay is on. The operator's
+        holds even when the user has no limit of their own."""
+        cap = getattr(self, "_operator_cap_kw", None)
+        if cap is None:
+            return float(self._target_peak_limit)
+        if self._peak_unlimited:
+            return cap
+        return min(float(self._target_peak_limit), cap)
 
     async def update_target_peak_limit(
         self, new_limit: float, unlimited: bool | None = None
@@ -784,18 +885,16 @@ class LoadManagementCoordinator:
             await self._save_device_configuration()
             _LOGGER.debug("Updated %s hands-off to %s", device_id, hands_off)
 
-    def _update_peak_tracking(self, grid_import_w: float) -> bool:
-        """Update 15-minute rolling average peak and monthly maximum.
+    def _update_peak_tracking(self, grid_import_w: float) -> None:
+        """Update the 15-minute rolling average the shed states key off.
 
-        Called every coordinator cycle (~10s). Maintains a sliding window
-        of grid import samples over the last 15 minutes, computes the
-        rolling average, and updates the monthly peak if exceeded.
+        Called every coordinator cycle (~10s). The rolling average is the
+        instrument for calm — it drives warning / shedding / emergency and
+        their restore. It is NOT the billed peak: (#1069) that is booked by
+        :meth:`record_closed_slot` from the utility's clock slots.
 
         Args:
             grid_import_w: Current grid import in Watts.
-
-        Returns:
-            True if monthly peak was updated (caller should persist).
         """
         now = dt_util.now()
         grid_import_kw = grid_import_w / 1000.0
@@ -815,23 +914,33 @@ class LoadManagementCoordinator:
         else:
             self._consecutive_peak_15min = 0.0
 
-        # Monthly peak reset on month change
-        current_month = now.month
-        if self._monthly_peak_month is not None and current_month != self._monthly_peak_month:
+    def record_closed_slot(self, slot_start: datetime, average_kw: float) -> bool:
+        """(#1069) Book one closed clock slot against the monthly peak.
+
+        The bill averages fixed :00/:15/:30/:45 slots, so the monthly peak
+        is the highest CLOSED slot — read from the coordinator's one slot
+        tracker (``peak_guard.PeakSlotTracker``). It used to be the highest
+        value of a free-sliding window, which reads a 10-minute spike across
+        a boundary at twice what the bill sees. A slot of a new month starts
+        that month's peak.
+
+        Returns True when the monthly peak changed (caller persists).
+        """
+        month = slot_start.month
+        if self._monthly_peak_month is not None and month != self._monthly_peak_month:
             _LOGGER.info(
                 "Monthly peak reset: previous month peak was %.3f kW",
                 self._monthly_consecutive_peak,
             )
             self._monthly_consecutive_peak = 0.0
-        self._monthly_peak_month = current_month
-
-        # Update monthly peak if current 15-min average exceeds it
-        peak_changed = False
-        if self._consecutive_peak_15min > self._monthly_consecutive_peak:
-            self._monthly_consecutive_peak = self._consecutive_peak_15min
-            peak_changed = True
-
-        return peak_changed
+            self._monthly_peak_month = month
+            self._monthly_consecutive_peak = round(float(average_kw), 3)
+            return True
+        self._monthly_peak_month = month
+        if float(average_kw) > self._monthly_consecutive_peak:
+            self._monthly_consecutive_peak = round(float(average_kw), 3)
+            return True
+        return False
 
     async def process_peak_update(
         self,
@@ -841,6 +950,7 @@ class LoadManagementCoordinator:
         grid_import_w: float = 0,
         ev_power_w: float = 0,
         grid_import_known: bool = True,
+        closed_slot: "Optional[tuple]" = None,
     ):
         """Process peak power update and manage loads accordingly.
 
@@ -880,8 +990,9 @@ class LoadManagementCoordinator:
                 0.0, float(current_peak or 0.0) * 1000.0)
 
         # Update rolling peak tracking from actual grid import
-        peak_changed = self._update_peak_tracking(grid_import_w)
-        if peak_changed:
+        self._update_peak_tracking(grid_import_w)
+        # (#1069) …and the billed peak from the slot that just closed, if any.
+        if closed_slot is not None and self.record_closed_slot(*closed_slot):
             await self._save_device_configuration()
 
         try:
@@ -973,6 +1084,7 @@ class LoadManagementCoordinator:
 
         for device_id in stale:
             self._devices_shed.remove(device_id)
+            self._phase_shed_ids.pop(device_id, None)   # (#1048)
             if device_id in self._devices:
                 self._devices[device_id].pop("_ran_since_shed", None)
             _LOGGER.debug(
@@ -1006,13 +1118,14 @@ class LoadManagementCoordinator:
         # (#716) No grid ceiling declared → nothing to defend. Return NORMAL
         # before any threshold is consulted, so a stale level left in config
         # can't shed on an install that opted out.
-        if self._peak_unlimited:
+        if not self._limit_active():
             self._last_state_decision_path = "peak_limit_unlimited_normal"
             return LoadManagementState.NORMAL
 
         warning_level, emergency_level = self._effective_levels()
         peak_to_check = current_peak
-        restore_threshold = self._target_peak_limit - self._hysteresis
+        target = self._active_target_kw()
+        restore_threshold = target - self._hysteresis
 
         # Emergency state - immediate action required
         if peak_to_check >= emergency_level:
@@ -1020,7 +1133,7 @@ class LoadManagementCoordinator:
             return LoadManagementState.EMERGENCY
 
         # At or above target - must shed loads
-        elif peak_to_check >= self._target_peak_limit:
+        elif peak_to_check >= target:
             self._last_state_decision_path = "above_target_shedding"
             return LoadManagementState.SHEDDING
 
@@ -1028,7 +1141,8 @@ class LoadManagementCoordinator:
         elif peak_to_check >= warning_level:
             # If we have devices shed and peak is still in warning zone,
             # stay in SHEDDING to allow controlled restoration
-            if self._devices_shed:
+            # (#1048) a load shed for a phase is the guard's, not the peak's
+            if any(not self._is_phase_shed(d) for d in self._devices_shed):
                 self._last_state_decision_path = "warning_zone_keep_shedding"
                 return LoadManagementState.SHEDDING
             self._last_state_decision_path = "warning_zone_clean"
@@ -1068,7 +1182,7 @@ class LoadManagementCoordinator:
         """Handle load management state changes."""
         _LOGGER.info(
             "Load management state change: %s → %s (peak: %skW, target: %skW)",
-            old_state, new_state, round(current_peak, 2), self._target_peak_limit,
+            old_state, new_state, round(current_peak, 2), self._active_target_kw(),
         )
 
         if new_state == LoadManagementState.EMERGENCY:
@@ -1172,8 +1286,8 @@ class LoadManagementCoordinator:
         ``candidates`` is the subset that can be thrown right now, highest
         priority number first — the order the drag list gives.
         """
-        target_w = float(self._target_peak_limit) * 1000.0
-        aim_w = (float(self._target_peak_limit) - float(self._hysteresis)) * 1000.0
+        target_w = self._active_target_kw() * 1000.0
+        aim_w = (self._active_target_kw() - float(self._hysteresis)) * 1000.0
         grid_import_w = float(self._last_grid_import_w)
         need_w = max(0.0, grid_import_w - aim_w)
 
@@ -1296,6 +1410,9 @@ class LoadManagementCoordinator:
                 if would_w >= plan["need_w"] or reason != "EMERGENCY":
                     break
             self._shed_path = f"observer:withheld:{len(would)}"
+            # (#1084) the withheld sheds, flagged as observed
+            for device_id in would:
+                self._log_shed(device_id, reason, shed=True, observer=True)
             _LOGGER.info(
                 "Observer mode: %s shedding would turn off %s (need %.0f W)",
                 reason, ", ".join(would), plan["need_w"],
@@ -1378,6 +1495,206 @@ class LoadManagementCoordinator:
         except Exception as e:  # noqa: BLE001
             _LOGGER.debug("shed notification dismiss failed: %s", e)
 
+    # -- (#1048) a phase over its limit sheds loads ------------------------
+
+    def _is_phase_shed(self, device_id: str) -> bool:
+        return device_id in self._phase_shed_ids
+
+    def _phase_episode_open(self) -> bool:
+        return bool(self._phase_held) or bool(self._phase_shed_ids)
+
+    def _phase_overlay(self, device_id: str) -> Dict[str, Any]:
+        """What the card shows for a load taken for a phase — from this
+        manager's own record, so a rebuilt row still says why it is off."""
+        phase = self._phase_shed_ids.get(device_id) or self._phase_held.get(device_id)
+        return {"shed_reason": "PHASE", "shed_phase": phase} if phase else {}
+
+    def _phase_candidates(self) -> List[Tuple[str, Dict, float]]:
+        """Every load that may answer for a phase: permitted, available,
+        not critical, on and drawing. Chargers are the guard's own (it stops
+        them before loads are asked); a surplus-owned load is a candidate too
+        — it is HELD for its owner to back off, never switched from here."""
+        rows: List[Tuple[str, Dict, float]] = []
+        for did, info in self._devices.items():
+            if info.get("device_type") == "ev_charger":
+                continue
+            if not may_actuate(info) or info.get("is_critical", False):
+                continue
+            if did in self._devices_shed or did in self._phase_held:
+                continue
+            if not info.get("is_available", False):
+                continue
+            state = self._device_discovery.get_device_current_state(info)
+            if not state.get("is_on"):
+                continue
+            draw_w = float(state.get("current_power") or 0.0)
+            if not state.get("power_known", True):
+                draw_w = float(info.get("power_rating") or 0.0)
+            if draw_w > 0:
+                rows.append((did, info, draw_w))
+        return rows
+
+    async def _throw_for_phase(self, device_id: str, info: Dict, phase: str) -> bool:
+        """Take one load off for ``phase``: hold a surplus-owned one for its
+        owner (#649 — one writer per load), switch off one of ours."""
+        if self._peak_managed_elsewhere(info):
+            if self._observer_mode:
+                return False
+            self._phase_held[device_id] = phase
+            info["shed_reason"] = "PHASE"
+            info["shed_phase"] = phase
+            _LOGGER.info("Phase %s over its limit: holding %s for its owner",
+                         phase, info.get("friendly_name", device_id))
+            return True
+        if not self._can_shed_device(device_id, info):
+            return False
+        if await self._shed_device(device_id, "PHASE"):
+            info["shed_phase"] = phase
+            self._phase_shed_ids[device_id] = phase
+            return True
+        return False
+
+    async def process_phase_guard(
+        self, over: Dict[str, float], *, may_restore: bool,
+        latched: Any = (), single_phase: bool = False,
+        voltage_v: float = DEFAULT_VOLTAGE_V,
+    ) -> Dict[str, Any]:
+        """(#1048) A phase over its limit: take that phase's loads off.
+
+        ``over`` is the guard's request this cycle — the phases still over
+        after the chargers had their turn (or with no car to stop), by how
+        many amps. For each, the loads known to draw on it go first, highest
+        priority number first, until the amps they free cover the excess; one
+        load of unknown phase per cycle when they cannot, so the meter says
+        whether it helped. Critical loads, hands-off loads and chargers are
+        never taken.
+
+        While the guard's latch stands (``may_restore`` False) nothing taken
+        here comes back, and the surplus-owned loads known to sit on a
+        latched phase do not start. After it, one returns per restore delay:
+        ours through the ordinary restore path, held ones released here.
+
+        Returns the verdict for the guard's snapshot, with ``hold`` (no start)
+        and ``shed`` (back off now) for the surplus controller.
+        """
+        self._phase_may_restore = bool(may_restore)
+        for did in [d for d in self._phase_held if d not in self._devices]:
+            self._phase_held.pop(did, None)
+        for did in [d for d in self._phase_shed_ids if d not in self._devices_shed]:
+            self._phase_shed_ids.pop(did, None)
+        latched_phases = set(latched or ()) | set(over or {})
+        thrown: List[str] = []
+        if over:
+            for phase, excess_a in sorted(over.items(), key=lambda kv: -kv[1]):
+                known, unknown = order_candidates(
+                    self._phase_candidates(), phase, single_phase=single_phase)
+                freed = 0.0
+                for did, info, draw_w in known:
+                    if freed >= excess_a:
+                        break
+                    if await self._throw_for_phase(did, info, phase):
+                        thrown.append(did)
+                        freed += relief_a(info.get("phase"), draw_w, phase,
+                                          single_phase=single_phase,
+                                          voltage_v=voltage_v)
+                if freed < excess_a:
+                    for did, info, _draw_w in unknown:
+                        if await self._throw_for_phase(did, info, phase):
+                            thrown.append(did)
+                            break
+            if thrown:
+                self._phase_shed_path = f"shed:{len(thrown)}"
+                self._announce_phase_episode(over, thrown)
+            elif self._observer_mode:
+                self._phase_shed_path = "observer:withheld"
+            else:
+                self._phase_shed_path = "nothing_on_phase"
+        elif not may_restore:
+            self._phase_shed_path = "held:latch"
+        elif self._phase_held:
+            if (not self._last_restore_time
+                    or dt_util.now() - self._last_restore_time
+                    >= timedelta(seconds=DEFAULT_LOAD_RESTORE_DELAY)):
+                did = sorted(self._phase_held,
+                             key=lambda d: self._devices.get(d, {}).get("priority", 5),
+                             reverse=True)[0]
+                self._phase_held.pop(did, None)
+                info = self._devices.get(did) or {}
+                info.pop("shed_reason", None)
+                info.pop("shed_phase", None)
+                self._last_restore_time = dt_util.now()
+                self._phase_shed_path = f"released:{did}"
+                _LOGGER.info("Phase guard recovered: %s may run again",
+                             info.get("friendly_name", did))
+            else:
+                self._phase_shed_path = "waiting:restore_delay"
+        else:
+            self._phase_shed_path = "clear"
+        if not self._phase_episode_open():
+            self._end_phase_episode()
+
+        hold: Dict[str, str] = dict(self._phase_held)
+        if not may_restore:
+            for did, info in self._devices.items():
+                if did in hold or not self._peak_managed_elsewhere(info):
+                    continue
+                if info.get("device_type") == "ev_charger":
+                    continue
+                # an unknown load draws on no phase here (unless the supply
+                # has only one): its starts are not held on a guess
+                p = load_phase(info.get("phase"))
+                for ph in sorted(latched_phases):
+                    if draws_on(p, ph, single_phase=single_phase):
+                        hold[did] = ph
+                        break
+        return {
+            "over": dict(over or {}),
+            "thrown": thrown,
+            "latched": sorted(latched_phases),
+            "hold": hold,
+            "shed": dict(self._phase_held),
+            "path": self._phase_shed_path,
+        }
+
+    def _announce_phase_episode(self, over: Dict[str, float], thrown: List[str]) -> None:
+        """One persistent notification per episode, like the peak's (#896),
+        and the bus event the notification layer listens on."""
+        names = [self._devices.get(d, {}).get("friendly_name", d) for d in thrown]
+        phases = ", ".join(f"{p} {a:.1f} A over" for p, a in sorted(over.items()))
+        message = (
+            f"SEM switched off {', '.join(names)}: {phases} its limit. "
+            f"They come back once every phase has had its margin back for "
+            f"the phase guard's recovery cycles."
+        )
+        try:
+            from homeassistant.components import persistent_notification
+            persistent_notification.async_create(
+                self.hass, message, title="Phase over its limit",
+                notification_id="sem_phase_shed",
+            )
+            self._phase_notified = True
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.debug("phase shed notification failed: %s", e)
+        try:
+            self.hass.bus.async_fire(f"{DOMAIN}_notification", {
+                "category": "alerts",
+                "event": "phase_shed",
+                "devices": list(thrown),
+                "over_a": {p: round(a, 1) for p, a in over.items()},
+            })
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.debug("phase shed event failed: %s", e)
+
+    def _end_phase_episode(self) -> None:
+        if not self._phase_notified:
+            return
+        self._phase_notified = False
+        try:
+            from homeassistant.components import persistent_notification
+            persistent_notification.async_dismiss(self.hass, "sem_phase_shed")
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.debug("phase shed notification dismiss failed: %s", e)
+
     async def _restore_loads(self):
         """Restore loads that were shed."""
         if not self._devices_shed:
@@ -1389,8 +1706,11 @@ class LoadManagementCoordinator:
             return
 
         # Restore devices in reverse priority order (low priority restored first)
+        # (#1048) — but a load shed for a phase waits for the guard's latch:
+        # the house's peak being fine says nothing about the fuse.
         devices_to_restore = sorted(
-            self._devices_shed,
+            (d for d in self._devices_shed
+             if self._phase_may_restore or not self._is_phase_shed(d)),
             key=lambda device_id: self._devices[device_id].get("priority", 5),
             reverse=True
         )
@@ -1509,7 +1829,9 @@ class LoadManagementCoordinator:
             return False
 
         # Check if enough time has passed since last shedding
-        if (reason != "EMERGENCY" and self._last_shedding_time and
+        # (#1048) A phase over its limit is a fuse, not a tariff: like an
+        # emergency, its sheds are bounded by the excess, not by a timer.
+        if (reason not in ("EMERGENCY", "PHASE") and self._last_shedding_time and
             dt_util.now() - self._last_shedding_time < timedelta(seconds=DEFAULT_LOAD_SHEDDING_DELAY)):
             _LOGGER.debug("Cannot shed %s: shedding delay active", device_id)
             return False
@@ -1625,7 +1947,16 @@ class LoadManagementCoordinator:
 
             else:
                 # Legacy fallback: use switch_entity directly or control_type
-                if device_info.get("control_type") == "current":
+                if device_info.get("control_type") == "start_stop":
+                    # (#1148) A start/stop-only charger has no current to
+                    # write, and its start/stop is decide()'s (#461-peak) —
+                    # never thrown from here, even past the guard above.
+                    _LOGGER.debug(
+                        "Not shedding %s: start/stop-only charger row (#1148)",
+                        device_id,
+                    )
+                    success = False
+                elif device_info.get("control_type") == "current":
                     current_entity = device_info.get("switch_entity")
                     charger_service = device_info.get("charger_service")
 
@@ -1657,6 +1988,7 @@ class LoadManagementCoordinator:
                     success = await self._device_discovery.turn_off_device(device_info)
 
             if success:
+                self._log_shed(device_id, reason, shed=True)
                 self._devices_shed.append(device_id)
                 self._devices[device_id]["last_turned_off"] = dt_util.now()
                 self._devices[device_id]["shed_reason"] = reason
@@ -1669,6 +2001,27 @@ class LoadManagementCoordinator:
         except Exception as e:
             _LOGGER.error("Failed to shed device %s: %s", device_id, e)
         return success
+
+    def _log_shed(self, device_id: str, reason: str, *, shed: bool,
+                  observer: bool = False) -> None:
+        """(#1084) A shed or restore that left for the load, to the decision
+        log. Recording only; never raises."""
+        try:
+            from ..coordinator import reason_codes as RC
+            from ..coordinator.decision_log import record_shed
+            info = self._devices.get(device_id) or {}
+            code = (RC.LOAD_PEAK_RESTORE if not shed
+                    else RC.LOAD_PHASE_SHED if reason == "PHASE"
+                    else RC.LOAD_PEAK_SHED)
+            text = ("peak cleared" if not shed
+                    else "phase over its limit" if reason == "PHASE"
+                    else f"grid peak limit ({str(reason).lower()})")
+            record_shed(self.decision_log, device_id,
+                        name=str(info.get("friendly_name") or device_id),
+                        shed=shed, reason_code=code, text=text,
+                        observer=observer)
+        except Exception:  # noqa: BLE001 — the log never costs a shed
+            _LOGGER.debug("decision log: shed record failed", exc_info=True)
 
     async def _restore_device(self, device_id: str):
         """Restore a device that was shed.
@@ -1806,8 +2159,9 @@ class LoadManagementCoordinator:
 
             else:
                 # Legacy fallback
-                if device_info.get("control_type") == "current":
-                    # For EV charger, just mark as restored
+                if device_info.get("control_type") in ("current", "start_stop"):
+                    # For EV charger, just mark as restored (#1148: a
+                    # start/stop-only one too — nothing is written)
                     success = True
                 else:
                     was_on = device_info.get("_pre_shed_was_on")
@@ -1829,14 +2183,19 @@ class LoadManagementCoordinator:
                         success = await self._device_discovery.turn_on_device(device_info)
 
             if success:
+                self._log_shed(device_id, "RESTORE", shed=False)
                 self._devices_shed.remove(device_id)
                 self._last_restore_time = dt_util.now()
                 self._devices[device_id]["last_turned_on"] = dt_util.now()
                 self._devices[device_id].pop("shed_reason", None)
+                self._devices[device_id].pop("shed_phase", None)
                 self._devices[device_id].pop("_ran_since_shed", None)
+                self._phase_shed_ids.pop(device_id, None)
                 _LOGGER.info("Restored device %s", device_info.get('friendly_name', device_id))
                 if not self._devices_shed:
                     self._end_shed_episode()
+                if not self._phase_episode_open():
+                    self._end_phase_episode()
 
         except Exception as e:
             _LOGGER.error("Failed to restore device %s: %s", device_id, e)
@@ -1900,9 +2259,14 @@ class LoadManagementCoordinator:
             "available_load_reduction": round(available_reduction, 2),
             "enabled": self._enabled,
             "devices": {
-                did: {**dinfo, "is_shed": did in self._devices_shed}
+                did: {**dinfo, "is_shed": did in self._devices_shed
+                      or did in self._phase_held, **self._phase_overlay(did)}
                 for did, dinfo in self._devices.items()
             },
+            # (#1048) the phase guard's shed path: this cycle's verdict and
+            # the surplus-owned loads held for a phase
+            "phase_shed_path": self._phase_shed_path,
+            "phase_held": dict(self._phase_held),
             "consecutive_peak_15min": self._consecutive_peak_15min,
             "monthly_consecutive_peak": self._monthly_consecutive_peak,
             # #433 — telemetry surface (mirrors classifier_path /
@@ -1924,4 +2288,4 @@ class LoadManagementCoordinator:
 
     def get_peak_margin(self, current_peak: float) -> float:
         """Get remaining margin before target peak is reached."""
-        return max(0, self._target_peak_limit - current_peak)
+        return max(0, self._active_target_kw() - current_peak)

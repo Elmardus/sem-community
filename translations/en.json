@@ -2,13 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Solar Energy Management Setup",
-        "description": "SEM has detected the following sensors from your Home Assistant Energy Dashboard:\n\n{summary}\n\nClick **Submit** to continue. Just one more step. EV chargers, heat pumps, tariff, and all other settings are set up later in the new **Configuration** tab on the SEM dashboard — no need to handle them now.",
-        "data": {
-          "observer_mode": "Test mode (read-only — do not control hardware)"
-        },
-        "data_description": {
-          "observer_mode": "Leave OFF for a normal install. Turn ON only on a test/staging Home Assistant that mirrors a production instance, so SEM never sends commands to KEBA, the inverter, or any switches."
+        "title": "SEM found your system",
+        "description": "These are the values right now:\n\n- Solar: {solar}\n- Grid: {grid}\n- Battery: {battery}\n\nThey come from the same sensors as your Energy dashboard. Press **Submit**.",
+        "sections": {
+          "own_sensors": {
+            "name": "Choose sensors myself",
+            "description": "Only if a value above looks wrong.",
+            "data": {
+              "solar_production_sensor": "Solar power",
+              "grid_power_sensor": "Grid power",
+              "battery_power_sensor": "Battery power",
+              "battery_soc_sensor": "Battery charge %"
+            }
+          }
         }
       },
       "ev_charger": {
@@ -102,6 +108,50 @@
           "grid_import_power_entity": "Only if your meter has no single signed sensor: the import side, always positive. Fill both of these or neither.",
           "grid_export_power_entity": "The export side, always positive. SEM computes export minus import, so no direction has to be guessed."
         }
+      },
+      "check_grid": {
+        "title": "One question",
+        "description": "{why}\n\nRight now your grid meter shows **{grid}**. Solar: {solar}. Battery: {battery}.",
+        "data": {
+          "grid_answer": "What is your house doing right now?"
+        },
+        "data_description": {
+          "grid_answer": "Look at your meter or your energy app. \"I don't know\" is fine: SEM then learns it over the next days."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Choose sensors myself",
+            "description": "Only if a value above looks wrong.",
+            "data": {
+              "solar_production_sensor": "Solar power",
+              "grid_power_sensor": "Grid power",
+              "battery_power_sensor": "Battery power",
+              "battery_soc_sensor": "Battery charge %"
+            }
+          }
+        }
+      },
+      "pick_grid": {
+        "title": "Pick your grid meter",
+        "description": "SEM could not find a grid power sensor. Without it, SEM cannot tell what you buy or send.\n\nPick it below, or press **Submit** to skip. You can set it later in the Configuration tab.\n\nSolar: {solar}. Battery: {battery}.",
+        "data": {
+          "grid_power_sensor": "Grid power"
+        },
+        "data_description": {
+          "grid_power_sensor": "Live power in watts, not a daily total."
+        },
+        "sections": {
+          "own_sensors": {
+            "name": "Choose sensors myself",
+            "description": "Only if a value above looks wrong.",
+            "data": {
+              "solar_production_sensor": "Solar power",
+              "grid_power_sensor": "Grid power",
+              "battery_power_sensor": "Battery power",
+              "battery_soc_sensor": "Battery charge %"
+            }
+          }
+        }
       }
     },
     "error": {
@@ -182,7 +232,8 @@
           "legionella_interval_hours": "Max hours between disinfection cycles",
           "diagram_style": "System diagram style",
           "grid_sign_invert": "Invert grid power sign",
-          "battery_operating_mode_entity": "Battery operating-mode entity (watched)"
+          "battery_operating_mode_entity": "Battery operating-mode entity (watched)",
+          "battery_charge_end_soc_entity": "Battery end-of-charge level (optional)"
         },
         "data_description": {
           "update_interval": "How often the coordinator reads sensors and adjusts hardware. 10 s gives the most accurate energy integration; values above 30 s will under-count energy. Range 10–60 s.",
@@ -208,7 +259,19 @@
           "legionella_target_temp": "Temperature (°C) the hot water system must reach during a legionella disinfection cycle.",
           "legionella_interval_hours": "Maximum hours between legionella disinfection cycles before SEM forces a heat-up.",
           "grid_sign_invert": "Turn ON only if grid import shows as a positive value (e.g. Enphase). SEM's convention is negative = import; this negates the raw reading and bypasses sign auto-detection.",
-          "battery_operating_mode_entity": "The inverter's operating-policy selector (e.g. Huawei's 'Working mode'). SEM only READS it: the mode is shown beside the battery evidence, and a one-time repair warns when it is not the self-consumption mode SEM's planning assumes. SEM never changes it. Leave empty to disable the watch."
+          "battery_operating_mode_entity": "The inverter's operating-policy selector (e.g. Huawei's 'Working mode'). SEM only READS it: the mode is shown beside the battery evidence, and a one-time repair warns when it is not the self-consumption mode SEM's planning assumes. SEM never changes it. Leave empty to disable the watch.",
+          "battery_charge_end_soc_entity": "Where the inverter itself stops charging the battery, in %. SEM only reads it, never writes it. Force charge then also ends there when it is below 90 %."
+        }
+      },
+      "settings_battery_limit": {
+        "title": "Battery {battery} — discharge limit",
+        "description": "Battery {battery} is {sensor}.\n\nPick the number entity that limits this battery's discharge power. Leave it empty to use the shared entity from the page before.",
+        "data": {
+          "battery_discharge_control_entity": "Discharge limit entity — battery {battery}",
+          "battery_charge_end_soc_entity": "End-of-charge level — battery {battery}"
+        },
+        "data_description": {
+          "battery_charge_end_soc_entity": "This battery's own end-of-charge level. SEM only reads it. Leave it empty to use the shared entity from the page before."
         }
       },
       "settings_ev": {
@@ -236,6 +299,7 @@
         "description": "Electricity rates and advanced tuning parameters.",
         "data": {
           "tariff_mode": "Tariff mode",
+          "tariff_schedule_entity": "Peak-time schedule (Calendar mode)",
           "dynamic_tariff_entity": "Dynamic price entity (auto-detected if empty)",
           "dynamic_forecast_entity": "Price forecast entity (optional, auto-detected if empty)",
           "dynamic_feedin_entity": "Feed-in price entity (optional, for dynamic export rate)",
@@ -248,10 +312,22 @@
           "grid_import_power_entity": "Grid import power sensor (optional, auto-detected)",
           "grid_export_power_entity": "Grid export power sensor (optional, auto-detected)",
           "tariff_classification_mode": "Price classification mode",
-          "solar_forecast_source": "Solar forecast source"
+          "solar_forecast_source": "Solar forecast source",
+          "grid_co2_entity": "Grid CO₂ intensity sensor (optional)",
+          "outdoor_temperature_entity": "Outdoor temperature (optional)",
+          "tariff_value_preset": "Taxes and fees preset",
+          "import_price_basis": "What your import price includes",
+          "import_markup": "Supplier markup",
+          "import_energy_tax": "Energy tax",
+          "import_vat_percent": "VAT",
+          "feed_in_fee_model": "Feed-in fee",
+          "feed_in_fee": "Feed-in fee amount",
+          "feed_in_fee_tiers": "Feed-in fee tiers",
+          "export_value_threshold": "Stop exporting below"
         },
         "data_description": {
           "tariff_mode": "Choose 'Static' for fixed rates, 'Dynamic' for real-time pricing, or 'Calendar' for time-of-use schedules.",
+          "tariff_schedule_entity": "A Home Assistant Schedule helper. Its time blocks are the peak (HT) hours; all other hours use the night rate.",
           "dynamic_tariff_entity": "Sensor providing the current electricity import price. Auto-detected from Tibber, Nordpool, etc.",
           "dynamic_forecast_entity": "Optional sensor with hourly price forecasts used for smart scheduling.",
           "dynamic_feedin_entity": "Optional sensor providing the current feed-in / export price for dynamic export rate.",
@@ -264,7 +340,18 @@
           "grid_import_power_entity": "Optional sensor (W) for grid import power. Auto-detected from the Energy Dashboard; override here if needed.",
           "grid_export_power_entity": "Optional sensor (W) for grid export power. Auto-detected from the Energy Dashboard; override here if needed.",
           "tariff_classification_mode": "Percentile buckets prices relative to today's range (recommended). Static uses fixed cheap/expensive thresholds.",
-          "solar_forecast_source": "Which forecast integration SEM reads. Auto-detect prefers Solcast, then Forecast.Solar, then Open-Meteo — pick one explicitly if you run several side by side."
+          "solar_forecast_source": "Which forecast integration SEM reads. Auto-detect prefers Solcast, then Forecast.Solar, then Open-Meteo — pick one explicitly if you run several side by side.",
+          "grid_co2_entity": "SEM finds a sensor in g or kg CO₂ per kWh by itself. Pick one only if it found the wrong one.",
+          "outdoor_temperature_entity": "SEM finds an outdoor thermometer by its name, or uses your weather entity. Pick one only if it chose the wrong one.",
+          "tariff_value_preset": "Fills the fields below. 'None' adds nothing: prices stay as they are. 'Netherlands from 2027' sets energy tax and 21 % VAT; enter your supplier's markup and fee yourself.",
+          "import_price_basis": "All-in: the price already has tax and VAT (Tibber, a rate from your bill) — nothing is added. Spot incl. VAT: tax and markup are added with VAT. Spot: tax, markup and VAT are all added.",
+          "import_markup": "What your supplier adds per bought kWh, excl. VAT.",
+          "import_energy_tax": "Energy tax per bought kWh, excl. VAT.",
+          "import_vat_percent": "VAT on the bought kWh, in percent.",
+          "feed_in_fee_model": "What your supplier charges for the energy you send to the grid: per kWh, in tiers by kWh sent this year, or a fixed amount per month.",
+          "feed_in_fee": "Per kWh: the fee per kWh. Fixed monthly: the amount per month.",
+          "feed_in_fee_tiers": "For tiers only. kWh sent this year : fee per kWh, for example 0:0, 1000:0.02, 3000:0.05",
+          "export_value_threshold": "When a sold kWh is worth less than this, SEM stops exporting: the battery and loads take the sun first. 0 = only below zero. Needs the Export guard switch."
         }
       },
       "load_management": {
@@ -278,7 +365,9 @@
           "emergency_peak_level": "Emergency Peak Level (kW)",
           "vehicle_soc_entity": "Vehicle Battery SOC",
           "ev_battery_capacity_kwh": "EV Battery Capacity (kWh)",
-          "ev_target_soc": "Consider full at (%)"
+          "ev_target_soc": "Consider full at (%)",
+          "shed_signal_entity": "Grid operator relay",
+          "shed_signal_limit": "Grid limit while it is on (kW)"
         },
         "data_description": {
           "load_management_enabled": "Enable/disable SEM's automatic load-shedding to stay under your grid peak limit.",
@@ -288,7 +377,9 @@
           "emergency_peak_level": "Power level (kW) at which SEM aggressively sheds loads to avoid demand charges. Must be above the target peak limit.",
           "vehicle_soc_entity": "Optional sensor reporting the vehicle's current state of charge (0–100%).",
           "ev_battery_capacity_kwh": "Total usable capacity of the EV battery in kWh.",
-          "ev_target_soc": "SEM stops treating the car as needing charge once it reaches this. It is a definition of \"full\", not a limit on charging."
+          "ev_target_soc": "SEM stops treating the car as needing charge once it reaches this. It is a definition of \"full\", not a limit on charging.",
+          "shed_signal_entity": "The contact your grid operator switches (§14a, ripple control). Leave empty if you have none.",
+          "shed_signal_limit": "While the relay is on, SEM keeps the house's grid draw under this limit. Solar on top is fine."
         }
       },
       "battery_scheduler": {
@@ -499,7 +590,10 @@
           "heat_pump_relay1_on_value": "SG-Ready contact 1 — ON value",
           "heat_pump_relay1_off_value": "SG-Ready contact 1 — OFF value",
           "heat_pump_relay2_on_value": "SG-Ready contact 2 — ON value",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value"
+          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value",
+          "heat_pump_tariff_rate": "Own tariff: fixed rate",
+          "heat_pump_tariff_entity": "Own tariff: price entity",
+          "heat_pump_tariff_meter": "Own tariff: meter (kWh)"
         },
         "data_description": {
           "heat_pump_relay1_entity": "Switch entity for SG-Ready relay 1 (normal operation signal). Set together with relay 2 for SG-Ready protocol.",
@@ -513,12 +607,15 @@
           "heat_pump_relay1_on_value": "Only for a text/number/select contact: the value SEM writes to close contact 1. Leave empty for a switch.",
           "heat_pump_relay1_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 1. Leave empty for a switch.",
           "heat_pump_relay2_on_value": "Only for a text/number/select contact: the value SEM writes to close contact 2. Leave empty for a switch.",
-          "heat_pump_relay2_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 2. Leave empty for a switch."
+          "heat_pump_relay2_off_value": "Only for a text/number/select contact: the value SEM writes to open contact 2. Leave empty for a switch.",
+          "heat_pump_tariff_rate": "A fixed price for the heat pump's own meter, e.g. a heat pump tariff. 0 = house tariff.",
+          "heat_pump_tariff_entity": "A sensor with the heat pump's price, if it changes. Cheap hours then follow this price.",
+          "heat_pump_tariff_meter": "Optional. The kWh counter of the heat pump's own meter. Empty = SEM estimates its grid share."
         }
       },
       "ev_charger_menu": {
         "title": "EV Chargers",
-        "description": "Manage your EV charger configuration.",
+        "description": "A charger is optional. No EV charger? Keep the first option selected and submit.",
         "data": {
           "action": "Action"
         },
@@ -673,7 +770,10 @@
           "heat_pump_relay1_on_value": "SG-Ready contact 1 — ON value",
           "heat_pump_relay1_off_value": "SG-Ready contact 1 — OFF value",
           "heat_pump_relay2_on_value": "SG-Ready contact 2 — ON value",
-          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value"
+          "heat_pump_relay2_off_value": "SG-Ready contact 2 — OFF value",
+          "heat_pump_tariff_rate": "Own tariff: fixed rate",
+          "heat_pump_tariff_entity": "Own tariff: price entity",
+          "heat_pump_tariff_meter": "Own tariff: meter (kWh)"
         }
       }
     },
@@ -689,7 +789,9 @@
       "heat_pump_no_control": "Configure at least one control path: both relays, a climate entity, or a service.",
       "heat_pump_service_invalid": "The SG-Ready service must be domain.service (e.g. ems_esp.send_command).",
       "heat_pump_service_data_invalid": "The SG-Ready service data must be a JSON object.",
-      "heat_pump_contact_values_missing": "This SG-Ready contact is a text/number/select entity, so SEM needs both the ON and the OFF value to write. Fill both, or pick a switch entity."
+      "heat_pump_contact_values_missing": "This SG-Ready contact is a text/number/select entity, so SEM needs both the ON and the OFF value to write. Fill both, or pick a switch entity.",
+      "calendar_needs_schedule": "Calendar mode needs a peak-time schedule. Pick a Schedule helper or choose another tariff mode.",
+      "value_needs_spot_basis": "A markup, energy tax or VAT only applies when your price is a spot price. Pick the spot basis, or set them to 0."
     }
   },
   "entity": {
@@ -1371,6 +1473,87 @@
       },
       "house_meter_gap": {
         "name": "House meter difference"
+      },
+      "pv_health": {
+        "name": "PV health",
+        "state": {
+          "green": "Good",
+          "yellow": "Fair",
+          "orange": "Poor",
+          "red": "Bad"
+        }
+      },
+      "per_charger_commanded_current": {
+        "name": "{charger} Commanded Current"
+      },
+      "per_charger_daily_energy": {
+        "name": "{charger} Daily Energy"
+      },
+      "per_charger_estimated_soc": {
+        "name": "{charger} Estimated SOC"
+      },
+      "per_charger_flow_battery_to_ev_energy": {
+        "name": "{charger} Battery → EV Energy"
+      },
+      "per_charger_flow_battery_to_ev_power": {
+        "name": "{charger} Battery → EV Power"
+      },
+      "per_charger_flow_grid_to_ev_energy": {
+        "name": "{charger} Grid → EV Energy"
+      },
+      "per_charger_flow_grid_to_ev_power": {
+        "name": "{charger} Grid → EV Power"
+      },
+      "per_charger_flow_solar_to_ev_energy": {
+        "name": "{charger} Solar → EV Energy"
+      },
+      "per_charger_flow_solar_to_ev_power": {
+        "name": "{charger} Solar → EV Power"
+      },
+      "per_charger_power": {
+        "name": "{charger} Power"
+      },
+      "per_charger_session_energy": {
+        "name": "{charger} Session Energy"
+      },
+      "per_charger_session_energy_external": {
+        "name": "{charger} Session Energy (charger)"
+      },
+      "per_charger_session_solar_share": {
+        "name": "{charger} Solar Share"
+      },
+      "per_charger_taper_minutes_to_full": {
+        "name": "{charger} Minutes to Full"
+      },
+      "per_charger_taper_ratio": {
+        "name": "{charger} Taper Ratio"
+      },
+      "per_charger_taper_trend": {
+        "name": "{charger} Taper Trend"
+      },
+      "per_charger_vehicle_soc": {
+        "name": "{charger} Vehicle SOC"
+      },
+      "daily_self_consumption_value": {
+        "name": "Self-consumption value today"
+      },
+      "yearly_self_consumption_value": {
+        "name": "Self-consumption value this year"
+      },
+      "daily_export_value": {
+        "name": "Export value today"
+      },
+      "yearly_export_value": {
+        "name": "Export value this year"
+      },
+      "daily_feed_in_fees": {
+        "name": "Feed-in fees today"
+      },
+      "yearly_feed_in_fees": {
+        "name": "Feed-in fees this year"
+      },
+      "per_device_tariff_cost": {
+        "name": "{device} tariff cost today"
       }
     },
     "binary_sensor": {
@@ -1444,6 +1627,15 @@
       },
       "ev_morning_window_enabled": {
         "name": "Morning EV window"
+      },
+      "simulation_tab": {
+        "name": "Simulation tab"
+      },
+      "battery_discharge_limit_caps_charge": {
+        "name": "Discharge limit also caps charging"
+      },
+      "ev_absorb_grid_fill": {
+        "name": "Start the car on negative export, buying the gap"
       }
     },
     "number": {
@@ -1488,9 +1680,6 @@
       },
       "heat_pump_boost_offset": {
         "name": "Heat Pump Boost Offset"
-      },
-      "hot_water_max_temperature": {
-        "name": "Hot Water Max Temperature"
       },
       "system_size_kwp": {
         "name": "PV System Size"
@@ -1608,6 +1797,14 @@
           "8_hours": "8 hours",
           "12_hours": "12 hours"
         }
+      },
+      "hints": {
+        "name": "Hints",
+        "state": {
+          "off": "Off",
+          "weekly": "Weekly note",
+          "all": "All hints"
+        }
       }
     },
     "button": {
@@ -1616,6 +1813,11 @@
       },
       "pause_charging": {
         "name": "{charger} Pause Charging"
+      }
+    },
+    "time": {
+      "per_charger_target_time": {
+        "name": "{charger} Charge By"
       }
     }
   },
@@ -1647,6 +1849,9 @@
     "set_option_invalid_payload": {
       "message": "set_option requires an 'options' dict mapping config keys to new values."
     },
+    "battery_list_changed": {
+      "message": "The batteries in the Energy Dashboard changed, so this battery setting was not saved. Check it and try again."
+    },
     "set_option_no_entry": {
       "message": "No SEM ConfigEntry found — install SEM via Settings → Devices & Services first."
     },
@@ -1655,6 +1860,24 @@
     },
     "load_management_failed_to_start": {
       "message": "Load management is switched on but failed to start, so SEM cannot use its device list. Check the Home Assistant log for \"Failed to initialize load management\" and reload the integration."
+    },
+    "battery_boost_not_permitted": {
+      "message": "The battery may not feed “{charger}”: its permission is off. Switch it on in the battery settings to boost."
+    },
+    "battery_boost_not_connected": {
+      "message": "No car is plugged into “{charger}”."
+    },
+    "battery_boost_bad_floor": {
+      "message": "“{floor}” is not a battery level: give a floor from 0 to 100 %."
+    },
+    "charger_not_found": {
+      "message": "SEM has no charger “{charger}”."
+    },
+    "departure_bad_time": {
+      "message": "“{day}: {time}” is not a departure: days are mon … sun, times HH:MM from 00:00 to 23:59."
+    },
+    "value_needs_spot_basis": {
+      "message": "A markup, energy tax or VAT only applies when your price is a spot price. Pick the spot basis, or set them to 0."
     }
   },
   "issues": {
@@ -1789,7 +2012,7 @@
     },
     "split_grid_guessed": {
       "title": "SEM is checking two guessed grid meters",
-      "description": "No grid power entity is configured and the Energy Dashboard gives none, so SEM matched entity names and found **{import_entity}** as a possible grid import meter and **{export_entity}** as a possible export meter — a name match, with no device evidence behind it. SEM will NOT steer on them until they agree with your grid energy counters, so grid power reads 0 for now. To skip the wait, open **Settings → Integrations → SEM → Configure → Sensors** and set **Grid import power** and **Grid export power** explicitly."
+      "description": "SEM has no grid power sensor, so it guessed by name: **{import_entity}** for grid import and **{export_entity}** for grid export. SEM does not use them until they match your grid energy counters, so grid power reads 0 for now. To pick your meter: open the SEM dashboard, tab ⚙ **Configuration**, and pick **All settings** at the top. Then set **Grid power** in section **Sensor sources**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
     },
     "battery_control_write_not_taken": {
       "title": "A battery control write is not taken: {entity_id}",
@@ -1809,7 +2032,31 @@
     },
     "split_grid_rejected": {
       "title": "SEM could not find your grid power meters",
-      "description": "No grid power entity is configured and the Energy Dashboard gives none. SEM matched **{import_entity}** and **{export_entity}** by entity name, then checked them against your grid energy counters — and they do not track them, so they are not your meters. SEM reports **no grid power** rather than a wrong one. Open **Settings → Integrations → SEM → Configure → Sensors** and set **Grid import power** and **Grid export power** explicitly; this notice clears once real meters are named or the guesses start agreeing."
+      "description": "SEM has no grid power sensor, and its guesses by name are not your grid meter: **{import_entity}** for import, **{export_entity}** for export. They do not match your grid energy counters, or one of the two is missing. SEM shows no grid power rather than a wrong one. To pick your meter: open the SEM dashboard, tab ⚙ **Configuration**, and pick **All settings** at the top. Then set **Grid power** in section **Sensor sources**. If your meter has one sensor for import and one for export, set **Grid import sensor** and **Grid export sensor** in section **Tariff & pricing** instead."
+    },
+    "power_sensor_not_found": {
+      "title": "No power sensor for {energy_entity}",
+      "description": "The Energy Dashboard counts **{energy_entity}** in kWh, but SEM found no power sensor (W) for it. SEM reads this power as 0 W, so the energy flows and the surplus are wrong. To fix it, add the power sensor to this entry in the Energy Dashboard. Or open the SEM dashboard, tab ⚙ **Configuration**, and pick **All settings** at the top. Then set the sensor in section **Sensor sources**. If there is no power sensor, you can ignore this notice."
+    },
+    "power_sensor_not_found_unit": {
+      "title": "No power sensor for {energy_entity}",
+      "description": "The Energy Dashboard counts **{energy_entity}** in kWh, but SEM found no power sensor (W) for it. SEM adds up only the other solar or battery entries, so the energy flows and the surplus are wrong. To fix it, add the power sensor to this entry in the Energy Dashboard. If there is no power sensor, you can ignore this notice."
+    },
+    "charger_device_gone": {
+      "title": "Charger {name}: its device is gone",
+      "description": "Home Assistant no longer has the device behind the charger {name}. SEM cannot drive it. Remove the charger in SEM, or add the device back."
+    },
+    "charger_role_missing": {
+      "title": "Charger {name}: a role is missing",
+      "description": "SEM found no entity on the device of {name} for: {roles}. Pick it in the charger settings, or check the device's integration."
+    },
+    "charger_role_entity_gone": {
+      "title": "Charger {name}: an entity is gone",
+      "description": "The charger {name} uses {entity}, which is gone or disabled. Pick another entity in the charger settings, or check the device's integration."
+    },
+    "external_write_seen": {
+      "title": "Another party writes to {name}",
+      "description": "Something other than SEM keeps changing **{name}**, and SEM and that party undo each other. In SEM's Configuration tab, set this device to *Yes, SEM yields* and pick the entity that shows when the other party is in control."
     }
   },
   "selector": {
@@ -1818,6 +2065,86 @@
         "disabled": "Disabled",
         "grid_only": "Grid supply only",
         "hybrid_load_port": "Grid + hybrid inverter Load/EPS output"
+      }
+    },
+    "diagram_style": {
+      "options": {
+        "sem": "SEM (built-in)",
+        "kflow": "K-Flow (HACS)"
+      }
+    },
+    "tariff_mode": {
+      "options": {
+        "static": "Static (fixed HT/NT rates)",
+        "dynamic": "Dynamic / price sensor (Tibber / Nordpool / aWATTar / Amber / Octopus — or any entity with the current price)",
+        "calendar": "Calendar (time-based HT/NT schedule)"
+      }
+    },
+    "solar_forecast_source": {
+      "options": {
+        "auto": "Auto-detect (Solcast, then Forecast.Solar, then Open-Meteo, then Helios)",
+        "solcast": "Solcast PV Solar",
+        "forecast_solar": "Forecast.Solar",
+        "open_meteo": "Open-Meteo Solar Forecast",
+        "helios": "Helios Forecast"
+      }
+    },
+    "tariff_classification_mode": {
+      "options": {
+        "percentile": "Percentile (relative to today's prices)",
+        "static": "Static (fixed cheap/expensive thresholds)"
+      }
+    },
+    "battery_charge_platform": {
+      "options": {
+        "auto": "Auto-detect (recommended)",
+        "huawei": "Huawei SUN2000 / LUNA2000",
+        "goodwe": "GoodWe",
+        "deye": "Deye hybrid inverter",
+        "generic": "Generic / other"
+      }
+    },
+    "deye_force_charge_work_mode": {
+      "options": {
+        "load_first": "Load First",
+        "battery_first": "Battery First"
+      }
+    },
+    "tariff_value_preset": {
+      "options": {
+        "none": "None (no taxes or fees added)",
+        "nl_2027": "Netherlands from 2027",
+        "custom": "Custom"
+      }
+    },
+    "import_price_basis": {
+      "options": {
+        "all_in": "All-in (taxes included)",
+        "spot_incl_vat": "Spot price incl. VAT",
+        "spot": "Spot price (no taxes)"
+      }
+    },
+    "feed_in_fee_model": {
+      "options": {
+        "none": "None",
+        "per_kwh": "Per kWh",
+        "tiered": "Tiers by kWh per year",
+        "fixed_monthly": "Fixed per month"
+      }
+    },
+    "setup_grid_answer": {
+      "options": {
+        "buying": "Buying from the grid",
+        "sending": "Sending to the grid",
+        "keep": "This is my grid meter",
+        "other": "Use the other meter",
+        "unknown": "I don't know"
+      }
+    },
+    "setup_words": {
+      "options": {
+        "none": "not found",
+        "why_guessed": "Your Energy dashboard has no grid power sensor, so SEM guessed one."
       }
     }
   }

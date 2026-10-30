@@ -23,6 +23,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from ..charger_types import BatteryIntent, ExportIntent
+from ...utils.select_option import listed_option
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ def unload_release_reason(adapter, was_observer: bool) -> Optional[str]:
 
 
 async def async_release_batteries_on_unload(coordinator) -> dict:
-    """(#936 — Guido, 08.09.2026: *"on uninstall SEM should go to observation
+    """(#936 — rule, 08.09.2026: *"on uninstall SEM should go to observation
     mode on and then uninstall"*.) Flip the coordinator to observer mode
     FIRST, so no cycle still in flight commands anything, then hand back only
     what SEM itself commanded (see :func:`unload_release_reason`).
@@ -80,6 +81,12 @@ async def async_release_batteries_on_unload(coordinator) -> dict:
     outcome: dict = {}
     adapters = getattr(coordinator, "_battery_adapters", {}) or {}
     for bid, adapter in adapters.items():
+        # (#1178) a cycle still running may have left another battery as
+        # this one's limit writer; the hand-back is every battery's own
+        try:
+            adapter._limit_writer = None
+        except Exception:  # noqa: BLE001 — a read-only stand-in in tests
+            pass
         why = unload_release_reason(adapter, was_observer)
         if why is None:
             outcome[bid] = ("observer mode — nothing was ever commanded, nothing written"
@@ -159,6 +166,52 @@ class BatteryControlAdapter(ABC):
     #: fault, and the sensor-unavailable Repair's business, not this one's.
     _WRITE_REPORT_WAIT_S: float = 180.0
 
+    #: (#1138) A limit write the entity did not keep is sent ONCE more: the
+    #: 100 W same-limit skip below would otherwise hold the old register
+    #: value until the wanted limit moves. ``_limit_resent_for_w`` is the
+    #: limit that already had its one extra send, so a register that keeps
+    #: refusing is not written every cycle (#538, #900).
+    _limit_resend_due: bool = False
+    _limit_resent_for_w: "Optional[float]" = None
+
+    #: (#1178) Set by the pipeline only while the cycle's commands run, when
+    #: another battery shares this adapter's discharge limit entity: the
+    #: battery that writes it (its own id on a cycle nobody writes it, after
+    #: a stop). ``None``: this adapter writes it. See
+    #: ``coordinator/battery_shared_limit.py``.
+    _limit_writer: "Optional[str]" = None
+    #: (#1178) The ``(watts, force)`` of the limit write held back this
+    #: cycle — sent after all if the writer's sale did not go out.
+    _limit_withheld: "Optional[tuple]" = None
+    #: (#1178) This cycle's command sent a stop that the device must not
+    #: get a write right after (Huawei's one write per cycle). Reset by the
+    #: pipeline each cycle.
+    _sent_stop: bool = False
+    #: (#1178) This cycle's command sent the sale, or found it running.
+    #: Reset by the pipeline each cycle: ``last_intent`` outlives a sale that
+    #: has stopped going out.
+    _sale_sent: bool = False
+
+    def _limit_not_mine(self, watts: float, force: bool = False) -> bool:
+        """(#1178) True when this adapter must not write the shared
+        discharge limit this cycle: every ``_apply_discharge_limit`` then
+        sends nothing and keeps what it would have sent. The pipeline gives
+        this adapter the writer's record after the cycle."""
+        if self._limit_writer is None:
+            return False
+        self._limit_withheld = (float(watts), bool(force))
+        return True
+
+    def _limit_already_sent(self, watts: float) -> bool:
+        """The same-limit skip for ``command_limit_discharge``: True when the
+        last limit is within 100 W of ``watts`` and nothing asks for a
+        re-send. A pending re-send is used up by the call that sees it."""
+        if self._limit_resend_due:
+            self._limit_resend_due = False
+            return False
+        return (self._last_discharge_limit_w >= 0
+                and abs(watts - self._last_discharge_limit_w) < 100.0)
+
     def _note_pending_write(self, entity_id: str, watts: float) -> None:
         import time as _time
         pending = getattr(self, "_pending_write", None)
@@ -222,11 +275,16 @@ class BatteryControlAdapter(ABC):
             or (ceiling_w is not None and watts >= ceiling_w
                 and abs(seen_w - ceiling_w) <= tol_w))
         if reflected:
+            self._limit_resent_for_w = None
             self.write_not_taken_strikes = 0
             self.last_unverified_entity = ""
             self.last_verified_entity = entity_id
             return True
         self.write_not_taken_strikes += 1
+        if (entity_id == getattr(self, "_discharge_control_entity", None)
+                and self._limit_resent_for_w != watts):
+            self._limit_resend_due = True
+            self._limit_resent_for_w = watts
         self.last_unverified_entity = entity_id
         label = str(attrs.get("unit_of_measurement") or "W")
         self.last_unverified_wanted = f"{watts / scale:g} {label}"
@@ -243,6 +301,51 @@ class BatteryControlAdapter(ABC):
         """(#900) The discharge limit this adapter last commanded, -1 when
         none yet — the anchor the actuator quantises the next one against."""
         return float(getattr(self, "_last_discharge_limit_w", -1.0))
+
+    #: (#1066) Per direction: did a forced charge / discharge SEM started
+    #: land, and has its stop landed since? None = unknown (this adapter has
+    #: not seen either). Written by ``actuate_battery._note_forced_op`` only.
+    _sem_forced_charge: "Optional[bool]" = None
+    _sem_forced_discharge: "Optional[bool]" = None
+    #: (#1066) cycles in a row a stop has not landed while a flag is True
+    _sem_stop_misses: int = 0
+
+    #: (#1066) what ``last_error`` says when SEM is asked to limit discharge
+    #: and has no entity to write the limit to.
+    NO_DISCHARGE_LIMIT_ERROR = (
+        "no discharge limit entity — SEM cannot cap this battery, so it "
+        "covers any load on the meter, the car included")
+
+    def _discharge_limit_unwritable(self) -> bool:
+        """(#1066) True when a LIMIT_DISCHARGE has nowhere to go — and say so.
+
+        With no ``battery_discharge_control_entity`` the brand writers used
+        to record the asked-for watts as the limit in force and return. No
+        write went out, nothing said so, and the discharge-limit sensor and
+        the Diagnose block both showed a cap the battery never had.
+        @RienduPre's 2× Sessy (no discharge-limit setting at all, only the
+        power setpoint) covered 2.3 kW of car from the pack that way.
+
+        Records no limit (-1, "none written") and puts the gap in
+        ``last_error`` — the Deye convention for a limit it cannot apply.
+        The intent is still recorded by the caller: it is what SEM asked for.
+        """
+        if getattr(self, "_discharge_control_entity", ""):
+            return False
+        self._last_discharge_limit_w = -1.0
+        self._last_error = self.NO_DISCHARGE_LIMIT_ERROR
+        if not getattr(self, "_no_limit_said", False):
+            self._no_limit_said = True
+            _LOGGER.warning(
+                "Battery: asked to limit discharge, but no discharge limit "
+                "entity is set — SEM cannot keep this battery out of the car "
+                "(%s, #1066)", type(self).__name__)
+        return True
+
+    def _clear_no_limit_error(self) -> None:
+        """(#1066) The gap is only an error while a limit is asked for."""
+        if self._last_error == self.NO_DISCHARGE_LIMIT_ERROR:
+            self._last_error = None
 
     def __init__(self, hass, config: dict) -> None:
         self._hass = hass
@@ -415,10 +518,57 @@ class BatteryControlAdapter(ABC):
 
         Sets ``_last_intent`` ONLY when the write succeeds — a failed
         write leaves ``_last_intent`` unchanged so the next cycle
-        re-issues the command rather than masquerading as successful."""
+        re-issues the command rather than masquerading as successful.
+
+        (#1175) A discharge limit SEM wrote before the sale is put back to
+        the max first (:meth:`_hand_back_own_limit`)."""
+        await self._hand_back_own_limit()
+        await self._send_sale(power_w)
+
+    def _own_limit_held(self) -> bool:
+        """(#1175) Is the last discharge limit SEM wrote below the pack's
+        max? −1 (SEM wrote none) is no. So is one entity for both the limit
+        and the sale power: that register is the sale's own."""
+        if getattr(self, "_discharge_control_entity", "") == self._force_discharge_entity:
+            return False
+        return 0.0 <= self.last_discharge_limit_w < float(self.max_discharge_power_w)
+
+    async def _hand_back_own_limit(self) -> None:
+        """(#1175) Before a sale: put back the pack's max discharge when the
+        last limit SEM wrote is below it.
+
+        A limit SEM wrote to keep the pack for the house (the 0 W cheap-hour
+        hold, the EV clamp) stays in the register until a command writes it
+        again, and only NORMAL did. On a brand where that limit also caps a
+        forced discharge, the sale then sends nothing. A limit SEM did not
+        write (``last_discharge_limit_w`` is −1) is left as it is (#936).
+
+        The write skips the same-value check: SEM knows it wrote a lower
+        limit, and the entity can still show the max from before that write
+        until the integration reads it again (review). A failed write leaves
+        the record low, so the next sale cycle asks again.
+        """
+        if not self._own_limit_held():
+            return
+        apply = getattr(self, "_apply_discharge_limit", None)
+        if apply is None:
+            return
+        await apply(float(self.max_discharge_power_w), force=True)
+        if (not self._own_limit_held()
+                and self._last_intent is BatteryIntent.LIMIT_DISCHARGE):
+            # The limit is gone. Left as the last command, LIMIT_DISCHARGE at
+            # the max reads as a limit in force, and a hold that comes back
+            # next cycle waits out the lowering dwell (review). A sale that
+            # goes out this cycle records its own intent after this.
+            self._last_intent = None
+
+    async def _send_sale(self, power_w: float) -> None:
+        """The sale's own write: the forcible-discharge power, clamped to
+        the brand's max. Records the intent only when the write landed."""
         watts = max(0.0, min(float(power_w), self.max_discharge_power_w))
         ok = await self._write_force_discharge(watts)
         if ok:
+            self._sale_sent = True   # (#1178)
             self._last_error = None
             self._last_intent = BatteryIntent.FORCE_DISCHARGE
         else:
@@ -600,10 +750,12 @@ class BatteryControlAdapter(ABC):
                     "(battery_power_direction_entity) — nothing written",
                 )
             return False
-        want = str(self._config.get(
+        # (#1039) the option the select lists — a label would be refused,
+        # and the read below would then wait for it forever
+        want = listed_option(self._hass, ent, str(self._config.get(
             "battery_direction_discharge_value" if watts > 0
             else "battery_direction_charge_value")
-            or ("discharge" if watts > 0 else "charge"))
+            or ("discharge" if watts > 0 else "charge")))
         st = self._hass.states.get(ent)
         if st is not None and str(getattr(st, "state", "")) == want:
             return True
@@ -719,13 +871,10 @@ class BatteryControlAdapter(ABC):
         if isinstance(attrs, dict):
             # (#749) the entity's min/max are NATIVE units — scale them to
             # watts so the clamp, the de-dup and every log stay in W; only
-            # the service-call value converts back at the boundary.
-            lo = attrs.get("min")
-            if isinstance(lo, (int, float)):
-                wire = max(float(lo) * scale, wire)
-            hi = attrs.get("max")
-            if isinstance(hi, (int, float)):
-                wire = min(float(hi) * scale, wire)
+            # the service-call value converts back at the boundary. (#820)
+            # The clamp itself is shared with the charge pacer.
+            from ..power_control import clamp_to_entity_range
+            wire = clamp_to_entity_range(attrs, wire, scale)
         watts = self._setpoint_from_wire(wire, sign)
         # #531: a silent clamp hides a real mismatch (fleet power > a single
         # unit's setpoint range). Surface it once per clamped write so the

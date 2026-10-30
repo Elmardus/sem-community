@@ -6,7 +6,7 @@ days to learn something the recorder can already prove is a waste of the user's
 time, and it is the difference between "the budget works next week" and "the
 budget works now".
 
-Guido's idea, and .175 makes the case: five months of ``forecast_tomorrow_kwh``
+The idea, and .175 makes the case: five months of ``forecast_tomorrow_kwh``
 and ``daily_solar_energy`` sitting in the statistics table — 139 settled pairs,
 which is what exposed the trust-model flaw in the first place.
 

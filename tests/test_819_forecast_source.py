@@ -121,7 +121,7 @@ class TestAMissingChoiceDoesNotBreakForecasting:
 class TestTheSettingIsActuallyWired:
     """A picker nothing reads is an inert half — the shape #804 Phase A
     shipped as. Pin the whole path: config -> reader, and a GUI the user
-    can actually reach (Guido: every setting lives on the dashboard too)."""
+    can actually reach (rule: every setting lives on the dashboard too)."""
 
     def test_the_coordinator_passes_the_config_value(self):
         import ast
@@ -152,7 +152,7 @@ class TestTheSettingIsActuallyWired:
         card = (Path(__file__).resolve().parent.parent / "dashboard" / "card"
                 / "src" / "cards" / "sem-config-card.js").read_text()
         assert "solar_forecast_source" in card, (
-            "Guido's standing rule: every setting is reachable on the SEM "
+            "Standing rule: every setting is reachable on the SEM "
             "dashboard, not only in the options flow"
         )
 
@@ -169,7 +169,7 @@ class TestTheSettingIsActuallyWired:
         doc = (Path(__file__).resolve().parent.parent / "docs"
                / "SETUP_GUIDE.md").read_text()
         human = {"solcast": "Solcast", "forecast_solar": "Forecast.Solar",
-                 "open_meteo": "Open-Meteo"}
+                 "open_meteo": "Open-Meteo", "helios": "Helios"}
         for key in FORECAST_SOURCES:
             assert human[key] in doc, (
                 f"SEM supports {key} but the setup guide never names it"
@@ -191,7 +191,7 @@ class TestTheSettingIsActuallyWired:
 
 @pytest.mark.unit
 class TestTheGuiShowsWhatIsActuallyInstalled:
-    """Guido, 21.08: *"if the user has meteo or an other solar forecast option
+    """21.08: *"if the user has meteo or an other solar forecast option
     installed he can just switch in the gui"*. A dropdown that offers all four
     regardless lets someone pick a source that is not there and then wonder why
     nothing changed — the choice would silently fall back. The picker has to

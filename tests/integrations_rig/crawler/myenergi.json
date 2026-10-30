@@ -1,0 +1,32 @@
+{
+ "chargers": [],
+ "meters": [],
+ "near_misses": [
+  {
+   "charger_roles": [
+    "charge_mode",
+    "phase_select",
+    "power"
+   ],
+   "choose_vehicle": 0,
+   "companions": 0,
+   "entities": 23,
+   "missing": [],
+   "offer": {
+    "_suggested_phase_switch": {
+     "entity": "select.test_zappi_1_myenergi_test_zappi_1_phase_setting",
+     "value_1p": "1",
+     "value_3p": "3"
+    },
+    "ev_charge_mode_entity": "select.test_zappi_1_myenergi_test_zappi_1_charge_mode",
+    "ev_charge_mode_start": "Fast",
+    "ev_charge_mode_stop": "Stopped",
+    "ev_charging_power_sensor": "sensor.test_zappi_1_myenergi_test_zappi_1_power_ct_internal_load"
+   },
+   "paired_vehicle": false,
+   "proposed_roles": []
+  }
+ ],
+ "proposals": [],
+ "vehicles": []
+}

@@ -1,0 +1,727 @@
+{
+ "devices": {
+  "openevse:deadbeeffeed": {
+   "manufacturer": null,
+   "model": null,
+   "name": "deadbeeffeed"
+  }
+ },
+ "domain": "openevse",
+ "entities": [
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.openevse_mock_config_divert_active",
+   "original_device_class": null,
+   "platform": "openevse",
+   "state": "off",
+   "translation_key": "divert_active",
+   "unique_id": "deadbeeffeed-divert_active",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.openevse_mock_config_ethernet_connected",
+   "original_device_class": null,
+   "platform": "openevse",
+   "state": "off",
+   "translation_key": "using_ethernet",
+   "unique_id": "deadbeeffeed-using_ethernet",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.openevse_mock_config_limit_active",
+   "original_device_class": null,
+   "platform": "openevse",
+   "state": "off",
+   "translation_key": "has_limit",
+   "unique_id": "deadbeeffeed-has_limit",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "connectivity"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "binary_sensor.openevse_mock_config_mqtt_connected",
+   "original_device_class": "connectivity",
+   "platform": "openevse",
+   "state": "off",
+   "translation_key": "mqtt_connected",
+   "unique_id": "deadbeeffeed-mqtt_connected",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.openevse_mock_config_shaper_active",
+   "original_device_class": null,
+   "platform": "openevse",
+   "state": "off",
+   "translation_key": "shaper_active",
+   "unique_id": "deadbeeffeed-shaper_active",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "plug"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "binary_sensor.openevse_mock_config_vehicle_connected",
+   "original_device_class": "plug",
+   "platform": "openevse",
+   "state": "on",
+   "translation_key": "vehicle",
+   "unique_id": "deadbeeffeed-vehicle",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "restart"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "button.openevse_mock_config_restart",
+   "original_device_class": "restart",
+   "platform": "openevse",
+   "state": "unknown",
+   "translation_key": "restart",
+   "unique_id": "deadbeeffeed-restart_evse",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "restart"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "button.openevse_mock_config_restart_wi_fi",
+   "original_device_class": "restart",
+   "platform": "openevse",
+   "state": "unknown",
+   "translation_key": "restart_wifi",
+   "unique_id": "deadbeeffeed-restart_wifi",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "max": 48.0,
+    "min": 6.0,
+    "step": 1.0,
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {
+    "max": 48.0,
+    "min": 6.0,
+    "step": 1.0
+   },
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "config",
+   "entity_id": "number.openevse_mock_config_charge_rate",
+   "original_device_class": "current",
+   "platform": "openevse",
+   "state": "20",
+   "translation_key": "charge_rate",
+   "unique_id": "deadbeeffeed-charge_rate",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_ambient_temperature",
+   "original_device_class": "temperature",
+   "platform": "openevse",
+   "state": "25.5",
+   "translation_key": "ambient_temp",
+   "unique_id": "deadbeeffeed-ambient_temp",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "duration",
+    "unit_of_measurement": "min"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_charge_time_elapsed",
+   "original_device_class": "duration",
+   "platform": "openevse",
+   "state": "60.0",
+   "translation_key": "charge_time",
+   "unique_id": "deadbeeffeed-charge_time",
+   "unit_of_measurement": "min"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_charging_current",
+   "original_device_class": "current",
+   "platform": "openevse",
+   "state": "32.0",
+   "translation_key": "charging_current",
+   "unique_id": "deadbeeffeed-charging_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_charging_power",
+   "original_device_class": "power",
+   "platform": "openevse",
+   "state": "7680.0",
+   "translation_key": "charging_power",
+   "unique_id": "deadbeeffeed-charging_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_charging_status",
+   "original_device_class": null,
+   "platform": "openevse",
+   "state": "Charging",
+   "translation_key": "status",
+   "unique_id": "deadbeeffeed-status",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "voltage",
+    "unit_of_measurement": "V"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_charging_voltage",
+   "original_device_class": "voltage",
+   "platform": "openevse",
+   "state": "240",
+   "translation_key": "charging_voltage",
+   "unique_id": "deadbeeffeed-charging_voltage",
+   "unit_of_measurement": "V"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_current_capacity",
+   "original_device_class": "current",
+   "platform": "openevse",
+   "state": "32",
+   "translation_key": "current_capacity",
+   "unique_id": "deadbeeffeed-current_capacity",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_current_limit",
+   "original_device_class": "current",
+   "platform": "openevse",
+   "state": "48",
+   "translation_key": "max_current",
+   "unique_id": "deadbeeffeed-max_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_current_power",
+   "original_device_class": "power",
+   "platform": "openevse",
+   "state": "7680",
+   "translation_key": "current_power",
+   "unique_id": "deadbeeffeed-current_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_daily_energy_usage",
+   "original_device_class": "energy",
+   "platform": "openevse",
+   "state": "10",
+   "translation_key": "total_day",
+   "unique_id": "deadbeeffeed-total_day",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_esp_temperature",
+   "original_device_class": "temperature",
+   "platform": "openevse",
+   "state": "45.0",
+   "translation_key": "esp_temp",
+   "unique_id": "deadbeeffeed-esp_temp",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "data_size",
+    "unit_of_measurement": "B"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_free_memory",
+   "original_device_class": "data_size",
+   "platform": "openevse",
+   "state": "50000",
+   "translation_key": "freeram",
+   "unique_id": "deadbeeffeed-freeram",
+   "unit_of_measurement": "B"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_gfci_trip_count",
+   "original_device_class": null,
+   "platform": "openevse",
+   "state": "0",
+   "translation_key": "gfi_trip_count",
+   "unique_id": "deadbeeffeed-gfi_trip_count",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_ir_temperature",
+   "original_device_class": "temperature",
+   "platform": "openevse",
+   "state": "30.2",
+   "translation_key": "ir_temp",
+   "unique_id": "deadbeeffeed-ir_temp",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_maximum_amperage",
+   "original_device_class": "current",
+   "platform": "openevse",
+   "state": "48",
+   "translation_key": "max_amps",
+   "unique_id": "deadbeeffeed-max_amps",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_minimum_amperage",
+   "original_device_class": "current",
+   "platform": "openevse",
+   "state": "6",
+   "translation_key": "min_amps",
+   "unique_id": "deadbeeffeed-min_amps",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_monthly_energy_usage",
+   "original_device_class": "energy",
+   "platform": "openevse",
+   "state": "200",
+   "translation_key": "total_month",
+   "unique_id": "deadbeeffeed-total_month",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_no_ground_trip_count",
+   "original_device_class": null,
+   "platform": "openevse",
+   "state": "0",
+   "translation_key": "no_gnd_trip_count",
+   "unique_id": "deadbeeffeed-no_gnd_trip_count",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "temperature",
+    "unit_of_measurement": "\u00b0C"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_rtc_temperature",
+   "original_device_class": "temperature",
+   "platform": "openevse",
+   "state": "28.7",
+   "translation_key": "rtc_temp",
+   "unique_id": "deadbeeffeed-rtc_temp",
+   "unit_of_measurement": "\u00b0C"
+  },
+  {
+   "attributes": {
+    "device_class": "enum",
+    "options": [
+     "level_1",
+     "level_2",
+     "automatic"
+    ]
+   },
+   "capabilities": {
+    "options": [
+     "level_1",
+     "level_2",
+     "automatic"
+    ]
+   },
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_service_level",
+   "original_device_class": "enum",
+   "platform": "openevse",
+   "state": "level_2",
+   "translation_key": "service_level",
+   "unique_id": "deadbeeffeed-service_level",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "current",
+    "unit_of_measurement": "A"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_shaper_available_current",
+   "original_device_class": "current",
+   "platform": "openevse",
+   "state": "20.0",
+   "translation_key": "shaper_available_current",
+   "unique_id": "deadbeeffeed-shaper_available_current",
+   "unit_of_measurement": "A"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_shaper_live_power",
+   "original_device_class": "power",
+   "platform": "openevse",
+   "state": "5000",
+   "translation_key": "shaper_live_power",
+   "unique_id": "deadbeeffeed-shaper_live_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "power",
+    "unit_of_measurement": "W"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_shaper_maximum_power",
+   "original_device_class": "power",
+   "platform": "openevse",
+   "state": "11000",
+   "translation_key": "shaper_max_power",
+   "unique_id": "deadbeeffeed-shaper_max_power",
+   "unit_of_measurement": "W"
+  },
+  {
+   "attributes": {
+    "device_class": "signal_strength",
+    "unit_of_measurement": "dB"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_signal_strength",
+   "original_device_class": "signal_strength",
+   "platform": "openevse",
+   "state": "-65",
+   "translation_key": null,
+   "unique_id": "deadbeeffeed-wifi_signal",
+   "unit_of_measurement": "dB"
+  },
+  {
+   "attributes": {},
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_stuck_relay_trip_count",
+   "original_device_class": null,
+   "platform": "openevse",
+   "state": "0",
+   "translation_key": "stuck_relay_trip_count",
+   "unique_id": "deadbeeffeed-stuck_relay_trip_count",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_total_energy_usage",
+   "original_device_class": "energy",
+   "platform": "openevse",
+   "state": "500000",
+   "translation_key": "usage_total",
+   "unique_id": "deadbeeffeed-usage_total",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "duration",
+    "unit_of_measurement": "s"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": "diagnostic",
+   "entity_id": "sensor.openevse_mock_config_uptime",
+   "original_device_class": "duration",
+   "platform": "openevse",
+   "state": "86400",
+   "translation_key": "uptime",
+   "unique_id": "deadbeeffeed-uptime",
+   "unit_of_measurement": "s"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_usage_this_session",
+   "original_device_class": "energy",
+   "platform": "openevse",
+   "state": "15.0",
+   "translation_key": "usage_session",
+   "unique_id": "deadbeeffeed-usage_session",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "timestamp"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_vehicle_charge_completion",
+   "original_device_class": "timestamp",
+   "platform": "openevse",
+   "state": "unknown",
+   "translation_key": "vehicle_eta",
+   "unique_id": "deadbeeffeed-vehicle_eta",
+   "unit_of_measurement": null
+  },
+  {
+   "attributes": {
+    "device_class": "distance",
+    "unit_of_measurement": "km"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_vehicle_range",
+   "original_device_class": "distance",
+   "platform": "openevse",
+   "state": "250",
+   "translation_key": "vehicle_range",
+   "unique_id": "deadbeeffeed-vehicle_range",
+   "unit_of_measurement": "km"
+  },
+  {
+   "attributes": {
+    "device_class": "battery",
+    "unit_of_measurement": "%"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_vehicle_state_of_charge",
+   "original_device_class": "battery",
+   "platform": "openevse",
+   "state": "75",
+   "translation_key": "vehicle_soc",
+   "unique_id": "deadbeeffeed-vehicle_soc",
+   "unit_of_measurement": "%"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_weekly_energy_usage",
+   "original_device_class": "energy",
+   "platform": "openevse",
+   "state": "50",
+   "translation_key": "total_week",
+   "unique_id": "deadbeeffeed-total_week",
+   "unit_of_measurement": "kWh"
+  },
+  {
+   "attributes": {
+    "device_class": "energy",
+    "unit_of_measurement": "kWh"
+   },
+   "capabilities": {},
+   "device": "openevse:deadbeeffeed",
+   "disabled_by": null,
+   "entity_category": null,
+   "entity_id": "sensor.openevse_mock_config_yearly_energy_usage",
+   "original_device_class": "energy",
+   "platform": "openevse",
+   "state": "2000",
+   "translation_key": "total_year",
+   "unique_id": "deadbeeffeed-total_year",
+   "unit_of_measurement": "kWh"
+  }
+ ],
+ "services": {},
+ "source": {
+  "files": [
+   "tests/components/openevse/snapshots/test_number.ambr",
+   "tests/components/openevse/snapshots/test_sensor.ambr",
+   "tests/components/openevse/snapshots/test_binary_sensor.ambr",
+   "tests/components/openevse/snapshots/test_button.ambr"
+  ],
+  "kind": "core-snapshot",
+  "note": "Home Assistant's own test output for this integration at the tag; the device grouping comes from unique_id",
+  "repo": "home-assistant/core",
+  "tag": "2026.8.2"
+ }
+}

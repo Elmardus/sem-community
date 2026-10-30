@@ -448,6 +448,9 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
         # every transition issues exactly ONE command and defers the rest to
         # the next cycle. This flag is the state that makes that possible.
         self._forcible_discharging = False
+        # (#1175) The last sale cycle was spent on handing back SEM's limit,
+        # so this one sends the sale, whether that write landed or not.
+        self._sale_limit_tried = False
         # Whether a forcible CHARGE is currently active (started by SEM this
         # lifetime). Guards the startup orphan-clear from wrongly stopping a
         # charge that SEM itself issued this run (#589 Part C).
@@ -510,13 +513,25 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
         self._startup_orphan_checked = True
         self._fd_floor_soc = floor_soc
         watts = max(0.0, min(float(power_w), self._max_discharge_w))
+        # (#1175) SEM's own discharge limit (a 0 W hold) would cap the sale.
+        # It goes back to the max first, as this cycle's only command (one
+        # write per cycle, see __init__); the sale goes out on the next. If
+        # that write failed, the sale still goes out next, and the write is
+        # tried again after it, so a register that refuses it never holds
+        # the sale back.
+        if self._own_limit_held() and not self._sale_limit_tried:
+            self._sale_limit_tried = True
+            await self._hand_back_own_limit()
+            return
+        self._sale_limit_tried = False
         if not self._inverter_device_id:
             # No service → number-entity fallback (a user who wired one).
-            await super().command_force_discharge(power_w, floor_soc)
+            await self._send_sale(power_w)
             self._forcible_discharging = bool(self._force_discharge_entity)
             return
         if self._forcible_discharging and abs(watts - self._last_force_discharge_w) < 100.0:
             self._last_intent = BatteryIntent.FORCE_DISCHARGE
+            self._sale_sent = True   # (#1178) the sale runs this cycle
             return
         try:
             await self._hass.services.async_call(
@@ -529,6 +544,7 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
             )
             self._forcible_discharging = True
             self._last_force_discharge_w = watts
+            self._sale_sent = True   # (#1178)
             _LOGGER.info(
                 "Huawei battery: forcible discharge %.0f W to SOC %d%% "
                 "(manual sell / arbitrage)", watts, int(floor_soc),
@@ -577,6 +593,7 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
 
     async def _issue_stop(self) -> bool:
         """Raw stop (service or number-entity). True on success."""
+        self._sent_stop = True       # (#1178) no shared limit write after it
         if self._inverter_device_id:
             try:
                 await self._hass.services.async_call(
@@ -592,6 +609,15 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
                 return False
         await super()._zero_setpoint()   # the one #523 door (#1005)
         return True
+
+    async def _stop_forced_charge(self):
+        """The forced charge's stop, through the charge adapter. (#1178) It
+        sends one only with a device id in its own config; then the shared
+        discharge limit is not written right after it."""
+        if (getattr(self._charge_adapter, "config", None) or {}).get(
+                "inverter_device_id"):
+            self._sent_stop = True
+        return await self._charge_adapter.stop_forced_charge()
 
     def _forcible_status_reading(self) -> str:
         """Classify the ``huawei_solar`` "Forcible charge/discharge" status
@@ -724,7 +750,7 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
         # re-issues instead of falsely reporting NORMAL.
         if self._forcible_charging:
             try:
-                await self._charge_adapter.stop_forced_charge()
+                await self._stop_forced_charge()
             except Exception as e:  # noqa: BLE001
                 self._last_error = f"stop_forced_charge failed: {e}"
                 return
@@ -741,6 +767,7 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
             self._last_intent = BatteryIntent.NORMAL
             return
         await self._apply_discharge_limit(self._max_discharge_w)
+        self._clear_no_limit_error()                    # (#1066)
         self._last_intent = BatteryIntent.NORMAL
 
     async def command_limit_discharge(self, watts: float) -> None:
@@ -755,11 +782,13 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
         if await self._stop_forcible():
             self._last_intent = BatteryIntent.LIMIT_DISCHARGE
             return
+        if self._discharge_limit_unwritable():          # (#1066)
+            self._last_intent = BatteryIntent.LIMIT_DISCHARGE
+            return
         # Clamp to [0, max]
         watts = max(0.0, min(watts, self._max_discharge_w))
         # Hysteresis (matches battery_protection.py:106-109)
-        if (self._last_discharge_limit_w >= 0
-                and abs(watts - self._last_discharge_limit_w) < 100.0):
+        if self._limit_already_sent(watts):
             self._last_intent = BatteryIntent.LIMIT_DISCHARGE
             return
         await self._apply_discharge_limit(watts)
@@ -821,7 +850,7 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
         if self._force_charge_already_stopped():
             return
         from .force_charge import ChargeCommandStatus
-        status = await self._charge_adapter.stop_forced_charge()
+        status = await self._stop_forced_charge()
         if getattr(status, "status", None) is ChargeCommandStatus.FAILED:
             self._last_error = (
                 f"stop_forced_charge failed: {getattr(status, 'message', '')}"
@@ -833,7 +862,10 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
 
     # ─── Helpers ───────────────────────────────────────────────
 
-    async def _apply_discharge_limit(self, watts: float) -> None:
+    async def _apply_discharge_limit(self, watts: float, *,
+                                     force: bool = False) -> None:
+        if self._limit_not_mine(watts, force):          # (#1178)
+            return
         if not self._discharge_control_entity:
             log_on_change(   # (#762) a standing config gap is one line, not 806/day
                 _LOGGER, "no_discharge_entity", logging.DEBUG,
@@ -861,6 +893,7 @@ class HuaweiBatteryAdapter(BatteryControlAdapter):
             self._discharge_control_entity,
             watts,
             context="Huawei battery discharge limit",
+            force=force,
         )
         if ok:
             self._last_discharge_limit_w = watts

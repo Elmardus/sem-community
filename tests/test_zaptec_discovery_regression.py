@@ -48,7 +48,12 @@ def test_zaptec_variant_prefers_charger_device_and_infers_missing_device_classes
     assert charger["_device_id"] == "charger-42"
     assert charger["ev_charging_power_sensor"] == "sensor.zaptec_garage_total_charge_power"
     assert charger["ev_total_energy_sensor"] == "sensor.zaptec_garage_signed_meter_value_kwh"
-    assert charger["ev_current_control_entity"] == "number.zaptec_garage_available_current"
+    # (#1144) this pin once took ``…_available_current`` as the control: its
+    # unique id was missing, and the rule refused the site limit by unique id
+    # only. That number limits every charger on the site (#804); the box
+    # starts and stops through its resume button instead.
+    assert "ev_current_control_entity" not in charger
+    assert charger["ev_start_stop_entity"] == "button.zaptec_garage_resume_charging"
 
 
 def test_zaptec_without_its_number_reports_no_control_at_all():

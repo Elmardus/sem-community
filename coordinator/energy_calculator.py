@@ -1,29 +1,41 @@
 """Energy calculation module for SEM coordinator."""
 from __future__ import annotations
 
+import calendar
 import inspect
 import logging
+import math
 import re
+import time
+import uuid
 from collections import deque
+from types import SimpleNamespace
 from datetime import datetime, date, timedelta
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional, Set, Tuple
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from ..const import DOMAIN
+from ..const import DEFAULT_ELECTRICITY_IMPORT_RATE, DOMAIN
+from ..consts.core import SENSOR_DARK_READ_GRACE_S
 
 from .types import (
     PowerReadings, EnergyTotals, CostData, PerformanceMetrics,
-    PowerFlows, EnergyFlows,
+    PowerFlows, EnergyFlows, shown_w,
 )
 from ..utils.time_manager import TimeManager
 from .units import energy_state_to_kwh
+from .sensor_reader import EV_ACTIVE_CHARGE_FLOOR_W
+from .repair_issues import UNAVAILABLE_REPAIR_THRESHOLD_S
+from ..ha_energy_reader import ENERGY_COUNTER_CATEGORIES, energy_counters
 from .battery_provenance import (
     BatteryProvenance, allocate_fleet_charge, discharge_savings,
 )
 
 from ..utils.log_gate import log_on_change
+from ..utils.helpers import (
+    BATTERY_SALE_SENSOR_KEY, battery_export_part, solar_export,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,9 +45,42 @@ MIN_POWER_THRESHOLD = 10  # Watts
 # Maximum integration gap — skip cycle if sensors were unavailable longer
 # than this (prevents energy spikes from sensor restarts / integration updates)
 MAX_INTEGRATION_GAP_SECONDS = 120  # 2 minutes
+# (#1187) How long a step across an outage waits for the counters that
+# bound its night part. After a power cut an integration can retry its
+# setup for minutes; the wait starts once Home Assistant runs.
+SOLAR_GAP_WAIT_S = 1800
+# (#1187) The counters whose movement bounds what a solar counter can show
+# in the dark: the batteries' output, and the grid power #681 says passes
+# through a hybrid to a car charging at night.
+SOLAR_GAP_BOUND_CATEGORIES = ("battery_discharge", "grid_import")
 
 # Threshold for hardware reconciliation (kWh)
 RECONCILIATION_THRESHOLD = 0.5
+
+# (#1049) A drop of an EV counter by at most the larger of these is a dip
+# that comes back (a box falling back to an older stored value on a reboot);
+# booked as a reset it would count the climb back as charging (bug class 43),
+# so the last reading holds. A larger drop is a reset — a daily counter at
+# midnight, a session counter at the next plug-in, a new box.
+EV_COUNTER_DIP_KWH = 0.1
+EV_COUNTER_DIP_SHARE = 0.01
+
+# (#1101) The most one box can draw: 3 × 63 A × 230 V, the largest AC supply a
+# home box is wired for. A trap for a counter step no box could have drawn,
+# not a rating (bug classes 40, 43) — a box set up larger keeps its own.
+EV_COUNTER_BOX_MAX_KW = 44.0
+# (#1101) A live power read under the floor can still be one phase of three
+# (#1035): the time it covers may have held up to this many times that draw.
+EV_COUNTER_TRICKLE_FACTOR = 3.0
+# (#1101) What SEM saw a box draw and its counter has not shown yet is kept
+# until the box has been seen idle this long: a late counter may report it in
+# several steps after the stop. A power read above the meter leaves a rest
+# that is not energy, so it may not wait for ever.
+EV_COUNTER_LATE_REPORT_H = 2.0
+# (#1161) What a day's EV row keeps of the day before until its first
+# anchor: enough to say what that day booked above its counters.
+_EV_CLOSING_KEYS = ("row", "anchor", "base", "last", "drawn_at", "owed",
+                    "carried")
 
 # Adoption threshold for a metered category (#628). Much finer than the solar/EV
 # 0.5 kWh: those correct a large one-way shortfall, while a grid row is often
@@ -44,10 +89,29 @@ RECONCILIATION_THRESHOLD = 0.5
 # row — the point is to stop drift, not to chase noise.
 METER_RECONCILIATION_THRESHOLD = 0.05
 
-# Sanity ceiling for one day of a metered category (#628). Solar and EV have
-# physical bounds to check against (kWp × 16 h, chargers × amps × 24 h); grid
-# and battery do not, so this is a pure unit-error trap — a Wh register read as
-# kWh is 1000× out. No residential install imports or exports 1 MWh in a day.
+# (#1177) The power inputs the daily rows integrate: the input, the flag that
+# says every read of it was dark this cycle (``SensorReader``, #818), and the
+# fields the integral books from it. A dark read is the reader's 0 W, right
+# for steering and wrong for an integral (bug class 58): on PROD the modbus
+# inverter was dark 26 % of a noon hour, the solar row lost that share, and
+# home — the balance of the metered rows — went down.
+_INTEGRAL_INPUTS = (
+    ("solar", "solar_power_unavailable", ("solar_power",)),
+    ("grid", "grid_power_unavailable",
+     ("grid_import_power", "grid_export_power")),
+    ("battery", "battery_power_all_unavailable",
+     ("battery_charge_power", "battery_discharge_power")),
+)
+#: (#1177) the flows the battery's books are split by (charge origin, #770;
+#: the delivered share of a discharge, #776)
+_BATTERY_FLOW_FIELDS = ("solar_to_battery", "grid_to_battery",
+                        "battery_to_home", "battery_to_ev", "battery_to_grid")
+
+# Sanity ceiling for one day of a metered category (#628). Solar, battery and
+# EV have physical bounds to check against (kWp × 16 h, 3 × the battery size,
+# chargers × amps × 24 h — see ``_daily_ceiling``); grid does not, so this is a
+# pure unit-error trap — a Wh register read as kWh is 1000× out. No
+# residential install imports or exports 1 MWh in a day.
 MAX_PLAUSIBLE_DAILY_KWH = 1000.0
 
 # Accumulator category for EV charging energy (#666). A named constant, not a
@@ -72,6 +136,18 @@ _LEGACY_EV_KEY_PREFIX = f"{_LEGACY_EV_CATEGORY}_"
 # deliberately does not start with ``ev_``: that prefix means "survives the
 # midnight rollover" (``_check_rollover``), and this bucket must roll at midnight.
 MIDNIGHT_EV_CATEGORY = "midnight_ev"
+
+# (#1046) Where the car's kWh came from, on the EV day. The car's solar share
+# is printed beside ``daily_ev`` ("Today 5 kWh · Solar Share 100 %"), so its
+# flows must cover the same hours: the flow layer's own totals roll at
+# midnight, and a night charge before the Charge-by time would sit in the
+# share and not in "Today". The ``ev_`` prefix keeps these rows through the
+# midnight sweep, like the EV row. DAILY-ONLY, like the midnight mirror.
+EV_DAY_FLOW_CATEGORIES = (
+    ("solar_to_ev", "ev_flow_solar"),
+    ("grid_to_ev", "ev_flow_grid"),
+    ("battery_to_ev", "ev_flow_battery"),
+)
 
 # (#769) Per-device ledger keys. Every controlled load gets daily/monthly/
 # yearly/lifetime totals on the same footing as EV, keyed by ``device_id``
@@ -158,6 +234,42 @@ _COST_ESTIMATE_BASIS = {
 _FLEET_CALENDAR_OFFSET = "00:00"
 
 
+
+def _finite(value: Any) -> bool:
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value))
+
+
+def _aware(value: Any) -> Optional[datetime]:
+    """(#1187) A stored or published time with its zone; None for any
+    other value (no zone, not a time)."""
+    if isinstance(value, str):
+        try:
+            value = dt_util.parse_datetime(value)
+        except (TypeError, ValueError):   # ISO in shape, not in its values
+            return None
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value
+    return None
+
+
+def _ev_day_after(before: Any, day: str) -> bool:
+    """(#1160) ``day`` is the day right after ``before`` (ISO dates)."""
+    try:
+        return (date.fromisoformat(day)
+                - date.fromisoformat(str(before))) == timedelta(days=1)
+    except ValueError:
+        return False
+
+
+def _ev_counter_drop(value: float, ref: Optional[float]) -> Optional[str]:
+    """(#1049) ``"dip"`` or ``"reset"`` for a reading below ``ref``, else None."""
+    if ref is None or value >= ref - 0.001:
+        return None
+    window = max(EV_COUNTER_DIP_KWH, ref * EV_COUNTER_DIP_SHARE)
+    return "dip" if ref - value <= window else "reset"
+
+
 def _valid_hhmm(value) -> bool:
     """A usable day-boundary offset: ``HH:MM`` on a real clock.
 
@@ -190,6 +302,24 @@ _HOME_BALANCE_TERMS = (
     ("battery_discharge", 1.0),
     ("battery_charge", -1.0),
 )
+
+
+def _as_seed_counters(value: Any) -> Optional[Dict[str, List[str]]]:
+    """A stored lifetime seed set (#1043), or None when it is not one.
+
+    None means "no record", which makes the seed check the counters again —
+    the safe answer for a damaged entry.
+    """
+    if not isinstance(value, dict):
+        return None
+    out: Dict[str, List[str]] = {}
+    for category, ids in value.items():
+        if not isinstance(category, str) or not isinstance(ids, (list, tuple)):
+            return None
+        if not all(isinstance(e, str) for e in ids):
+            return None
+        out[category] = sorted(ids)
+    return out
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -236,8 +366,42 @@ def _stat_bucket_year_month(row: Dict[str, Any]) -> Optional[tuple[int, int]]:
     return None
 
 
+def _sem_stat_entity_id(hass: Optional[HomeAssistant], key: str) -> Optional[str]:
+    """(#1216) The entity id of SEM's own sensor ``key``, by its unique id
+    (``sem_<key>``) — users rename entities. None when it cannot be found."""
+    if hass is None:
+        return None
+    try:
+        from homeassistant.helpers import entity_registry as er
+        entity_id = er.async_get(hass).async_get_entity_id(
+            "sensor", DOMAIN, f"sem_{key}")
+    except Exception:  # noqa: BLE001 — registry absent/mocked (tests, early boot)
+        return None
+    return entity_id if isinstance(entity_id, str) and entity_id else None
+
+
 # Environmental impact constants
-GRID_CO2_KG_PER_KWH = 0.128  # Swiss grid average
+GRID_CO2_KG_PER_KWH = 0.128  # Swiss grid average — the fallback (#1088)
+#: (#1088) accumulator category of the live-intensity correction, in kg
+CO2_CORRECTION_CATEGORY = "co2_live_correction"
+#: (#1191) the battery's part of ``grid_export`` (a sale), booked beside it
+GRID_EXPORT_BATTERY_CATEGORY = "grid_export_battery"
+#: (#1191 review) rows booked beside a metered row, by that row: when the
+#: meter corrects the row, each keeps its share of what was added since the
+#: last correction
+_ROWS_BESIDE = {"grid_export": (GRID_EXPORT_BATTERY_CATEGORY,)}
+
+# (#1077) The value layer's cost categories: what solar used at home was
+# worth over exporting it, what exported kWh fetched before the fee, and the
+# feed-in fees. Booked only while a value field is set.
+VALUE_SELF_CONSUMPTION = "value_self_consumption"
+VALUE_EXPORT = "value_export"
+VALUE_FEED_IN_FEE = "value_feed_in_fee"
+#: (#812) A device on its own tariff: its grid kWh and what they cost at
+#: that tariff, per device id. Keyed on the calendar day like the house's
+#: own import cost, so the two daily figures roll together.
+DEVICE_TARIFF_KWH = "device_tariff_kwh:"
+DEVICE_TARIFF_COST = "device_tariff_cost:"
 CO2_KG_PER_TREE_PER_YEAR = 22  # EPA estimate
 
 
@@ -251,6 +415,10 @@ class EnergyCalculator:
 
         # Accumulators for energy integration
         self._daily_accumulators: Dict[str, float] = {}
+        # (#1088) the grid's live CO2 intensity this cycle (kg/kWh), or None
+        # = no usable reading; and the soak flag that lets it count.
+        self._grid_co2_kg: Optional[float] = None
+        self._co2_live: bool = False
         self._monthly_accumulators: Dict[str, float] = {}
         self._yearly_accumulators: Dict[str, float] = {}
         self._lifetime_accumulators: Dict[str, float] = {}
@@ -262,13 +430,57 @@ class EnergyCalculator:
 
         # Last update time for integration
         self._last_update: Optional[datetime] = None
+        #: (#1177) input → (its fields' watts, when in UTC) at its last live
+        #: read; the inputs held this cycle; the battery's live flow shares
+        self._integral_last_live: Dict[str, Tuple[Tuple[float, ...], datetime]] = {}
+        self._integral_held: frozenset = frozenset()
+        self._integral_live: frozenset = frozenset()
+        self._battery_live_flows: Optional[SimpleNamespace] = None
+        # (#1203 review) each battery's charge watts at that same live read
+        self._battery_live_charging: Dict[str, float] = {}
+        # (#1191 review) the battery's part of the export, from the last
+        # cycle the grid read live: a held export keeps it (#1177)
+        self._grid_live_battery_export_w: float = 0.0
 
         # Cost rates
-        self._import_rate = config.get("electricity_import_rate", 0.3387)
+        self._import_rate = config.get("electricity_import_rate",
+                                       DEFAULT_ELECTRICITY_IMPORT_RATE)
         self._export_rate = config.get("electricity_export_rate", 0.075)
 
         # Rate history for 7-day averaging (dynamic tariffs)
         self._rate_history: deque = deque(maxlen=30)
+        #: (#812) device id → the stamped baseline of a device's own meter
+        #: (entity, date, value, time), kept with the energy state so a
+        #: restart books the first step after it.
+        self.device_meter_last: Dict[str, Dict[str, Any]] = {}
+        #: (#1228) device id → an own meter's step over time no cycle booked
+        #: (SEM down, a skipped cycle, the meter dark), waiting for the house
+        #: rows over the same time: kWh, start, the rows at the start.
+        self.device_meter_gaps: Dict[str, Dict[str, Any]] = {}
+        #: (#1228) the meter baselines written this cycle; the house rows at
+        #: the cycle's end are stamped on them (``_settle_meter_gaps``)
+        self._meter_written: Set[str] = set()
+        #: (#1228) the own-meter devices staged this cycle: a held step of
+        #: any other device is dropped
+        self._meter_staged: Set[str] = set()
+        #: (#1228) seconds this run has integrated, and the run they belong
+        #: to: time SEM did not see is a span's length less what it saw
+        self._seen_s = 0.0
+        self._run_token = uuid.uuid4().hex
+        #: (#812) this cycle's own-tariff devices, staged by the coordinator
+        self._device_tariff_cycle: list = []
+        #: (#812) the calendar day the last cycle booked under — the day the
+        #: per-device cost sensors read, so they need no clock of their own
+        self.booking_day: Optional[date] = None
+
+        # (#1077) The value layer's books. ``_export_rate`` above is the
+        # export VALUE (net of the per-kWh feed-in fee); these keep the
+        # market price and the fee apart so the bill can show both. Off
+        # (nothing accumulated) until a value field is set.
+        self._value_layer_on: bool = False
+        self._export_spot_rate: Optional[float] = None
+        self._feed_in_fee_rate: float = 0.0
+        self._feed_in_fixed_monthly: float = 0.0
 
         # (#770) Share of the battery's STORED energy that was bought from
         # the grid. Autarky counts battery discharge as own supply; that is
@@ -316,6 +528,61 @@ class EnergyCalculator:
         self._ev_counter_enabled: bool = False
         self._ev_counter_logged: bool = False
         self._ev_counter_baselines: Dict[str, Any] = {}
+        # (#1049) Every charger has a counter of its own, so the counters see
+        # all the charging the power integral sees. Only then may the EV rows
+        # move down to them — see ``_ev_adoption``.
+        self._ev_counter_complete: bool = False
+        # (#1049) Per charger id: the same baseline model for that charger's
+        # own daily row (``follow_charger_counter``). Persisted.
+        self._charger_counter_baselines: Dict[str, Dict[str, Any]] = {}
+        # (#1049) Counter → the charger id whose power it counts. Set with
+        # ``complete``.
+        self._ev_counter_owner: Dict[str, str] = {}
+        # (#1157) Counter → every charger id whose charging it counts: its
+        # owner alone, or the whole fleet for a fallback counter (legacy daily
+        # sensor, Energy Dashboard), or the chargers that name one counter.
+        # The step check reads these boxes' power.
+        self._ev_counter_boxes: Dict[str, Tuple[str, ...]] = {}
+        # (#1159) Counters given the whole fleet because SEM does not know
+        # which boxes they count: none of their ``pending`` is owed.
+        self._ev_counter_guessed: Set[str] = set()
+        # (#1049) Owners drawing charging power this cycle. Runtime only.
+        self._ev_owners_drawing: Set[str] = set()
+        # (#1049) Per counter: the kWh its box drew since the counter last
+        # moved (``pending``), and the reading of that move (``seen``).
+        # Persisted — a cloud counter can still owe a session at a restart.
+        self._ev_counter_pending: Dict[str, float] = {}
+        self._ev_counter_seen: Dict[str, float] = {}
+        # (#1101) Per counter: the most kWh its box could have drawn since the
+        # counter last moved, in time SEM did not see that box idle — while it
+        # charged, while its power read was dark, while SEM was down. A
+        # counter missing here has no known history: its next move is booked
+        # as it stands. ``watched_at``: the last cycle that kept this up.
+        # Persisted with ``pending``. ``foreign``: this cycle's steps that
+        # stand for kWh no box drew — counter → (reading before, kWh).
+        self._ev_counter_room: Dict[str, float] = {}
+        self._ev_watched_at: Optional[datetime] = None
+        self._ev_counter_foreign: Dict[str, Tuple[float, float]] = {}
+        # (#1101) Per counter: kWh SEM saw its box draw that the counter has
+        # not shown yet. Unlike ``pending`` it outlives a move — a late
+        # counter can report a session in several steps. ``idle_h``: hours
+        # the box has been seen idle since it last charged. Both persisted.
+        self._ev_counter_unreported: Dict[str, float] = {}
+        self._ev_counter_idle_h: Dict[str, float] = {}
+        # (#1101) Per counter: the part of ``room`` from time SEM did not see
+        # the box (a dark or foreign power read, SEM down, a skipped cycle),
+        # and the hours SEM has watched the box since (``quiet_h``). Both
+        # persisted.
+        self._ev_counter_unseen_kwh: Dict[str, float] = {}
+        self._ev_counter_quiet_h: Dict[str, float] = {}
+        # (#1159) Counters whose boxes this cycle read each on their own
+        # power sensor, so ``pending`` is their own draw. Runtime only.
+        self._ev_counter_own_read: Set[str] = set()
+        # (#1161) Per counter: every kWh SEM saw its boxes draw, charging,
+        # while it read them on their own (``_ev_counter_owes``). A row
+        # takes it at its anchor (``drawn_at``); at the day's end the
+        # difference is what that day drew. Persisted with ``pending``.
+        self._ev_counter_drawn_total: Dict[str, float] = {}
         # (#556) Daily-solar reconciliation against hardware production
         # counters — closes the cloud-poll undercount (integrating a power
         # sensor that reports 0/unavailable between polls). Baselines are
@@ -325,6 +592,9 @@ class EnergyCalculator:
         self._solar_counter_enabled: bool = False
         self._solar_counter_logged: bool = False
         self._solar_counter_baselines: Dict[str, Any] = {}
+        # (#1187) when SEM began to wait for a battery discharge counter to
+        # judge a step across an outage (in memory: a restart waits again)
+        self._solar_gap_wait_since: Optional[datetime] = None
         # (#628) Metered categories — grid import/export and battery
         # charge/discharge follow the utility/BMS counters the user already
         # declared in HA's Energy Dashboard. Same baseline/anchor/delta model
@@ -344,6 +614,9 @@ class EnergyCalculator:
         self._meter_counter_enabled: bool = False
         self._meter_counter_logged: bool = False
         self._meter_baselines: Dict[str, Dict[str, Any]] = {}
+        # (#1218) The day each category's counter was last refused above its
+        # ceiling: one warning a day, not one a cycle.
+        self._ceiling_warned: Dict[str, str] = {}
         # (#628) Which categories' daily values are COUNTER-BACKED this cycle —
         # the precondition for ``_reconcile_home_energy``. Rebuilt from scratch
         # every cycle and never persisted: it describes THIS cycle's reads, not
@@ -363,7 +636,27 @@ class EnergyCalculator:
         # see ``_ev_reset_day``.
         self._ev_day_offset: Optional[str] = None
         self._ev_day_key: Optional[date] = None
+        # (#1176) The car day ``daily_ev`` last read from, and the moment it
+        # last rolled to a new one — that sensor's ``last_reset``. Both
+        # persist; no moment yet (a fresh install, the upgrade's own car
+        # day) leaves the sensor on midnight, as it said before.
+        self._ev_seen_day: Optional[date] = None
+        self._ev_rolled_at: Optional[datetime] = None
+        # (#1046) the day key daily_ev was last read from (not persisted:
+        # the next cycle sets it before anyone reads it)
+        self._daily_ev_day: Optional[date] = None
+        # (#1046) The EV day the ``ev_flow_*`` rows were first booked on.
+        # That day began before them, so its rows are short. Persisted, or
+        # every restart would look like the upgrade day.
+        self._ev_flow_since: Optional[date] = None
         self._lifetime_seeded: bool = False
+        # (#1043) Which counters, per category, the lifetime seed added up —
+        # persisted, so a seed taken from a different set (the first tariff
+        # only, before #1043) is known and taken again. None = no record.
+        self._lifetime_seed_counters: Optional[Dict[str, List[str]]] = None
+        # (#1043) Per counter: when it was first seen without a reading while
+        # HA was running. Runtime only — the wait starts again on every start.
+        self._lifetime_seed_unready_since: Dict[str, float] = {}
         self._yearly_seeded: bool = False
         self._yearly_seed_attempts: int = 0
         # Separate flag for the yearly COST backfill so it can correct installs
@@ -383,6 +676,10 @@ class EnergyCalculator:
         # One row per finished calendar day WITH a home row — a day without
         # one is a gap and is refused, never recorded as zero. Persisted.
         self._baseload_history: deque = deque(maxlen=_BASELOAD_HISTORY_DAYS)
+        # (#1044) The first calendar day whose mirror held home members only
+        # (SEM's own chargers left out). Persisted, the ``midnight_ev_since``
+        # way: a restart must not look like the upgrade day.
+        self._home_members_since: Optional[date] = None
 
     def _record_clamp(
         self, name: str, raw: float, clamped: float, eps: float,
@@ -399,20 +696,13 @@ class EnergyCalculator:
         return clamped
 
     def _ev_deadlines(self) -> list[str]:
-        """Every configured ``Charge by`` time: per charger, else the global
-        default. Empty only pre-setup (no chargers AND no default)."""
-        from ..consts.core import DEFAULT_EV_TARGET_TIME
+        """Every charger's ``Charge by`` time (#1023: the one resolver's
+        answer); the global one, or 07:00, before any charger exists."""
+        from .departure import departure_hhmm
 
-        deadlines = []
-        for c in self.config.get("ev_chargers") or []:
-            tt = c.get("ev_target_time") or self.config.get("ev_target_time")
-            if tt:
-                deadlines.append(str(tt))
-        if not deadlines:
-            global_tt = self.config.get("ev_target_time") or DEFAULT_EV_TARGET_TIME
-            if global_tt:
-                deadlines.append(str(global_tt))
-        return deadlines
+        chargers = self.config.get("ev_chargers") or []
+        return ([departure_hhmm(c, self.config) for c in chargers]
+                or [departure_hhmm(None, self.config)])
 
     def _seed_ev_day_memo_from_legacy_rule(self) -> None:
         """(#724) Upgrade seam: adopt the new fleet rule at a rollover, not
@@ -516,6 +806,72 @@ class EnergyCalculator:
         self._ev_day_key = day
         return day
 
+    def _integral_watts(self, power: PowerReadings, at: datetime) -> Dict[str, float]:
+        """(#1177) The watts this cycle's integrals book, by field.
+
+        A dark input books its last live read for ``SENSOR_DARK_READ_GRACE_S``
+        — the window its own entity shows that value — and the reader's 0 W
+        after it. The age counts from the live read, so a dark cycle never
+        renews it. A live 0 W is a reading and is booked and held as 0.
+        ``at`` is UTC: a local clock goes back an hour in autumn, and an age
+        below 0 is not known, so it holds nothing.
+
+        Home books the house SEM shows (``home_shown_w``, #1047) while it
+        holds one: the raw home is built from a dark input's 0 W. Steering
+        never reads these values — they exist for the integrals only.
+        ``_integral_held`` / ``_integral_live`` name the inputs held / read
+        live this cycle.
+
+        (#1186) An input read from several sensors with one of them dark
+        books the figure SEM shows (``shown_w``): each dark unit at its own
+        last live read, kept by the reader. That figure is the input's read,
+        as its entity's last value is; while a unit is held the input
+        counts as held, so the battery's flow shares and the grid's battery
+        export come from the last read with every unit live.
+        """
+        watts: Dict[str, float] = {}
+        held, live = set(), set()
+        units = getattr(power, "held_w", None)
+        units = units if isinstance(units, dict) else {}
+        for name, flag, fields in _INTEGRAL_INPUTS:
+            read = tuple(float(shown_w(power, f) or 0.0) for f in fields)
+            last = self._integral_last_live.get(name)
+            if getattr(power, flag, False) is not True:
+                self._integral_last_live[name] = (read, at)
+                (held if name in units else live).add(name)
+            elif (last is not None and 0.0 <= (at - last[1]).total_seconds()
+                  <= SENSOR_DARK_READ_GRACE_S):
+                read = last[0]
+                held.add(name)
+            watts.update(zip(fields, read, strict=True))
+        self._integral_held = frozenset(held)
+        self._integral_live = frozenset(live)
+        shown = getattr(power, "home_shown_w", None)
+        if not isinstance(shown, (int, float)) or isinstance(shown, bool):
+            shown = power.home_consumption_power
+        watts["home_consumption_power"] = float(shown or 0.0)
+        return watts
+
+    def _battery_flows(self, power_flows: "Optional[PowerFlows]"):
+        """(#1177 review) The battery's flow shares for the books.
+
+        A dark battery is 0 W in the flows too. With its watts held, a
+        charge split on those flows is lost and a discharge counts as
+        delivered in full — a sale from the pack paid twice (#776). So
+        while the battery is held, its shares from the same live read go
+        with it; a live battery uses this cycle's flows. The shares are
+        taken only when the battery is live, the read its watts are held
+        from.
+        """
+        if "battery" in self._integral_held:
+            return self._battery_live_flows
+        if "battery" in self._integral_live:
+            self._battery_live_flows = None if power_flows is None else (
+                SimpleNamespace(**{
+                    f: float(getattr(power_flows, f, 0.0) or 0.0)
+                    for f in _BATTERY_FLOW_FIELDS}))
+        return power_flows
+
     def calculate_energy(
         self, power: PowerReadings,
         power_flows: "Optional[PowerFlows]" = None,
@@ -533,6 +889,17 @@ class EnergyCalculator:
         ev_day = self._ev_reset_day(now)
         month_key = f"{today.year}_{today.month}"
         year_key = f"{today.year}"
+        # (#1177) a dark input books its last live read, not 0 W — read
+        # first, so a skipped cycle's live read still counts as one
+        held_w = self._integral_watts(power, dt_util.utcnow())
+        battery_flows = self._battery_flows(power_flows)
+        # (#1191 review) the battery's part of a live meter's export, kept for
+        # a dark meter's held export — taken here, before a skipped cycle
+        # returns, because its read can be held too
+        if "grid" in self._integral_live:
+            self._grid_live_battery_export_w = battery_export_part(
+                held_w["grid_export_power"],
+                getattr(battery_flows, "battery_to_grid", 0.0))
 
         # Calculate time delta
         if self._last_update is None:
@@ -555,25 +922,28 @@ class EnergyCalculator:
             interval_hours = interval_seconds / 3600
 
         self._last_update = now
+        self._seen_s += interval_hours * 3600.0   # (#1228)
 
         # Check for day/month/year rollover and reset accumulators
         self._check_rollover(today, month_key, year_key)
+        self.booking_day = today   # (#812)
 
         # (#628) This cycle's counter-backing starts empty — each reconciler
         # below records its own category only when it actually read a COMPLETE
         # counter set. ``_reconcile_home_energy`` reads the result.
         self._counter_backed = set()
+        self._meter_staged = set()   # (#1228) filled by ``_import_cost``
 
         # Integrate power to energy
         energy = EnergyTotals()
 
         # Solar energy
-        if power.solar_power >= MIN_POWER_THRESHOLD:
-            solar_increment = (power.solar_power * interval_hours) / 1000  # kWh
+        if held_w["solar_power"] >= MIN_POWER_THRESHOLD:
+            solar_increment = (held_w["solar_power"] * interval_hours) / 1000  # kWh
             self._accumulate("solar", today, month_key, year_key, solar_increment)
         # (#556) hardware-counter reconciliation — upward-only correction
         # for cloud-polled power sensors; must run before the read below.
-        self._reconcile_solar_energy(today, month_key, year_key)
+        self._reconcile_solar_energy(today, month_key, year_key, now)
         energy.daily_solar = self._get_daily("solar", today)
         energy.monthly_solar = self._get_monthly("solar", month_key)
         energy.yearly_solar = self._get_yearly("solar", year_key)
@@ -583,8 +953,8 @@ class EnergyCalculator:
         # fallback and the anchor — but the READ moved below every other
         # category (#628): home is a residual of those categories, so it can
         # only be reconciled once they have been.
-        if power.home_consumption_power >= MIN_POWER_THRESHOLD:
-            home_increment = (power.home_consumption_power * interval_hours) / 1000
+        if held_w["home_consumption_power"] >= MIN_POWER_THRESHOLD:
+            home_increment = (held_w["home_consumption_power"] * interval_hours) / 1000
             self._accumulate("home", today, month_key, year_key, home_increment)
 
         # EV charging. The sunrise/deadline reset lives entirely in the DAY KEY
@@ -614,21 +984,50 @@ class EnergyCalculator:
             self._daily_accumulators[mirror_key] = (
                 self._daily_accumulators.get(mirror_key, 0.0) + ev_increment
             )
+        # (#1046) the car's flow split, on the same EV day as the row above.
+        # Not behind the ev_power gate: the flows are their own measure.
+        if power_flows is not None:
+            if self._ev_flow_since is None:
+                self._ev_flow_since = ev_day
+            for attr, category in EV_DAY_FLOW_CATEGORIES:
+                watts = max(0.0, float(getattr(power_flows, attr, 0.0) or 0.0))
+                if watts > 0.0:
+                    key = f"{category}_{ev_day}"
+                    self._daily_accumulators[key] = (
+                        self._daily_accumulators.get(key, 0.0)
+                        + watts * interval_hours / 1000.0
+                    )
         # (#658) wallbox-counter reconciliation — recovers charging SEM was not
         # running to integrate; must run before the reads below, exactly like
         # its solar sibling.
+        # (#1049) …after noting what each box drew since its counter moved.
+        self._track_ev_pending(power, interval_hours, now)
         self._reconcile_ev_energy(ev_day, month_key, year_key)
         self._reconcile_midnight_ev_energy(today)  # (#628)
 
         energy.daily_ev = self._get_daily(EV_CATEGORY, ev_day)
+        self._daily_ev_day = ev_day  # (#1046) the key ev_day_flows reads
+        self._note_ev_rollover(ev_day)
         energy.monthly_ev = self._get_monthly(EV_CATEGORY, month_key)
         energy.yearly_ev = self._get_yearly(EV_CATEGORY, year_key)
 
         # Grid import
-        if power.grid_import_power >= MIN_POWER_THRESHOLD:
-            import_increment = (power.grid_import_power * interval_hours) / 1000
+        if held_w["grid_import_power"] >= MIN_POWER_THRESHOLD:
+            import_increment = (held_w["grid_import_power"] * interval_hours) / 1000
             self._accumulate("grid_import", today, month_key, year_key, import_increment)
-            self._accumulate_cost("cost_import", today, month_key, year_key, import_increment * self._import_rate)
+            # (#812) split here, in the one booking, when a device is on its
+            # own tariff; with none, exactly ``import_increment × rate``
+            self._accumulate_cost("cost_import", today, month_key, year_key,
+                                  self._import_cost(import_increment, interval_hours,
+                                                    power, power_flows, today,
+                                                    month_key, year_key)
+                                  if self._device_tariff_cycle else
+                                  import_increment * self._import_rate)
+        if self._device_tariff_cycle:
+            # (#812) no import this cycle: nothing to split, but the meter
+            # baselines advance (their steps came from the sun)
+            self._import_cost(0.0, interval_hours, power, power_flows, today,
+                              month_key, year_key)
         # (#628) utility-meter reconciliation — bidirectional, so it must run
         # before the reads below exactly like its solar and EV siblings.
         self._reconcile_metered_energy(
@@ -639,10 +1038,24 @@ class EnergyCalculator:
         energy.monthly_grid_import = self._get_monthly("grid_import", month_key)
         energy.yearly_grid_import = self._get_yearly("grid_import", year_key)
 
+        # (#1191) The battery's part of this cycle's export, booked beside it.
+        # Its flow comes from the read the held watts came from (#1177): a
+        # dark pack's held flows, or a dark meter's last live split.
+        if "grid" in self._integral_held:
+            battery_export_w = min(held_w["grid_export_power"],
+                                   self._grid_live_battery_export_w)
+        else:
+            battery_export_w = battery_export_part(
+                held_w["grid_export_power"],
+                getattr(battery_flows, "battery_to_grid", 0.0))
         # Grid export
-        if power.grid_export_power >= MIN_POWER_THRESHOLD:
-            export_increment = (power.grid_export_power * interval_hours) / 1000
+        if held_w["grid_export_power"] >= MIN_POWER_THRESHOLD:
+            export_increment = (held_w["grid_export_power"] * interval_hours) / 1000
             self._accumulate("grid_export", today, month_key, year_key, export_increment)
+            if battery_export_w > 0:
+                self._accumulate(
+                    GRID_EXPORT_BATTERY_CATEGORY, today, month_key, year_key,
+                    battery_export_w * interval_hours / 1000)
             self._accumulate_cost("cost_export", today, month_key, year_key, export_increment * self._export_rate)
             # (#871, arc #921) The same kWh counted again when the meter was
             # hostile — a separate key, not a sign on the export total, because
@@ -651,11 +1064,45 @@ class EnergyCalculator:
                 self._accumulate("grid_export_negative", today, month_key, year_key, export_increment)
                 self._accumulate_cost("cost_export_negative", today, month_key, year_key,
                                       export_increment * abs(float(self._export_rate)))
+            # (#1077) The bill's two lines: what the kWh fetched on the
+            # market, and the per-kWh feed-in fee taken off it.
+            if self._value_layer_on:
+                spot = (self._export_spot_rate if self._export_spot_rate is not None
+                        else float(self._export_rate or 0.0))
+                self._accumulate_cost(VALUE_EXPORT, today, month_key, year_key,
+                                      export_increment * spot)
+                if self._feed_in_fee_rate:
+                    self._accumulate_cost(VALUE_FEED_IN_FEE, today, month_key, year_key,
+                                          export_increment * self._feed_in_fee_rate)
+        # (#1077) A fixed monthly fee is owed by the hour, whatever flows.
+        if self._value_layer_on and self._feed_in_fixed_monthly > 0:
+            hours_in_month = calendar.monthrange(today.year, today.month)[1] * 24
+            self._accumulate_cost(
+                VALUE_FEED_IN_FEE, today, month_key, year_key,
+                self._feed_in_fixed_monthly * interval_hours / hours_in_month)
         self._reconcile_metered_energy(
             "grid_export", today, month_key, year_key,
             cost_key="cost_export", rate=self._export_rate,
         )
+        # (#1088) CO2 avoided at the grid's LIVE intensity. Booked as the
+        # DIFFERENCE from the fixed Swiss average, per kWh of solar used in
+        # the house this cycle: the published totals stay
+        #   self-consumed × 0.128 + this correction
+        # so switching it on adds nothing at that moment (no jump in a
+        # lifetime total), a restart keeps it (it is an accumulator), and a
+        # cycle with no usable reading adds exactly 0 — the fixed value.
+        if self._co2_live and self._grid_co2_kg is not None:
+            used_w = max(0.0, held_w["solar_power"] - solar_export(
+                held_w["grid_export_power"], battery_export_w))
+            if used_w >= MIN_POWER_THRESHOLD:
+                used_kwh = used_w * interval_hours / 1000
+                self._accumulate(
+                    CO2_CORRECTION_CATEGORY, today, month_key, year_key,
+                    used_kwh * (self._grid_co2_kg - GRID_CO2_KG_PER_KWH))
         energy.daily_grid_export = self._get_daily("grid_export", today)
+        energy.daily_grid_export_battery = self._get_daily(GRID_EXPORT_BATTERY_CATEGORY, today)
+        energy.monthly_grid_export_battery = self._get_monthly(GRID_EXPORT_BATTERY_CATEGORY, month_key)
+        energy.yearly_grid_export_battery = self._get_yearly(GRID_EXPORT_BATTERY_CATEGORY, year_key)
         energy.daily_grid_export_negative = self._get_daily("grid_export_negative", today)
         energy.daily_grid_export_negative_cost = self._get_daily_cost("cost_export_negative", today)
         energy.monthly_grid_export_negative = self._get_monthly("grid_export_negative", month_key)
@@ -666,8 +1113,8 @@ class EnergyCalculator:
         energy.yearly_grid_export = self._get_yearly("grid_export", year_key)
 
         # Battery charge
-        if power.battery_charge_power >= MIN_POWER_THRESHOLD:
-            charge_increment = (power.battery_charge_power * interval_hours) / 1000
+        if held_w["battery_charge_power"] >= MIN_POWER_THRESHOLD:
+            charge_increment = (held_w["battery_charge_power"] * interval_hours) / 1000
             self._accumulate("battery_charge", today, month_key, year_key, charge_increment)
             # (#770) …and again, told apart by origin. The flow layer has
             # always known which part came off the roof; it just never
@@ -675,7 +1122,7 @@ class EnergyCalculator:
             # against the full import price and the difference was called
             # savings.
             self._file_battery_charge_origin(
-                power, power_flows, charge_increment, today,
+                power, battery_flows, charge_increment, today,
             )
         # (#770) Pin the pool to the measured contents ONCE per cycle, after
         # the charge and before the draw. Integrated power drifts; SOC is
@@ -688,8 +1135,8 @@ class EnergyCalculator:
         energy.yearly_battery_charge = self._get_yearly("battery_charge", year_key)
 
         # Battery discharge
-        if power.battery_discharge_power >= MIN_POWER_THRESHOLD:
-            discharge_increment = (power.battery_discharge_power * interval_hours) / 1000
+        if held_w["battery_discharge_power"] >= MIN_POWER_THRESHOLD:
+            discharge_increment = (held_w["battery_discharge_power"] * interval_hours) / 1000
             self._accumulate("battery_discharge", today, month_key, year_key, discharge_increment)
             # (#770) What this discharge actually saved, not what a discharge
             # of free solar would have saved. Drawn from the pool in
@@ -698,7 +1145,7 @@ class EnergyCalculator:
             self._accumulate_cost(
                 "cost_batt_savings", today, month_key, year_key,
                 self._battery_discharge_savings(
-                    power, discharge_increment, power_flows),
+                    power, discharge_increment, battery_flows),
             )
         self._reconcile_metered_energy(
             "battery_discharge", today, month_key, year_key,
@@ -727,10 +1174,12 @@ class EnergyCalculator:
         # sanity net for the metered rows, and home is derived FROM those rows.
         # Capping after the derivation would let one corrupt BMS counter push a
         # bogus figure into the home row for a cycle before the net caught it.
+        # (#1218) A counter's figure never gets here: the corrections refuse
+        # one above the same ceiling, because a cap writes the day alone.
         battery_capacity = self.config.get("battery_capacity_kwh", 15)
-        max_daily_battery = battery_capacity * 3  # 3 full cycles/day is generous limit
+        max_daily_battery = self._daily_ceiling("battery_charge")
         inverter_kwp = self.config.get("system_size_kwp", 10)
-        max_daily_solar = inverter_kwp * 16  # 16 peak sun hours is extreme max
+        max_daily_solar = self._daily_ceiling("solar")
 
         if energy.daily_battery_discharge > max_daily_battery:
             _LOGGER.warning(
@@ -761,6 +1210,9 @@ class EnergyCalculator:
         # AND capped; its integral ran at the top of the cycle as the fallback
         # and the anchor. Reading it here is the whole point of the move.
         self._reconcile_home_energy(today, month_key, year_key)
+        # (#1228) an own meter's step over time no cycle booked, against the
+        # house rows over the same time — read once every row is final
+        self._settle_meter_gaps(today, month_key, year_key, now)
         energy.daily_home = self._get_daily("home", today)
         energy.monthly_home = self._get_monthly("home", month_key)
         energy.yearly_home = self._get_yearly("home", year_key)
@@ -772,6 +1224,11 @@ class EnergyCalculator:
         # (#773) The audited residual, derived AFTER home because it is one
         # more subtraction from it. The W twin is filled by the coordinator,
         # which owns the live device draws.
+        # (#1044) The first day this code books the mirror. Before it, SEM's
+        # own chargers were booked too; a day that began before it is not
+        # sealed as a home-members-only day (``_seal_baseload_day``).
+        if self._home_members_since is None:
+            self._home_members_since = today
         _baseload = self.get_true_baseload(today)
         energy.true_baseload_today = _baseload["today_kwh"]
         energy.controlled_loads_today = _baseload["controlled_today_kwh"]
@@ -796,18 +1253,25 @@ class EnergyCalculator:
                  * interval_hours) / 1000
             )
         else:
-            home_incr = (power.home_consumption_power * interval_hours) / 1000 if power.home_consumption_power >= MIN_POWER_THRESHOLD else 0.0
+            home_incr = (held_w["home_consumption_power"] * interval_hours) / 1000 if held_w["home_consumption_power"] >= MIN_POWER_THRESHOLD else 0.0
             # FLEET-READ: legacy fallback path. ``power_flows`` is the
             # preferred input in the v1.7.0+ coordinator pipeline; this
             # branch only fires for the two-arg test fixtures that
             # pre-date the per-cycle ``calculate_power_flows`` call.
             ev_incr = (power.ev_power * interval_hours) / 1000 if power.ev_power >= MIN_POWER_THRESHOLD else 0.0
-            import_incr = (power.grid_import_power * interval_hours) / 1000 if power.grid_import_power >= MIN_POWER_THRESHOLD else 0.0
-            discharge_incr = (power.battery_discharge_power * interval_hours) / 1000 if power.battery_discharge_power >= MIN_POWER_THRESHOLD else 0.0
+            import_incr = (held_w["grid_import_power"] * interval_hours) / 1000 if held_w["grid_import_power"] >= MIN_POWER_THRESHOLD else 0.0
+            discharge_incr = (held_w["battery_discharge_power"] * interval_hours) / 1000 if held_w["battery_discharge_power"] >= MIN_POWER_THRESHOLD else 0.0
             # Solar self-consumed = total consumption minus what came from grid or battery discharge
             solar_self_consumed = max(0.0, (home_incr + ev_incr) - import_incr - discharge_incr)
         if solar_self_consumed > 0.0:
             self._accumulate_cost("cost_savings", today, month_key, year_key, solar_self_consumed * self._import_rate)
+            # (#1077) What using it at home was worth over selling it: the
+            # spread between the import and the export value, per kWh.
+            if self._value_layer_on:
+                self._accumulate_cost(
+                    VALUE_SELF_CONSUMPTION, today, month_key, year_key,
+                    solar_self_consumed * (float(self._import_rate or 0.0)
+                                           - float(self._export_rate or 0.0)))
 
         return energy
 
@@ -830,6 +1294,8 @@ class EnergyCalculator:
         # row that goes stale in one of them.
         energy.daily_total_consumption = self.daily_total_consumption(today)
         energy.daily_ev = self._get_daily(EV_CATEGORY, ev_day)
+        self._daily_ev_day = ev_day  # (#1046) the key ev_day_flows reads
+        self._note_ev_rollover(ev_day)
         energy.monthly_ev = self._get_monthly(EV_CATEGORY, month_key)
         energy.yearly_ev = self._get_yearly(EV_CATEGORY, year_key)
         energy.daily_grid_import = self._get_daily("grid_import", today)
@@ -838,6 +1304,9 @@ class EnergyCalculator:
         energy.daily_grid_export = self._get_daily("grid_export", today)
         energy.monthly_grid_export = self._get_monthly("grid_export", month_key)
         energy.yearly_grid_export = self._get_yearly("grid_export", year_key)
+        energy.daily_grid_export_battery = self._get_daily(GRID_EXPORT_BATTERY_CATEGORY, today)
+        energy.monthly_grid_export_battery = self._get_monthly(GRID_EXPORT_BATTERY_CATEGORY, month_key)
+        energy.yearly_grid_export_battery = self._get_yearly(GRID_EXPORT_BATTERY_CATEGORY, year_key)
         energy.daily_battery_charge = self._get_daily("battery_charge", today)
         energy.monthly_battery_charge = self._get_monthly("battery_charge", month_key)
         energy.yearly_battery_charge = self._get_yearly("battery_charge", year_key)
@@ -857,7 +1326,11 @@ class EnergyCalculator:
         return energy
 
     def configure_ev_counters(
-        self, hass: HomeAssistant, entity_ids: List[str], enabled: bool
+        self, hass: HomeAssistant, entity_ids: List[str], enabled: bool,
+        complete: bool = False,
+        owners: Optional[Dict[str, str]] = None,
+        boxes: Optional[Dict[str, List[str]]] = None,
+        guessed: Optional[List[str]] = None,
     ) -> None:
         """Enable daily-EV reconciliation against wallbox counters (#658).
 
@@ -872,6 +1345,22 @@ class EnergyCalculator:
         set is still safe rather than wrong: adoption is upward-only against a
         fleet integration that already includes every charger, so a missing
         counter simply means that charger's downtime energy can't be recovered.
+
+        ``complete`` (#1049): every charger has a counter of its own, so the set
+        sees all the charging the power integral sees. Only a complete set may
+        pull the EV rows DOWN; a partial one stays upward-only. ``owners`` maps
+        each counter to its charger id: until the counter reports what that
+        box charged, the rows may not move down. A counter without an owner
+        leaves the set partial.
+
+        ``boxes`` (#1157): each counter → every charger id whose charging it
+        counts. A counter is checked against the power of these boxes
+        (``_track_ev_pending``); one with no boxes is not checked. An owner is
+        its counter's one box when ``boxes`` does not name it.
+
+        ``guessed`` (#1159): the counters whose boxes are the whole fleet only
+        because SEM does not know which boxes they count. Their ``pending``
+        is never owed at an anchor (``_ev_counter_owes``).
 
         Gated by the same ``prefer_hardware_energy`` option as the solar
         counters — it is the same promise ("trust the hardware over my
@@ -895,6 +1384,19 @@ class EnergyCalculator:
             self._midnight_ev_baselines.clear()
         self._ev_counter_entities = new_entities
         self._ev_counter_enabled = bool(enabled) and bool(self._ev_counter_entities)
+        owners = {e: str(o) for e, o in (owners or {}).items()
+                  if e in self._ev_counter_entities and o}
+        self._ev_counter_owner = owners
+        counted = {e: tuple(dict.fromkeys(str(c) for c in (cids or []) if c))
+                   for e, cids in (boxes or {}).items()
+                   if e in self._ev_counter_entities}
+        for entity_id, owner in owners.items():
+            counted.setdefault(entity_id, (owner,))
+        self._ev_counter_boxes = {e: b for e, b in counted.items() if b}
+        self._ev_counter_guessed = {e for e in (guessed or [])
+                                    if e in self._ev_counter_boxes}
+        self._ev_counter_complete = bool(complete) and all(
+            e in owners for e in self._ev_counter_entities)
         if self._ev_counter_enabled and not self._ev_counter_logged:
             self._ev_counter_logged = True
             _LOGGER.info(
@@ -1023,7 +1525,7 @@ class EnergyCalculator:
             _LOGGER.debug("Could not detect install date from statistics: %s", e)
 
     @staticmethod
-    def _energy_state_kwh(state) -> float:
+    def _energy_state_kwh(state) -> Optional[float]:
         """Energy-counter state → kWh, honoring unit_of_measurement.
 
         #551 — hardware lifetime counters are NOT all kWh: Fronius
@@ -1036,7 +1538,55 @@ class EnergyCalculator:
         # #641 — this rule was the reference for the shared one; the body now
         # delegates so there is exactly one Wh/MWh table. The method stays as
         # the name the rest of the class (and its tests) call.
-        return energy_state_to_kwh(state, default=0.0)
+        # (#1202) None when the state gives no number: read as 0 kWh, "none"
+        # or "nan" looked like a counter reset and the next read booked the
+        # whole register.
+        return energy_state_to_kwh(state)
+
+    def _read_counter_set(
+        self, hass: HomeAssistant, entity_ids: List[str], now: float,
+    ) -> "tuple[Optional[float], List[str], bool]":
+        """Add up one category's hardware counters (#1043).
+
+        Returns ``(kwh, summed, complete)``. A counter is not ready while it
+        has no state, reads unknown/unavailable, or reads no number above 0 —
+        a counter still loading reads one of those, and adding it as 0 makes
+        a sum that looks complete (#1043 seeded 12,396 of 60,601 kWh solar
+        that way). ``kwh`` is None while any counter is not ready and its wait
+        is not over. The wait starts only once HA runs: before that, every
+        entity of an integration still loading has no state (bug class 86).
+        After ``UNAVAILABLE_REPAIR_THRESHOLD_S`` the counter is left out, so a
+        gone Energy Dashboard row cannot hold the seed for ever, and
+        ``complete`` is False: the sum is then only a floor. An external
+        statistic id (``source:id``) never has a state and is left out at once.
+        """
+        running = bool(getattr(hass, "is_running", False))
+        unready = self._lifetime_seed_unready_since
+        total = 0.0
+        summed: List[str] = []
+        complete = True
+        waiting = False
+        for entity_id in entity_ids:
+            external = ":" in entity_id
+            value = None
+            if not external:
+                state = hass.states.get(entity_id)
+                if state is not None:
+                    value = energy_state_to_kwh(state)  # #551 unit-aware
+            if value is not None and math.isfinite(value) and value > 0:
+                unready.pop(entity_id, None)
+                total += value
+                summed.append(entity_id)
+                continue
+            complete = False
+            if external:
+                continue
+            if running and entity_id not in unready:
+                unready[entity_id] = now
+            since = unready.get(entity_id)
+            if since is None or now - since < UNAVAILABLE_REPAIR_THRESHOLD_S:
+                waiting = True
+        return (None if waiting else total), summed, complete
 
     def seed_lifetime_from_hardware(self, hass: HomeAssistant, ed_config) -> None:
         """Seed lifetime accumulators from hardware energy counters.
@@ -1051,28 +1601,61 @@ class EnergyCalculator:
         if not ed_config:
             return
 
-        # Read hardware total to compare
         def _read(entity_id):
             if not entity_id:
                 return 0.0
             state = hass.states.get(entity_id)
             if state and state.state not in ("unknown", "unavailable", None):
-                return self._energy_state_kwh(state)  # #551 unit-aware
+                value = self._energy_state_kwh(state)  # #551 unit-aware
+                # (#1202) no number seeds nothing, as "unavailable" does
+                return 0.0 if value is None else value
             return 0.0
 
-        # Read all hardware counters first
-        # (#556) multi-string installs have several solar counters — seed
-        # from their SUM, matching what the daily reconciliation tracks
-        # (single-counter seeding could later SHRINK lifetime on re-seed).
-        solar_list = list(getattr(ed_config, "solar_energy_list", None) or [])
-        if solar_list:
-            solar = sum(_read(e) for e in solar_list)
-        else:
-            solar = _read(ed_config.solar_energy)
-        grid_import = _read(ed_config.grid_import_energy)
-        grid_export = _read(ed_config.grid_export_energy)
-        batt_charge = _read(ed_config.battery_charge_energy)
-        batt_discharge = _read(ed_config.battery_discharge_energy)
+        # (#1043) Every category is the SUM of all its Energy Dashboard
+        # counters, as HA's dashboard shows it — not the first one. Solar was
+        # summed since #556; grid and battery read the first counter only, so
+        # a dual-tariff meter seeded tariff 1 alone. A sum is taken only once
+        # every counter in it reads, or has been left out after the wait.
+        counters = {
+            category: energy_counters(ed_config, category)
+            for category in ENERGY_COUNTER_CATEGORIES
+        }
+        now = time.monotonic()
+        totals: Dict[str, float] = {}
+        seed_set: Dict[str, List[str]] = {}
+        complete: Dict[str, bool] = {}
+        waiting = False
+        for category, entity_ids in counters.items():
+            kwh, summed, whole = self._read_counter_set(hass, entity_ids, now)
+            seed_set[category] = sorted(summed)
+            complete[category] = whole
+            if kwh is None:
+                waiting = True
+            else:
+                totals[category] = kwh
+        left_out = sorted(
+            e for category, ids in counters.items() for e in ids
+            if e not in seed_set[category]
+        )
+        if waiting:
+            log_on_change(
+                _LOGGER, "lifetime_seed_wait", logging.DEBUG,
+                "Lifetime seed waiting for counter(s) with no reading: %s",
+                ", ".join(left_out),
+            )
+            return
+        if left_out:
+            log_on_change(
+                _LOGGER, "lifetime_seed_left_out", logging.INFO,
+                "Lifetime seed: Energy Dashboard counter(s) %s gave no reading "
+                "— left out; those lifetime totals are only raised, never "
+                "lowered", ", ".join(left_out),
+            )
+        solar = totals["solar"]
+        grid_import = totals["grid_import"]
+        grid_export = totals["grid_export"]
+        batt_charge = totals["battery_charge"]
+        batt_discharge = totals["battery_discharge"]
 
         _LOGGER.debug(
             "Lifetime seed check: hw solar=%.0f import=%.0f export=%.0f "
@@ -1089,7 +1672,13 @@ class EnergyCalculator:
                 solar, grid_import, grid_export,
             )
             return
-        if (batt_charge < 1 or batt_discharge < 1) and (batt_charge + batt_discharge) < 10:
+        # (#1043) Only a battery counter that gave a reading is waited for: an
+        # install without a battery read 0 + 0 here and never seeded at all.
+        if (
+            (seed_set["battery_charge"] or seed_set["battery_discharge"])
+            and (batt_charge < 1 or batt_discharge < 1)
+            and (batt_charge + batt_discharge) < 10
+        ):
             _LOGGER.debug(
                 "Lifetime seed waiting for battery: charge=%.0f discharge=%.0f",
                 batt_charge, batt_discharge,
@@ -1100,65 +1689,124 @@ class EnergyCalculator:
         # Re-seed any sensor that is <50% of the hardware counter —
         # this fixes the race condition where solar loaded first but
         # grid/battery were unavailable during initial seeding (#110).
+        # (#1043) That re-seed, the 90 % solar check and a changed counter
+        # set only RAISE totals (``_raise_lifetime_to_counters``): a swapped
+        # inverter, a removed row or a second charger reads less than the
+        # history SEM holds. Only the #551 unit heal sets values outright.
         current = self._lifetime_accumulators
-        needs_seed = False
-        checks = [
-            ("lifetime_solar", solar),
-            ("lifetime_grid_import", grid_import),
-            ("lifetime_grid_export", grid_export),
-            ("lifetime_battery_charge", batt_charge),
-            ("lifetime_battery_discharge", batt_discharge),
-        ]
-        for key, hw_value in checks:
+        raise_needed = False
+        unit_heal = False
+        for category in ENERGY_COUNTER_CATEGORIES:
+            key = f"lifetime_{category}"
+            hw_value = totals[category]
             stored = current.get(key, 0)
             if hw_value > 100 and stored < hw_value * 0.5:
                 _LOGGER.info(
                     "Lifetime re-seed needed: %s stored=%.0f hw=%.0f (%.0f%%)",
                     key, stored, hw_value, (stored / hw_value * 100) if hw_value > 0 else 0,
                 )
-                needs_seed = True
-                break
+                raise_needed = True
             # #551 — DOWNWARD self-heal: installs that seeded before the
             # unit-aware read stored Wh values as kWh (×1000). The
             # accumulator can never legitimately dwarf its own hardware
             # counter, so stored >> hw means a corrupted seed — re-seed
-            # from the (now unit-corrected) counter.
-            if hw_value > 10 and stored > hw_value * 2:
+            # from the (now unit-corrected) counter. (#1043) Never from a sum
+            # with a counter left out: that is a floor, not the counter.
+            if complete[category] and hw_value > 10 and stored > hw_value * 2:
                 _LOGGER.info(
                     "Lifetime re-seed (downward, #551 unit fix): %s "
                     "stored=%.0f hw=%.0f", key, stored, hw_value,
                 )
-                needs_seed = True
+                unit_heal = True
                 break
 
-        if not needs_seed and current.get("lifetime_solar", 0) > solar * 0.9:
+        if not unit_heal:
+            if self._lifetime_seed_counters is None:
+                # No record: the seed came from before #1043, which read only
+                # the FIRST grid and battery counter — wrong wherever a list
+                # is longer.
+                set_changed = any(len(ids) > 1 for ids in counters.values())
+            else:
+                set_changed = self._lifetime_seed_counters != seed_set
+            if (
+                raise_needed
+                or set_changed
+                or current.get("lifetime_solar", 0) <= solar * 0.9
+            ):
+                self._raise_lifetime_to_counters(
+                    totals, self._read_ev_seed(ed_config, _read), seed_set,
+                )
+            self._lifetime_seed_counters = seed_set
             self._lifetime_seeded = True
             return
 
-        # Seed (or re-seed) all lifetime accumulators from hardware
-        self._lifetime_accumulators["lifetime_solar"] = solar
-        self._lifetime_accumulators["lifetime_grid_import"] = grid_import
-        self._lifetime_accumulators["lifetime_grid_export"] = grid_export
-        self._lifetime_accumulators["lifetime_battery_charge"] = batt_charge
-        self._lifetime_accumulators["lifetime_battery_discharge"] = batt_discharge
-        home = max(0, solar + grid_import + batt_discharge - grid_export - batt_charge)
+        # Seed (or re-seed) all lifetime accumulators from hardware. (#1043) A
+        # category with a counter left out is a floor, so it only goes up.
+        for category in ENERGY_COUNTER_CATEGORIES:
+            key = f"lifetime_{category}"
+            value = totals[category]
+            if not complete[category]:
+                value = max(value, current.get(key, 0.0))
+            self._lifetime_accumulators[key] = value
+        acc = self._lifetime_accumulators
+        home = max(0, acc["lifetime_solar"] + acc["lifetime_grid_import"]
+                   + acc["lifetime_battery_discharge"] - acc["lifetime_grid_export"]
+                   - acc["lifetime_battery_charge"])
         self._lifetime_accumulators["lifetime_home"] = home
 
-        # Seed EV from hardware counter (KEBA total energy etc.)
-        ev_total = 0.0
-        for dev in ed_config.device_consumption:
-            energy_sensor = dev.get("stat_consumption", "")
-            if any(p in energy_sensor.lower() for p in ["keba", "ev", "charger", "wallbox", "easee"]):
-                ev_total = _read(energy_sensor)
-                break
+        ev_total = self._read_ev_seed(ed_config, _read)
         if ev_total > 0:
             self._lifetime_accumulators["lifetime_ev"] = ev_total
 
+        self._lifetime_seed_counters = seed_set
         self._lifetime_seeded = True
         _LOGGER.info(
             "Lifetime seeded from hardware: solar=%.0f import=%.0f export=%.0f "
             "batt_charge=%.0f batt_discharge=%.0f home=%.0f ev=%.0f kWh",
-            solar, grid_import, grid_export, batt_charge, batt_discharge, home, ev_total,
+            acc["lifetime_solar"], acc["lifetime_grid_import"],
+            acc["lifetime_grid_export"], acc["lifetime_battery_charge"],
+            acc["lifetime_battery_discharge"], home, ev_total,
+        )
+
+    @staticmethod
+    def _read_ev_seed(ed_config, read) -> float:
+        """Seed EV from hardware counter (KEBA total energy etc.)."""
+        for dev in getattr(ed_config, "device_consumption", None) or []:
+            energy_sensor = dev.get("stat_consumption", "")
+            if any(p in energy_sensor.lower() for p in ["keba", "ev", "charger", "wallbox", "easee"]):
+                return read(energy_sensor)
+        return 0.0
+
+    def _raise_lifetime_to_counters(
+        self, totals: Dict[str, float], ev_total: float, seed_set: Dict[str, List[str]],
+    ) -> None:
+        """Raise each lifetime total its counters prove too low (#1043).
+
+        Only UP: a counter that was replaced or removed reads less than the
+        history SEM holds, and that history stays. On a fresh install every
+        total is 0, so this is the full seed. ``lifetime_home`` moves by the
+        same amounts, with the sign each category has in the energy balance.
+        """
+        acc = self._lifetime_accumulators
+        home_delta = 0.0
+        raised = []
+        for category in ENERGY_COUNTER_CATEGORIES:
+            key = f"lifetime_{category}"
+            delta = totals[category] - acc.get(key, 0.0)
+            if delta <= 0:
+                continue
+            acc[key] = totals[category]
+            home_delta += -delta if category in ("grid_export", "battery_charge") else delta
+            raised.append(f"{category} +{delta:.0f}")
+        if ev_total > acc.get("lifetime_ev", 0.0):
+            raised.append(f"ev +{ev_total - acc.get('lifetime_ev', 0.0):.0f}")
+            acc["lifetime_ev"] = ev_total
+        if not raised:
+            return
+        acc["lifetime_home"] = max(0.0, acc.get("lifetime_home", 0.0) + home_delta)
+        _LOGGER.info(
+            "Lifetime seeded from hardware — raised to the Energy Dashboard "
+            "counters %s: %s kWh", seed_set, ", ".join(raised),
         )
 
     @property
@@ -1232,27 +1880,30 @@ class EnergyCalculator:
             _LOGGER.debug("Recorder not available for yearly seeding")
             return
 
-        # Build entity → category mapping from Energy Dashboard config
-        entity_map = {}
-        if ed_config.solar_energy:
-            entity_map[ed_config.solar_energy] = "solar"
-        if ed_config.grid_import_energy:
-            entity_map[ed_config.grid_import_energy] = "grid_import"
-        if ed_config.grid_export_energy:
-            entity_map[ed_config.grid_export_energy] = "grid_export"
-        if ed_config.battery_charge_energy:
-            entity_map[ed_config.battery_charge_energy] = "battery_charge"
-        if ed_config.battery_discharge_energy:
-            entity_map[ed_config.battery_discharge_energy] = "battery_discharge"
+        # Category → every Energy Dashboard counter of it (#1043: all tariffs
+        # and inverters, not the first one).
+        category_counters = {
+            category: ids
+            for category in ENERGY_COUNTER_CATEGORIES
+            if (ids := energy_counters(ed_config, category))
+        }
 
-        if not entity_map:
+        if not category_counters:
             _LOGGER.debug("No energy entities in ED config for yearly seeding")
             return
 
         # Query statistics from Jan 1 of current year
         now = dt_util.now()
         start_time = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        entity_ids = list(entity_map.keys())
+        entity_ids = list(dict.fromkeys(
+            entity_id for ids in category_counters.values() for entity_id in ids
+        ))
+        # (#1216) the pack's sale from SEM's own sensor, read beside the
+        # export: the year's export below comes from the recorder, so the
+        # row booked beside it must too, or every sale reads as solar's
+        sale_id = _sem_stat_entity_id(hass, BATTERY_SALE_SENSOR_KEY)
+        if sale_id and sale_id not in entity_ids:
+            entity_ids.append(sale_id)
 
         try:
             stats = await statistics_during_period(
@@ -1266,18 +1917,39 @@ class EnergyCalculator:
             _LOGGER.debug("No recorder statistics available for yearly seeding")
             return
 
-        # Extract yearly energy: difference between latest and first sum
-        seeded = {}
-        for entity_id, category in entity_map.items():
+        # Extract yearly energy: difference between latest and first sum,
+        # added up over the category's counters (#1043)
+        def _span(entity_id: str) -> Optional[float]:
             entity_stats = stats.get(entity_id, [])
             if len(entity_stats) < 2:
-                seeded[category] = 0.0
-                continue
+                return None
             first_sum = entity_stats[0].get("sum") if entity_stats[0].get("sum") is not None else 0.0
             last_sum = entity_stats[-1].get("sum") if entity_stats[-1].get("sum") is not None else 0.0
-            yearly_energy = max(0, last_sum - first_sum)
+            return max(0, last_sum - first_sum)
+
+        seeded = {}
+        for category, ids in category_counters.items():
+            yearly_energy = 0.0
+            has_stats = False
+            for entity_id in ids:
+                span = _span(entity_id)
+                if span is None:
+                    continue
+                yearly_energy += span
+                has_stats = True
             seeded[category] = yearly_energy
-            self._yearly_accumulators[f"{category}_{year_key}"] = yearly_energy
+            if has_stats:
+                self._yearly_accumulators[f"{category}_{year_key}"] = yearly_energy
+                if category == "grid_export":
+                    # (#1216) the row beside the export follows it: the
+                    # recorded sale, never more than the export. With no
+                    # history of it the row keeps what SEM saw live.
+                    sale_key = f"{GRID_EXPORT_BATTERY_CATEGORY}_{year_key}"
+                    sale = _span(sale_id) if sale_id else None
+                    if sale is None:
+                        sale = self._yearly_accumulators.get(sale_key, 0.0)
+                    self._yearly_accumulators[sale_key] = battery_export_part(
+                        yearly_energy, sale)
 
         # Derive home consumption from energy balance
         solar = seeded.get("solar", 0)
@@ -1438,6 +2110,9 @@ class EnergyCalculator:
         def _e(series: str) -> float:
             return float(month_energy.get(series, {}).get(month, 0.0) or 0.0)
 
+        # (#1216) the pack's part of the month's export, where SEM recorded it
+        sold = battery_export_part(
+            _e("grid_export"), _e(GRID_EXPORT_BATTERY_CATEGORY))
         if category == "cost_import":
             return _e("grid_import") * imp_rate
         if category == "cost_export":
@@ -1448,14 +2123,17 @@ class EnergyCalculator:
             solar_charged = _e("battery_charge") * (
                 1.0 - self._battery_grid_origin_share
             )
-            solar_direct = max(0.0, _e("solar") - _e("grid_export") - solar_charged)
+            # (#1216) only solar's export is taken away from solar
+            solar_direct = max(0.0, _e("solar") - solar_export(
+                _e("grid_export"), sold) - solar_charged)
             return solar_direct * imp_rate
         if category == "cost_batt_savings":
             # (#770) Full import rate on purpose — the provenance store has no
             # origin record for the pre-tracking past, and unknown origin keeps
             # the legacy credit rather than being charged for a measurement SEM
-            # never took.
-            return _e("battery_discharge") * imp_rate
+            # never took. (#776, #1216) A kWh the pack sold earns its export
+            # revenue, not an avoided import too.
+            return max(0.0, _e("battery_discharge") - sold) * imp_rate
         return 0.0
 
     def _seed_yearly_cost_estimate(self, year_key: str) -> None:
@@ -1477,6 +2155,9 @@ class EnergyCalculator:
         grid_export = float(ya.get(f"grid_export_{year_key}", 0.0) or 0.0)
         batt_charge = float(ya.get(f"battery_charge_{year_key}", 0.0) or 0.0)
         batt_discharge = float(ya.get(f"battery_discharge_{year_key}", 0.0) or 0.0)
+        # (#1216) the pack's part of the year's export, booked beside it
+        sold = battery_export_part(grid_export, float(ya.get(
+            f"{GRID_EXPORT_BATTERY_CATEGORY}_{year_key}", 0.0) or 0.0))
         imp_rate = self._get_avg_import_rate()
         exp_rate = self._get_avg_export_rate()
         # Avoided-import savings split to mirror the live accumulators and avoid
@@ -1488,7 +2169,10 @@ class EnergyCalculator:
         # structurally; the live path has always used the flow-attributed
         # split).
         solar_charged = batt_charge * (1.0 - self._battery_grid_origin_share)
-        solar_direct = max(0.0, solar - grid_export - solar_charged)
+        # (#1216) only solar's export is taken away from solar
+        solar_direct = max(
+            0.0, solar - solar_export(grid_export, sold) - solar_charged)
+        batt_delivered = max(0.0, batt_discharge - sold)
         ca = self._yearly_cost_accumulators
         ca[f"cost_import_{year_key}"] = round(grid_import * imp_rate, 4)
         ca[f"cost_export_{year_key}"] = round(grid_export * exp_rate, 4)
@@ -1498,13 +2182,14 @@ class EnergyCalculator:
         # pre-tracking year has no origin record at all, and unknown origin
         # keeps the legacy credit rather than being charged for a measurement
         # SEM never took. Live accumulation from here on is split properly.
-        ca[f"cost_batt_savings_{year_key}"] = round(batt_discharge * imp_rate, 4)
+        # (#776, #1216) A kWh the pack sold earns its export revenue only.
+        ca[f"cost_batt_savings_{year_key}"] = round(batt_delivered * imp_rate, 4)
         self._yearly_cost_seeded = True
         _LOGGER.info(
             "Yearly COST seeded (estimate @ avg import %.4f / export %.4f): "
             "import=%.2f export=%.2f solar_savings=%.2f batt_savings=%.2f CHF",
             imp_rate, exp_rate, grid_import * imp_rate, grid_export * exp_rate,
-            solar_direct * imp_rate, batt_discharge * imp_rate,
+            solar_direct * imp_rate, batt_delivered * imp_rate,
         )
 
     def _apply_yearly_cost_floor(
@@ -1626,19 +2311,19 @@ class EnergyCalculator:
         """
         if hass is None or not ed_config:
             return None
+        # (#1043) every counter of a series, each one's month added in
         entity_map: Dict[str, str] = {}
-        for attr, series in (
-            ("solar_energy", "solar"),
-            ("grid_import_energy", "grid_import"),
-            ("grid_export_energy", "grid_export"),
-            ("battery_charge_energy", "battery_charge"),
-            ("battery_discharge_energy", "battery_discharge"),
-        ):
-            entity_id = getattr(ed_config, attr, None)
-            if isinstance(entity_id, str) and entity_id:
-                entity_map[entity_id] = series
+        for series in ENERGY_COUNTER_CATEGORIES:
+            for entity_id in energy_counters(ed_config, series):
+                entity_map.setdefault(entity_id, series)
         if not entity_map:
             return None
+        # (#1216) the pack's sale, from SEM's own sensor: the only history
+        # that says who exported. A month before it existed has none, and
+        # all its export stays solar's.
+        sale_id = _sem_stat_entity_id(hass, BATTERY_SALE_SENSOR_KEY)
+        if sale_id:
+            entity_map.setdefault(sale_id, GRID_EXPORT_BATTERY_CATEGORY)
         try:
             target_year = int(year_key)
         except (TypeError, ValueError):
@@ -1665,7 +2350,8 @@ class EnergyCalculator:
                 bucket = _stat_bucket_year_month(row)
                 if bucket is not None and bucket[0] == target_year:
                     baseline = prev_sum if prev_sum is not None else 0.0
-                    result.setdefault(series, {})[bucket[1]] = max(
+                    months = result.setdefault(series, {})
+                    months[bucket[1]] = months.get(bucket[1], 0.0) + max(
                         0.0, cumulative - baseline
                     )
                 prev_sum = cumulative
@@ -1749,8 +2435,190 @@ class EnergyCalculator:
         state = self._hass.states.get("sun.sun") if self._hass else None
         return bool(state) and getattr(state, "state", None) == "below_horizon"
 
+    def _sun_turn(self) -> Optional[datetime]:
+        """(#1187) The next sunrise or sunset, whichever comes first, as
+        ``sun.sun`` says now. None when the sun entity does not say."""
+        state = self._hass.states.get("sun.sun") if self._hass else None
+        attrs = getattr(state, "attributes", None)
+        if not hasattr(attrs, "get"):
+            return None
+        found = [when for when in (_aware(attrs.get("next_rising")),
+                                   _aware(attrs.get("next_setting")))
+                 if when is not None]
+        return min(found) if found else None
+
+    def _bound_counters(self) -> List[str]:
+        """(#1187) Every configured counter of ``SOLAR_GAP_BOUND_CATEGORIES``."""
+        return [entity_id for category in SOLAR_GAP_BOUND_CATEGORIES
+                for entity_id in self._meter_counter_entities.get(category) or []]
+
+    def _bound_reads(self) -> Optional[Dict[str, float]]:
+        """(#1187) Each bound counter's kWh: empty with none set, None while
+        one is not read. A counter loading reads no number above 0 (#1043):
+        taken as a reading, it would look like a counter that went back."""
+        outs: Dict[str, float] = {}
+        for entity_id in self._bound_counters():
+            state = self._hass.states.get(entity_id)
+            if not state or state.state in ("unknown", "unavailable", None):
+                return None
+            value = self._energy_state_kwh(state)  # #551 unit-aware
+            if not (_finite(value) and value > 0):
+                return None
+            outs[entity_id] = float(value)
+        return outs
+
+    def _battery_known(self) -> bool:
+        """(#1187) Has this home a battery: a battery counter, or energy SEM
+        ever booked into or out of one?"""
+        if (self._meter_counter_entities.get("battery_charge")
+                or self._meter_counter_entities.get("battery_discharge")):
+            return True
+        return any(
+            _finite(self._lifetime_accumulators.get(f"lifetime_{c}"))
+            and self._lifetime_accumulators[f"lifetime_{c}"] > 0
+            for c in ("battery_charge", "battery_discharge")
+        )
+
+    def _counts_only_while_ha_runs(self, entity_id: str) -> bool:
+        """(#1187) A counter Home Assistant computes from a power sensor (a
+        Riemann sum, a meter built on a source, SEM's own) does not count
+        while HA is down. Flat over an outage, it says nothing of the night.
+        A doubt counts as such a counter: the step is then held back."""
+        try:
+            from homeassistant.helpers import entity_registry as er
+            entry = er.async_get(self._hass).async_get(entity_id)
+            state = self._hass.states.get(entity_id)
+        except Exception:  # noqa: BLE001 — no registry: no proof either
+            return True
+        if getattr(entry, "platform", None) in ("integration", DOMAIN):
+            return True
+        attrs = getattr(state, "attributes", None)
+        return hasattr(attrs, "get") and any(
+            attrs.get(key) for key in ("source", "source_entity"))
+
+    def _solar_gap_wait_over(self, now: datetime) -> bool:
+        """(#1187) Has SEM waited ``SOLAR_GAP_WAIT_S`` for a bound counter
+        it cannot read? A gone counter must not hold the solar row for the
+        rest of the day. The wait starts once HA runs: before that, every
+        entity still loading has no state (bug class 86)."""
+        from homeassistant.core import CoreState
+        # ``is_running`` is true while Home Assistant is still starting too
+        if getattr(self._hass, "state", None) is not CoreState.running:
+            return False
+        if self._solar_gap_wait_since is None:
+            self._solar_gap_wait_since = now
+        waited = (now - self._solar_gap_wait_since).total_seconds()
+        return waited >= SOLAR_GAP_WAIT_S
+
+    def _solar_gap(
+        self, bl: Dict[str, Any], readings: Dict[str, float], now: datetime,
+    ) -> Set[str]:
+        """(#1187) The counters whose step since the last read spans a
+        sunrise or a sunset that SEM did not watch.
+
+        The sun gate (#681) judges a step by the sun at the moment it is
+        read. One cycle is a few seconds, so that is the step's own hour. A
+        step across an outage is not: HA down from 02:30 to 20:00 gave one
+        step of 30.38 kWh, read after dark, and the whole day was dropped
+        (12.10.2026, PROD). Read in daylight, the night's battery output in
+        such a step was booked as solar.
+
+        A step is such a gap when the last read is older than the
+        integrator's own gap limit and a sunrise or sunset (``turn``, taken
+        at that read) has passed since. Only counters read at that last
+        cycle count; one dark since then is judged as before.
+        """
+        span = bl.get("span")
+        if not isinstance(span, dict):
+            return set()
+        at, turn = _aware(span.get("at")), _aware(span.get("turn"))
+        read = span.get("read")
+        if at is None or turn is None or not isinstance(read, list):
+            return set()
+        if (now - at).total_seconds() <= MAX_INTEGRATION_GAP_SECONDS or now < turn:
+            return set()
+        return {
+            entity_id for entity_id in readings
+            if entity_id in read and entity_id in bl["last"]
+            and entity_id in bl["base"]
+        }
+
+    def _hold_back_battery_output(
+        self, bl: Dict[str, Any], readings: Dict[str, float],
+        gap: Set[str], outs_now: Optional[Dict[str, float]],
+    ) -> float:
+        """(#1187) Credit a gap step less what could have moved it in the
+        dark; return the part credited.
+
+        In the dark a hybrid's counter moves only by what the battery puts
+        out through the inverter (#681) and by grid power it passes to a car
+        (#681's overnight charge). So the night part of the step is at most
+        the batteries' output plus the grid import over the same span. That
+        much stays out of the day: the bases move up by it, shared by each
+        counter's step. Daytime discharge and import are held back too, so
+        the day reads low, never high. No such counter and no battery:
+        nothing is held back. All of the step is held back, as the sun gate
+        did before, when nothing proves the bound: a battery with no
+        discharge counter, a counter that went back, a set that changed, no
+        reading before the gap, a counter HA computes, or a wait that ran
+        out.
+        """
+        span = bl["span"]
+        steps = {e: max(0.0, readings[e] - bl["last"][e]) for e in gap}
+        total = sum(steps.values())
+        if total <= 0:
+            return 0.0
+        before = span.get("outs")
+        has_discharge = bool(self._meter_counter_entities.get("battery_discharge"))
+        if outs_now is None:
+            out = total   # the wait ran out: nothing proves the bound
+        elif not has_discharge and self._battery_known():
+            out = total
+        elif not outs_now:
+            out = 0.0
+        elif (not isinstance(before, dict) or set(before) != set(outs_now)
+              or any(not _finite(before[e]) or outs_now[e] < before[e] - 0.001
+                     for e in outs_now)
+              or any(self._counts_only_while_ha_runs(e) for e in outs_now)):
+            out = total
+        else:
+            out = sum(outs_now[e] - before[e] for e in outs_now)
+        held = min(total, max(0.0, out))
+        for entity_id, step in steps.items():
+            bl["base"][entity_id] += held * step / total
+        _LOGGER.info(
+            "Solar counter step since %s, with a sunrise or sunset SEM did "
+            "not watch: %.2f kWh, %.2f kWh of it kept out as possible "
+            "battery output or grid power (#1187)",
+            span.get("at"), total, held,
+        )
+        return total - held
+
+    def _note_solar_span(
+        self, bl: Dict[str, Any], readings: Dict[str, float], now: datetime,
+        outs_now: Optional[Dict[str, float]], row: float,
+    ) -> None:
+        """(#1187) Where the next step starts: when, the sun's next turn,
+        what each bound counter read, the day's solar row, and which
+        counters were read. A cycle that cannot read the discharge counters
+        keeps the older outputs: a bound from further back is larger, never
+        too small."""
+        span = bl.get("span") if isinstance(bl.get("span"), dict) else {}
+        outs = outs_now
+        if outs is None:
+            outs = span.get("outs")
+        turn = self._sun_turn()
+        bl["span"] = {
+            "at": dt_util.as_utc(now).isoformat(),
+            "turn": dt_util.as_utc(turn).isoformat() if turn else None,
+            "outs": dict(outs) if isinstance(outs, dict) else None,
+            "row": row,
+            "read": sorted(readings),
+        }
+
     def _reconcile_solar_energy(
-        self, today: date, month_key: str, year_key: str
+        self, today: date, month_key: str, year_key: str,
+        now: Optional[datetime] = None,
     ) -> None:
         """Track daily solar against hardware production counters (#556).
 
@@ -1777,6 +2645,11 @@ class EnergyCalculator:
           discharge) and under-reports by day (PV going DC→battery never
           appears as AC yield), and keeping only the maximum ratchets the
           night inflation in instead of letting the two cancel.
+        - A STEP ACROSS AN OUTAGE IS JUDGED BY ITS SPAN (#1187), not by the
+          sun at the read — see ``_solar_gap``. When a sunrise or sunset
+          passed while SEM was down, the step is credited less what the
+          batteries put out and the grid gave over it
+          (``_hold_back_battery_output``).
 
         Known limitation: cost savings are computed from live power flows,
         so cost figures for counter-recovered energy remain approximate.
@@ -1802,11 +2675,23 @@ class EnergyCalculator:
             if not state or state.state in ("unknown", "unavailable", None):
                 continue
             value = self._energy_state_kwh(state)  # #551 unit-aware
-            if value >= 0:
+            if value is not None and value >= 0:
                 readings[entity_id] = value
 
         if not readings:
             return
+
+        # (#1187) A step across an outage with a sunrise or sunset inside
+        # needs the batteries' output and the grid import over the same span.
+        # A bound counter not read yet (a restart brings entities up one by one):
+        # wait, baselines untouched, and the row is not counter-backed, or
+        # home would be balanced against meter rows that took the gap.
+        now = dt_util.as_utc(now) if now else dt_util.utcnow()
+        gap = self._solar_gap(bl, readings, now)
+        outs_now = self._bound_reads()
+        if gap and outs_now is None and not self._solar_gap_wait_over(now):
+            return
+        self._solar_gap_wait_since = None
 
         # (#628) A COMPLETE counter set makes today's solar row counter-backed,
         # which is what lets it take part in the home balance. Completeness
@@ -1819,7 +2704,8 @@ class EnergyCalculator:
         if len(readings) == len(self._solar_counter_entities):
             self._counter_backed.add("solar")
 
-        if self._sun_is_down():
+        dark = self._sun_is_down()
+        if dark and not gap:
             # Darkness: absorb the counter's movement into the baseline
             # instead of crediting it as production (#681). Rolling the
             # baseline forward also swallows a daily counter's midnight reset
@@ -1829,6 +2715,7 @@ class EnergyCalculator:
             for entity_id, value in readings.items():
                 bl["base"][entity_id] = value
                 bl["last"][entity_id] = value
+            self._note_solar_span(bl, readings, now, outs_now, integrated)
             return
 
         # A counter that went BACKWARDS since its last reading (inverter
@@ -1847,9 +2734,24 @@ class EnergyCalculator:
         if reset:
             bl["base"] = {}
             bl.pop("anchor", None)
+            gap = set()   # (#1187) nothing of the gap is known then
+        elif gap:
+            credited = self._hold_back_battery_output(bl, readings, gap, outs_now)
+            # (#1187 review) The step runs from the last read: so does the
+            # anchor. Set now, it would hold what the integrator added while
+            # SEM waited for a counter, and the step holds that again. With
+            # nothing credited the anchor is now, as before.
+            row = bl["span"].get("row")
+            if ("anchor" not in bl and credited > 0 and _finite(row)
+                    and 0 <= row <= integrated):
+                bl["anchor"] = row
         for entity_id, value in readings.items():
-            bl["base"].setdefault(entity_id, value)
+            if dark and entity_id not in gap:
+                bl["base"][entity_id] = value   # (#681) as above
+            else:
+                bl["base"].setdefault(entity_id, value)
             bl["last"][entity_id] = value
+        self._note_solar_span(bl, readings, now, outs_now, integrated)
         # The counters track production SINCE their baselines; production
         # before that (SEM down over midnight, counter loaded late) is
         # only known to the integrator — anchor on the daily value at
@@ -1862,9 +2764,12 @@ class EnergyCalculator:
         )
         target = bl["anchor"] + counter_daily
 
-        # Sanity cap — same physical bound the integrator uses.
+        # Sanity cap — same physical bound the integrator uses
+        # (``_daily_ceiling``, #1218).
         inverter_kwp = self.config.get("system_size_kwp", 10)
-        if target > inverter_kwp * 16:
+        if target > self._daily_ceiling("solar"):
+            # (#1218) The row is the power sensor's, not the counter's.
+            self._counter_backed.discard("solar")
             _LOGGER.warning(
                 "Solar counter reconciliation target %.1f kWh exceeds "
                 "%d kWp × 16h — ignoring this cycle (unit mismatch?)",
@@ -1912,9 +2817,20 @@ class EnergyCalculator:
 
         - Counters may be lifetime or daily-resetting; only deltas are used.
         - Counter going backwards (charger reboot, midnight reset of a daily
-          counter) → re-baseline; the accumulated value keeps.
-        - ADOPTION IS UPWARD-ONLY: integration remains the floor, so an
-          unavailable/stale/partial counter set can never shrink the day. The
+          counter) → re-baseline; the accumulated value keeps. A drop within
+          ``EV_COUNTER_DIP_KWH`` / ``EV_COUNTER_DIP_SHARE`` is a dip: the last
+          reading holds (#1049).
+        - ADOPTION IS UPWARD-ONLY while the counter set is partial, a counter
+          does not read, or a counter's base is younger than the anchor:
+          integration is then the floor, so a missing counter can never
+          shrink the day. When every charger has its own counter and all of
+          them read, the counters own the row in BOTH directions (#1049): a
+          charger power sensor can read high — a Wallbox behind the MQTT
+          bridge booked 19.56 kWh against 10.99 on its own meter — and
+          upward-only kept every kWh of it. The row moves down only once every
+          box has stopped and its counter has reported since
+          (``_track_ev_pending``): a counter that reports late, or never,
+          cannot pull the row down. The
           delta propagates to monthly, yearly and lifetime so all periods stay
           consistent (#666: they are written by one call, so they are corrected
           by one call too).
@@ -1969,6 +2885,8 @@ class EnergyCalculator:
         calendar-day mirror the home balance needs. They differ only in their
         day key and in which longer periods they feed, so they are parameters —
         a second hand-written copy of a delta model is how the two drift apart.
+        A third instance, one charger's own row, is ``follow_charger_counter``;
+        all three share ``_ev_counter_target`` and ``_ev_adoption``.
 
         ``baselines`` is mutated IN PLACE (never rebound) so the caller's
         attribute keeps pointing at the live dict across a day rollover.
@@ -1976,28 +2894,102 @@ class EnergyCalculator:
         if not self._ev_counter_enabled or not self._hass:
             return
 
-        day_str = str(day)
-        bl = baselines
-        if bl.get("date") != day_str or "base" not in bl or "last" not in bl:
+        daily_key = f"{category}_{day}"
+        integrated = self._daily_accumulators.get(daily_key, 0.0)
+        entities = self._ev_counter_entities
+        target, all_read = self._ev_counter_target(
+            baselines, str(day), entities, integrated,
+            self._ev_counter_complete,
+        )
+        # (#1160) The row as this cycle leaves it, for the next day's anchor.
+        baselines["row"] = integrated
+        if target is None:
+            return
+
+        # Sanity cap — the fleet's own physical ceiling, from the configured
+        # charger limits. Catches a counter in the wrong magnitude that
+        # ``_energy_state_kwh`` could not classify from its unit string.
+        max_daily = self._max_daily_ev_kwh()
+        if target > max_daily:
+            # (#1092-class) once per day per bucket — the sibling home/
+            # solar ceiling check two screens down already debounces this
+            # exact shape; this one warned every cycle until a unit
+            # mismatch cleared.
+            day_str = str(day)
+            if self._ceiling_warned.get(category) != day_str:
+                self._ceiling_warned[category] = day_str
+                _LOGGER.warning(
+                    "EV counter reconciliation target %.1f kWh exceeds the fleet's "
+                    "%.0f kWh/day ceiling — ignoring this cycle (unit mismatch?)",
+                    target, max_daily,
+                )
+            return
+
+        owned = all_read and self._ev_counter_complete
+        adopted = self._ev_adoption(
+            category, target, integrated, owned, self._ev_settled(entities),
+        )
+        if adopted is None:
+            return
+        delta = adopted - integrated
+        self._daily_accumulators[daily_key] = adopted
+        baselines["row"] = adopted
+        for accumulators, key in periods:
+            # max(0.0) — a delta can be negative since #1049, and a longer
+            # period must never be dragged below zero by one day's correction.
+            accumulators[key] = max(0.0, accumulators.get(key, 0.0) + delta)
+
+    def _ev_counter_target(
+        self,
+        bl: Dict[str, Any],
+        day_str: str,
+        entities: List[str],
+        integrated: float,
+        complete: bool,
+    ) -> "tuple[Optional[float], bool]":
+        """The day's kWh by the counters: ``anchor + Σ counter deltas``.
+
+        Returns ``(target, all_read)``; ``target`` is None when no counter
+        reads. ``all_read``: every counter read this cycle, and the anchor was
+        set with this very set, complete, all reading — only then does the
+        target cover everything the row holds. Mutates ``bl`` in place.
+        """
+        maps = [bl.get("base"), bl.get("last"), bl.get("owed", {}),
+                bl.get("carried", {}), bl.get("drawn_at", {})]
+        if (bl.get("date") != day_str
+                or not all(isinstance(m, dict) for m in maps)
+                or not all(_finite(v) for m in maps for v in m.values())
+                or ("anchor" in bl and not _finite(bl["anchor"]))):
+            # (#1161) The day that just closed, as its last cycle left it:
+            # the new day's first anchor owes what it booked above its
+            # counters (``_ev_carry_at_start``).
+            closing = ({k: bl.get(k) for k in _EV_CLOSING_KEYS}
+                       if _ev_day_after(bl.get("date"), day_str) else None)
             # Day rollover (or first run / legacy or damaged shape):
             # fresh baselines for the new day.
             bl.clear()
             bl.update({"date": day_str, "base": {}, "last": {}})
-
-        daily_key = f"{category}_{day}"
-        integrated = self._daily_accumulators.get(daily_key, 0.0)
-
+            if closing is not None:
+                bl["closing"] = closing
+        bl.pop("late", None)  # (#1161) a store from #1160
         readings: Dict[str, float] = {}
-        for entity_id in self._ev_counter_entities:
+        for entity_id in entities:
             state = self._hass.states.get(entity_id)
             if not state or state.state in ("unknown", "unavailable", None):
                 continue
             value = self._energy_state_kwh(state)  # #551 unit-aware
-            if value >= 0:
+            if value is not None and value >= 0:
+                value = self.ev_counter_judged_kwh(entity_id, value)  # (#1101)
+                # (#1049) A dip that comes back holds the last reading — on a
+                # fresh day too, where only the pending tracker remembers it.
+                ref = bl["last"].get(entity_id,
+                                     self._ev_counter_seen.get(entity_id))
+                if _ev_counter_drop(value, ref) == "dip":
+                    value = ref
                 readings[entity_id] = value
 
         if not readings:
-            return
+            return None, False
 
         # A counter that went BACKWARDS since its last reading invalidates the
         # whole baseline set: its past contribution is already inside the
@@ -2012,45 +3004,566 @@ class EnergyCalculator:
         if reset:
             bl["base"] = {}
             bl.pop("anchor", None)
+        not_drawn: Dict[str, float] = {}
         for entity_id, value in readings.items():
+            prior = (bl["last"].get(entity_id)
+                     if entity_id in bl["base"] else None)
             bl["base"].setdefault(entity_id, value)
+            foreign = self._ev_counter_foreign.get(entity_id)
+            if (foreign is not None and prior is not None
+                    and prior <= foreign[0] + 0.001):
+                # (#1101) This cycle's step stood for kWh no box drew in this
+                # window (``_judge_ev_step``): the base moves with it, so the
+                # row books none of it. ``prior`` past the step's start: this
+                # row has taken the step already.
+                not_drawn[entity_id] = min(foreign[1], max(0.0, value - prior))
+                bl["base"][entity_id] += not_drawn[entity_id]
             bl["last"][entity_id] = value
         # The counters track charging SINCE their baselines; charging before
         # that (SEM down over the EV-day boundary, charger added late) is only
         # known to the integrator — anchor on the daily value at baseline time:
         # target = anchor + counter deltas.
-        bl.setdefault("anchor", integrated)
+        if "anchor" not in bl:
+            bl["anchor"] = integrated
+            # (#1161) The day's first anchor after a start the closing day
+            # recorded: it owes the carry, which stands for ``pending``.
+            closing = bl.pop("closing", None)
+            carry = (self._ev_carry_at_start(closing, readings, integrated)
+                     if "drawn_at" not in bl else None)
+            # What each counter's boxes had drawn by now: the anchor holds
+            # this cycle's draw, and all before it. Only a counter whose
+            # boxes are read on their own (``_ev_counter_owes``).
+            bl["drawn_at"] = {
+                e: self._ev_counter_drawn_total.get(e, 0.0)
+                for e in entities if self._ev_counter_owes(e)}
+            # (#1049) The set the anchor was taken with — only if it was
+            # complete and every counter read. A counter first seen later
+            # starts its delta late; a counter set changed since (a restore
+            # brings the old blob back) covers other boxes. Either way the
+            # target misses kWh the row holds, so it may not pull it down.
+            whole = complete and len(readings) == len(entities)
+            bl["whole"] = sorted(entities) if whole else None
+            # (#1049) What a box drew before the anchor and its counter has
+            # not reported yet. That counter's next moves pay it first: it
+            # belongs to the row before the anchor, not to this one. Only
+            # where ``pending`` is what the counter's own boxes drew
+            # (``_ev_counter_owes``, #1157 #1159).
+            bl["owed"], bl["carried"] = (
+                carry or (self._ev_owed_at_anchor(entities), {}))
+        owed = bl.setdefault("owed", {})
+        carried = bl.setdefault("carried", {})
+        for entity_id, value in readings.items():
+            if entity_id not in owed:
+                continue
+            # A counter can report a late session in several steps: what a
+            # step books pays first, oldest first. (#1159) Then what a step
+            # judged foreign took out of the row: nothing else did. Kept,
+            # what was owed then took the next real charge that day.
+            # (#1161) Whatever the box does: the counter decides the total.
+            left = owed[entity_id]
+            if left <= 0.001:  # paid, or a damaged store
+                del owed[entity_id]
+                continue
+            paid = min(left, max(0.0, value - bl["base"][entity_id]))
+            bl["base"][entity_id] += paid
+            cut = paid + min(left - paid, not_drawn.get(entity_id, 0.0))
+            owed[entity_id] = left - cut
+            if entity_id in carried:
+                # (#1161) What rolled in from the day before is paid first.
+                carried[entity_id] = max(0.0, carried[entity_id] - cut)
+            if owed[entity_id] <= 0.001:  # paid, or a damaged store
+                del owed[entity_id]
+        for entity_id in [e for e, v in carried.items()
+                          if e not in owed or v <= 0.001]:
+            del carried[entity_id]
 
         counter_daily = sum(
             value - bl["base"][entity_id]
             for entity_id, value in readings.items()
         )
-        target = bl["anchor"] + counter_daily
-
-        # Sanity cap — the fleet's own physical ceiling, from the configured
-        # charger limits. Catches a counter in the wrong magnitude that
-        # ``_energy_state_kwh`` could not classify from its unit string.
-        max_daily = self._max_daily_ev_kwh()
-        if target > max_daily:
-            _LOGGER.warning(
-                "EV counter reconciliation target %.1f kWh exceeds the fleet's "
-                "%.0f kWh/day ceiling — ignoring this cycle (unit mismatch?)",
-                target, max_daily,
-            )
-            return
-
-        delta = target - integrated
-        if delta <= RECONCILIATION_THRESHOLD:
-            return  # Upward-only; small drift stays with the integrator.
-
-        _LOGGER.info(
-            "%s energy reconciliation: counter=%.2f kWh > integrated=%.2f kWh "
-            "— adopting counter value (+%.2f kWh)",
-            category, target, integrated, delta,
+        return (
+            max(0.0, bl["anchor"] + counter_daily),
+            len(readings) == len(entities)
+            and bl.get("whole") == sorted(entities),
         )
-        self._daily_accumulators[daily_key] = target
-        for accumulators, key in periods:
-            accumulators[key] = accumulators.get(key, 0.0) + delta
+
+    def _ev_carry_at_start(
+        self, closing: Any, readings: Dict[str, float], anchor: float,
+    ) -> Optional[Tuple[Dict[str, float], Dict[str, float]]]:
+        """(#1161) What a new day's first anchor owes for the day that just
+        closed: ``(owed, carried)``, per counter.
+
+        The counter decides the total. While a car charges across the day's
+        start, the closing row may stand above its counters: it shows the
+        power read, and a row that moves up only, or one the counters own
+        while a car charges, cannot move down. Each counter owes what SEM
+        saw its boxes draw (``drawn_at``) above what it showed, from the
+        closing day's anchor up to this one; no more in all than the two
+        rows hold above the counters. The anchor holds the draw of the
+        cycles since the closing day's last one, so a counter's move in
+        them counts as shown. The new day's moves of that counter pay it,
+        never below 0. So the days add up to the counter: a late report is
+        booked once, and a power read above the meter stays on the day it
+        was read and is taken off the next.
+
+        What the closing day still owed rolls on once more (``carried``)
+        and goes at the next start: a counter shows a late report within a
+        day; a rest older than that was a power read the counter will never
+        show, and it would hide real charging the counter shows later. None
+        when the store does not say (from before #1161, SEM down a whole
+        day, or damaged): the anchor owes ``pending`` as before.
+        """
+        if not isinstance(closing, dict):
+            return None
+        row, old_anchor = closing.get("row"), closing.get("anchor")
+        maps = [closing.get(k) for k in ("base", "last", "drawn_at",
+                                         "owed", "carried")]
+        if not (_finite(row) and row >= 0.0 and _finite(old_anchor)
+                and _finite(anchor)
+                and all(isinstance(m, dict) for m in maps[:3])
+                and all(m is None or isinstance(m, dict) for m in maps[3:])):
+            return None
+        base, last, drawn_at = maps[:3]
+        owed, carried = maps[3] or {}, maps[4] or {}
+        if not all(_finite(v) for m in (base, last, drawn_at, owed, carried)
+                   for v in m.values()):
+            return None
+        shown: Dict[str, float] = {}
+        for entity_id, start in base.items():
+            now = last.get(entity_id, start)
+            value = readings.get(entity_id)
+            if value is not None and value >= now:
+                # Its move since the closing day's last cycle, less what no
+                # box drew (#1101). A counter that went back (a daily one
+                # resets at midnight) shows what it showed then.
+                foreign = self._ev_counter_foreign.get(entity_id)
+                now = value - (foreign[1] if foreign is not None else 0.0)
+            shown[entity_id] = max(0.0, now - start)
+        held = max(0.0, row + max(0.0, anchor)
+                   - max(0.0, old_anchor + sum(shown.values())))
+        over = {e: max(0.0, self._ev_counter_drawn_total.get(e, 0.0) - v
+                       - shown.get(e, 0.0))
+                for e, v in drawn_at.items()}
+        total = sum(over.values())
+        share = 1.0 if total <= held else held / total
+        roll = {e: max(0.0, v - max(0.0, carried.get(e, 0.0)))
+                for e, v in owed.items()}
+        new = {e: over.get(e, 0.0) * share + roll.get(e, 0.0)
+               for e in set(over) | set(roll)}
+        return ({e: v for e, v in new.items() if v > 0.001},
+                {e: v for e, v in roll.items() if v > 0.001})
+
+    def _ev_owed_at_anchor(self, entities: List[str]) -> Dict[str, float]:
+        """(#1049 #1159) What each counter owes a row's new anchor: what its
+        boxes drew since it last moved (``pending``). Only where that is the
+        counter's own boxes' draw (``_ev_counter_owes``)."""
+        return {e: v for e in entities if self._ev_counter_owes(e)
+                and (v := self._ev_counter_pending.get(e, 0.0)) > 0.0}
+
+    @staticmethod
+    def _ev_adoption(
+        label: str, target: float, integrated: float, owned: bool,
+        settled: bool = False,
+    ) -> Optional[float]:
+        """The value an EV row takes from its counters, or None (#658, #1049).
+
+        ``owned``: every charger has its own counter and all of them read, so
+        the counters own the row: it follows them up as finely as a grid
+        meter. Down only once ``settled`` — every box has stopped and its
+        counter has reported since — because a counter can publish a value
+        minutes old, and while a car charges the row may not fall under what
+        the box really drew. Not owned: only a material shortfall is taken.
+        """
+        if owned and settled and integrated > target + METER_RECONCILIATION_THRESHOLD:
+            adopted = target
+        elif owned and target > integrated + METER_RECONCILIATION_THRESHOLD:
+            adopted = target
+        elif target > integrated + RECONCILIATION_THRESHOLD:
+            adopted = target
+        else:
+            return None
+        delta = adopted - integrated
+        log = (
+            _LOGGER.info
+            if abs(delta) > RECONCILIATION_THRESHOLD
+            else _LOGGER.debug
+        )
+        log(
+            "%s energy reconciliation: counter=%.2f kWh vs integrated=%.2f kWh "
+            "— adopting counter value (%+.2f kWh)",
+            label, target, integrated, delta,
+        )
+        return adopted
+
+    def _track_ev_pending(
+        self, power: PowerReadings, interval_hours: float,
+        now: Optional[datetime] = None,
+    ) -> None:
+        """(#1049) Per counter: the kWh its box charged since the counter moved.
+
+        That energy is real but not in the counter yet — a cloud counter can
+        report minutes or an hour late. While any is owed, or the box is
+        charging, the counters may not pull a row down (``_ev_settled``).
+        Each counter is charged with ITS box's power (bug class 3); standby
+        draw is not charging (``EV_ACTIVE_CHARGE_FLOOR_W``, bug class 36).
+
+        (#1101) …and the most its box could have drawn in time SEM did not
+        see it idle (``_ev_counter_room``). A counter that moves by more than
+        that stands for kWh no box drew since it last moved — a Wallbox
+        register caught up 11.18 kWh in one report, on a box SEM had seen
+        idle for six hours. From such a step only what SEM saw the box draw
+        is booked (``_ev_counter_foreign``, read by ``_ev_counter_target``).
+        What SEM saw drawn and the counter has not shown yet
+        (``_ev_counter_unreported``) is part of the reach until the box has
+        been seen idle for ``EV_COUNTER_LATE_REPORT_H``.
+
+        (#1101) The same wait spends the unseen part of ``room``: once SEM
+        has watched the box that long since it last could not see it, a
+        counter has shown what the box drew then. Without it, every restart
+        and dark read since the counter last moved stayed in ``room`` at
+        44 kW: on a counter flat for a day, a 19.85 kWh catch-up at the next
+        plug-in was booked. What SEM saw the box draw stays.
+
+        (#1157) A counter no one box owns — a fallback (legacy daily sensor,
+        Energy Dashboard) or one two chargers name — is checked the same way
+        against every box it counts (``_ev_counter_boxes``): their draws add
+        up, and its room grows as fast as all of them at once. Before, only a
+        box's own counter was checked, so a fallback's jump was booked while
+        every box read 0 W.
+
+        (#1159) …and which counters read each of their boxes on its own
+        power sensor this cycle (``_ev_counter_own_read``): only their
+        ``pending`` may be owed at an anchor (``_ev_counter_owes``).
+
+        (#1161) …and every kWh each counter's boxes drew
+        (``_ev_counter_drawn_total``): a row reads what its day drew from
+        it, to carry what its counter has not shown into the next day.
+        """
+        self._ev_owners_drawing = set()
+        self._ev_counter_foreign = {}
+        self._ev_counter_own_read = set()
+        if not self._ev_counter_enabled or not self._hass:
+            return
+        now = now or dt_util.now()
+        unseen_h = self._ev_unwatched_hours(now, interval_hours)
+        self._ev_watched_at = now
+        if unseen_h is None:
+            # No record of the last cycle: nothing is known about the time
+            # since, so every counter's next move is booked as it stands —
+            # until SEM has watched its box for the late-report wait.
+            self._ev_counter_room.clear()
+            self._ev_counter_unseen_kwh.clear()
+            self._ev_counter_quiet_h.clear()
+        # More than a second unseen: SEM was down or skipped a cycle.
+        gap = unseen_h is not None and unseen_h * 3600.0 > 1.0
+        box_kw = self._ev_box_max_kw()
+        per_charger = getattr(power, "ev_power_per_charger", None) or {}
+        fleet_w = float(power.ev_power or 0.0)  # FLEET-READ: the fallback when a box's own draw is not known.
+        for entity_id, boxes in self._ev_counter_boxes.items():
+            # (#1157) A counter counts every box in ``boxes``: their draws
+            # add up. When one box's own draw is not read (no list, an id-less
+            # entry, no power sensor of its own), the counter is charged the
+            # fleet's: that only ever holds a row higher.
+            own = all(b in per_charger for b in boxes)
+            if own:
+                self._ev_counter_own_read.add(entity_id)  # (#1159)
+            draws = ([float(per_charger.get(b) or 0.0) for b in boxes]
+                     if own else [fleet_w])
+            # A box that reads below zero (a sign-flipped sensor) does not
+            # cancel another box's charge.
+            watts = sum(max(0.0, w) for w in draws)
+            # Standby is not charging (bug class 36), box by box.
+            charging_w = sum(w for w in draws if w > EV_ACTIVE_CHARGE_FLOOR_W)
+            if own:
+                self._ev_owners_drawing.update(
+                    b for b, w in zip(boxes, draws, strict=True)
+                    if w > EV_ACTIVE_CHARGE_FLOOR_W)
+            elif charging_w > 0.0:
+                self._ev_owners_drawing.update(boxes)
+            state = self._hass.states.get(entity_id)
+            value = None
+            if state is not None and state.state not in (
+                    "unknown", "unavailable", None):
+                value = self._energy_state_kwh(state)
+            seen = self._ev_counter_seen.get(entity_id)
+            room = self._ev_counter_room.get(entity_id)
+            unseen = self._ev_counter_unseen_kwh.get(entity_id, 0.0)
+            # As much as every box it counts could draw at once.
+            reach_kw = box_kw * len(boxes)
+            if room is not None and gap:
+                room += reach_kw * unseen_h
+                unseen += reach_kw * unseen_h
+            this_cycle = max(reach_kw, watts / 1000.0) * interval_hours
+            drawn = charging_w * interval_hours / 1000.0
+            if drawn > 0.0 and self._ev_counter_owes(entity_id):  # (#1161)
+                self._ev_counter_drawn_total[entity_id] = (
+                    self._ev_counter_drawn_total.get(entity_id, 0.0) + drawn)
+            live = self._ev_box_power_live(boxes, power, per_charger)
+            unreported = self._ev_counter_unreported.get(entity_id, 0.0)
+            moved = (value is not None and seen is not None
+                     and value > seen + 0.001)
+            if value is not None and value >= 0 and (
+                seen is None
+                or moved
+                or _ev_counter_drop(value, seen) == "reset"
+            ):
+                if moved:
+                    step = value - seen
+                    if room is not None:
+                        # What SEM saw drawn and not yet shown may come in
+                        # this step too, whenever the box drew it.
+                        step -= self._judge_ev_step(
+                            entity_id, boxes, seen, value,
+                            room + this_cycle + unreported,
+                            unreported + max(0.0, watts) * interval_hours / 1000.0,
+                            now)
+                    unreported = max(0.0, unreported + drawn - step)
+                # Moved, reset, or first seen: it holds everything so far.
+                self._ev_counter_seen[entity_id] = value
+                self._ev_counter_pending[entity_id] = 0.0
+                if seen is not None:
+                    # A real move starts the watch; a first sight (a store
+                    # from before it) leaves the next move as it stands,
+                    # unless the late-report wait starts the watch first.
+                    room = unseen = 0.0
+            else:
+                if charging_w > 0.0:
+                    self._ev_counter_pending[entity_id] = (
+                        self._ev_counter_pending.get(entity_id, 0.0)
+                        + drawn
+                    )
+                unreported += drawn
+                # Charging, or a power read that cannot say "idle": the box
+                # may have drawn its most. Seen idle: at most a trickle.
+                if room is not None and (charging_w > 0.0 or not live):
+                    room += this_cycle
+                    if not live:
+                        unseen += this_cycle
+                elif room is not None:
+                    room += (EV_COUNTER_TRICKLE_FACTOR * max(0.0, watts)
+                             * interval_hours / 1000.0)
+            # (#1101) Watched for the late-report wait since SEM last could
+            # not see the box: a counter has shown by now what the box drew
+            # then, so the unseen part of ``room`` is spent. What SEM saw —
+            # a charge, a trickle — stays, and never less than the draw it
+            # saw since the counter last moved (``pending``: a record that
+            # holds none, or an older store). Unseen time starts the wait
+            # again. No record yet: the watch starts.
+            quiet_h = self._ev_counter_quiet_h.get(entity_id, 0.0)
+            if not live or gap:
+                quiet_h = 0.0
+            else:
+                if quiet_h < EV_COUNTER_LATE_REPORT_H <= quiet_h + interval_hours:
+                    room = max(self._ev_counter_pending.get(entity_id, 0.0),
+                               (0.0 if room is None else room) - unseen)
+                    unseen = 0.0
+                quiet_h += interval_hours
+            self._ev_counter_quiet_h[entity_id] = quiet_h
+            if unseen > 0.0:
+                self._ev_counter_unseen_kwh[entity_id] = unseen
+            else:
+                self._ev_counter_unseen_kwh.pop(entity_id, None)
+            if room is not None:
+                self._ev_counter_room[entity_id] = room
+            # Seen idle long enough: a counter that has not shown the rest by
+            # now never will — what is left was a power read above the meter.
+            # A dark read or a skipped cycle pauses the count; only charging
+            # starts it again.
+            idle_h = self._ev_counter_idle_h.get(entity_id, 0.0)
+            if charging_w > 0.0:
+                idle_h = 0.0
+            elif live and not gap:
+                idle_h += interval_hours
+            self._ev_counter_idle_h[entity_id] = idle_h
+            if idle_h >= EV_COUNTER_LATE_REPORT_H:
+                unreported = 0.0
+            if unreported > 0.0:
+                self._ev_counter_unreported[entity_id] = unreported
+            else:
+                self._ev_counter_unreported.pop(entity_id, None)
+
+    def _judge_ev_step(
+        self, entity_id: str, boxes: Tuple[str, ...], before: float,
+        value: float, room: float, seen_kwh: float, now: datetime,
+    ) -> float:
+        """(#1101) Book from a counter step no more than its box could draw.
+
+        ``room``: the most the box could have drawn since the counter last
+        moved, unseen by SEM, plus what SEM saw it draw that the counter has
+        not shown yet. A step above it (and the dip window) is the counter
+        reporting kWh no box drew; only ``seen_kwh`` — what SEM saw the box
+        draw and the counter has not shown — is booked from it. Returns the
+        kWh not booked.
+        """
+        step = value - before
+        if step <= room + EV_COUNTER_DIP_KWH:
+            return 0.0
+        foreign = step - seen_kwh
+        if foreign <= 0.001:
+            return 0.0
+        self._ev_counter_foreign[entity_id] = (before, foreign)
+        # Once a day per counter: a counter in the wrong unit would say it
+        # every cycle.
+        log_on_change(
+            _LOGGER, f"ev-step:{entity_id}:{now.date()}", logging.WARNING,
+            "EV counter %s rose %.2f kWh at once, but %s %s could have "
+            "drawn at most %.2f kWh since it last moved — %.2f kWh not booked "
+            "(the counter caught up on energy from outside this window)",
+            entity_id, step, "charger" if len(boxes) == 1 else "chargers",
+            ", ".join(boxes), room, foreign,
+        )
+        return foreign
+
+    def ev_counter_judged_kwh(
+        self, entity_id: Optional[str], value: Optional[float],
+    ) -> Optional[float]:
+        """(#1101) A tracked counter's reading as far as the step check has
+        seen it. A rise it has not judged yet (``calculate_energy`` skipped
+        this cycle) waits for the next cycle: booked now, a row could not
+        take a judged step back out of it."""
+        if (value is None or not self._ev_counter_enabled
+                or entity_id not in self._ev_counter_boxes):
+            return value
+        seen = self._ev_counter_seen.get(entity_id)
+        return seen if seen is not None and value > seen + 0.001 else value
+
+    def ev_counter_step_not_drawn(
+        self, entity_id: Optional[str],
+    ) -> Optional[Tuple[float, float]]:
+        """(#1101) This cycle's judged step of ``entity_id``, for readers of
+        the same counter outside this class (a session's total): the reading
+        before the step and the kWh of it no box drew. None: nothing judged."""
+        return self._ev_counter_foreign.get(entity_id) if entity_id else None
+
+    def _ev_unwatched_hours(
+        self, now: datetime, interval_hours: float,
+    ) -> Optional[float]:
+        """(#1101) Hours since the last tracked cycle that this cycle's
+        interval does not cover — SEM down, or a skipped cycle. None when
+        there is no last cycle to measure from."""
+        if self._ev_watched_at is None:
+            return None
+        try:
+            elapsed_h = (now - self._ev_watched_at).total_seconds() / 3600.0
+        except TypeError:  # a naive stored time against an aware clock
+            return None
+        return max(0.0, elapsed_h - interval_hours)
+
+    def _ev_box_max_kw(self) -> float:
+        """(#1101) The most one box can draw, in kW — see
+        ``EV_COUNTER_BOX_MAX_KW``. One box's share of ``_max_daily_ev_kwh``
+        when the boxes are set up larger."""
+        chargers = self.config.get("ev_chargers") or []
+        configured = self._max_daily_ev_kwh() / max(1, len(chargers)) / 24.0
+        return max(EV_COUNTER_BOX_MAX_KW, configured)
+
+    def _ev_box_power_live(
+        self, boxes: Tuple[str, ...], power: PowerReadings,
+        per_charger: Dict[str, float],
+    ) -> bool:
+        """(#1101) Did this cycle read each box's OWN power sensor as a
+        number? Only then does a read under the floor say the boxes are idle:
+        a dark sensor reads 0 W, and so does the fleet's sum for a box that is
+        not in it. The one fleet sensor counts for a counter of one box, when
+        that is the one counter SEM tracks or the one box with a counter of
+        its own (#1101). Never for several boxes (#1157): the Energy
+        Dashboard's sensor is its first EV device, and a top-level one may
+        be the primary's, so it cannot say the others are idle."""
+        lone_owner = tuple(self._ev_counter_owner.values())
+        if boxes and all(b in per_charger for b in boxes):
+            sensors: Dict[str, Any] = {}
+            for c in self.config.get("ev_chargers") or []:
+                if isinstance(c, dict):
+                    sensors.setdefault(c.get("id"),
+                                       c.get("ev_charging_power_sensor"))
+            entities = [sensors.get(b) for b in boxes]
+        elif not per_charger and len(boxes) == 1 and (
+                len(self._ev_counter_boxes) == 1 or boxes == lone_owner):
+            entities = [getattr(power, "ev_power_fleet_entity", None)]
+        else:
+            return False
+        return all(entity and self._power_state_live(entity)
+                   for entity in entities)
+
+    def _power_state_live(self, entity: str) -> bool:
+        """(#1101) The power sensor reads a number."""
+        state = self._hass.states.get(entity)
+        if state is None or state.state in ("unknown", "unavailable", None, ""):
+            return False
+        try:
+            return math.isfinite(float(state.state))
+        except (TypeError, ValueError):
+            return False
+
+    def _ev_settled(self, entities: List[str]) -> bool:
+        """(#1049) Every box behind these counters has stopped charging, and
+        each counter has reported since — nothing it counts is still owed."""
+        return not any(
+            self._ev_counter_pending.get(e, 0.0) > 0.0
+            or any(b in self._ev_owners_drawing
+                   for b in self._ev_counter_boxes.get(e, ()))
+            for e in entities
+        )
+
+    def _ev_counter_owes(self, entity_id: str) -> bool:
+        """(#1159) Is this counter's ``pending`` what its own boxes drew, so a
+        row may owe it at an anchor? Its boxes must be known: not the whole
+        fleet given as a guess (``guessed``). Each box must have been read on
+        its own power sensor (``_ev_counter_own_read``); else ``pending``
+        holds the fleet's draw (``_track_ev_pending``), which counts other
+        boxes and not this one. On a home with one box the fleet read is
+        that box's draw."""
+        boxes = self._ev_counter_boxes.get(entity_id, ())
+        if not boxes or entity_id in self._ev_counter_guessed:
+            return False
+        if entity_id in self._ev_counter_own_read:
+            return True
+        chargers = [c for c in self.config.get("ev_chargers") or []
+                    if isinstance(c, dict)]
+        return len(chargers) <= 1  # one box: the fleet read is its draw
+
+    def follow_charger_counter(
+        self,
+        cid: str,
+        day: str,
+        value: float,
+        counter: Optional[str],
+    ) -> float:
+        """(#1049) One charger's daily kWh, held to its OWN counter.
+
+        The fleet rows follow the counters (``_reconcile_ev_bucket``); the
+        per-charger rows the coordinator integrates must follow them too, or
+        the members would sum above a fleet row that moved down and the
+        per-charger card would keep the high read. Same model, one member,
+        and only while the fleet's set is complete — on a partial fleet the
+        fleet row stays upward-only, and members held to counters alone could
+        then sum above it. ``counter`` must be this charger's alone.
+        Returns the row's new value; ``value`` when there is nothing to follow.
+        """
+        if (not self._ev_counter_enabled or not self._hass or not counter
+                or not self._ev_counter_complete):
+            return value
+        bl = self._charger_counter_baselines.setdefault(cid, {})
+        if bl.get("counter") != counter:
+            # Another counter: its deltas start now, on the row as it stands.
+            # Kept, the old anchor would meet the new counter's zero delta and
+            # pull the day's earlier charging out of the row.
+            bl.clear()
+        target, all_read = self._ev_counter_target(
+            bl, day, [counter], value, True)
+        bl["counter"] = counter
+        chargers = self.config.get("ev_chargers") or []
+        one_box = self._max_daily_ev_kwh() / max(1, len(chargers))
+        adopted = None
+        if target is not None and target <= one_box:
+            adopted = self._ev_adoption(
+                f"charger {cid}", target, value, all_read,
+                self._ev_settled([counter]),
+            )
+        row = value if adopted is None else adopted
+        # (#1160) The row as this cycle leaves it, for the next day's anchor.
+        bl["row"] = row
+        return row
 
     def _tally_backing(self, category: str, today_str: str, backed: bool) -> None:
         """(#628 visibility) Count and announce counter-backing transitions.
@@ -2076,8 +3589,8 @@ class EnergyCalculator:
             log_on_change(
                 _LOGGER, f"backing:{category}", logging.INFO,
                 "%s: no longer counter-backed — a configured counter is "
-                "unreadable; the daily row runs on power integration alone "
-                "until it returns", category,
+                "unreadable or above the day's ceiling; the daily row runs on "
+                "power integration alone until it returns", category,
             )
         elif prev is False:
             log_on_change(
@@ -2112,11 +3625,13 @@ class EnergyCalculator:
         Same baseline/anchor/delta model as ``_reconcile_solar_energy``, with
         three deliberate differences:
 
-        - **BIDIRECTIONAL.** Solar and EV adopt upward only, because their
-          counters can only ever reveal energy the integrator missed. A grid
-          meter can prove the integrator counted energy that never flowed
-          (#628: export integrated 3.06 kWh against a meter reading 0.16),
-          so a downward correction has to be legal. Safe because every daily
+        - **BIDIRECTIONAL.** Solar adopts upward only: on a hybrid its counter
+          measures AC yield and trails PV production all day (bug class 28).
+          A grid meter can prove the integrator counted energy that never
+          flowed (#628: export integrated 3.06 kWh against a meter reading
+          0.16), so a downward correction has to be legal. EV joined this side
+          in #1049, once each box has stopped and its counter reported — see
+          ``_ev_adoption``. Safe because every daily
           energy sensor is ``SensorStateClass.TOTAL`` — a decrease is a
           correction, not a statistics reset.
         - **ALL-OR-NOTHING per category.** Upward-only was the safety net that
@@ -2166,7 +3681,7 @@ class EnergyCalculator:
             if not state or state.state in ("unknown", "unavailable", None):
                 continue
             value = self._energy_state_kwh(state)  # #551 unit-aware
-            if value >= 0:
+            if value is not None and value >= 0:
                 readings[entity_id] = value
 
         if len(readings) != len(entities):
@@ -2175,11 +3690,6 @@ class EnergyCalculator:
             # unavailable, and its delta is still owed once it returns.
             self._tally_backing(category, today_str, backed=False)
             return
-
-        # (#628) Complete read — this category's daily row is the hardware's
-        # this cycle, so the home balance may build on it.
-        self._counter_backed.add(category)
-        self._tally_backing(category, today_str, backed=True)
 
         # A counter that went BACKWARDS since its last reading (meter reboot,
         # a daily-type register resetting at midnight) invalidates the whole
@@ -2192,23 +3702,46 @@ class EnergyCalculator:
         if reset:
             bl["base"] = {}
             bl.pop("anchor", None)
+            bl.pop("beside_mark", None)
         for entity_id, value in readings.items():
             bl["base"].setdefault(entity_id, value)
             bl["last"][entity_id] = value
         bl.setdefault("anchor", integrated)
+        # (#1191 review) where the beside rows stood when the anchor was set:
+        # the first correction is split as what came after it
+        if _ROWS_BESIDE.get(category) and not isinstance(bl.get("beside_mark"), dict):
+            bl["beside_mark"] = {"row": integrated, "parts": {
+                beside: self._daily_accumulators.get(f"{beside}_{today}", 0.0)
+                for beside in _ROWS_BESIDE[category]}}
 
         counter_daily = sum(
             value - bl["base"][entity_id] for entity_id, value in readings.items()
         )
         target = max(0.0, bl["anchor"] + counter_daily)
 
-        if target > MAX_PLAUSIBLE_DAILY_KWH:
-            _LOGGER.warning(
-                "%s counter reconciliation target %.1f kWh exceeds the %.0f "
-                "kWh/day sanity ceiling — ignoring this cycle (unit mismatch?)",
-                category, target, MAX_PLAUSIBLE_DAILY_KWH,
-            )
+        # (#1218) The row's own ceiling, the one its cap below holds the day
+        # to. Adopted, a target above it moved the month, year and lifetime;
+        # the cap then wrote back only the day, and the next cycle added the
+        # same step again — and its cost, at a rate the step itself raised.
+        ceiling = self._daily_ceiling(category)
+        if target > ceiling:
+            if self._ceiling_warned.get(category) != today_str:
+                self._ceiling_warned[category] = today_str
+                _LOGGER.warning(
+                    "%s counter reconciliation target %.1f kWh exceeds the "
+                    "%.0f kWh/day sanity ceiling — ignoring the counter "
+                    "until it is back below (unit mismatch?)",
+                    category, target, ceiling,
+                )
+            # The row is the power sensor's now, not the counter's: the home
+            # balance may not build on it.
+            self._tally_backing(category, today_str, backed=False)
             return
+
+        # (#628) Complete read — this category's daily row is the hardware's
+        # this cycle, so the home balance may build on it.
+        self._counter_backed.add(category)
+        self._tally_backing(category, today_str, backed=True)
 
         delta = target - integrated
         if abs(delta) <= METER_RECONCILIATION_THRESHOLD:
@@ -2235,6 +3768,34 @@ class EnergyCalculator:
             # max(0.0) — the delta can now be negative, and a longer period
             # must never be dragged below zero by one day's correction.
             accumulators[key] = max(0.0, accumulators.get(key, 0.0) + delta)
+        # (#1191 review) A row booked beside this one keeps its share: the
+        # flows give the split, the meter the size. Left as integrated, a
+        # meter 10 % ahead of a big sale put the gap on solar's export. The
+        # correction is split as what was added since the last one was —
+        # the morning's sale is not moved by an afternoon's drift.
+        mark = bl.get("beside_mark")
+        if not isinstance(mark, dict):
+            mark = {"row": 0.0, "parts": {}}
+        added = integrated - float(mark.get("row") or 0.0)
+        parts = {}
+        for beside in _ROWS_BESIDE.get(category, ()):
+            part = self._daily_accumulators.get(f"{beside}_{today}", 0.0)
+            before = float((mark.get("parts") or {}).get(beside) or 0.0)
+            share = (min(1.0, max(0.0, (part - before) / added))
+                     if added > 0 else 0.0)
+            moved = max(-part, min(target - part, delta * share))
+            parts[beside] = part + moved
+            if not moved:
+                continue
+            self._daily_accumulators[f"{beside}_{today}"] = part + moved
+            for accumulators, key in (
+                (self._monthly_accumulators, f"{beside}_{month_key}"),
+                (self._yearly_accumulators, f"{beside}_{year_key}"),
+                (self._lifetime_accumulators, f"lifetime_{beside}"),
+            ):
+                accumulators[key] = max(0.0, accumulators.get(key, 0.0) + moved)
+        if parts:
+            bl["beside_mark"] = {"row": target, "parts": parts}
 
         if cost_key and rate:
             # (#795) The drift happened across the day; price it at the
@@ -2248,8 +3809,16 @@ class EnergyCalculator:
             daily_cost = self._daily_cost_accumulators.get(
                 f"{cost_key}_{today}", 0.0
             )
-            if integrated > 0.05 and daily_cost > 0:
-                rate = daily_cost / integrated
+            booked = integrated
+            if cost_key == "cost_import":
+                # (#1228) the house's own average: the kWh an own-tariff
+                # device took are at its price, and the counters' extra
+                # import is the house's unless a device meter claims it
+                taken, taken_cost = self._device_taken(today)
+                booked -= taken
+                daily_cost -= taken_cost
+            if booked > 0.05 and daily_cost > 0:
+                rate = daily_cost / booked
             cost_delta = delta * rate
             for accumulators, key in (
                 (self._daily_cost_accumulators, f"{cost_key}_{today}"),
@@ -2361,6 +3930,8 @@ class EnergyCalculator:
             )
             return
 
+        # (#1228) the home row is the counters' balance this cycle
+        self._counter_backed.add("home")
         daily_key = f"home_{today}"
         integrated = self._daily_accumulators.get(daily_key, 0.0)
         delta = target - integrated
@@ -2393,6 +3964,23 @@ class EnergyCalculator:
             # max(0.0) — the delta is bidirectional, and a longer period must
             # never be dragged below zero by one day's correction.
             accumulators[key] = max(0.0, accumulators.get(key, 0.0) + delta)
+
+    def _daily_ceiling(self, category: str) -> float:
+        """(#1218) The most one day's row of ``category`` may hold.
+
+        One figure for both places that judge it: the cap at the end of
+        ``calculate_energy`` and the counter corrections before it. The cap
+        writes the day alone; a correction moves the month, year and lifetime
+        with it. A correction may therefore never adopt what the cap would
+        cut. EV has its own (``_max_daily_ev_kwh``).
+        """
+        if category in ("battery_charge", "battery_discharge"):
+            # 3 full cycles/day is generous limit
+            return self.config.get("battery_capacity_kwh", 15) * 3
+        if category == "solar":
+            # 16 peak sun hours is extreme max
+            return self.config.get("system_size_kwp", 10) * 16
+        return MAX_PLAUSIBLE_DAILY_KWH
 
     def _max_daily_ev_kwh(self) -> float:
         """Physical ceiling for one day of fleet EV charging.
@@ -2481,19 +4069,46 @@ class EnergyCalculator:
             costs.yearly_savings + costs.yearly_battery_savings, 2,
         )
 
-        # Environmental impact (CO2 avoided by self-consuming solar)
-        daily_self_consumed = max(0, energy.daily_solar - energy.daily_grid_export)
-        yearly_self_consumed = max(0, energy.yearly_solar - energy.yearly_grid_export)
+        # (#1077) The value layer's books — 0 until a value field is set.
+        costs.daily_self_consumption_value = self._get_daily_cost(VALUE_SELF_CONSUMPTION, today)
+        costs.yearly_self_consumption_value = self._get_yearly_cost(VALUE_SELF_CONSUMPTION, year_key)
+        costs.daily_export_value = self._get_daily_cost(VALUE_EXPORT, today)
+        costs.yearly_export_value = self._get_yearly_cost(VALUE_EXPORT, year_key)
+        costs.daily_feed_in_fees = self._get_daily_cost(VALUE_FEED_IN_FEE, today)
+        costs.yearly_feed_in_fees = self._get_yearly_cost(VALUE_FEED_IN_FEE, year_key)
+
+        # Environmental impact (CO2 avoided by self-consuming solar).
+        # (#1191) Only solar's part of the export was ever in the solar total;
+        # a battery sale is taken out of the export first.
+        daily_self_consumed = max(0, energy.daily_solar - solar_export(
+            energy.daily_grid_export, energy.daily_grid_export_battery))
+        yearly_self_consumed = max(0, energy.yearly_solar - solar_export(
+            energy.yearly_grid_export, energy.yearly_grid_export_battery))
         lifetime_solar = self._get_lifetime("solar")
         lifetime_export = self._get_lifetime("grid_export")
-        lifetime_self_consumed = max(0, lifetime_solar - lifetime_export)
+        lifetime_self_consumed = max(0, lifetime_solar - solar_export(
+            lifetime_export, self._get_lifetime(GRID_EXPORT_BATTERY_CATEGORY)))
 
-        costs.daily_co2_avoided_kg = round(daily_self_consumed * GRID_CO2_KG_PER_KWH, 2)
-        costs.yearly_co2_avoided_kg = round(yearly_self_consumed * GRID_CO2_KG_PER_KWH, 1)
+        # (#1088) + the live-intensity correction (0 while the flag is off
+        # and before it ever ran). Never below 0: CO2 avoided is a saving.
+        daily_co2 = max(0.0, daily_self_consumed * GRID_CO2_KG_PER_KWH
+            + self._co2_correction("daily", today))
+        costs.daily_co2_avoided_kg = round(daily_co2, 2)
+        # (#1221) The two numbers behind it, for the Energy Impact card: the
+        # kWh it counts and the kg per kWh it used today (the day's average
+        # once the live value counts), at the precision the card shows. While
+        # the kWh still shows 0.0, an average says nothing: the rate now.
+        costs.daily_co2_solar_used_kwh = round(daily_self_consumed, 1)
+        costs.daily_co2_kg_per_kwh = round(
+            daily_co2 / daily_self_consumed if costs.daily_co2_solar_used_kwh > 0
+            else self.grid_co2_kg_now(), 3)
+        costs.yearly_co2_avoided_kg = round(max(0.0, yearly_self_consumed * GRID_CO2_KG_PER_KWH
+            + self._co2_correction("yearly", year_key)), 1)
         costs.yearly_trees_equivalent = round(
             costs.yearly_co2_avoided_kg / CO2_KG_PER_TREE_PER_YEAR, 1
         )
-        costs.lifetime_co2_avoided_kg = round(lifetime_self_consumed * GRID_CO2_KG_PER_KWH, 1)
+        costs.lifetime_co2_avoided_kg = round(max(0.0, lifetime_self_consumed * GRID_CO2_KG_PER_KWH
+            + self._co2_correction("lifetime", None)), 1)
         costs.lifetime_trees_equivalent = round(
             costs.lifetime_co2_avoided_kg / CO2_KG_PER_TREE_PER_YEAR, 1
         )
@@ -2597,12 +4212,15 @@ class EnergyCalculator:
             None if _share is None else round(_share * 100, 1)
         )
 
-        # Self consumption rate = (solar - export) / solar — direction-of-
-        # flow-agnostic; whatever solar didn't go to the grid was
-        # consumed locally (by home, battery, or EV). No flow attribution
-        # needed.
+        # Self consumption rate = (solar - solar's export) / solar; whatever
+        # solar didn't send to the grid was consumed locally (by home,
+        # battery, or EV). (#1191) So the battery's part of the export (a
+        # sale) is the pack's, not solar's: taken away with it, a sunless
+        # morning's sale read below 0 %, the clamp held 0 % and the health
+        # check fired.
         if energy.daily_solar > 0:
-            solar_used = energy.daily_solar - energy.daily_grid_export
+            solar_used = energy.daily_solar - solar_export(
+                energy.daily_grid_export, energy.daily_grid_export_battery)
             metrics.self_consumption_rate = round(
                 (solar_used / energy.daily_solar) * 100, 1
             )
@@ -2744,6 +4362,38 @@ class EnergyCalculator:
             2,
         )
 
+    def ev_day_flows(self) -> Optional[Tuple[float, float, float]]:
+        """(#1046) kWh the flows sent to the car this EV day — solar, grid,
+        battery — on the day key ``daily_ev`` was last read from, so the two
+        never straddle a rollover. None on the EV day the rows were first
+        booked on: it began before them, so they are short."""
+        ev_day = getattr(self, "_daily_ev_day", None)
+        if ev_day is None:
+            ev_day = self._ev_reset_day(dt_util.now())
+        since = getattr(self, "_ev_flow_since", None)
+        if since is None or ev_day <= since:
+            return None
+        return tuple(
+            self._daily_accumulators.get(f"{category}_{ev_day}", 0.0)
+            for _, category in EV_DAY_FLOW_CATEGORIES
+        )
+
+    def _note_ev_rollover(self, ev_day: date) -> None:
+        """(#1176) Record the moment ``daily_ev`` moves to a new car day —
+        whatever rolled it: the Charge-by time, sunrise, a changed setting,
+        a restart across the boundary. It falls to 0 right then."""
+        seen = getattr(self, "_ev_seen_day", None)
+        if seen is not None and ev_day != seen:
+            self._ev_rolled_at = dt_util.now()
+        self._ev_seen_day = ev_day
+
+    def ev_last_reset(self) -> Optional[datetime]:
+        """(#1176) When ``daily_ev`` last fell to 0: the car-day sensor's
+        ``last_reset``. None until the first rollover this code saw — the
+        sensor then keeps midnight, as before. Moving it mid-day on the
+        upgrade would make the recorder count the day's kWh again."""
+        return getattr(self, "_ev_rolled_at", None)
+
     def _get_daily(self, category: str, today: date) -> float:
         """Get daily accumulated energy."""
         key = f"{category}_{today}"
@@ -2768,6 +4418,53 @@ class EnergyCalculator:
         """Get yearly accumulated energy."""
         key = f"{category}_{year_key}"
         return round(self._yearly_accumulators.get(key, 0.0), 2)
+
+    def set_value_rates(self, tariff: Any) -> None:
+        """(#1077) This cycle's value-layer numbers, from the tariff
+        snapshot. Anything unreadable switches the books off for the cycle
+        rather than booking a guess."""
+        try:
+            self._value_layer_on = getattr(tariff, "value_layer_on", False) is True
+            spot = getattr(tariff, "current_export_spot_rate", None)
+            self._export_spot_rate = None if spot is None else float(spot)
+            self._feed_in_fee_rate = float(getattr(tariff, "feed_in_fee_rate", 0.0) or 0.0)
+            self._feed_in_fixed_monthly = float(
+                getattr(tariff, "feed_in_fixed_monthly", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            self._value_layer_on = False
+
+    def export_year_to_date_kwh(self, now: Optional[datetime] = None) -> float:
+        """(#1077) kWh exported this calendar year (local time).
+
+        The yearly export accumulator: persisted with the others in SEM's
+        store, seeded from the recorder for a mid-year install, and keyed by
+        the year — so on 1 January it reads 0 without a reset of its own.
+        """
+        now = now or dt_util.now()
+        return self._get_yearly("grid_export", str(now.year))
+
+    def set_grid_co2_intensity(self, kg_per_kwh: Optional[float], live: bool) -> None:
+        """(#1088) This cycle's grid CO2 intensity (kg/kWh; None = no usable
+        reading) and whether the soak flag lets it count."""
+        self._grid_co2_kg = kg_per_kwh
+        self._co2_live = bool(live)
+
+    def grid_co2_kg_now(self) -> float:
+        """(#1088) The kg/kWh a grid kWh counts at right now: the live
+        intensity when the soak flag lets it count and a reading exists,
+        else the fixed Swiss average — one rule for every CO2 number."""
+        if self._co2_live and self._grid_co2_kg is not None:
+            return float(self._grid_co2_kg)
+        return GRID_CO2_KG_PER_KWH
+
+    def _co2_correction(self, period: str, key) -> float:
+        """(#1088) The accumulated live-intensity correction, unrounded."""
+        c = CO2_CORRECTION_CATEGORY
+        if period == "daily":
+            return self._daily_accumulators.get(f"{c}_{key}", 0.0)
+        if period == "yearly":
+            return self._yearly_accumulators.get(f"{c}_{key}", 0.0)
+        return self._lifetime_accumulators.get(f"lifetime_{c}", 0.0)
 
     def _get_lifetime(self, category: str) -> float:
         """Get lifetime accumulated energy."""
@@ -2847,6 +4544,298 @@ class EnergyCalculator:
             "monthly_kwh": self._get_monthly(category, self._month_key(meter_day)),
             "yearly_kwh": self._get_yearly(category, str(meter_day.year)),
             "lifetime_kwh": self._get_lifetime(category),
+        }
+
+    def set_device_tariff_cycle(self, entries) -> None:
+        """(#812) The own-tariff devices of THIS cycle (``DeviceCycle``),
+        staged by the coordinator before ``calculate_energy`` books it."""
+        self._device_tariff_cycle = list(entries or ())
+
+    def _import_cost(self, import_kwh: float, interval_hours: float,
+                     power, power_flows, today: date,
+                     month_key: str, year_key: str) -> float:
+        """(#812) The money of THIS cycle's import, split where it is booked.
+
+        Each own-tariff device's use this cycle — its own meter's step, else
+        its draw × the cycle time — times the grid's share of the house this
+        cycle is its grid kWh: the rest of what it used came from the sun or
+        the pack. When the devices' grid kWh add up to more than this
+        cycle's import, they share the import in proportion (order does not
+        matter). The rest of the import is the house's, at the house rate.
+
+        One booking, one total: nothing is moved later, nothing waits for a
+        later cycle, a device kWh is never counted twice. A meter baseline is
+        written back HERE, where its step is booked: a cycle that returns
+        early leaves the step for the next one.
+
+        (#1228) Not a meter step over more time than a cycle: SEM down, a
+        skipped cycle, a meter dark for minutes. This cycle's import and
+        share say nothing of that time, so the step is held and booked
+        against the house rows over the same time (``_settle_meter_gaps``).
+        """
+        from .device_tariff import grid_share
+        house_rate = float(self._import_rate or 0.0)
+        entries, self._device_tariff_cycle = self._device_tariff_cycle, []
+        left = max(0.0, float(import_kwh or 0.0))
+        share = grid_share(getattr(power_flows, "grid_to_home", 0.0),
+                           getattr(power, "home_consumption_power", 0.0))
+        wants = []
+        self._meter_staged = {e.device_id for e in entries if e.meter}
+        for e in entries:
+            held = False
+            if e.meter and e.baseline is not None:
+                held = self._hold_meter_gap(e)
+                self.device_meter_last[e.device_id] = dict(e.baseline)
+                self._meter_written.add(e.device_id)
+            if e.meter:
+                used = 0.0 if held else max(0.0, e.meter_kwh)
+            else:
+                used = max(0.0, e.power_w) * interval_hours / 1000.0
+            wants.append(used * share)
+        total = sum(wants)
+        scale = min(1.0, left / total) if total > 0 else 0.0
+        cost = 0.0
+        for e, want in zip(entries, wants, strict=True):
+            kwh = want * scale
+            if kwh <= 0:
+                continue
+            price = house_rate if e.price is None else float(e.price)
+            self._accumulate(f"{DEVICE_TARIFF_KWH}{e.device_id}", today,
+                             month_key, year_key, kwh)
+            self._accumulate_cost(f"{DEVICE_TARIFF_COST}{e.device_id}", today,
+                                  month_key, year_key, kwh * price)
+            cost += kwh * price
+            left -= kwh
+        return cost + max(0.0, left) * house_rate
+
+    def _hold_meter_gap(self, entry) -> bool:
+        """(#1228) Hold a meter step that covers more than one cycle.
+
+        True when the step since the device's last booked read spans more
+        than ``MAX_INTEGRATION_GAP_SECONDS`` — the limit the integrator
+        skips a cycle at. The step waits in ``device_meter_gaps`` with the
+        house rows stamped on that read. A second such step before the
+        first is settled joins it: one span, from the older start.
+        """
+        step = max(0.0, float(entry.meter_kwh or 0.0))
+        last = self.device_meter_last.get(entry.device_id)
+        if step <= 0.0 or not isinstance(last, dict):
+            return False
+        try:
+            span_s = (datetime.fromisoformat(str(entry.baseline["at"]))
+                      - datetime.fromisoformat(str(last["at"]))).total_seconds()
+        except (KeyError, TypeError, ValueError):
+            return False
+        if span_s <= MAX_INTEGRATION_GAP_SECONDS:
+            return False
+        gap = self.device_meter_gaps.get(entry.device_id)
+        if isinstance(gap, dict) and _finite(gap.get("kwh")):
+            gap["kwh"] = float(gap["kwh"]) + step
+            gap["price"] = entry.price
+            gap.pop("wait", None)
+        else:
+            self.device_meter_gaps[entry.device_id] = {
+                "kwh": step, "since": str(last["at"]),
+                "rows": last.get("rows"), "price": entry.price}
+        return True
+
+    def _device_taken(self, today: date) -> Tuple[float, float]:
+        """(#1228) The grid kWh and their cost own-tariff devices took of
+        the day's import."""
+        suffix = f"_{today}"
+        return (
+            sum(v for k, v in self._daily_accumulators.items()
+                if k.startswith(DEVICE_TARIFF_KWH) and k.endswith(suffix)),
+            sum(v for k, v in self._daily_cost_accumulators.items()
+                if k.startswith(DEVICE_TARIFF_COST) and k.endswith(suffix)),
+        )
+
+    def _meter_rows(self, today: date) -> Dict[str, Any]:
+        """(#1228) The house rows a meter step's span is read against: the
+        day's grid import and its cost, what the house, the batteries and
+        the car used, and what own-tariff devices already took of the
+        import. With the time this run has integrated."""
+        suffix = f"_{today}"
+        rows = self._daily_accumulators
+        taken, taken_cost = self._device_taken(today)
+        return {
+            "day": str(today),
+            "import": rows.get(f"grid_import{suffix}", 0.0),
+            "cost": self._daily_cost_accumulators.get(f"cost_import{suffix}", 0.0),
+            "used": sum(rows.get(f"{c}{suffix}", 0.0) for c in (
+                "home", "battery_charge", MIDNIGHT_EV_CATEGORY)),
+            "taken": taken, "taken_cost": taken_cost,
+            "seen": self._seen_s, "run": self._run_token,
+            "rise": self._dark_rise(),
+        }
+
+    def _settle_meter_gaps(self, today: date, month_key: str, year_key: str,
+                           now: datetime) -> None:
+        """(#1228) Book each held meter step against the house rows over
+        the same span, then stamp this cycle's rows on the new baselines.
+
+        A cycle's import and share say nothing of time no cycle booked. The
+        rows do, once they cover it: SEM watched all of the span, or every
+        counter and the home balance are read this cycle (the counters kept
+        counting while SEM was down). The device's grid kWh are its step ×
+        the grid's share of what the house, the batteries and the car used
+        over the span, at most the import no device took; steps settled in
+        one cycle share that in proportion. They leave the house cost at
+        the rate the house booked them.
+
+        Waits up to ``SOLAR_GAP_WAIT_S`` for the counters once HA runs, as
+        the solar step does (#1187). Dropped, and said, when the rows cannot
+        cover the span: no grid import counter (the house lost that import
+        too), PV with no solar counter and the sun up, a new day (the day's
+        rows start again), no rows at the start (a store from before), the
+        device off its own meter, or the wait is over.
+        """
+        rows = self._meter_rows(today)
+        ready = []
+        for did in sorted(self.device_meter_gaps):
+            gap = self.device_meter_gaps[did]
+            why = (self._meter_gap_unread(gap, rows, now)
+                   if did in self._meter_staged
+                   else "the device has no own meter now")
+            if why == "wait":
+                continue
+            del self.device_meter_gaps[did]
+            if why is None:
+                ready.append((did, gap))
+            else:
+                _LOGGER.info(
+                    "Own meter of %s: %.3f kWh over time SEM did not book — "
+                    "not priced, %s (#1228)", did, _as_float(gap.get("kwh")), why)
+        if ready:
+            self._book_meter_gaps(ready, rows, today, month_key, year_key)
+        if self._meter_written:
+            rows = self._meter_rows(today)
+            for did in self._meter_written:
+                if isinstance(self.device_meter_last.get(did), dict):
+                    self.device_meter_last[did]["rows"] = dict(rows)
+            self._meter_written = set()
+
+    def _dark_rise(self) -> Optional[str]:
+        """(#1228) While the sun is down, its next rising as ``sun.sun``
+        says; the same text at both ends of a span = no sunrise inside."""
+        if not self._sun_is_down():
+            return None
+        attrs = getattr(self._hass.states.get("sun.sun"), "attributes", None)
+        rise = attrs.get("next_rising") if hasattr(attrs, "get") else None
+        return str(rise) if rise else None
+
+    def _meter_gap_unread(self, gap: Dict[str, Any], rows: Dict[str, Any],
+                          now: datetime) -> Optional[str]:
+        """(#1228) None = the rows cover the held step's span; "wait" = not
+        yet; else why they never will."""
+        start = gap.get("rows")
+        if not isinstance(start, dict) or not all(
+                _finite(start.get(k)) for k in
+                ("import", "cost", "used", "taken", "taken_cost", "seen")):
+            return "no house rows at its start"
+        if start.get("day") != rows["day"]:
+            return "a new day began"
+        try:
+            span_s = (now - datetime.fromisoformat(str(gap["since"]))).total_seconds()
+        except (KeyError, TypeError, ValueError):
+            return "its start cannot be read"
+        seen = (rows["seen"] - float(start["seen"])
+                if start.get("run") == rows["run"] else 0.0)
+        if span_s - seen <= MAX_INTEGRATION_GAP_SECONDS:
+            return None   # SEM integrated the whole span
+        if not (self._meter_counter_enabled
+                and self._meter_counter_entities.get("grid_import")):
+            return "no grid import counter covers the time SEM did not see"
+        # PV with no counter: its row says nothing of that time, unless the
+        # sun stayed down from the start to now
+        if (not self._solar_counter_enabled
+                and self._lifetime_accumulators.get("lifetime_solar", 0.0) > 0
+                and (start.get("rise") is None
+                     or start.get("rise") != self._dark_rise())):
+            return "no solar counter covers that time, and the sun may have been up"
+        # every counter read this cycle, not only the import: the home
+        # balance takes a row still near 0 as no flow, and a battery counter
+        # still loading after a restart would read the span as all grid
+        needed = set(self._meter_counter_entities) | {"home"}
+        if self._solar_counter_enabled:
+            needed.add("solar")
+        if needed <= self._counter_backed:
+            return None
+        from homeassistant.core import CoreState
+        if getattr(self._hass, "state", None) is not CoreState.running:
+            return "wait"   # entities still loading (bug class 86)
+        # the clock runs while HA runs: a restart starts it again
+        wait = gap.get("wait") if isinstance(gap.get("wait"), dict) else {}
+        try:
+            if wait.get("run") != self._run_token:
+                raise ValueError
+            waited = (now - datetime.fromisoformat(str(wait["at"]))).total_seconds()
+        except (KeyError, TypeError, ValueError):
+            gap["wait"] = {"at": now.isoformat(), "run": self._run_token}
+            return "wait"
+        if waited < SOLAR_GAP_WAIT_S:
+            return "wait"
+        return "its counters were not all read in time"
+
+    def _book_meter_gaps(self, ready: List[Tuple[str, Dict[str, Any]]],
+                         rows: Dict[str, Any], today: date, month_key: str,
+                         year_key: str) -> None:
+        """(#1228) The held steps' grid kWh, moved from the house cost to
+        each device's own price."""
+        plans = []
+        for did, gap in ready:
+            start = gap["rows"]
+            d_import = rows["import"] - float(start["import"])
+            d_used = rows["used"] - float(start["used"])
+            free = d_import - (rows["taken"] - float(start["taken"]))
+            free_cost = ((rows["cost"] - float(start["cost"]))
+                         - (rows["taken_cost"] - float(start["taken_cost"])))
+            share = max(0.0, min(1.0, d_import / d_used)) if d_used > 0 else 0.0
+            want = max(0.0, _as_float(gap.get("kwh"))) * share
+            plans.append((did, gap, want, free, free_cost))
+        # at most the import no device took; several steps in one cycle
+        # share the least such import in proportion
+        total = sum(p[2] for p in plans)
+        least = min(p[3] for p in plans)
+        scale = min(1.0, max(0.0, least) / total) if total > 0 else 0.0
+        for did, gap, want, free, free_cost in plans:
+            kwh = want * scale
+            if kwh <= 0.0:
+                _LOGGER.info("Own meter of %s: %.3f kWh over time SEM did not "
+                             "book — none of it from the grid (#1228)",
+                             did, _as_float(gap.get("kwh")))
+                continue
+            # what the house paid a kWh of that import; the device's own
+            # price as the house prices a gap (#795): its day's average, else
+            # its price at the read after the gap, else the house's
+            house = free_cost / free
+            own_kwh = self._daily_accumulators.get(
+                f"{DEVICE_TARIFF_KWH}{did}_{today}", 0.0)
+            own_cost = self._daily_cost_accumulators.get(
+                f"{DEVICE_TARIFF_COST}{did}_{today}", 0.0)
+            if own_kwh > 0.05:
+                price = own_cost / own_kwh
+            elif _finite(gap.get("price")):
+                price = float(gap["price"])
+            else:
+                price = house
+            self._accumulate(f"{DEVICE_TARIFF_KWH}{did}", today, month_key,
+                             year_key, kwh)
+            self._accumulate_cost(f"{DEVICE_TARIFF_COST}{did}", today,
+                                  month_key, year_key, kwh * price)
+            self._accumulate_cost("cost_import", today, month_key, year_key,
+                                  kwh * (price - house))
+            _LOGGER.info("Own meter of %s: %.3f of %.3f kWh over time SEM did "
+                         "not book were from the grid, priced at %.4f (#1228)",
+                         did, kwh, _as_float(gap.get("kwh")), price)
+
+    def get_device_tariff(self, device_id: str, day: date) -> Dict[str, float]:
+        """(#812) Today's grid kWh and cost of a device on its own tariff."""
+        return {
+            "daily_grid_kwh": self._get_daily(
+                f"{DEVICE_TARIFF_KWH}{device_id}", day),
+            "daily_cost": self._get_daily_cost(
+                f"{DEVICE_TARIFF_COST}{device_id}", day),
         }
 
     def get_device_splits(self, device_id: str, meter_day: date) -> Dict[str, float]:
@@ -3018,6 +5007,13 @@ class EnergyCalculator:
             # — and most houses').
             "estimated_kwh": round(estimated, 3),
             "devices": devices,
+            # (#1044) True when the whole day was booked with SEM's own
+            # chargers left out of the mirror. The upgrade day is not: its
+            # morning may hold a charger booked under the old rule.
+            "home_members_only": (
+                self._home_members_since is not None
+                and day > self._home_members_since
+            ),
         })
 
     # ── (#770) battery charge, by where the energy came from ───────────
@@ -3112,17 +5108,30 @@ class EnergyCalculator:
 
         self.accumulate_battery_charge_split(solar_kwh, grid_kwh, today)
 
-        charging = {
-            bid: bp.power_w
-            for bid, bp in (getattr(power, "batteries", None) or {}).items()
-            if float(getattr(bp, "power_w", 0.0) or 0.0) > 0
-        }
+        charging = self._charging_units(power)
         for bid, (b_solar, b_grid) in allocate_fleet_charge(
             charging, solar_kwh, grid_kwh,
         ).items():
             self._battery_provenance.charge(
                 bid, b_solar, b_grid, self._import_rate,
             )
+
+    def _charging_units(self, power: PowerReadings) -> Dict[str, float]:
+        """(#1203 review) Each charging battery's watts, for the per-battery
+        split. While the battery is held (#1177, #1186) the charge booked is
+        the held figure, and a dark unit reads 0 W here: the live units
+        would take its charge. So the shares come from the last live read,
+        as the flow shares do (``_battery_flows``)."""
+        if "battery" in self._integral_held:
+            return dict(self._battery_live_charging)
+        charging = {
+            bid: bp.power_w
+            for bid, bp in (getattr(power, "batteries", None) or {}).items()
+            if float(getattr(bp, "power_w", 0.0) or 0.0) > 0
+        }
+        if "battery" in self._integral_live:
+            self._battery_live_charging = dict(charging)
+        return charging
 
     def _battery_discharge_savings(
         self, power: PowerReadings, discharge_increment: float,
@@ -3254,7 +5263,10 @@ class EnergyCalculator:
         daily_grid_import = self._daily_accumulators.get(f"grid_import_{today_str}", 0.0)
         daily_grid_export = self._daily_accumulators.get(f"grid_export_{today_str}", 0.0)
         daily_solar = self._daily_accumulators.get(f"solar_{today_str}", 0.0)
-        daily_self_consumed = max(0, daily_solar - daily_grid_export)
+        # (#1191) the same solar part of the export the rate and CO2 use
+        daily_self_consumed = max(0, daily_solar - solar_export(
+            daily_grid_export, self._daily_accumulators.get(
+                f"{GRID_EXPORT_BATTERY_CATEGORY}_{today_str}", 0.0)))
 
         # Use incremental cost accumulators (rate-weighted, accurate for dynamic tariffs)
         daily_cost = self._daily_cost_accumulators.get(f"cost_import_{today_str}", 0.0)
@@ -3298,10 +5310,11 @@ class EnergyCalculator:
         """Check for day/month rollover and cleanup old accumulators.
 
         EV keys (``ev_*``) are excluded — they use the sunrise/deadline-based
-        day and get cleaned up separately (older than yesterday). No other
-        accumulator category starts with "ev", so the prefix is unambiguous;
-        the categories are solar, home, ev, grid_import, grid_export,
-        battery_charge, battery_discharge.
+        day and get cleaned up separately (older than yesterday). The other
+        categories are solar, home, grid_import, grid_export, battery_charge,
+        battery_discharge; the only other ``ev_`` rows are the car's flow
+        split on the EV day (``EV_DAY_FLOW_CATEGORIES``, #1046), which must
+        survive midnight for the same reason.
 
         (#769) Per-device keys (``device:*``) get the same exemption, for the
         same reason and one more: a device's day rolls at SUNRISE, so between
@@ -3411,8 +5424,17 @@ class EnergyCalculator:
             "yearly_cost_accumulators": self._yearly_cost_accumulators.copy(),
             "last_update": self._last_update.isoformat() if self._last_update else None,
             "yearly_seeded": self._yearly_seeded,
+            # (#1043) the counters the lifetime seed added up. Lost, a seed
+            # from the first tariff only could not be told from a good one.
+            "lifetime_seed_counters": (
+                {cat: list(ids) for cat, ids in self._lifetime_seed_counters.items()}
+                if self._lifetime_seed_counters is not None else None
+            ),
             "yearly_cost_seeded": self._yearly_cost_seeded,
             "rate_history": list(self._rate_history),
+            "device_meter_last": dict(self.device_meter_last),   # (#812)
+            # (#1228) a step over an outage still waiting for its rows
+            "device_meter_gaps": dict(self.device_meter_gaps),
             "accumulated_savings": self._accumulated_savings,
             "accumulated_battery_savings": self._accumulated_battery_savings,
             "accumulated_cost": self._accumulated_cost,
@@ -3430,6 +5452,29 @@ class EnergyCalculator:
             # restart and the first cycle re-baselines at the current counter
             # value — the downtime delta is silently discarded.
             "ev_counter_baselines": dict(self._ev_counter_baselines),
+            # (#1049) each charger's own row, same reason.
+            "charger_counter_baselines": {
+                cid: dict(bl)
+                for cid, bl in self._charger_counter_baselines.items()
+            },
+            # (#1049) and what each box drew since its counter last moved:
+            # lost, a cloud counter's unreported session would come out of
+            # the row at the first cycle after a restart.
+            "ev_counter_pending": {
+                "pending": dict(self._ev_counter_pending),
+                "seen": dict(self._ev_counter_seen),
+                # (#1101) and the most each box could have drawn unseen, with
+                # the last cycle that kept it: the time SEM is down counts too.
+                "room": dict(self._ev_counter_room),
+                "unreported": dict(self._ev_counter_unreported),
+                "idle_h": dict(self._ev_counter_idle_h),
+                "unseen_kwh": dict(self._ev_counter_unseen_kwh),
+                "quiet_h": dict(self._ev_counter_quiet_h),
+                # (#1161) and every kWh each counter's boxes drew
+                "drawn_total": dict(self._ev_counter_drawn_total),
+                "watched_at": (self._ev_watched_at.isoformat()
+                               if self._ev_watched_at else None),
+            },
             # (#628) same again for the grid/battery meters — a restart in the
             # middle of the day must not forget where today's registers
             # started, or the anchor re-lands on the current daily value and
@@ -3449,6 +5494,14 @@ class EnergyCalculator:
             # pair a restart re-derives the day from whatever the deadline is
             # NOW, which is exactly the retroactive re-bucket ``_ev_reset_day``
             # defends against — the bug would simply return on the next reboot.
+            "ev_seen_day": (
+                self._ev_seen_day.isoformat()
+                if getattr(self, "_ev_seen_day", None) else None
+            ),
+            "ev_rolled_at": (
+                self._ev_rolled_at.isoformat()
+                if getattr(self, "_ev_rolled_at", None) else None
+            ),
             "ev_day_offset": self._ev_day_offset,
             "ev_day_key": (
                 self._ev_day_key.isoformat() if self._ev_day_key else None
@@ -3463,6 +5516,14 @@ class EnergyCalculator:
             # weeks after every reboot — the exact window a post-upgrade
             # sensor fault most needs catching in.
             "baseload_history": list(self._baseload_history),
+            "home_members_since": (
+                self._home_members_since.isoformat()
+                if self._home_members_since else None
+            ),
+            "ev_flow_since": (
+                self._ev_flow_since.isoformat()
+                if self._ev_flow_since else None
+            ),
         }
 
     @staticmethod
@@ -3522,6 +5583,23 @@ class EnergyCalculator:
             self._yearly_cost_accumulators = state.get("yearly_cost_accumulators", {})
             self._yearly_seeded = state.get("yearly_seeded", False)
             self._yearly_cost_seeded = state.get("yearly_cost_seeded", False)
+            self._lifetime_seed_counters = _as_seed_counters(
+                state.get("lifetime_seed_counters"))
+            # (#812) a corrupt entry is dropped, never a reason to fail restore
+            _ml = state.get("device_meter_last")
+            self.device_meter_last = {
+                str(k): dict(v) for k, v in (_ml.items() if isinstance(_ml, dict) else ())
+                if isinstance(v, dict) and isinstance(v.get("value"), (int, float))
+                and not isinstance(v.get("value"), bool)
+                and math.isfinite(float(v["value"]))
+                and isinstance(v.get("entity"), str) and isinstance(v.get("date"), str)
+                and isinstance(v.get("at"), str)}
+            # (#1228) the same: a held step needs its kWh and its start
+            _mg = state.get("device_meter_gaps")
+            self.device_meter_gaps = {
+                str(k): dict(v) for k, v in (_mg.items() if isinstance(_mg, dict) else ())
+                if isinstance(v, dict) and _finite(v.get("kwh"))
+                and isinstance(v.get("since"), str)}
             rate_history = state.get("rate_history", [])
             self._rate_history = deque(
                 rate_history if isinstance(rate_history, list) else [], maxlen=30
@@ -3547,6 +5625,46 @@ class EnergyCalculator:
             ev_baselines = state.get("ev_counter_baselines")
             if isinstance(ev_baselines, dict):
                 self._ev_counter_baselines = ev_baselines
+            pending = state.get("ev_counter_pending")
+            if isinstance(pending, dict):
+                for attr, key in (("_ev_counter_pending", "pending"),
+                                  ("_ev_counter_seen", "seen"),
+                                  ("_ev_counter_room", "room"),
+                                  ("_ev_counter_unreported", "unreported"),
+                                  ("_ev_counter_idle_h", "idle_h"),
+                                  ("_ev_counter_unseen_kwh", "unseen_kwh"),
+                                  ("_ev_counter_quiet_h", "quiet_h"),
+                                  ("_ev_counter_drawn_total", "drawn_total")):
+                    raw = pending.get(key)
+                    if isinstance(raw, dict):
+                        setattr(self, attr, {
+                            str(e): float(v) for e, v in raw.items()
+                            if isinstance(v, (int, float))
+                            and not isinstance(v, bool) and math.isfinite(v)
+                            and v >= 0
+                        })
+                if not isinstance(pending.get("unseen_kwh"), dict):
+                    # (#1101) A store from before the wait does not tell
+                    # what ``room`` holds: all of it waits to be spent.
+                    self._ev_counter_unseen_kwh = dict(self._ev_counter_room)
+                # (#1101) A time that does not parse, or has no zone, is no
+                # record: every counter's next move is booked as it stands.
+                watched_at = pending.get("watched_at")
+                self._ev_watched_at = None
+                if isinstance(watched_at, str):
+                    try:
+                        parsed = datetime.fromisoformat(watched_at)
+                    except ValueError:
+                        parsed = None
+                    if parsed is not None and parsed.tzinfo is not None:
+                        self._ev_watched_at = parsed
+            charger_baselines = state.get("charger_counter_baselines")
+            if isinstance(charger_baselines, dict):
+                # A damaged entry is dropped; that charger re-anchors.
+                self._charger_counter_baselines = {
+                    str(cid): bl for cid, bl in charger_baselines.items()
+                    if isinstance(bl, dict)
+                }
             meter_baselines = state.get("meter_baselines")
             if isinstance(meter_baselines, dict):
                 # Per-category shape check — a damaged blob for one category
@@ -3568,6 +5686,17 @@ class EnergyCalculator:
                         "Discarding unparseable midnight_ev_since %r — the home "
                         "balance re-arms for one day", since,
                     )
+            # (#1176) a store without them is the upgrade: midnight until
+            # the first rollover this code sees.
+            try:
+                seen = state.get("ev_seen_day")
+                self._ev_seen_day = date.fromisoformat(str(seen)) if seen else None
+                rolled = state.get("ev_rolled_at")
+                self._ev_rolled_at = (
+                    datetime.fromisoformat(str(rolled)) if rolled else None)
+            except ValueError:
+                self._ev_seen_day = None
+                self._ev_rolled_at = None
             ev_day_offset = state.get("ev_day_offset")
             ev_day_key = state.get("ev_day_key")
             if _valid_hhmm(ev_day_offset) and ev_day_key:
@@ -3604,6 +5733,34 @@ class EnergyCalculator:
                      if isinstance(r, dict) and r.get("date")),
                     maxlen=_BASELOAD_HISTORY_DAYS,
                 )
+            # (#1044) Absent on a store written before the fix: the next
+            # update stamps today, so the upgrade day is not sealed clean.
+            members_since = state.get("home_members_since")
+            if members_since:
+                try:
+                    self._home_members_since = date.fromisoformat(
+                        str(members_since))
+                except ValueError:
+                    _LOGGER.warning(
+                        "Discarding unparseable home_members_since %r — the "
+                        "true baseload's day history restarts today",
+                        members_since,
+                    )
+                    self._home_members_since = None
+            # (#1046) Absent on a store written before the fix: the next
+            # update stamps the running EV day, whose share then reads the
+            # calendar flows.
+            flow_since = state.get("ev_flow_since")
+            if flow_since:
+                try:
+                    self._ev_flow_since = date.fromisoformat(str(flow_since))
+                except ValueError:
+                    _LOGGER.warning(
+                        "Discarding unparseable ev_flow_since %r — the car's "
+                        "solar share reads the calendar flows for one EV day",
+                        flow_since,
+                    )
+                    self._ev_flow_since = None
             last_update = state.get("last_update")
             if last_update:
                 self._last_update = datetime.fromisoformat(last_update)

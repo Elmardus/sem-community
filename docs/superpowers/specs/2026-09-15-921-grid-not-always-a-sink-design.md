@@ -1,7 +1,7 @@
 # The grid is not always a sink — where else a kWh can go, and making sure it does
 
 **Arc:** #921 · **Children:** #955 #871 #926 #879 #892 #956 · **Branch:** `feature/921-grid-not-always-a-sink`
-**Status:** design approved in conversation 15.09.2026 (Guido: adapters first, #956 after). Milestone 2.1 — all six, deliberately (#921, 13.09).
+**Status:** design approved in conversation 15.09.2026 (adapters first, #956 after). Milestone 2.1 — all six, deliberately (#921, 13.09).
 
 ## 1. Problem
 
@@ -17,7 +17,7 @@ Six issues, one model. Fixing them one at a time produces six rankings that disa
 
 ## 2. The model — a sink has a state, not a price
 
-Guido's framing (13.09): *"it seems more natural about the energy and avoid costs with negative grid
+The framing (13.09): *"it seems more natural about the energy and avoid costs with negative grid
 export"* and *"SEM has to make sure we do not export."* Two consequences fix the design:
 
 1. **The balance layer reasons about energy, never money.** Price already decides WHEN in SEM (cheap
@@ -62,7 +62,7 @@ existing routers: `surplus_controller` for harvested surplus, `decide_battery` f
 | #892 | EV **OPEN** in `[departure − N h, departure]` | the #537 assist gate, extended with a morning window | forecast must refill the pack today; a drain floor; departure from `ev_departure_time_entity` |
 | #956 | — | the roster learns service-shaped roles; the brand table from #955 becomes a crawled role | after the guard ships — its value is the NEXT brand |
 
-**Sequencing (Guido, 15.09): adapters first, #956 after.** The adapter registry is built in the ROLE
+**Sequencing (decision 15.09): adapters first, #956 after.** The adapter registry is built in the ROLE
 shape now (`zero_export` capability, per-brand dialect), so #956 fills it rather than reshaping it.
 
 ## 4. Components
@@ -145,7 +145,7 @@ SEM is that someone: `_curtailment_grant_w` returns 0.0 and the probe is held in
 - `today_plan`: rows `export_closed` / `export_reopens` / `house_hold` / `ev_morning_window` from the
   verdicts' `until`, translated in all 16 languages (#963's lesson: the parity test runs on plan keys).
 
-### 4.7 Surface (all settings in the GUI — Guido, 20.08)
+### 4.7 Surface (all settings in the GUI — rule, 20.08)
 
 Config tab, beside the peak limit: **Export guard** switch (default OFF), **Override external
 scheduling** switch (default OFF, Huawei), **Hold-in / hold-out** numbers (defaults 120 s / 300 s).
@@ -206,7 +206,7 @@ sink_verdicts()  ──────────────► FleetCycleState.s
 4. **#956** — the roster learns service-shaped roles; the brand table becomes a crawled role.
 
 Stages 1–3 ship together on this branch, default-OFF (gate 4: complete and inert), proven once on
-.175, merged on Guido's word with `SEM_FEAT_OK`. Stage 4 (#956) is its own branch on the same role
+.175, merged on approval with `SEM_FEAT_OK`. Stage 4 (#956) is its own branch on the same role
 shape — planned in full as Tasks 18–24 of the same plan, so the arc's plan is the complete arc.
 
 ## 9. Not this arc

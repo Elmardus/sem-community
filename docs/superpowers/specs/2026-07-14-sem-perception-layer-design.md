@@ -1,6 +1,6 @@
 # SEM Perception Layer — Trace Integration & Sign/Balance Integrity — Design Spec
 
-**Status:** Proposed design (grounded 2026-07-14, from the #589 reliability-arc discussion with Guido). Build target 1.8.0. **Sequenced after** the SignDetector/CounterAudit dedup (see §9) — that dedup is a clean prerequisite that halves the surface this spec plugs into.
+**Status:** Proposed design (grounded 2026-07-14, from the #589 reliability-arc discussion). Build target 1.8.0. **Sequenced after** the SignDetector/CounterAudit dedup (see §9) — that dedup is a clean prerequisite that halves the surface this spec plugs into.
 **Motivation:** the layered trace (2026-07-11 spec) validates the *control* chain (Management → Process → Integration) but assumes its *inputs* are trustworthy. It structurally **cannot catch a sign error**: flip the battery sign and all three layers cohere on the wrong-signed input — every `layer_match` is green while the whole cycle is wrong. Separately, the #589 sign-contradiction audit hand-rolled its **own** debounce→flag→sensor mechanism, duplicating the trace's `streak → health → binary_sensor.sem_layer_mismatch` engine. This spec closes both: it adds the missing foundation layer and retires the duplicate.
 
 ---

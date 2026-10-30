@@ -45,9 +45,15 @@ class TestSEMSwitches:
                         # the battery family it paces.
                         "battery_charge_pacing_enabled",
                         "battery_may_export", "battery_may_assist_ev",
+                        # #1078 — a discharge limit that also caps charging
+                        "battery_discharge_limit_caps_charge",
+                        # #1080 — a car's start gap bought on a negative export value
+                        "ev_absorb_grid_fill",
                         # arc #921 — four switches, all default OFF, after the permissions
                         "export_guard_enabled", "export_guard_override_external",
-                        "battery_house_sink_enabled", "ev_morning_window_enabled"]
+                        "battery_house_sink_enabled", "ev_morning_window_enabled",
+                        # #1083 — the Simulation tab, default OFF
+                        "simulation_tab"]
 
     # ``test_night_charging_default_off`` and
     # ``test_night_charging_existing_state_preserved`` removed in
@@ -310,7 +316,7 @@ def _ghost(state):
 
 @pytest.mark.unit
 class TestExplicitConfigBeatsGhostRestore777:
-    """A fresh installation came up in observer mode (Guido, 15.08).
+    """A fresh installation came up in observer mode (15.08).
 
     ``switch.sem_observer_mode`` has a forced-stable entity id, HA's
     restore-state store outlives the config entry, and the restore path

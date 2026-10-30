@@ -14,7 +14,7 @@
  */
 
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
-import { antiCyclePlaceholder, antiCycleBounds } from '../util/load-sections.js';
+import { antiCyclePlaceholder, antiCycleBounds, antiCycleValue } from '../util/load-sections.js';
 import { shedReasonKey } from '../util/shed-reason.js';
 import { importKw, slotStatus } from '../util/peak-slot.js';
 import { repeat } from 'lit/directives/repeat.js';
@@ -28,6 +28,18 @@ import {
     readFormValues,
     findDeviceForConfig,
 } from './load-config-modal.js';
+import { stateLabel } from '../util/state-label.js';
+import { MISSING, fmtValue, readNumber } from '../util/missing-value.js';
+
+// (#1200) A load's live power in kW from its own entity, or null while that
+// entity is out. Older backends carry current_power in the map instead.
+function devicePowerKw(stateObj, info) {
+    if (info.power_entity && stateObj) {
+        const w = readNumber(stateObj);
+        return w == null ? null : w / 1000;
+    }
+    return (info.current_power || 0) / 1000;
+}
 
 /* Drag-and-drop is Lit-native (pointer events) — see _dragStart/_dragMove/
    _dragEnd. SortableJS was removed (#576): an imperative DOM library and
@@ -40,13 +52,28 @@ const COMFORT_DOCS = {
     docs: 'https://github.com/traktore-org/sem-community/blob/develop/docs/ENERGY_PLANNER.md#comfort-banking',
 };
 
+// (#1055 follow-up) Every SEM sensor _updateDeviceData() reads. The card
+// reads them again when any of them changes — state or attributes. The old
+// gate named three of them; with load management off all three stand still,
+// so a limit saved on the Configuration tab never reached the slider until
+// a page reload. dashboard/card/test/redraw-gate.test.js checks this list
+// against the reads.
+export const LOAD_PRIORITY_READS = [
+    'controllable_devices_count', 'consecutive_peak_15min',
+    'load_management_status', 'target_peak_limit', 'grid_power',
+];
+
+// How long a slider value the user let go of is shown before the sensor has
+// it — the same span as the priority hold below.
+const PEAK_HOLD_MS = 15000;
+
 class SEMLoadPriorityCard extends SEMLitBase {
     constructor() {
         super();
         this.devices = [];
-        this.targetPeakLimit = 5.0;
+        this.targetPeakLimit = null;     // (#1200) null until the sensor gives one
         this.peakLimitUnlimited = false;  // (#716) explicit opt-out, never inferred
-        this.currentPeak = 0;            // the BILLED metric: 15-min rolling average
+        this.currentPeak = null;         // the BILLED metric: 15-min rolling average
         this.gridImportKw = null;        // (#909) instantaneous, for contrast
         this.slotAllowedW = null;        // (#864/#909) what the rest of this slot may average
         this.slotUsedKwh = null;         // (#864/#909) energy spent in this billing slot
@@ -61,7 +88,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
 
     setConfig(config) {
         this._config      = config;
-        this.entityPrefix = config.entity_prefix || 'sensor.sem_';
+        this._prefix = config.entity_prefix || 'sensor.sem_';
         this.requestUpdate();
     }
 
@@ -74,6 +101,8 @@ class SEMLoadPriorityCard extends SEMLitBase {
         if (lang !== this._lang) {
             this._lang = lang;
             this._lastDeviceSig = '';
+            this._lastReads = this._readStates(hass);
+            this._updateDeviceData();
             this.requestUpdate();
             return;
         }
@@ -88,16 +117,18 @@ class SEMLoadPriorityCard extends SEMLitBase {
         // the reorder back before it lands.
         if (this._priorityFrozenUntil && Date.now() < this._priorityFrozenUntil) return;
 
-        const devState  = hass?.states[`${this.entityPrefix}controllable_devices_count`];
-        const peakState = hass?.states[`${this.entityPrefix}consecutive_peak_15min`];
-        const lmState   = hass?.states[`${this.entityPrefix}load_management_status`];
-        const key = (devState?.state || '') + '|' + (peakState?.state || '') + '|' + (lmState?.state || '');
-
-        if (key === this._lastKey) return;
-        this._lastKey = key;
+        // HA gives a new state object only when the state or an attribute
+        // changed, so one changed object is one changed input.
+        const reads = this._readStates(hass);
+        if (this._lastReads && reads.every((s, i) => s === this._lastReads[i])) return;
+        this._lastReads = reads;
 
         this._updateDeviceData();
         this.requestUpdate();
+    }
+
+    _readStates(hass) {
+        return LOAD_PRIORITY_READS.map((s) => hass?.states?.[`${this._prefix}${s}`]);
     }
 
     get hass() { return this._hass; }
@@ -179,6 +210,12 @@ class SEMLoadPriorityCard extends SEMLitBase {
             .device-name span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
             .device-power { font-size:1em; font-weight:500; font-variant-numeric:tabular-nums; white-space:nowrap; opacity:0.7; }
             .device-bottom { display:flex; align-items:center; gap:8px; font-size:0.95em; flex-wrap:wrap; }
+            .operator-lock {
+                padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+                color: #ff9800; border: 1px solid #ff9800; background: rgba(255,152,0,.10);
+                white-space: nowrap;
+            }
+            .status-dot.locked { background:#ff9800; }
             .status-dot { width:7px; height:7px; border-radius:50%; background:var(--divider-color, rgba(128,128,128,0.12)); flex-shrink:0; }
             .status-dot.on { background:#4caf50; box-shadow:0 0 6px #4caf50; }
             .status-dot.shed { background:#f44336; box-shadow:0 0 6px #f44336; }
@@ -373,14 +410,30 @@ class SEMLoadPriorityCard extends SEMLitBase {
     // ── Device data extraction ──
     _updateDeviceData() {
         if (!this._hass) return;
-        const targetPeakEntity  = this._hass.states[`${this.entityPrefix}target_peak_limit`];
-        const currentPeakEntity = this._hass.states[`${this.entityPrefix}consecutive_peak_15min`];
-        const statusEntity      = this._hass.states[`${this.entityPrefix}load_management_status`];
-        const devicesEntity     = this._hass.states[`${this.entityPrefix}controllable_devices_count`];
+        const targetPeakEntity  = this._hass.states[`${this._prefix}target_peak_limit`];
+        const currentPeakEntity = this._hass.states[`${this._prefix}consecutive_peak_15min`];
+        const statusEntity      = this._hass.states[`${this._prefix}load_management_status`];
+        const devicesEntity     = this._hass.states[`${this._prefix}controllable_devices_count`];
 
-        if (targetPeakEntity)  this.targetPeakLimit      = parseFloat(targetPeakEntity.state)  || 5.0;
+        // (#1200) null when out: the card prints "—", not a 5 kW limit or a
+        // 0 kW peak nobody measured.
+        if (targetPeakEntity)  this.targetPeakLimit      = readNumber(targetPeakEntity);
         if (targetPeakEntity)  this.peakLimitUnlimited   = targetPeakEntity.attributes?.peak_limit_unlimited || false;
-        if (currentPeakEntity) this.currentPeak          = parseFloat(currentPeakEntity.state) || 0;
+        // (#1055 follow-up) Keep showing the value the user let go of until
+        // the sensor has it, so a push from before the save cannot move the
+        // slider back.
+        const hold = this._peakHold;
+        if (hold) {
+            const landed = this.peakLimitUnlimited === hold.unlimited
+                && (hold.unlimited || Math.abs(this.targetPeakLimit - hold.kw) < 0.05);
+            if (landed || Date.now() >= hold.until) {
+                this._peakHold = null;
+            } else {
+                this.targetPeakLimit = hold.kw;
+                this.peakLimitUnlimited = hold.unlimited;
+            }
+        }
+        if (currentPeakEntity) this.currentPeak          = readNumber(currentPeakEntity);
         // (#909) The two other quantities the peak block needs to stop reading
         // as a contradiction: what the meter shows RIGHT NOW, and the slot
         // budget the #864 guard actually steers by.
@@ -388,7 +441,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
             this.slotAllowedW = targetPeakEntity.attributes?.peak_slot_allowed_w ?? null;
             this.slotUsedKwh  = targetPeakEntity.attributes?.peak_slot_used_kwh ?? null;
         }
-        const gridEntity = this._hass.states[`${this.entityPrefix}grid_power`];
+        const gridEntity = this._hass.states[`${this._prefix}grid_power`];
         this.gridImportKw = gridEntity ? importKw(gridEntity.state) : null;
         if (statusEntity)      this.loadManagementStatus = statusEntity.state || 'normal';
 
@@ -400,9 +453,8 @@ class SEMLoadPriorityCard extends SEMLitBase {
                     // (#829) live power from the device's own entity — the map
                     // no longer carries current_power (it made the count sensor
                     // write a row every cycle); older backends still fall back.
-                    power: ((info.power_entity && this._hass?.states?.[info.power_entity])
-                        ? (parseFloat(this._hass.states[info.power_entity]?.state) || 0)
-                        : (info.current_power || 0)) / 1000,
+                    // (#1200) null while that entity is out: "— W", not 0 W.
+                    power: devicePowerKw(this._hass.states[info.power_entity], info),
                     // (#577) self-calibrated rated power (W) — shown dimmed when
                     // the load is off so the row keeps a meaningful number
                     // instead of a bare "OFF".
@@ -411,6 +463,16 @@ class SEMLoadPriorityCard extends SEMLitBase {
                     isOn: info.is_on || false,
                     isShed: info.is_shed || false,
                     shedReason: info.shed_reason || null,
+                    // (#1048) the phase guard's shed names its phase
+                    shedPhase: info.shed_phase || null,
+                    // (#1048) the supply phase: a load's is the user's goal,
+                    // a charger's is measured (read-only)
+                    phase: (info.goals && info.goals.phase) || info.phase || 'unknown',
+                    // (#1021) wiring behind the grid operator's relay, and
+                    // whether the relay holds it right now
+                    behindRelay: !!(info.goals && info.goals.behind_operator_relay),
+                    lockedByOperator: info.locked_by_operator === true,
+                    phaseMeasured: info.phase_measured === true,
                     // (#780) two axes, two fields. The toggle on this row is
                     // the user's "SEM may touch this load" permission; the
                     // handle is a discovery fact the toggle must not erase.
@@ -448,8 +510,9 @@ class SEMLoadPriorityCard extends SEMLitBase {
 
         const unlimited  = this.peakLimitUnlimited;
         const peakColor  = this._getPeakColor();
-        const peakMargin = this.targetPeakLimit - this.currentPeak;
-        const peakPct    = unlimited ? 0 : (this.targetPeakLimit > 0 ? Math.min((this.currentPeak / this.targetPeakLimit) * 100, 100) : 0);
+        const peakMargin = this.targetPeakLimit == null || this.currentPeak == null
+            ? null : this.targetPeakLimit - this.currentPeak;
+        const peakPct    = unlimited || this.currentPeak == null ? 0 : (this.targetPeakLimit > 0 ? Math.min((this.currentPeak / this.targetPeakLimit) * 100, 100) : 0);
         // (#909) The billing slot the guard defends — null when the install is
         // uncapped or the guard has published nothing yet.
         const slot = unlimited ? null : slotStatus({
@@ -463,11 +526,11 @@ class SEMLoadPriorityCard extends SEMLitBase {
                 <div class="card-content">
                     <div class="status-bar">
                         <div class="peak-dot" style="background:${peakColor};box-shadow:0 0 8px ${peakColor}"></div>
-                        <span id="lm-status" class="status-text">${this._t(this.loadManagementStatus || 'normal').toUpperCase()}</span>
+                        <span id="lm-status" class="status-text">${stateLabel('load_management_status', this.loadManagementStatus || 'normal', (k) => this._t(k)).toUpperCase()}</span>
                         <div class="spacer"></div>
                         <span class="dim">${this._t('peak_15min_avg')}</span>
-                        <span id="peak-current" class="mono">${this.currentPeak.toFixed(2)} kW</span>
-                        <span class="dim">/ ${unlimited ? this._t('uncapped') : this.targetPeakLimit.toFixed(1)}</span>
+                        <span id="peak-current" class="mono">${fmtValue(this.currentPeak, 2)} kW</span>
+                        <span class="dim">/ ${unlimited ? this._t('uncapped') : fmtValue(this.targetPeakLimit, 1)}</span>
                         <button class="help-btn ${this._showHelp ? 'active' : ''}" data-action="toggle-help"
                                 title="${this._t('help')}">?</button>
                     </div>
@@ -475,7 +538,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
                     <div class="peak-box">
                         <div class="peak-row">
                             <span class="dim">${this._t('peak_15min_avg')}</span>
-                            <span id="peak-current2" class="mono">${this.currentPeak.toFixed(2)} kW</span>
+                            <span id="peak-current2" class="mono">${fmtValue(this.currentPeak, 2)} kW</span>
                         </div>
                         ${this.gridImportKw === null ? nothing : html`
                         <div class="peak-row">
@@ -484,12 +547,12 @@ class SEMLoadPriorityCard extends SEMLitBase {
                         </div>`}
                         <div class="peak-row">
                             <span class="dim">${this._t('target_limit')}</span>
-                            <span id="peak-target" class="mono">${unlimited ? this._t('uncapped') : this.targetPeakLimit.toFixed(2) + ' kW'}</span>
+                            <span id="peak-target" class="mono">${unlimited ? this._t('uncapped') : fmtValue(this.targetPeakLimit, 2) + ' kW'}</span>
                         </div>
                         ${unlimited ? nothing : html`
                         <div class="peak-row">
                             <span class="dim">${this._t('margin')}</span>
-                            <span id="peak-margin" class="mono" style="color:${peakMargin > 0 ? '#4caf50' : '#f44336'}">${peakMargin.toFixed(2)} kW</span>
+                            <span id="peak-margin" class="mono" style="color:${peakMargin == null ? '' : peakMargin > 0 ? '#4caf50' : '#f44336'}">${fmtValue(peakMargin, 2)} kW</span>
                         </div>`}
                         <div class="bar">
                             <div id="peak-bar" class="bar-fill" style="width:${peakPct}%;background:${peakColor}"></div>
@@ -592,9 +655,9 @@ class SEMLoadPriorityCard extends SEMLitBase {
                     </div>
                     <div class="device-power" data-field="power-${device.id}">
                         ${isBattery
-                            ? html`<span style="opacity:0.7">${device.soc != null ? device.soc + '% · ' : ''}${onOff ? semFormatPower(device.power * 1000) : this._t('off')}</span>`
+                            ? html`<span style="opacity:0.7">${device.soc != null ? device.soc + '% · ' : ''}${onOff ? semFormatPower(device.power == null ? null : device.power * 1000) : this._t('off')}</span>`
                             : (onOff
-                                ? semFormatPower(device.power * 1000)
+                                ? semFormatPower(device.power == null ? null : device.power * 1000)
                                 : (device.isShed
                                     ? this._t('shed_label')
                                     : (device.rating > 0
@@ -604,12 +667,14 @@ class SEMLoadPriorityCard extends SEMLitBase {
                 </div>
                 ${device.blockedBy ? html`<div style="font-size:13px;color:#ff9800;padding:2px 0 0 28px">&#9203; Waiting for: ${device.blockedBy}</div>` : nothing}
                 ${device.dependsOn.length ? html`<div style="font-size:13px;opacity:0.55;padding:0 0 0 28px">&#8618; ${this._t('requires')}: ${device.dependsOn.join(', ')}</div>` : nothing}
-                ${device.isShed && device.shedReason ? html`<div style="font-size:13px;color:#f44336;padding:2px 0 0 28px">${this._t(shedReasonKey(device.shedReason))}</div>` : nothing}
+                ${device.isShed && device.shedReason ? html`<div style="font-size:13px;color:#f44336;padding:2px 0 0 28px">${(this._t(shedReasonKey(device.shedReason)) || '').replace('{phase}', device.shedPhase || '?')}</div>` : nothing}
                 <div class="device-bottom">
-                    <div class="status-dot ${onOff ? 'on' : (device.isShed ? 'shed' : '')}" data-field="status-${device.id}"></div>
-                    <span class="dim" data-field="onoff-${device.id}">${onOff ? this._t('on') : (device.isShed ? this._t('shed_label') : this._t('off'))}</span>
+                    <div class="status-dot ${device.lockedByOperator ? 'locked' : (onOff ? 'on' : (device.isShed ? 'shed' : ''))}" data-field="status-${device.id}"></div>
+                    ${device.lockedByOperator
+                        ? html`<span class="operator-lock" data-field="onoff-${device.id}">${this._t('locked_by_grid_operator')}</span>`
+                        : html`<span class="dim" data-field="onoff-${device.id}">${onOff ? this._t('on') : (device.isShed ? this._t('shed_label') : this._t('off'))}</span>`}
                     <span class="badge priority" data-field="pri-${device.id}">${priority}</span>
-                    ${isBattery ? nothing : this._renderControlVerdict(device)}
+                    ${isBattery || device.lockedByOperator ? nothing : this._renderControlVerdict(device)}
                     <div class="spacer"></div>
                     ${isBattery ? html`<span class="dim" title="${this._t('battery_role_help')}">${this._t('battery_role_label')}</span>` : nothing}
                     ${device.deviceType === 'ev_charger' || device.deviceType === 'ev_charging' || isBattery ? nothing : html`
@@ -632,6 +697,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
                             )}
                         </select>
                     </label>`}
+                    ${isBattery ? nothing : this._renderPhase(device)}
                     <div class="arrows">
                         <button class="arrow-btn" data-action="move-up"   data-device="${device.id}" title="${this._t('move_up')}">&#9650;</button>
                         <button class="arrow-btn" data-action="move-down" data-device="${device.id}" title="${this._t('move_down')}">&#9660;</button>
@@ -650,6 +716,32 @@ class SEMLoadPriorityCard extends SEMLitBase {
                 ${this._goalOpen[device.id] ? this._renderGoalEditor(device) : nothing}
             </div>
         </div>`;
+    }
+
+    /**
+     * (#1048) The supply phase a load sits on — when a phase is over its
+     * limit, the phase guard sheds that phase's loads (and three-phase ones)
+     * first, loads on an unknown phase only after them. A charger's phase is
+     * measured, so it is shown, never set.
+     */
+    _renderPhase(device) {
+        const g = device.goals || {};
+        const phase = g.phase || device.phase || 'unknown';
+        const label = (p) => p === 'unknown' ? this._t('load_phase_unknown')
+            : p === '3ph' ? this._t('load_phase_3ph') : p;
+        const isEv = device.deviceType === 'ev_charger' || device.deviceType === 'ev_charging';
+        if (isEv) {
+            return phase === 'unknown' ? nothing : html`
+                <span class="dim" title="${this._t('load_phase_measured_hint')}">${label(phase)}</span>`;
+        }
+        return html`
+            <label class="toggle-label" title="${this._t('load_phase_tooltip')}">
+                <span class="dim">${this._t('load_phase_label')}</span>
+                <select class="mode-select" data-goal="phase" data-device="${device.id}">
+                    ${['unknown', 'L1', 'L2', 'L3', '3ph'].map(p => html`
+                        <option value="${p}" ?selected="${phase === p}">${label(p)}</option>`)}
+                </select>
+            </label>`;
     }
 
     // ── (#559) goal engine UI — EV-charger look (one merged mode picker) ──
@@ -831,7 +923,10 @@ class SEMLoadPriorityCard extends SEMLitBase {
         if (drag != null) kw = drag;
         const pct = ((kw - MIN_KW) / (MAX_KW - MIN_KW)) * 100;
         const atMax = kw >= MAX_KW - 1e-6;
-        const label = atMax ? this._t('uncapped') : `${kw.toFixed(1)} kW`;
+        // (#1200) no limit read and none dragged: the dash, not the 1 kW end
+        const unread = drag == null && !this.peakLimitUnlimited && this.targetPeakLimit == null;
+        const label = unread ? `${MISSING} kW`
+            : atMax ? this._t('uncapped') : `${kw.toFixed(1)} kW`;
         return html`
             <div class="range-wrap">
                 <div class="range-labels">
@@ -869,15 +964,20 @@ class SEMLoadPriorityCard extends SEMLitBase {
             window.removeEventListener('pointercancel', onUp);
             const kw = toVal(ev.clientX);
             this._peakDrag = null;
-            const unlimited = kw >= MAX_KW - 1e-6;
-            this.targetPeakLimit = kw;
-            this.peakLimitUnlimited = unlimited;
-            this._sendTargetPeakUpdate(kw, unlimited);
-            this.requestUpdate();
+            this._commitPeakLimit(kw, kw >= MAX_KW - 1e-6);
         };
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
         window.addEventListener('pointercancel', onUp);
+    }
+
+    _commitPeakLimit(kw, unlimited) {
+        this.targetPeakLimit = kw;
+        this.peakLimitUnlimited = unlimited;
+        const hold = { kw, unlimited, until: Date.now() + PEAK_HOLD_MS };
+        this._peakHold = hold;
+        this._sendTargetPeakUpdate(kw, unlimited, hold);
+        this.requestUpdate();
     }
 
     _onStopEntity(device, e) {
@@ -969,6 +1069,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
                 ${this._renderComfortBand(device)}
                 ${this._renderOvernightPicker(device)}
                 ${this._renderAntiCycle(device)}
+                ${this._renderOwnTariff(device)}
                 <div class="ge-row">
                     <span class="ge-label">${this._t('stop_condition')}</span>
                     <span class="ge-ctl">
@@ -1029,7 +1130,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
     // word in front of the two axes #780 split apart, so a row could read
     // ✓ while SEM was not allowed to touch it (mode Off). Say both plainly:
     // capability (is there a handle at all?) and permission (may SEM act
-    // right now?). Mockup approved by Guido 21.08.
+    // right now?). Mockup approved 21.08.
     _renderControlVerdict(device) {
         const mode = this._mergedMode(device);
         let key, icon, color;
@@ -1084,6 +1185,12 @@ class SEMLoadPriorityCard extends SEMLitBase {
         const readC = device.comfort ? device.comfort.reading_c : null;
         const read = readC == null ? null
             : (unit === '°F' ? readC * 9 / 5 + 32 : readC);
+        // (#1145) a worked example, hot water only: the issue was a user who
+        // could not tell what the extra degrees do
+        const showExample = /^hot_water/.test(String(device.id || '')) && target > 0;
+        const exampleText = this._t('comfort_example')
+            .replace('{keep}', target + unit).replace('{extra}', offset + unit)
+            .replace('{max}', (target + offset) + unit);
         const num = (key, val, step) => html`
             <input type="number" step="${step}" style="width:56px"
                    .value="${val ? String(val) : ''}" placeholder="\u2014"
@@ -1151,7 +1258,10 @@ class SEMLoadPriorityCard extends SEMLitBase {
                 <span class="ge-ctl">${num('comfort_limit', limit, 0.5)}
                     <span class="ge-unit">${unit}</span></span>
             </div>
-            <div class="ge-hint">${this._t('comfort_hint')}</div>`;
+            <div class="ge-hint">${this._t('comfort_hint')}</div>
+            ${showExample ? html`
+            <div class="ge-hint">${exampleText}</div>
+            <div class="ge-hint">${this._t('comfort_both_limits')}</div>` : nothing}`;
     }
 
     /** (#914) The anti-cycle range the backend publishes off consts/bounds.py
@@ -1162,6 +1272,21 @@ class SEMLoadPriorityCard extends SEMLitBase {
         return antiCycleBounds(ent?.attributes);
     }
 
+    /** (#1128) min/max on the input do not stop typing: the value is
+     *  limited here. Nothing to send (cleared, under 1) puts back what the
+     *  device holds; a value past the range shows the end it was set to. */
+    _onAntiCycleChange(device, key, bounds, e) {
+        const v = antiCycleValue(e.target.value, bounds);
+        if (v == null) {
+            const held = (device.goals || {})[key];
+            e.target.value = held != null ? String(held) : '';
+            return;
+        }
+        e.target.value = String(v);
+        device.goals = { ...(device.goals || {}), [key]: v };
+        this._sendDeviceUpdate(device.id, key, String(v));
+    }
+
     _renderAntiCycle(device) {
         // (#688) per-load anti-cycling — minutes, next to Min/Max/Mode (the
         // "well-placed" home the cycling report asked for). Blank ⇒ the solid
@@ -1169,14 +1294,6 @@ class SEMLoadPriorityCard extends SEMLitBase {
         // window. min_on holds the load through a passing cloud; min_off blocks
         // a too-soon restart — together they cap cycling at a ~10-min period.
         const g = device.goals || {};
-        const onChange = (key) => (e) => {
-            const v = e.target.value;
-            // Clearing the field must not send '' (a service error) or 0 (the
-            // disabled sentinel) — leave the prior value / default untouched.
-            if (v === '' || v == null || Number(v) < 1) return;
-            device.goals = { ...(device.goals || {}), [key]: v };
-            this._sendDeviceUpdate(device.id, key, String(v));
-        };
         // (#914) ONE bounds table. The range used to be re-declared here as
         // min="1" max="120" — a second copy of a number that lives nowhere
         // else, which is how a card and a backend come to disagree. It is now
@@ -1188,13 +1305,15 @@ class SEMLoadPriorityCard extends SEMLitBase {
         // holding — never a hard-coded "5" that was true for neither the
         // resistive default nor the heat-pump one. Absent live object ⇒ "—".
         const eff = (k) => antiCyclePlaceholder(g, k);
+        // (#1128) The arrows stop at 1, not the published 0: 0 turns
+        // anti-cycling off, and this card never sends it.
         const box = (key, effKey) => html`
             <input type="number" step="1" style="width:56px"
-                   min=${bounds ? bounds.min : nothing}
+                   min=${bounds ? Math.max(1, bounds.min) : nothing}
                    max=${bounds ? bounds.max : nothing}
                    .value="${g[key] != null && g[key] !== '' ? String(g[key]) : ''}"
                    placeholder="${eff(effKey)}"
-                   @change=${onChange(key)}
+                   @change=${(e) => this._onAntiCycleChange(device, key, bounds, e)}
                    @click=${(e) => e.stopPropagation()}>`;
         return html`
             <div class="ge-row">
@@ -1212,6 +1331,65 @@ class SEMLoadPriorityCard extends SEMLitBase {
                 </span>
             </div>
             <div class="ge-hint">${this._t('anti_cycle_hint')}</div>`;
+    }
+
+    /** (#812) The load's own tariff: a fixed rate or a price entity, and its
+     *  own meter. Empty = the house tariff. A heat pump keeps its tariff in
+     *  the Config tab (Heat pump section), so its row only says where. */
+    _renderOwnTariff(device) {
+        const g = device.goals || {};
+        const title = html`
+            <div class="ge-title" style="margin-top:10px">
+                <ha-icon icon="mdi:cash-multiple" style="--mdc-icon-size:14px;color:#488fc2"></ha-icon>
+                ${this._t('device_tariff_section')}
+            </div>`;
+        if (String(device.id || '').startsWith('heat_pump')) {
+            return html`${title}<div class="ge-hint">${this._t('device_tariff_heat_pump')}</div>`;
+        }
+        const send = (key, v) => {
+            device.goals = { ...(device.goals || {}), [key]: v };
+            this._sendDeviceUpdate(device.id, key, String(v));
+        };
+        const picker = (key, domains, deviceClass) => (
+            this.hass && customElements.get('ha-entity-picker') ? html`
+            <ha-entity-picker class="ge-entity"
+                   .hass=${this.hass}
+                   .value=${g[key] || ''}
+                   .includeDomains=${domains}
+                   .entityFilter=${deviceClass
+                       ? (st) => st?.attributes?.device_class === deviceClass : undefined}
+                   allow-custom-entity
+                   @value-changed=${(e) => send(key, e.detail?.value ?? '')}
+                   @click=${(e) => e.stopPropagation()}></ha-entity-picker>
+            ` : html`
+            <input type="text" class="ge-entity" .value="${g[key] || ''}"
+                   @change=${(e) => send(key, e.target.value.trim())}
+                   @click=${(e) => e.stopPropagation()}>`);
+        const rate = parseFloat(g.tariff_rate) || 0;
+        return html`
+            ${title}
+            <div class="ge-row">
+                <span class="ge-label">${this._t('device_tariff_rate')}</span>
+                <span class="ge-ctl">
+                    <input type="number" min="0" step="0.001" style="width:72px"
+                           .value="${rate > 0 ? String(rate) : ''}" placeholder="\u2014"
+                           @change=${(e) => {
+                               const v = parseFloat(e.target.value);
+                               send('tariff_rate', Number.isFinite(v) && v > 0 ? v : 0);
+                           }}
+                           @click=${(e) => e.stopPropagation()}>
+                    <span class="ge-unit">/kWh</span>
+                </span>
+            </div>
+            <div class="ge-row">
+                <span class="ge-label">${this._t('device_tariff_entity')}</span>
+                <span class="ge-ctl">${picker('tariff_entity', ['sensor', 'input_number'], null)}</span>
+            </div>
+            <div class="ge-row">
+                <span class="ge-label">${this._t('device_tariff_meter')}</span>
+                <span class="ge-ctl">${picker('tariff_meter', ['sensor'], 'energy')}</span>
+            </div>
+            <div class="ge-hint">${this._t('device_tariff_hint')}</div>`;
     }
 
     // ── Lit-native pointer-drag reorder (no SortableJS) ──
@@ -1434,12 +1612,18 @@ class SEMLoadPriorityCard extends SEMLitBase {
         }).catch((err) => this._showServiceError(err));
     }
 
-    _sendTargetPeakUpdate(val, unlimited = false) {
+    _sendTargetPeakUpdate(val, unlimited = false, hold = null) {
         if (!this._hass) return;
         this._hass.callService('solar_energy_management', 'update_target_peak', {
             target_peak_limit: val,
             peak_limit_unlimited: unlimited,
-        }).catch((err) => this._showServiceError(err));
+        }).catch((err) => {
+            // Refused: show the sensor again on the next push — unless a
+            // newer drag holds its own value.
+            if (hold && this._peakHold === hold) this._peakHold = null;
+            this._lastReads = null;
+            this._showServiceError(err);
+        });
     }
 
     // ── Configure modal ──
@@ -1482,8 +1666,14 @@ class SEMLoadPriorityCard extends SEMLitBase {
         const overlay = document.createElement('div');
         overlay.id = 'sem-config-modal';
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;display:flex;align-items:center;justify-content:center';
+        // (#1021) loads only: a charger or the battery is not behind a relay
+        const isLoad = dev && !['ev_charger', 'ev_charging', 'battery'].includes(dev.deviceType);
         overlay.innerHTML = buildLoadConfigModalHTML({
             deviceName, values, t: (k) => this._t(k), hasManual,
+            behindRelay: isLoad ? !!dev.behindRelay : null,
+            // (#1145) a device set up in the Configuration tab has no manual
+            // mapping, so the form would open empty; say what is in use
+            inUse: !hasManual && !values.entity ? (dev?.controlEntity || '') : '',
         });
         this.renderRoot.appendChild(overlay);
 
@@ -1519,6 +1709,18 @@ class SEMLoadPriorityCard extends SEMLitBase {
         };
         typeSel.addEventListener('change', applyType);
 
+        // (#1021) the relay switch is wiring, not part of the control
+        // mapping: it saves on its own, the moment it is flipped.
+        const relay = overlay.querySelector('#cfg-relay');
+        if (relay && dev) {
+            relay.addEventListener('click', () => {
+                const on = !relay.classList.contains('on');
+                relay.classList.toggle('on', on);
+                relay.setAttribute('aria-checked', String(on));
+                dev.behindRelay = on;
+                this._sendDeviceUpdate(dev.id, 'behind_operator_relay', String(on));
+            });
+        }
         overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
         overlay.querySelector('#cfg-cancel').addEventListener('click', () => overlay.remove());
         const removeBtn = overlay.querySelector('#cfg-remove');
@@ -1569,6 +1771,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
     // ── Helpers ──
     _getPeakColor() {
         if (this.peakLimitUnlimited) return '#4caf50';
+        if (this.currentPeak == null) return '#888';  // (#1200) no reading, no "safe"
         const pct = this.targetPeakLimit > 0 ? (this.currentPeak / this.targetPeakLimit) * 100 : 0;
         if (pct >= 100) return '#f44336';
         if (pct >= 90)  return '#ff9800';

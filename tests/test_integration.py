@@ -48,14 +48,17 @@ class TestPlatformEntityCounts:
         switches = add_entities.call_args[0][0]
         # 6 since #778: observer, vacation, energy-plan actuation, plus the
         # forecast-spending master switch and its two permissions.
-        assert len(switches) == 11  # +battery_charge_pacing_enabled (#820) +4 arc #921 (export guard, override, house sink, morning window)
+        assert len(switches) == 14  # +#1078 two-sided switch +#1080 grid-fill switch +battery_charge_pacing_enabled (#820) +4 arc #921 (export guard, override, house sink, morning window) +simulation_tab (#1083)
         keys = {s.entity_description.key for s in switches}
         assert keys == {"observer_mode", "vacation_mode", "energy_plan_actuation",
                         "battery_charge_pacing_enabled",  # #820
                         "forecast_spending_enabled",
                         "battery_may_export", "battery_may_assist_ev",
                         "export_guard_enabled", "export_guard_override_external",      # arc #921
-                        "battery_house_sink_enabled", "ev_morning_window_enabled"}
+                        "battery_house_sink_enabled", "ev_morning_window_enabled",
+                        "simulation_tab",
+                        "battery_discharge_limit_caps_charge",  # #1078
+                        "ev_absorb_grid_fill"}  # #1080
 
     @pytest.mark.asyncio
     async def test_number_count(self, mock_hass, config_entry, mock_coordinator):

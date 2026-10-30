@@ -312,8 +312,8 @@ class TestTheWallboxIsHandedBack:
         )
         dev.charger_id = "ev_charger"
         dev._park_store = None
-        for m in ("_remember_parked", "release_to_user",
-                  "session_start_mechanism"):
+        for m in ("_remember_parked", "_write_park_record", "release_to_user",
+                  "session_start_mechanism", "_start_switch_reads_running"):
             setattr(dev, m, getattr(CurrentControlDevice, m).__get__(dev))
         return dev
 
@@ -529,7 +529,7 @@ class TestTheParkDebtOutlivesTheProcess:
             hass=SimpleNamespace(services=SimpleNamespace(
                 has_service=lambda d, s: s in kw.get("services", ()))),
         )
-        for m in ("_remember_parked", "adopt_park_state", "release_to_user",
+        for m in ("_remember_parked", "_write_park_record", "adopt_park_state", "release_to_user",
                   "session_start_mechanism"):
             setattr(dev, m, getattr(CurrentControlDevice, m).__get__(dev))
         return dev
@@ -594,7 +594,7 @@ class TestAHandBackCannotBlockARemoval:
             start_stop_entity=None, charger_service="keba.set_current",
             hass=SimpleNamespace(services=SimpleNamespace(
                 has_service=lambda d, s: True)))
-        for m in ("_remember_parked", "release_to_user",
+        for m in ("_remember_parked", "_write_park_record", "release_to_user",
                   "session_start_mechanism"):
             setattr(dev, m, getattr(CurrentControlDevice, m).__get__(dev))
 
@@ -654,7 +654,7 @@ class TestTheLedgerIsClearedWhenTheDebtIsPaid:
             start_stop_entity=None, charger_service="keba.set_current",
             hass=SimpleNamespace(services=SimpleNamespace(
                 has_service=lambda d, s: s == "enable")))
-        for m in ("_remember_parked", "adopt_park_state", "release_to_user",
+        for m in ("_remember_parked", "_write_park_record", "adopt_park_state", "release_to_user",
                   "session_start_mechanism"):
             setattr(dev, m, getattr(CurrentControlDevice, m).__get__(dev))
         return dev

@@ -23,9 +23,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from ..devices.base import ControllableDevice, DeviceState, DeviceControlMode
+from . import reason_codes as RC  # (#1174)
 from .plan_verdict import NO_OPINION, PlanVerdict
 
 from ..utils.log_gate import log_on_change
+from .device_tariff import device_price_level  # (#812)
 from .price_signal import is_cheap_name, is_expensive_name
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,6 +35,9 @@ _LOGGER = logging.getLogger(__name__)
 # Defaults
 DEFAULT_REGULATION_OFFSET = 50  # Watts - always keep small export
 DEFAULT_MIN_SURPLUS_CHANGE = 100  # Watts - suppress adjustments below this
+# (#1102) Import the loads' pool ignores — a zero-export inverter's own grid
+# setpoint (Victron ESS +50 W) plus meter noise. See solar_bounded_surplus.
+IMPORT_DEADBAND_W = 100.0
 
 
 @dataclass(frozen=True)
@@ -54,13 +59,17 @@ class BatteryTierContext:
     #: this one now compute it through the SAME helper, so they cannot
     #: disagree about how deep the pack may go.
     effective_floor_soc: float = 0.0
+    #: (#1114) The same budget for a load ranked ABOVE the battery: its
+    #: Solar Gate counts the pack's charge power it may reclaim, as a
+    #: charger above the battery does. ``None`` = no difference.
+    assist_budget_above_battery_w: Optional[float] = None
 
 
 def tier1_battery_reserved_w(devices, *, below_priority, allowance_w,
                              exclude_ids=()) -> float:
     """(#885) Pack watts claimed by Tier-1 loads that OUTRANK a charger.
 
-    Guido, 31.08: *"The order tells who is first and gets power from the
+    Rule, 31.08: *"The order tells who is first and gets power from the
     battery. The next will get powered from the grid if there is nothing
     left."* The one priority axis is
     :meth:`UnifiedDeviceRegistry.priority_for` — loads, the battery and
@@ -240,6 +249,16 @@ def _reserved_for_seniors(devices, *, below_priority, cap_w, axis,
     return min(cap, reserved)
 
 
+def _phase_held(device) -> bool:
+    """(#1048) Held for a phase over its limit: the hold names the phase."""
+    return isinstance(getattr(device, "_phase_hold", None), str)
+
+
+def _phase_shed(device) -> bool:
+    """(#1048) Taken by the phase guard: back it off."""
+    return getattr(device, "_phase_shed", False) is True
+
+
 def _would_start(device) -> bool:
     """Cheap, READ-ONLY "is this device even a candidate to switch on".
 
@@ -258,6 +277,9 @@ def _would_start(device) -> bool:
     senior device, which is the whole point of the walk.
     """
     if getattr(device, "daily_max_runtime_reached", False):
+        return False
+    # (#1048) held for a phase over its limit
+    if _phase_held(device):
         return False
     until = getattr(device, "_external_off_until", None)
     if until is not None:
@@ -283,6 +305,7 @@ def build_battery_tier_context(
     config, battery_soc, true_surplus_w,
     assist_committed_w: float = 0.0,
     dynamic_floor_pct=None,
+    reclaim_w: float = 0.0,
 ) -> BatteryTierContext:
     """(#625, extracted from the coordinator's update cycle) Pure computation
     of the battery-tier context handed to :meth:`SurplusController.update`.
@@ -293,7 +316,7 @@ def build_battery_tier_context(
     from the battery this cycle. Before it, this function returned the FULL
     ``battery_assist_max_power`` regardless, so on a 5000 W pack the chargers
     could be offered 5000 W and the loads another 5000 W in the same cycle.
-    Guido, 31.08: *"The order tells who is first and gets power from the
+    Rule, 31.08: *"The order tells who is first and gets power from the
     battery. The next will get powered from the grid if there is nothing
     left."* Netting the budget is that sentence.
 
@@ -303,6 +326,13 @@ def build_battery_tier_context(
     through a floor the chargers were respecting. A floor kept by one
     consumer and ignored by the other is not a floor. ``None`` falls back to
     the buffer — never to no floor at all.
+
+    (#1114) ``reclaim_w`` — the pack's charge power a load above the
+    battery may take (#576). A charger above the battery reads its Solar
+    Gate with that power in (``decide.self_consumption_surplus_w``); the
+    loads read it without, so a "Solar + battery" load above the battery
+    got no help while the pack charged. One gate: a load above the battery
+    gets the budget with the reclaim counted, a load below it does not.
     """
     from ..consts.core import (
         DEFAULT_BATTERY_ASSIST_MAX_POWER as _DEF_ASSIST,
@@ -321,16 +351,19 @@ def build_battery_tier_context(
     # consumed in device order. Never negative — an over-commitment upstream
     # must leave zero here, not a negative budget that reads as a credit.
     remaining = max(0.0, cap - max(0.0, float(assist_committed_w or 0.0)))
-    assist_budget = (
+    above_floor = battery_soc is not None and battery_soc > effective_floor
+    assist_budget = remaining if (above_floor and true_surplus_w >= solar_gate) else 0.0
+    above_battery = (
         remaining
-        if (battery_soc is not None and battery_soc > effective_floor
-            and true_surplus_w >= solar_gate)
+        if (above_floor and true_surplus_w + max(0.0, float(reclaim_w or 0.0))
+            >= solar_gate)
         else 0.0
     )
     return BatteryTierContext(
         soc=battery_soc, buffer_soc=buffer_soc,
         reserve_soc=reserve_soc, assist_budget_w=assist_budget,
         effective_floor_soc=effective_floor,
+        assist_budget_above_battery_w=above_battery,
     )
 
 
@@ -348,12 +381,52 @@ def solar_bounded_surplus(
     grid_export_w: float,
     active_draw_w: float,
     solar_w: "Optional[float]" = None,
+    *,
+    grid_import_w: "Optional[float]" = 0.0,
+    ev_draw_w: float = 0.0,
+    battery_discharge_w: "Optional[float]" = 0.0,
 ) -> float:
     """The feedback-free SOLAR surplus, physically bounded by production (#620).
 
     ``grid_export + active_draw`` reconstructs "the surplus that would exist if
     the controller's own loads were off" — the stable quantity to allocate from
     (without the add-back the signal chases its own tail as loads switch on).
+
+    (#1102) The add-back is only that if the grid side is SIGNED: export is
+    the clamped half (``max(0, grid)``), so an import read as 0 W and the loads'
+    own draw came back whole. @lostcontrol's 3 kW boiler (no battery) ran on
+    with 2 kW imported — the pool said 3 kW, not 1 kW, and after its own debit
+    the walk sat at −50 W, inside the −100 W LIFO band, while the sun stayed
+    above 3 kW. So the import comes off, with two exceptions:
+
+    * the share the chargers' draw explains (``ev_draw_w``, fleet). A charger
+      is decided before the loads and already leaves a running load above it
+      its sun (#885); what it draws past that — a Min floor, Now, a cheap-hour
+      plan — is the charger's own grid, and must not stop that load.
+    * the first ``IMPORT_DEADBAND_W``: a zero-export inverter holds a small
+      import on purpose (Victron ESS: +50 W by default), and the LIFO band
+      leaves only 50 W past the export offset.
+
+    The import comes off here first; the reclaim (``reclaimable_battery_w``,
+    #938) takes off only what this side could not (``import_absorbed_by_loads_w``).
+    So a load BELOW the battery pays the whole import — a pack charging from
+    the grid does not yield to it — and the two addends together are the whole
+    balance, ``draw + export + charge − import``, whether a load runs or not.
+    The coordinator hands in a SUSTAINED import (``sustained_import``: the
+    mean of the last two minutes, or while a car may charge the lowest
+    reading of them, ``None`` on a dark meter) and, as ``ev_draw_w``, the
+    car's highest draw of the same two minutes (``sustained_car_draw``): a
+    charger's power sensor can trail the meter by a minute at a start, a
+    ramp or a stop, and that import is the car's. ``grid_import_w=None`` takes nothing
+    off: the running loads hold, and nothing new can start on a dark meter.
+
+    (#1112) The home battery is the other source that is not the sun. In a
+    battery home the pack covers a load the sun no longer funds, the meter
+    reads 0 W, and a Solar-only load ran on the pack. So the pack's
+    discharge (``battery_discharge_w``, sustained like the import) comes
+    off the same way, and the chargers' draw explains it as it explains
+    the import. A "Solar + battery" load gets its pack share back through
+    the Tier-1 headroom, which now sees the shortfall it pays for.
 
     The result is then clamped to ``[0, solar]``: **you cannot have more SOLAR
     surplus than the sun is producing.** This one physical invariant is the whole
@@ -363,10 +436,67 @@ def solar_bounded_surplus(
     hit when a load ran off the battery at night). ``solar_w=None`` (sensor
     unavailable) skips the cap and falls back to the raw add-back.
     """
-    surplus = float(grid_export_w) + float(active_draw_w)
+    deficit = loads_import_deficit_w(
+        grid_import_w, ev_draw_w=ev_draw_w,
+        battery_discharge_w=battery_discharge_w)
+    surplus = float(grid_export_w) - deficit + float(active_draw_w)
     if solar_w is not None:
         surplus = min(surplus, float(solar_w))
     return max(0.0, surplus)
+
+
+def loads_import_deficit_w(
+    grid_import_w: "Optional[float]", *, ev_draw_w: float = 0.0,
+    battery_discharge_w: "Optional[float]" = 0.0,
+) -> float:
+    """(#1102) The import the loads' pool carries: the meter's import less
+    what the chargers' draw explains and less ``IMPORT_DEADBAND_W``.
+    ``None`` (no live reading) is no evidence — nothing.
+
+    (#1112) Plus the pack's discharge: power the sun did not make. A dark
+    battery reading (``None``) adds nothing."""
+    if grid_import_w is None:
+        return 0.0
+    not_sun = float(grid_import_w) + max(0.0, float(battery_discharge_w or 0.0))
+    return max(0.0, not_sun
+               - max(0.0, float(ev_draw_w or 0.0)) - IMPORT_DEADBAND_W)
+
+
+def import_absorbed_by_loads_w(
+    *,
+    grid_export_w: float,
+    active_draw_w: float,
+    grid_import_w: "Optional[float]",
+    ev_draw_w: float = 0.0,
+) -> float:
+    """(#1102) How much of the import the loads' pool has already taken off
+    — at most down to 0, so at most their own credited draw. The reclaim
+    (#938) takes off only the rest. Without this a load above a charging
+    pack paid the same import twice once it ran (pool AND reclaim) but once
+    at its start, and cycled on a steady import (a single-phase hybrid on a
+    summed meter, a Victron setpoint above 100 W)."""
+    deficit = loads_import_deficit_w(grid_import_w, ev_draw_w=ev_draw_w)
+    return min(deficit, max(0.0, float(grid_export_w) + float(active_draw_w)))
+
+
+def _walk_charge_w(device, consumption_w) -> float:
+    """(#1102) What the walk took from the pool for a running load: its
+    draw less the battery's Tier-1 share (``_tier1_batt_w``, #885)."""
+    return max(0.0, float(consumption_w or 0.0)
+               - max(0.0, float(getattr(device, "_tier1_batt_w", 0.0) or 0.0)))
+
+
+def reclaim_handed_back(remaining_w: float, reclaim_w: float) -> float:
+    """(#576, #1102) The walk's pool after it crosses the battery's slot.
+
+    The battery takes back what is left of the reclaim, never more than the
+    loads above it left: ``remaining − min(reclaim, max(0, remaining))``.
+    The old form, ``max(0, remaining − reclaim)``, gives the same answer
+    while ``remaining ≥ 0`` — and wipes a deficit the loads above the
+    battery made, so the stop pass never saw it (class 137).
+    """
+    remaining = float(remaining_w)
+    return remaining - min(max(0.0, float(reclaim_w or 0.0)), max(0.0, remaining))
 
 
 def solar_bounded_reclaim(
@@ -524,6 +654,9 @@ class LoadIntent:
     power_w: float
     source: Optional[str]   # 'solar'|'tier1_battery'|'tier2_battery'|'cheap_grid'|None
     reason: str
+    #: (#1174) the reason as a stable code (``reason_codes``); empty = the
+    #: source names it. Recorded only, left out of equality.
+    code: str = field(default="", compare=False)
 
 
 def compute_load_intent(
@@ -576,7 +709,8 @@ def compute_load_intent(
         # (not _sem_owned) is left exactly as-is.
         if active and getattr(device, "_sem_commanded", False):
             # SEM issued the ON - opt-out undoes SEM's own action.
-            return LoadIntent(False, 0.0, None, "mode off — ending SEM-started run")
+            return LoadIntent(False, 0.0, None, "mode off — ending SEM-started run",
+                              RC.LOAD_MODE_OFF)
         if getattr(device, "_sem_owned", False):
             # (#847) ADOPTED only (user/externally started, claimed
             # under Surplus so goal gates could stop it). Opt-out
@@ -586,6 +720,11 @@ def compute_load_intent(
             device._offpeak_forced = False
             device._batt_overnight_forced = False
         return LoadIntent(active, held, None, "off — monitor only")
+    # 1b. (#1021) Behind the grid operator's relay and the relay is on: the
+    #     relay cuts the power, so SEM keeps its hands off — no write in
+    #     either direction, nothing counted, and the reason says who holds it.
+    if getattr(device, "locked_by_operator", False) is True:
+        return LoadIntent(active, 0.0, None, "locked by the grid operator")
     if mode == DeviceControlMode.PEAK_ONLY:
         # This controller never proactively sheds peak_only loads — the load
         # manager owns their peak shedding via shed_priority. Matches the old
@@ -595,7 +734,7 @@ def compute_load_intent(
     # --- SURPLUS mode below ---
     # 2. Peak shed wins over any run reason.
     if is_shed_target:
-        return LoadIntent(False, 0.0, None, "peak shed")
+        return LoadIntent(False, 0.0, None, "peak shed", RC.LOAD_PEAK_SHED)
 
     # 2b. (#638 Stage 3) The plan may STOP a paid run whose window closed —
     #     the hold is only ever raised while the remaining blocks can still
@@ -607,7 +746,8 @@ def compute_load_intent(
             and (getattr(device, "_batt_overnight_forced", False)
                  or getattr(device, "_offpeak_forced", False))):
         return LoadIntent(False, 0.0, None,
-                          plan.reason or "joint energy plan: window closed")
+                          plan.reason or "joint energy plan: window closed",
+                          RC.LOAD_PLAN_CLOSED)
 
     # 3. Done for the day — the hard stops (cap overrides the deficit).
     #    (#688) The daily MINIMUM is deliberately NOT one of them. It is a
@@ -616,16 +756,22 @@ def compute_load_intent(
     #    the EV floor/ceiling contract (#245) that this slider was built to
     #    mirror — treating Min as a stop made Max unreachable whenever Min > 0.
     if getattr(device, "daily_max_runtime_reached", False):
-        return LoadIntent(False, 0.0, None, "daily max cap reached")
+        return LoadIntent(False, 0.0, None, "daily max cap reached",
+                          RC.LOAD_DAILY_MAX)
     if getattr(device, "stop_condition_met", False):
-        return LoadIntent(False, 0.0, None, "stop condition met")
+        return LoadIntent(False, 0.0, None, "stop condition met",
+                          RC.LOAD_STOP_CONDITION)
+    # 3a. (#1121) The device's own run (Legionella) needs no sun: kept as
+    #     it is, never re-tuned. Only a shed (clause 2) or its own end stops it.
+    if active and getattr(device, "runs_without_surplus", False) is True:
+        return LoadIntent(True, held, None, "own run — ends at its own target")
 
     # 3b. A ScheduleDevice past its deadline is a hard commitment — force it on
     #     regardless of surplus or peak posture (matches the old deadline pass,
     #     which was deliberately not peak-gated). ruflo B1.
     if getattr(device, "is_deadline_approaching", False) and not active:
         return LoadIntent(True, float(getattr(device, "rated_power", 0.0) or 0.0),
-                          "solar", "deadline force")
+                          "solar", "deadline force", RC.LOAD_DEADLINE)
 
     # 4. A source can power it. peak_freeze blocks *new* starts but keeps a
     #    running load on (only an explicit shed removes it, clause 2).
@@ -692,8 +838,9 @@ def compute_load_intent(
     if plan_hold and deficit:
         detail = f" (until {plan.until:%H:%M})" if plan.until else ""
         return LoadIntent(False, 0.0, None,
-                          (plan.reason or "joint energy plan: waiting for the planned window") + detail)
-    return LoadIntent(False, 0.0, None, "no source available")
+                          (plan.reason or "joint energy plan: waiting for the planned window") + detail,
+                          RC.LOAD_PLAN_WAIT)
+    return LoadIntent(False, 0.0, None, "no source available", RC.LOAD_NO_SOURCE)
 
 
 def _load_meter_day(device: "ControllableDevice"):
@@ -759,6 +906,19 @@ def _reconcile_load_observe(device: "ControllableDevice", intent: LoadIntent,
     # (the H2 reset in the actuating path). Observer is a pure shadow: each cycle
     # independently says "given reality now, I would do X". (Belief-sync via
     # reconcile_all at update()'s top is separate and permitted — see there.)
+    # (#1084) The decision log's load seam under observer: the same command
+    # the WOULD line below names, flagged as observed. A hold sends nothing.
+    _log = getattr(controller, "decision_log", None)
+    if intent.on and (not active or intent.source is not None):
+        from .decision_log import record_load
+        record_load(_log, device, on=True, watts=intent.power_w,
+                    reason_code=intent.code or intent.source or RC.LOAD_START,
+                    text=intent.reason, observer=True)
+    elif not intent.on and active:
+        from .decision_log import record_load
+        record_load(_log, device, on=False,
+                    reason_code=intent.code or RC.LOAD_STOP,
+                    text=intent.reason, observer=True)
     observed = device.get_current_consumption() if active else 0.0
     name = getattr(device, "name", None) or getattr(device, "device_id", "?")
     # (#762) transition-gated: a WOULD that has not changed is not news —
@@ -780,7 +940,23 @@ def _reconcile_load_observe(device: "ControllableDevice", intent: LoadIntent,
     return observed
 
 
-async def _activate_owned(device: "ControllableDevice", watts: float) -> float:
+def _note_load(device, *, on: bool, watts: Optional[float] = None,
+               reason_code: str = "", text: str = "",
+               observer: bool = False) -> None:
+    """(#1084) Hand a load command to the decision log, if one is wired.
+
+    The module-level choke points below take a device, not the controller;
+    the device knows its controller from ``register_device``. Recording only.
+    """
+    from .decision_log import record_load
+    _log = getattr(getattr(device, "_controller", None), "decision_log", None)
+    record_load(_log, device, on=on,
+                watts=watts, reason_code=reason_code, text=text,
+                observer=observer)
+
+
+async def _activate_owned(device: "ControllableDevice", watts: float,
+                          *, reason_code: str = "", text: str = "") -> float:
     """Actuate ON **and** record ownership — the single choke point.
 
     Ownership follows from SEM having actuated the device, so it belongs next to
@@ -797,10 +973,24 @@ async def _activate_owned(device: "ControllableDevice", watts: float) -> float:
     consumed = await device.activate(watts)
     if consumed > 0:
         device.record_activated()
+        # (#1084) logged once it took: a refused start sent nothing new
+        _note_load(device, on=True, watts=watts,
+                   reason_code=reason_code or RC.LOAD_START, text=text)
     return consumed
 
 
-async def _deactivate_owned(device: "ControllableDevice") -> bool:
+async def _adjust_owned(device: "ControllableDevice", watts: float,
+                        *, reason_code: str = "", text: str = "") -> float:
+    """(#1084) Re-tune a running load's setpoint — the one place it happens,
+    so the decision log sees a setpoint change of a meaningful size."""
+    consumed = await device.adjust_power(watts)
+    _note_load(device, on=True, watts=watts,
+               reason_code=reason_code or RC.LOAD_ADJUST, text=text)
+    return consumed
+
+
+async def _deactivate_owned(device: "ControllableDevice",
+                            *, reason_code: str = "", text: str = "") -> bool:
     """Actuate OFF **and** release ownership. Returns True if it stopped.
 
     Anti-flicker can refuse the stop, so ownership is only released once the
@@ -810,6 +1000,8 @@ async def _deactivate_owned(device: "ControllableDevice") -> bool:
     if device.is_active:
         return False
     device.record_deactivated()
+    _note_load(device, on=False, reason_code=reason_code or RC.LOAD_STOP,
+               text=text)
     return True
 
 
@@ -835,7 +1027,10 @@ async def reconcile_load(device: "ControllableDevice", intent: LoadIntent,
     if intent.on and not active:
         if not device.can_activate():
             return 0.0
-        consumed = await _activate_owned(device, intent.power_w)
+        consumed = await _activate_owned(
+            device, intent.power_w,
+            reason_code=intent.code or intent.source or RC.LOAD_START,
+            text=intent.reason)
         if consumed > 0:
             device.reset_surplus_timer()
             _apply_source_markers(device, intent)
@@ -844,7 +1039,9 @@ async def reconcile_load(device: "ControllableDevice", intent: LoadIntent,
     if not intent.on and active:
         if not device.can_deactivate():
             return device.get_current_consumption()   # anti-flicker holds it on
-        if await _deactivate_owned(device):
+        if await _deactivate_owned(device,
+                                   reason_code=intent.code or RC.LOAD_STOP,
+                                   text=intent.reason):
             _clear_source_markers(device)
             return 0.0
         return device.get_current_consumption()
@@ -854,7 +1051,10 @@ async def reconcile_load(device: "ControllableDevice", intent: LoadIntent,
         # never actuate it — SEM only re-tunes loads it is actually driving.
         if intent.source is None:
             return device.get_current_consumption()
-        consumed = await device.adjust_power(intent.power_w)
+        consumed = await _adjust_owned(
+            device, intent.power_w,
+            reason_code=intent.code or intent.source or RC.LOAD_ADJUST,
+            text=intent.reason)
         _apply_source_markers(device, intent)
         return consumed
 
@@ -955,7 +1155,7 @@ async def deactivate_devices(devices, reason: str = "teardown") -> int:
         if not getattr(device, "_sem_commanded", False):
             continue
         try:
-            await _deactivate_owned(device)
+            await _deactivate_owned(device, reason_code=RC.LOAD_TEARDOWN, text=reason)
             stopped += 1
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning(
@@ -1085,6 +1285,15 @@ class SurplusController:
         self.observer_decisions: Dict[str, dict] = {}
         self._observer_decision_keys: Dict[str, str] = {}
         self._observer_published_this_cycle: set[str] = set()
+        # (#1084) The decision log: why a device's command changed. Owned
+        # here because all three actuator seams (chargers, batteries, loads)
+        # already hold this controller. Recording only; never restored.
+        from .decision_log import DecisionLog
+        self.decision_log = DecisionLog(hass)
+        # (#812) Each device's own tariff, when it has one. Stamped once per
+        # cycle in ``update``; a device without one reads the house level.
+        from .device_tariff import DeviceTariffs
+        self.device_tariffs = DeviceTariffs(hass)
         self.max_export_w: float = 0  # 0 = no limit. E.g., 10000 for 10kW export limit
         self._devices: Dict[str, ControllableDevice] = {}
         self._allocation_data = SurplusAllocationData()
@@ -1098,6 +1307,8 @@ class SurplusController:
         self._batt_buffer_soc: float = 100.0
         self._batt_reserve_soc: float = 100.0
         self._batt_assist_budget_w: float = 0.0
+        self._batt_assist_budget_above_w: Optional[float] = None
+        self._batt_priority: Optional[int] = None
         self._tier1_budget_left: float = 0.0
         # (arc Phase 4) last raw surplus samples for the median-of-3 pre-filter
         self._surplus_samples: List[float] = []
@@ -1112,6 +1323,11 @@ class SurplusController:
         # Stamped by update() from the coordinator; empty when actuation is
         # off or no trusted plan exists.
         self._plan_windows: dict = {}
+        # (#1021) The grid operator's relay this cycle, stamped by the
+        # coordinator. Devices marked "behind the relay" read it through
+        # ``locked_by_operator``. INERT = no relay configured.
+        from .shed_signal import INERT
+        self.shed_signal = INERT
 
     @property
     def allocation_data(self) -> SurplusAllocationData:
@@ -1163,6 +1379,7 @@ class SurplusController:
         "_last_activated", "_last_deactivated",   # anti-cycle windows
         "_observed_off_since", "_external_off_until",
         "_surplus_since",                          # activation debounce
+        "_held_power",           # (#1067) a rating hold spans the rebuild
     )
     # _sem_owned is transplanted separately: only from an ACTIVE old object —
     # a stale False (reconciler cleared it while the entity flickered) must not
@@ -1291,7 +1508,8 @@ class SurplusController:
         has activated (#508 W7).
 
         The coordinator builds a *feedback-free* true house surplus as
-        ``grid_export + active_surplus_draw_w()``. Without the addback,
+        signed grid + ``active_surplus_draw_w()`` (#1102: export minus the
+        import, see ``solar_bounded_surplus``). Without the addback,
         every device the controller turns on shrinks the grid export it
         reads next cycle, so the surplus signal would chase its own tail
         and the device would oscillate. Adding back the controller's own
@@ -1301,11 +1519,20 @@ class SurplusController:
         Externally-managed devices (the EV, driven by the decide/actuate
         path) are excluded — their draw is already reflected in grid
         export and must not be re-credited here.
+
+        (#1102) So are loads the walk never debits: mode Off (the user's
+        own, e.g. a monitored washer plug the belief sync sees running)
+        and a load behind the operator's relay while it is on (#1021).
+        Crediting them put their draw — and, once the pool saw the import,
+        the import they cause — back on the table for every Solar-only load.
         """
+        from ..devices.base import DeviceControlMode
         return sum(
             d.get_current_consumption()
             for d in self.get_devices_sorted()
             if d.is_active
+            and d.control_mode != DeviceControlMode.OFF
+            and getattr(d, "locked_by_operator", False) is not True
         )
 
     def grid_funded_draw_w(self) -> float:
@@ -1329,7 +1556,6 @@ class SurplusController:
         actuation (``reconcile_load`` applies them); the shared cycle context
         (``self._batt_*`` / ``self._tier1_budget_left``) is already stamped by
         ``update()``. This is what REPLACES the 7 imperative passes."""
-        price_is_cheap = is_cheap_name(price_level)
         soc_above = (self._batt_soc is not None
                      and self._batt_soc > self._batt_reserve_soc)
 
@@ -1341,6 +1567,10 @@ class SurplusController:
                     shed.add(d.device_id)
                     if not peak_shed_all:
                         break
+        # (#1048) …and every load the phase guard took for its phase.
+        for d in devices:
+            if _phase_shed(d) and d.is_active:
+                shed.add(d.device_id)
 
         remaining = float(remaining_surplus)
         reclaim_handed = False
@@ -1349,12 +1579,15 @@ class SurplusController:
             # (#576) hand the reclaim back at the battery's slot
             if (not reclaim_handed and battery_priority is not None
                     and reclaim_w > 0 and device.priority >= battery_priority):
-                remaining = max(0.0, remaining - reclaim_w)
+                remaining = reclaim_handed_back(remaining, reclaim_w)
                 reclaim_handed = True
             tier1 = self._tier1_headroom_w(device)
             intent = compute_load_intent(
                 device, remaining_surplus_w=remaining, tier1_headroom_w=tier1,
-                price_is_cheap=price_is_cheap, peak_freeze=peak_freeze,
+                # (#812) the device's own tariff when it has one
+                price_is_cheap=is_cheap_name(
+                    device_price_level(device, price_level)),
+                peak_freeze=peak_freeze,
                 is_night=getattr(self, "_is_night_cycle", True),
                 # (#953) same cycle context as is_night — stamped by update()
                 daylight_remaining_s=getattr(
@@ -1432,6 +1665,9 @@ class SurplusController:
         battery_buffer_soc: float = 100.0,
         battery_reserve_soc: float = 100.0,
         battery_assist_budget_w: float = 0.0,
+        # (#1114) the budget for a load ranked above the battery (its gate
+        # counts the reclaim). None = the same as ``battery_assist_budget_w``.
+        battery_assist_budget_above_w: Optional[float] = None,
         observer: bool = False,
         is_night: bool = True,
         # (#638 G4) device_id → True/False window verdicts from the joint
@@ -1462,7 +1698,7 @@ class SurplusController:
         Args:
             available_power_w: Total available surplus power. Since #508 W7
                 the coordinator passes the feedback-free TRUE house surplus
-                (grid export + this controller's own active draw), not the
+                (signed grid + this controller's own active draw, #1102), not the
                 EV charging budget — heat pump / hot water boost on what the
                 house is actually exporting after the EV and battery take
                 their share.
@@ -1494,6 +1730,9 @@ class SurplusController:
             d for d in self._devices.values()
             if getattr(d, "device_type", None) in (DeviceType.SWITCH, DeviceType.CLIMATE)
         ])
+        # (#812) A device with its own tariff gates on its own price level
+        # this cycle (``device_price_level``); the rest read ``price_level``.
+        self.device_tariffs.stamp(self._devices.values())
 
         # #508 W2 — peak posture. WARNING freezes new activation (don't add
         # load while the peak is climbing); SHEDDING/EMERGENCY additionally
@@ -1506,6 +1745,10 @@ class SurplusController:
         self._batt_buffer_soc = battery_buffer_soc
         self._batt_reserve_soc = battery_reserve_soc
         self._batt_assist_budget_w = max(0.0, float(battery_assist_budget_w or 0.0))
+        self._batt_assist_budget_above_w = (
+            None if battery_assist_budget_above_w is None
+            else max(0.0, float(battery_assist_budget_above_w)))
+        self._batt_priority = battery_priority
         # (#633) "Finish overnight from: Battery" is a NIGHT source — the
         # Tier-2 pass and its force-expiry both gate on this cycle flag.
         self._is_night_cycle = bool(is_night)
@@ -1591,11 +1834,17 @@ class SurplusController:
         # surplus the higher-priority loads left unconsumed (see #576 tests).
         remaining_surplus = distributable + max(0.0, reclaim_w)
         _reclaim_handed_back = False
+        # (#1102) What the walk took from the pool for each load. The
+        # deficit pass gives back exactly this when it stops one: a switch
+        # is debited its rating, and its power sensor can read 0 W while a
+        # thermostat holds it off.
+        _walk_spend: dict = {}
         active_count = 0
         # (#620) Tier-1 running budget — the battery can only supply its assist
         # budget ONCE, not once per device. Decremented as each battery-assist
         # load draws from it, so N loads can't each claim the full budget.
-        self._tier1_budget_left = self._batt_assist_budget_w
+        self._tier1_budget_left = max(
+            self._batt_assist_budget_w, self._batt_assist_budget_above_w or 0.0)
         # (#885) Clear each device's recorded battery draw before the walk
         # re-measures it. This is what the per-charger reservation reads for
         # loads that are ALREADY RUNNING, so a stale value would keep
@@ -1618,6 +1867,12 @@ class SurplusController:
                 distributable=distributable, available_power_w=available_power_w,
                 observer=observer,
             )
+
+        # (#1021) A load behind the grid operator's relay, relay on: the
+        # relay cuts it, so the imperative passes leave it alone — no
+        # start, no stop, no runtime judged. The intent path above says why.
+        devices = [d for d in devices
+                   if not (getattr(d, "locked_by_operator", False) is True)]
 
         # Force expiry: a cheap-hours force ends with its reason (#559 review) —
         # the tariff left the cheap window, OR the day rolled over (the deficit
@@ -1682,21 +1937,23 @@ class SurplusController:
                     # only blocks re-activation (class 17).
                     reason = ("cheap-hours top-up ended — today's daylight "
                               "can still finish the target")
-                elif not is_cheap_name(price_level):
+                elif not is_cheap_name(
+                        _lvl := device_price_level(device, price_level)):
                     # (#992/#994) Say which of three things happened. "tariff
                     # now flat" claims a transition that a flat tariff cannot
                     # make — it was flat when this top-up started — and
                     # "tariff now no_prices" blames the tariff for SEM losing
                     # the price feed. Class 99: a verdict naming a cause its
-                    # own scope refutes.
-                    if price_level == "flat":
+                    # own scope refutes. (#812) ``_lvl`` is the device's own
+                    # tariff when it has one.
+                    if _lvl == "flat":
                         reason = ("cheap-hours top-up ended — this tariff has "
                                   "no cheaper hours to wait for")
-                    elif price_level in ("no_prices", "", "unknown", None):
+                    elif _lvl in ("no_prices", "", "unknown", None):
                         reason = ("cheap-hours top-up ended — no prices left "
                                   "to compare")
                     else:
-                        reason = f"tariff now {price_level}"
+                        reason = f"tariff now {_lvl}"
             # (#620) Tier-2 overnight battery force expiry — its OWN terms: the
             # user turned the "Use battery overnight" toggle OFF, the Reserve
             # floor was crossed (battery must be protected), or the day rolled
@@ -1721,7 +1978,11 @@ class SurplusController:
                 elif soc is not None and soc <= self._batt_reserve_soc:
                     reason = "overnight battery force ended (reserve SoC reached)"
             if reason:
-                if await _deactivate_owned(device):
+                # (#1135) the minimum run holds here as on every other stop
+                # pass — this one trusted the device to hold it itself, and a
+                # heat pump's SG-Ready stand-down does not.
+                if device.can_deactivate() and await _deactivate_owned(
+                        device, reason_code=RC.LOAD_OVERNIGHT_END, text=reason):
                     device._offpeak_forced = False
                     device._offpeak_forced_date = None
                     device._batt_overnight_forced = False
@@ -1744,7 +2005,8 @@ class SurplusController:
             # only the export surplus and the battery charges first.
             if (not _reclaim_handed_back and battery_priority is not None
                     and reclaim_w > 0 and device.priority >= battery_priority):
-                remaining_surplus = max(0.0, remaining_surplus - reclaim_w)
+                remaining_surplus = reclaim_handed_back(
+                    remaining_surplus, reclaim_w)
                 _reclaim_handed_back = True
             # Skip devices in "off" mode — SEM never touches these
             if device.control_mode == DeviceControlMode.OFF:
@@ -1797,13 +2059,18 @@ class SurplusController:
                     # EV floor/ceiling contract).
                     done_reason = "daily target met — ending battery/grid top-up"
                 elif device.stop_condition_met:
+                    # (#1062) A device can meet its stop without a stop
+                    # entity (a boiler at its target, a banked comfort band)
+                    # — then there is no "<entity> >= <value>" to print.
                     done_reason = (
                         f"stop condition met ({device.stop_entity} >= "
-                        f"{device.stop_at:g})"
+                        f"{device.stop_at:g})" if device.stop_entity
+                        else "stop condition met (target reached)"
                     )
                 if done_reason:
                     if device.is_active and device.can_deactivate():
-                        if await _deactivate_owned(device):
+                        if await _deactivate_owned(
+                                device, reason_code=RC.LOAD_TARGET_MET, text=done_reason):
                             device._offpeak_forced = False
                             device._offpeak_forced_date = None
                             # (#620) done-for-the-day also ends any Tier-2
@@ -1821,6 +2088,19 @@ class SurplusController:
                             "%s: %s — deactivation waiting for anti-flicker",
                             device.name, done_reason,
                         )
+                    if device.is_active:
+                        # (#1102) Still on (anti-flicker, or the stop did not
+                        # take): its draw sits in the pool's add-back, so it
+                        # is debited like any running load. Skipping it gave
+                        # its watts to every load below it.
+                        _held = max(
+                            0.0, float(device.get_current_consumption() or 0.0))
+                        if (device._offpeak_forced or getattr(
+                                device, "_batt_overnight_forced", False)):
+                            # a paid run takes the sun that is left, no more
+                            _held = min(_held, max(0.0, remaining_surplus))
+                        remaining_surplus -= _held
+                        _walk_spend[device.device_id] = _held
                     allocations.append(SurplusAllocation(
                         device_id=device.device_id,
                         device_name=device.name,
@@ -1846,7 +2126,9 @@ class SurplusController:
                 if peak_freeze:
                     continue  # #508 W2: don't add load while peak is at risk
                 if device.can_activate():
-                    consumed = await _activate_owned(device, remaining_surplus)
+                    consumed = await _activate_owned(
+                        device, remaining_surplus, reason_code=RC.LOAD_SURPLUS,
+                        text="enough sun to start")
                     assist = 0.0
                     if consumed > 0:
                         device.reset_surplus_timer()
@@ -1866,6 +2148,7 @@ class SurplusController:
                             self._tier1_budget_left = max(
                                 0.0, self._tier1_budget_left - assist)
                     remaining_surplus -= max(0.0, consumed - assist)
+                    _walk_spend[device.device_id] = max(0.0, consumed - assist)
                     if consumed > 0:
                         active_count += 1
 
@@ -1874,8 +2157,29 @@ class SurplusController:
 
             elif device.is_active:
                 # Already active — adjust power level (applies to all modes)
-                old_consumption = device.get_current_consumption()
-                consumed = await device.adjust_power(remaining_surplus + old_consumption)
+                # (#1102) Offer ``remaining_surplus`` alone: the pool already
+                # holds this load's draw (the #508 W7 add-back), and the
+                # walk only debits loads AHEAD of it. ``+ old_consumption``
+                # dates from the export-only pool of v1.0 and counted the
+                # draw twice — a watt setpoint ramped to its maximum on the
+                # grid. On/off loads ignore the figure and are unchanged.
+                _paid = bool(device._offpeak_forced or getattr(
+                    device, "_batt_overnight_forced", False))
+                if device.control_mode == DeviceControlMode.SURPLUS and not _paid:
+                    # Tier-1 assist is part of what it may have (0 for a
+                    # plain load); the debit below takes the battery's share
+                    # back out.
+                    consumed = await _adjust_owned(
+                        device,
+                        remaining_surplus + self._tier1_headroom_w(device),
+                        reason_code=RC.LOAD_SURPLUS, text="follows the sun")
+                else:
+                    # (#1102) peak_only is the user's: SEM only sheds it
+                    # (the desired-state twin leaves it alone too). A paid
+                    # run (cheap-hours grid, Tier-2) holds the power its
+                    # force pass set — the sun's pool is not its budget, and
+                    # offering it ~0 W wrote its floor every other cycle.
+                    consumed = float(device.get_current_consumption() or 0.0)
                 # (#688) Debit the FULL draw, not just its change. The pool was
                 # credited with every active device's draw (the feedback-free
                 # add-back), so leaving the draw in after walking past the
@@ -1899,7 +2203,19 @@ class SurplusController:
                         device._tier1_batt_w = assist   # (#885)
                         self._tier1_budget_left = max(
                             0.0, self._tier1_budget_left - assist)
-                remaining_surplus -= max(0.0, consumed - assist)
+                spend = max(0.0, consumed - assist)
+                # (#1102) A load on a PAID source (cheap-hours grid, Tier-2
+                # battery) takes the sun that is left, never more: the rest
+                # it buys by design. Since the pool sees the import, its
+                # grid share would otherwise push the walk negative and the
+                # deficit LIFO — which skips it — would stop a solar load
+                # AHEAD of it that the sun still funds. The desired-state
+                # twin debits paid loads nothing; this keeps the priority
+                # order for the sun.
+                if _paid:
+                    spend = min(spend, max(0.0, remaining_surplus))
+                remaining_surplus -= spend
+                _walk_spend[device.device_id] = spend
                 active_count += 1
 
             allocations.append(SurplusAllocation(
@@ -1931,13 +2247,29 @@ class SurplusController:
                 # (#620) same for a Tier-2 overnight-battery forced device: it
                 # runs off the battery by design and is only ended by its OWN
                 # terms (reserve SoC / day rollover), never by the deficit LIFO.
+                # (#1121) …and a device's own run (Legionella) needs no sun.
                 if device._offpeak_forced or getattr(
-                        device, "_batt_overnight_forced", False):
+                        device, "_batt_overnight_forced", False) or getattr(
+                        device, "runs_without_surplus", False) is True:
                     continue
                 if device.is_active and device.can_deactivate():
                     consumption = device.get_current_consumption()
-                    if await _deactivate_owned(device):
-                        remaining_surplus += consumption
+                    # (#1102) Give back what the walk took from the pool. A
+                    # Tier-1 load's battery share was never taken, so it is
+                    # not given back; a load the battery covers in full
+                    # costs the sun nothing, and stopping it recovers
+                    # nothing — the pass moves on to the load that does.
+                    # A switch was taken its rating, so an idle one (0 W
+                    # read, thermostat off) gives that back and is stopped,
+                    # as before: skipping it left every load below it off.
+                    charged = _walk_spend.get(
+                        device.device_id, _walk_charge_w(device, consumption))
+                    if charged <= 0.0:
+                        continue
+                    if await _deactivate_owned(
+                            device, reason_code=RC.LOAD_SURPLUS_SHORT,
+                            text="not enough sun"):
+                        remaining_surplus += charged
                         active_count -= 1
                         _LOGGER.info(
                             "Deactivated %s (priority %d) to recover %.0fW",
@@ -1947,8 +2279,12 @@ class SurplusController:
                         for dep in self.get_dependents(device.device_id):
                             if dep.is_active and dep.can_deactivate():
                                 dep_consumption = dep.get_current_consumption()
-                                if await _deactivate_owned(dep):
-                                    remaining_surplus += dep_consumption
+                                if await _deactivate_owned(
+                                    dep, reason_code=RC.LOAD_DEPENDENCY,
+                                    text=f"{device.name} stopped"):
+                                    remaining_surplus += _walk_spend.get(
+                                        dep.device_id,
+                                        _walk_charge_w(dep, dep_consumption))
                                     active_count -= 1
                                     _LOGGER.info(
                                         "Cascade deactivated %s (depends on %s)",
@@ -1965,6 +2301,31 @@ class SurplusController:
                             "Deactivation of %s blocked by anti-flicker",
                             device.name,
                         )
+
+        # (#1048) The phase guard took these for a phase over its limit. The
+        # load manager may not switch a load this controller owns (#649), so
+        # the guard's order arrives here as a hold: back them off now —
+        # anti-flicker still holds a compressor through its minimum run.
+        for device in devices:
+            if not _phase_shed(device):
+                continue
+            if not device.is_active or not device.can_deactivate():
+                continue
+            consumption = device.get_current_consumption()
+            if await _deactivate_owned(
+                    device, reason_code=RC.LOAD_PHASE_GUARD,
+                    text="phase over its limit"):
+                active_count = max(0, active_count - 1)
+                remaining_surplus += consumption
+                _LOGGER.info(
+                    "Phase %s over its limit: shed %s (%.0f W)",
+                    device._phase_hold, device.name, consumption,
+                )
+                for a in allocations:
+                    if a.device_id == device.device_id:
+                        a.allocated_watts = 0.0
+                        a.actual_consumption_watts = 0.0
+                        a.state = DeviceState.IDLE.value
 
         # #508 W2 — peak shed pass. On SHEDDING/EMERGENCY, back the
         # controller's own active discretionary (SURPLUS-mode) devices off
@@ -1984,7 +2345,9 @@ class SurplusController:
                 if not device.is_active or not device.can_deactivate():
                     continue
                 consumption = device.get_current_consumption()
-                if await _deactivate_owned(device):
+                if await _deactivate_owned(
+                        device, reason_code=RC.LOAD_PEAK_SHED,
+                        text="grid peak limit"):
                     device._batt_overnight_forced = False
                     device._batt_overnight_forced_date = None
                     active_count = max(0, active_count - 1)
@@ -2012,8 +2375,13 @@ class SurplusController:
         # rated_power. Do not add a peak gate here.
         from ..devices.base import ScheduleDevice
         for device in devices:
-            if isinstance(device, ScheduleDevice) and device.is_deadline_approaching and not device.is_active:
-                consumed = await _activate_owned(device, device.rated_power)
+            if (isinstance(device, ScheduleDevice) and device.is_deadline_approaching
+                    and not device.is_active
+                    # (#1048) a deadline outranks the peak, not a fuse
+                    and not _phase_held(device)):
+                consumed = await _activate_owned(
+                    device, device.rated_power, reason_code=RC.LOAD_DEADLINE,
+                    text="deadline is near")
                 if consumed > 0:
                     active_count += 1
                     remaining_surplus -= consumed
@@ -2049,7 +2417,9 @@ class SurplusController:
                     continue
                 if not device.can_activate():
                     continue
-                consumed = await _activate_owned(device, device.min_power_threshold)
+                consumed = await _activate_owned(
+                    device, device.min_power_threshold,
+                    reason_code=RC.LOAD_PLAN_WINDOW, text="planned block")
                 if consumed > 0:
                     device._offpeak_forced = True
                     device._offpeak_forced_date = _load_meter_day(device)
@@ -2060,8 +2430,12 @@ class SurplusController:
                         device.name, consumed,
                     )
 
-        if is_cheap_name(price_level) and not peak_freeze:
+        if not peak_freeze:
             for device in devices:
+                # (#812) the device's own tariff when it has one; else the
+                # house level, exactly the old ``is_cheap_name(price_level)``
+                if not is_cheap_name(device_price_level(device, price_level)):
+                    continue
                 if device.control_mode != DeviceControlMode.SURPLUS:
                     continue
                 # (#559) solar_only devices NEVER grid-force — they accept
@@ -2126,7 +2500,9 @@ class SurplusController:
                             float(device.min_power_threshold or 0.0), _fit_w,
                         )
                         continue
-                    consumed = await _activate_owned(device, device.min_power_threshold)
+                    consumed = await _activate_owned(
+                        device, device.min_power_threshold,
+                        reason_code=RC.LOAD_CHEAP_GRID, text="cheap hours")
                     if consumed > 0:
                         device._offpeak_forced = True
                         device._offpeak_forced_date = _load_meter_day(device)
@@ -2182,7 +2558,9 @@ class SurplusController:
                     continue
                 if not device.can_activate():
                     continue
-                consumed = await _activate_owned(device, device.min_power_threshold)
+                consumed = await _activate_owned(
+                    device, device.min_power_threshold,
+                    reason_code=RC.LOAD_TIER2_BATTERY, text="overnight from the battery")
                 if consumed > 0:
                     device._batt_overnight_forced = True  # (#620) own marker
                     device._batt_overnight_forced_date = _load_meter_day(device)
@@ -2252,7 +2630,18 @@ class SurplusController:
             return 0.0
         # Running budget: shrinks as earlier (higher-priority) battery-assist
         # loads claim it this cycle, so the battery isn't multi-spent.
-        return max(0.0, min(self._batt_assist_budget_w, self._tier1_budget_left))
+        return max(0.0, min(self._tier1_budget_for(device), self._tier1_budget_left))
+
+    def _tier1_budget_for(self, device) -> float:
+        """(#1114) The Tier-1 budget this device's Solar Gate opens: a load
+        ranked above the battery counts the charge power it may reclaim,
+        the way a charger above the battery does."""
+        above = getattr(self, "_batt_assist_budget_above_w", None)
+        bprio = getattr(self, "_batt_priority", None)
+        if (above is not None and bprio is not None
+                and int(getattr(device, "priority", 0)) < int(bprio)):
+            return above
+        return self._batt_assist_budget_w
 
     def _tier2_overnight_eligible(self, device) -> bool:
         """(#620) Tier 2 — may this device draw the battery BELOW the buffer,

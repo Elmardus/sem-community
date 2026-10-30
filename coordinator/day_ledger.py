@@ -1,6 +1,6 @@
 """#638 day horizon — the day expressed as ledger slots.
 
-One mind, no second engine (Guido: "even with dayplanner"): the DAY is
+One mind, no second engine (rule: "even with dayplanner"): the DAY is
 translated into the ``LedgerSlot`` shape the night packer already
 understands, and ``build_night_ledger`` + ``pack_night`` run unchanged
 over it. Two slot flavours:
@@ -66,7 +66,7 @@ def build_day_slots(*, start: datetime, end: datetime, day_kwh: float,
                     sunrise: datetime, sunset: datetime,
                     home_w_at, price_at, level_cheap_at,
                     surplus_margin_w: float = DEFAULT_SURPLUS_MARGIN_W,
-                    export_rate: float = 0.0,
+                    export_rate=0.0,
                     step_s: int = 3600) -> list:
     """Tile ``[start, end)`` into day-shaped ``LedgerSlot``s.
 
@@ -82,7 +82,13 @@ def build_day_slots(*, start: datetime, end: datetime, day_kwh: float,
     preference becomes economic and can correctly LOSE to a night hour that
     is cheaper than the feed-in. Left at 0 the sun is free again, which is
     also right: with no export tariff, exporting earns nothing.
+
+    (#1162) ``export_rate`` may also be a function of the slot start, like
+    ``price_at``: a live feed-in tariff pays a different rate each hour, and
+    a single number priced every surplus slot at a rate the user is not
+    paid. A plain number still means one rate all day.
     """
+    rate_at = export_rate_fn(export_rate)
     slots = []
     t = start
     while t < end:
@@ -113,7 +119,7 @@ def build_day_slots(*, start: datetime, end: datetime, day_kwh: float,
                 # — one you PAY — look identical to a free kWh, and a planner
                 # cannot prefer another sink over a cost it cannot see. ``or 0.0``
                 # still handles an absent rate, the only case the clamp covered.
-                price=float(export_rate or 0.0),
+                price=rate_at(t),
                 level_cheap=True, home_w=0.0,
                 cap_override_w=surplus_w,
                 solar_w=solar_w, home_gross_w=home_w,
@@ -154,7 +160,7 @@ def _merge_windows(slots) -> list:
 
 def tomorrow_preview(*, day_start, day_end, day_kwh, sunrise, sunset,
                      home_w_at, price_at, level_cheap_at, stamps_at,
-                     export_rate: float = 0.0) -> dict:
+                     export_rate=0.0) -> dict:
     """(#638 consolidation / #722) The NEXT energy day's books, previewed.
 
     tintinz's Today|Tomorrow idea (#722), adopted onto the one data path:
@@ -213,6 +219,37 @@ def tariff_price_at(prov, ts):
     return None
 
 
+def tariff_export_rate_at(prov, ts, fallback: float) -> float:
+    """The ONE feed-in price accessor every planner surface reads (#1162) —
+    what a kWh exported at ``ts`` earns, from the same provider the live
+    export rate comes from. ``fallback`` (the configured rate) answers for a
+    provider that cannot say, so a static install prices exactly as before."""
+    if hasattr(prov, "get_export_rate_at"):
+        try:
+            p = prov.get_export_rate_at(ts)
+            if p is not None:
+                return float(p)
+        except Exception:  # noqa: BLE001 — the configured rate, honestly
+            pass
+    return float(fallback or 0.0)
+
+
+def export_rate_fn(rate):
+    """(#1162) A builder's ``export_rate`` as a function of the slot start:
+    a callable passes through, a number is that rate all day."""
+    if callable(rate):
+        def _at(ts):
+            try:
+                return float(rate(ts) or 0.0)
+            except Exception:  # noqa: BLE001 — an unread rate earns nothing
+                return 0.0
+        return _at
+    # (#871) NOT max(0.0, …): a negative rate is one you PAY and must stay
+    # visible; ``or 0.0`` only covers an absent rate.
+    flat = float(rate or 0.0)
+    return lambda ts: flat
+
+
 def tariff_cheap_at(prov, ts):
     """The ONE cheap-level accessor (#638) — the same gate execution's
     cheap-hours loads fire on."""
@@ -228,7 +265,7 @@ def tariff_cheap_at(prov, ts):
 
 def provisional_soc_curve(ledger, *, capacity_kwh: float,
                           max_charge_w: float) -> list:
-    """(Guido, 08-08: "we can also predict the battery level") — the
+    """(08-08: "we can also predict the battery level") — the
     battery's likely path through a walked day ledger.
 
     The trajectory walk models the DISCHARGE side (home draws battery to

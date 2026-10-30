@@ -47,6 +47,7 @@ from custom_components.solar_energy_management.coordinator.health_check import (
 )
 from custom_components.solar_energy_management.coordinator.types import (
     EnergyTotals,
+    PowerReadings,
 )
 
 TODAY = date(2026, 8, 14)
@@ -428,7 +429,7 @@ class TestWiredIntoTheCycle773:
         )
         coord._comfort_split_for = (
             SEMCoordinator._comfort_split_for.__get__(coord))
-        SEMCoordinator._file_device_energy(coord, TODAY)
+        SEMCoordinator._file_device_energy(coord, TODAY, PowerReadings())
 
         calls = coord._energy_calculator.accumulate_controlled_load\
             .call_args_list

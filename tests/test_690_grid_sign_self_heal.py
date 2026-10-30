@@ -49,12 +49,15 @@ class _Reader:
         return bool(self._raw_config.get("grid_sign_invert", False)
                     or self._raw_config.get("grid_sign_user_flip", False))
 
+    def grid_read_is_pair(self) -> bool:
+        # (#1215) a one-sensor meter: its sign is learned, so it is healed
+        return False
+
 
 def _coord(**cfg):
     c = SEMCoordinator.__new__(SEMCoordinator)
     c._sensor_reader = _Reader(**cfg)
     c._negative_balance_count = 0
-    c._sign_flip_suppression_count = 0
     return c
 
 

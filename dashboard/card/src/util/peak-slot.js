@@ -2,7 +2,7 @@
  * The peak block reads two different quantities, and the card used to show
  * only one of them under a name that fits neither.
  *
- * Guido, 03.09, looking at the Home diagram and the Load Management card at
+ * 03.09, looking at the Home diagram and the Load Management card at
  * the same moment: *"How is this possible? 4.3 kW charging and 4.36 kW
  * margin."* Both numbers were right. "Current Peak" is the **15-minute
  * rolling average** of grid import — the metric the demand tariff bills —
@@ -76,7 +76,30 @@ export function slotStatus({ targetKw, usedKwh, allowedW, now = new Date() }) {
  * import — the peak block only ever asks "how much is coming in".
  */
 export function importKw(gridPowerW) {
-    const w = Number(gridPowerW);
+    // (#1200) parseFloat, not Number: Number('') is 0, an empty state is no
+    // reading.
+    const w = typeof gridPowerW === 'number' ? gridPowerW : parseFloat(gridPowerW);
     if (!Number.isFinite(w)) return null;
     return Math.max(0, -w) / 1000;
+}
+
+/**
+ * (#1055) True when the install has no grid ceiling (#716), read from the
+ * `sensor.sem_target_peak_limit` state object's flag — never from the number.
+ */
+export function isUncapped(stateObj) {
+    return !!stateObj?.attributes?.peak_limit_unlimited;
+}
+
+/**
+ * (#1055) The grid ceiling as a person reads it, from the
+ * `sensor.sem_target_peak_limit` state object: the uncapped word when the
+ * install has no ceiling (#716), else "x.x kW", else "—". The sensor keeps
+ * the saved number while uncapped, so printing the state alone showed a
+ * limit that is not in force.
+ */
+export function peakLimitText(stateObj, uncappedWord) {
+    if (isUncapped(stateObj)) return uncappedWord;
+    const kw = parseFloat(stateObj?.state);
+    return Number.isFinite(kw) ? `${kw.toFixed(1)} kW` : '—';
 }

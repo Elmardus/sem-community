@@ -67,7 +67,7 @@
 | Peblar Rocksolid | `peblar` | number entity | 🧩 implemented | — |
 | V2C Trydan | `v2c` | number entity | 🧩 implemented | — |
 | Wallbox (MQTT bridge) | `mqtt` | number entity + switch (community MQTT bridge) | 🧩 implemented | #984/#985 (RienduPre) two Pulsar Plus behind the bridge; mapped from his entity lists, live confirm pending |
-| Zaptec | `zaptec` | service-based / number entity (available_current) | 🧩 implemented | disc. 103 (coppe218) reports a Zaptec Go2 under test; no entities or values shown yet |
+| Zaptec | `zaptec` | number entity (charger_max_current) | 🧩 implemented | disc. 103 (coppe218) reports a Zaptec Go2 under test; no entities or values shown yet |
 
 ## Vehicles
 
@@ -101,6 +101,32 @@ Everything else SEM reads or switches: the SG-Ready and hot-water path, metered 
 | Echelon meter | grid meter | `custom` | 🧩 implemented | #807 (ab-elco-clal) import/export entities appear in a live diagnostics dump; nothing confirmed about them |
 | Viessmann Vitocal 250-A / 252-A | heat pump / hot water | `vicare` | 🧩 implemented | #600 / disc. 599 (tlinnet) ViCare sensors mapped into SEM's fields; no actuation confirmed yet |
 | Buderus heat pump | heat pump (SG-Ready) | `ems-esp` | 📥 requested | #801 (HorizonKane) SG-Ready needs a command sent to EMS-ESP, not a relay flip |
+
+## How SEM finds a charger it has no row for
+
+SEM does not add code per brand. It reads what an integration offers and
+looks for these roles:
+
+- **Start and stop buttons** — a charger with a start and a stop button can
+  be started and stopped.
+- **A charge-mode select** — a select that can stop and can charge (for
+  example Fast / Eco / Stopped) is the charge mode, whatever it is called.
+- **A phase select** — a select with 1 and 3 is suggested as the phase switch.
+- **A car's own charge control** — a car integration's charging-amps number
+  and charge switch (Tesla Fleet, Teslemetry, Tessie).
+- **A charger that only reports** — driven through the one car that has
+  those controls (a Tesla Wall Connector with one Tesla).
+  With no such car, the report shows it as a charger found with no control
+  SEM can drive: SEM can read it but not start, stop or set its current.
+  With two such cars SEM does not guess; you add it by hand with that car's
+  controls.
+- **A companion device** — an installation or site device next to a
+  charger belongs to it and is not reported as unknown hardware.
+
+What SEM finds shows in the hardware report (Diagnose). For now it is a
+report only: nothing is set up by itself, and you add the charger by hand
+with the entities the report names.
+
 
 ## Upgrading a row to *tested live*
 

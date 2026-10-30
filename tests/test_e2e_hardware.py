@@ -61,6 +61,9 @@ class MockCharger:
     start_stop_entity: Optional[str] = None  # switch or button
     charge_mode_entity: Optional[str] = None  # select entity
     charge_mode_start: Optional[str] = None
+    # (#1032) entity_id -> the integration's translation key, for brands the
+    # roster's roles find (no brand path reads entity ids for them)
+    keys: Optional[dict] = None
     charge_mode_stop: Optional[str] = None
     start_service: Optional[str] = None
     start_service_data: Optional[str] = None
@@ -86,7 +89,8 @@ def _state(value, unit=None, device_class=None, state_class=None):
     return s
 
 
-def _entity(entity_id, platform, device_class=None, device_id=None):
+def _entity(entity_id, platform, device_class=None, device_id=None,
+            translation_key=None):
     """Create a mock entity registry entry."""
     e = MagicMock()
     e.entity_id = entity_id
@@ -94,6 +98,11 @@ def _entity(entity_id, platform, device_class=None, device_id=None):
     e.original_device_class = device_class
     e.disabled_by = None
     e.device_id = device_id or f"dev_{platform}_001"
+    e.translation_key = translation_key
+    e.unique_id = f"{e.device_id}-{translation_key}" if translation_key else None
+    e.entity_category = None
+    e.capabilities = {}
+    e.config_entry_id = None
     return e
 
 
@@ -211,22 +220,28 @@ class E2ETestBase:
     def _build_charger_registry(self):
         """Build entity registry entries for the charger."""
         chg = self.charger
+        k = chg.keys or {}
         entities = [
             _entity(chg.connected_sensor, chg.platform,
                     "plug" if "binary_sensor" in chg.connected_sensor else None,
-                    chg.device_id),
-            _entity(chg.power_sensor, chg.platform, "power", chg.device_id),
+                    chg.device_id, k.get(chg.connected_sensor)),
+            _entity(chg.power_sensor, chg.platform, "power", chg.device_id,
+                    k.get(chg.power_sensor)),
         ]
 
         if chg.charging_sensor != chg.connected_sensor:
             dc = "power" if "binary_sensor" in chg.charging_sensor else None
-            entities.append(_entity(chg.charging_sensor, chg.platform, dc, chg.device_id))
+            entities.append(_entity(chg.charging_sensor, chg.platform, dc, chg.device_id,
+                                    k.get(chg.charging_sensor)))
 
         if chg.energy_sensor:
-            entities.append(_entity(chg.energy_sensor, chg.platform, "energy", chg.device_id))
+            entities.append(_entity(chg.energy_sensor, chg.platform, "energy", chg.device_id,
+                                    k.get(chg.energy_sensor)))
 
         if chg.current_entity:
-            entities.append(_entity(chg.current_entity, chg.platform, None, chg.device_id))
+            entities.append(_entity(chg.current_entity, chg.platform,
+                                    "current" if chg.keys else None, chg.device_id,
+                                    k.get(chg.current_entity)))
 
         if chg.start_stop_entity:
             entities.append(_entity(chg.start_stop_entity, chg.platform, None, chg.device_id))
@@ -310,7 +325,10 @@ class E2ETestBase:
         reg.entities.values.return_value = self._build_charger_registry()
         mock_er.async_get.return_value = reg
 
-        result = discover_ev_charger_from_registry(hass)
+        # (#1032) a brand the roster's roles find is offered in the form the
+        # user confirms, never saved silently
+        result = discover_ev_charger_from_registry(
+            hass, include_roles=bool(self.charger.keys))
         assert result, f"{self.charger.name}: discovery returned empty"
         assert result.get("ev_charging_power_sensor") == self.charger.power_sensor, \
             f"{self.charger.name}: power sensor not found"
@@ -937,11 +955,13 @@ OHME = MockCharger(
     power_unit="kW",
     energy_sensor="sensor.ohme_home_pro_energy",
     charge_mode_entity="select.ohme_home_pro_charge_mode",
-    charge_mode_start="Max charge",
-    charge_mode_stop="Paused",
-    connected_state="Plugged in",
-    charging_state="Charging",
-    disconnected_state="Unplugged",
+    charge_mode_start="max_charge",
+    charge_mode_stop="paused",
+    # (#1038) the states HA stores (ohme ChargerStatus), never the labels
+    # it shows: "Plugged in" is how the wizard's own list went wrong.
+    connected_state="plugged_in",
+    charging_state="charging",
+    disconnected_state="unplugged",
 )
 
 PEBLAR = MockCharger(
@@ -954,9 +974,11 @@ PEBLAR = MockCharger(
     energy_sensor="sensor.peblar_rocksolid_session_energy",
     current_entity="number.peblar_rocksolid_charge_limit",
     start_stop_entity="switch.peblar_rocksolid_charge",
-    connected_state="connected",
+    # (#1038) core's cp_state options (peblar/const.py): "suspended" is a
+    # car plugged in and paused, "no_ev_connected" the empty bay.
+    connected_state="suspended",
     charging_state="charging",
-    disconnected_state="no EV connected",
+    disconnected_state="no_ev_connected",
 )
 
 V2C = MockCharger(
@@ -988,17 +1010,26 @@ BLUE_CURRENT = MockCharger(
 )
 
 OPENEVSE = MockCharger(
+    # (#1032) the real integration's ids and words — core's own test output
+    # at 2026.8.2 (tests/integrations_rig/captures/openevse.json)
     name="OpenEVSE",
     platform="openevse",
-    connected_sensor="binary_sensor.openevse_station_vehicle",
-    charging_sensor="sensor.openevse_station_status",
-    power_sensor="sensor.openevse_station_current_power",
+    connected_sensor="binary_sensor.openevse_mock_config_vehicle_connected",
+    charging_sensor="sensor.openevse_mock_config_charging_status",
+    power_sensor="sensor.openevse_mock_config_charging_power",
     power_unit="W",
-    energy_sensor="sensor.openevse_station_usage_session",
-    current_entity="number.openevse_station_max_current_soft",
+    energy_sensor="sensor.openevse_mock_config_usage_this_session",
+    current_entity="number.openevse_mock_config_charge_rate",
     connected_state="on",
-    charging_state="charging",
+    charging_state="Charging",
     disconnected_state="off",
+    keys={
+        "binary_sensor.openevse_mock_config_vehicle_connected": "vehicle",
+        "sensor.openevse_mock_config_charging_status": "status",
+        "sensor.openevse_mock_config_charging_power": "charging_power",
+        "sensor.openevse_mock_config_usage_this_session": "usage_session",
+        "number.openevse_mock_config_charge_rate": "charge_rate",
+    },
 )
 
 ALFEN = MockCharger(

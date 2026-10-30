@@ -97,6 +97,8 @@ def _fake_self(devices=()):
         # The peak authority execution uses — load manager first, config
         # ``target_peak_limit`` (kW) behind it (#638 finding #5).
         _get_peak_limit_w=lambda: 6000.0,
+        # (#1021) The operator's cap, which the planning fallback also reads.
+        _operator_cap_kw=lambda: None,
         # (#638 armed night 1) measured W/A accessor — the fake models the
         # no-memo case: nameplate, same as a coordinator that has never
         # observed a draw.
@@ -113,6 +115,9 @@ def _fake_self(devices=()):
     # precisely because a fake could disagree with production silently.
     fake._configured_export_rate = (
         lambda: SEMCoordinator._configured_export_rate(fake))
+    # (#1162) …and the per-slot reader built on it, bound to the real one too.
+    fake._export_rate_at = (
+        lambda: SEMCoordinator._export_rate_at(fake))
     # (#846) per-setpoint sizing — the fake keeps modelling the no-memo
     # case: amps × the nameplate W/A above, same as a coordinator whose
     # learner has never been fed.
@@ -154,7 +159,7 @@ def _fake_self(devices=()):
     # publishes whether arbitrage can act at all, and the double must not
     # answer that differently from production. The fake carries no scheduler
     # config and no per-battery modes, so it reads SHUT — which is the
-    # shipped default (#533) and the state of Guido's PROD.
+    # shipped default (#533) and the state of PROD.
     fake._arbitrage_enabled = (
         lambda n=0: SEMCoordinator._arbitrage_enabled(fake, n))
     return fake
@@ -595,7 +600,7 @@ class TestFleetSocCoverage:
         coverage is 1/2 and the planner waits."""
         rdr = self._reader(
             detect=lambda p: "sensor.b2_soc" if p == "sensor.b2_power" else None,
-            read=lambda e, k: 65.0,
+            read=lambda e, k, **kw: 65.0,
             exists=lambda p: p == "sensor.b1_power",
         )
         avg = SensorReader._read_battery_soc_average(
@@ -611,7 +616,7 @@ class TestFleetSocCoverage:
         there is nothing to wait for."""
         rdr = self._reader(
             detect=lambda p: "sensor.b1_soc" if p == "sensor.b1_power" else None,
-            read=lambda e, k: 88.0,
+            read=lambda e, k, **kw: 88.0,
         )
         avg = SensorReader._read_battery_soc_average(
             rdr, ["sensor.b1_power", "sensor.b2_power"])
@@ -625,7 +630,7 @@ class TestFleetSocCoverage:
         vals = {"sensor.b1_soc": None, "sensor.b2_soc": 65.0}
         rdr = self._reader(
             detect=lambda p: p.replace("_power", "_soc"),
-            read=lambda e, k: vals[e],
+            read=lambda e, k, **kw: vals[e],
         )
         avg = SensorReader._read_battery_soc_average(
             rdr, ["sensor.b1_power", "sensor.b2_power"])
@@ -634,7 +639,7 @@ class TestFleetSocCoverage:
 
     def test_whole_fleet_is_full_coverage(self):
         rdr = self._reader(detect=lambda p: p.replace("_power", "_soc"),
-                           read=lambda e, k: 88.0 if "b1" in e else 65.0)
+                           read=lambda e, k, **kw: 88.0 if "b1" in e else 65.0)
         avg = SensorReader._read_battery_soc_average(
             rdr, ["sensor.b1_power", "sensor.b2_power"])
         assert avg == 76.5
@@ -643,7 +648,7 @@ class TestFleetSocCoverage:
     def test_configured_count_is_recorded_separately(self):
         rdr = self._reader(
             detect=lambda p: "sensor.b1_soc" if p == "sensor.b1_power" else None,
-            read=lambda e, k: 88.0,
+            read=lambda e, k, **kw: 88.0,
         )
         SensorReader._read_battery_soc_average(
             rdr, ["sensor.b1_power", "sensor.b2_power"])
@@ -654,7 +659,7 @@ class TestFleetSocCoverage:
         used to live only on the full-coverage branch, so the second gap
         was silent."""
         rdr = self._reader(detect=lambda p: p.replace("_power", "_soc"),
-                           read=lambda e, k: None)
+                           read=lambda e, k, **kw: None)
         rdr._soc_partial_logged = True
         avg = SensorReader._read_battery_soc_average(
             rdr, ["sensor.b1_power", "sensor.b2_power"])
@@ -1253,7 +1258,7 @@ class TestDisconnectedCarIsNotADemand:
 
 
 class TestReplanCauseIsOnThePayload:
-    """Night-3 finding 3: Guido shrinking the ASK to 0.5 kWh at 00:11
+    """Night-3 finding 3: shrinking the ASK to 0.5 kWh at 00:11
     re-stamped the night with no trace of why — a re-planned night must be
     distinguishable from the first answer."""
 
@@ -1345,7 +1350,7 @@ class TestTomorrowPreviewComposer:
         assert SEMCoordinator._compose_tomorrow_preview(fake) is None
 
     def test_past_midnight_previews_the_COMING_day_not_the_day_after(self, monkeypatch):
-        """(Guido, 00:07 on 08-09) At 00:07 the coming energy day stamps
+        """(00:07 on 08-09) At 00:07 the coming energy day stamps
         at 06:07 TODAY — but 'now + 1 day' anchored the preview to
         TOMORROW's daylight: the axis spanned ~36 h (ticks reading
         07:00·15:00·23:00·07:00·15:00) with every window in the second
@@ -1372,24 +1377,26 @@ class TestTomorrowPreviewComposer:
         assert p["prices"] == "final"
 
     def test_tomorrows_known_asks_ride_the_preview(self):
-        """(Guido, 08-08: 'forecast and home consumption is something we
+        """(08-08: 'forecast and home consumption is something we
         already know') — the preview's real content is what tomorrow will
         ASK: each load's daily min-runtime × its calibrated draw, and each
         charger's daily target. Knowable today because the day counters
         reset at midnight."""
         fake = self._fake()
         fake.config["ev_chargers"][0]["daily_ev_target"] = 6.0
+        pump = _fake_load()
+        pump.name = "Pump"
         fake._surplus_controller = SimpleNamespace(
-            get_devices_sorted=lambda: [_fake_load()])
+            get_devices_sorted=lambda: [pump])
         p = SEMCoordinator._compose_tomorrow_preview(fake)
         asks = {a["label"]: a["kwh"] for a in p["known_asks"]}
         # pump: 4h min runtime × 800 W = 3.2 kWh (full day resets)
-        assert asks.get("pump") == 3.2
+        assert asks.get("Pump") == 3.2
         # the configured EV charger asks its daily target
         assert any(a["kind"] == "ev" for a in p["known_asks"])
 
     def test_a_peak_only_meter_channel_asks_nothing(self):
-        """(Guido, 09.08, PROD screenshot: 'Pro4PM consumption for sure is
+        """(09.08, PROD screenshot: 'Pro4PM consumption for sure is
         not correct') — three peak_only distribution-board metering
         channels showed 10 kWh asks in the Tomorrow view. The preview
         must mirror the demand builder's intent gate (finding #1, PROD
@@ -1399,19 +1406,22 @@ class TestTomorrowPreviewComposer:
             DeviceControlMode,
         )
         meter = _fake_load(did="pro4pm_ch3")
+        meter.name = "Pro4PM ch3"
         meter.control_mode = DeviceControlMode.PEAK_ONLY
         meter.daily_min_runtime_sec = 10 * 3600
         meter.rated_power = 1000.0
+        pump = _fake_load()
+        pump.name = "Pump"
         fake = self._fake()
         fake._surplus_controller = SimpleNamespace(
-            get_devices_sorted=lambda: [meter, _fake_load()])
+            get_devices_sorted=lambda: [meter, pump])
         p = SEMCoordinator._compose_tomorrow_preview(fake)
         labels = [a["label"] for a in p["known_asks"] if a["kind"] == "load"]
-        assert "pro4pm_ch3" not in labels
-        assert "pump" in labels  # the SURPLUS-mode sibling still asks
+        assert "Pro4PM ch3" not in labels
+        assert "Pump" in labels  # the SURPLUS-mode sibling still asks
 
     def test_the_provisional_pack_places_tomorrows_asks(self):
-        """(Guido: 'predict the battery level and when the devices get
+        """('predict the battery level and when the devices get
         surplus — pull it together') — the asks pack into tomorrow's own
         books, seeded with the battery level TODAY'S plan predicts for
         the morning. Provisional and labeled so."""
@@ -1430,7 +1440,7 @@ class TestTomorrowPreviewComposer:
         assert len(curve) <= 6, "compressed for the recorder budget"
 
     def test_an_idle_today_seeds_from_the_live_soc(self):
-        """(Guido on PROD, 08-08: 'where is the home battery?') An idle
+        """(PROD, 08-08: 'where is the home battery?') An idle
         today-plan has NO slots, so the stash offers no morning seed —
         but the live SOC is not an invented number; the provisional
         seeds from it instead of vanishing."""

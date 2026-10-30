@@ -1,4 +1,7 @@
-"""Tests for EVChargerDetector (hardware_detection.py)."""
+"""Tests for EVChargerDetector (hardware_detection.py).
+
+(#1032) Its glob-pattern detection is retired — the wizard reads one crawler;
+what stays is the validator and the registry discovery below."""
 import pytest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -144,43 +147,6 @@ class TestGetAllEntities:
         assert detector_empty.get_all_entities() == []
 
 
-class TestFindPatternMatches:
-    """Test _find_pattern_matches method."""
-
-    def test_find_pattern_matches_wildcard(self, detector_keba):
-        """Wildcard pattern matches expected entities."""
-        matches = detector_keba._find_pattern_matches(
-            "sensor.keba_*_power", KEBA_ENTITIES
-        )
-        # sensor.keba_p30_charging_power does NOT match sensor.keba_*_power
-        # because fnmatch treats * as matching everything including underscores
-        # but there are multiple segments. Let's verify what actually matches.
-        # sensor.keba_p30_charging_power vs sensor.keba_*_power
-        # * matches "p30_charging" so this should match.
-        assert "sensor.keba_p30_charging_power" in matches
-
-    def test_find_pattern_matches_exact(self, detector_keba):
-        """Exact pattern match works."""
-        matches = detector_keba._find_pattern_matches(
-            "sensor.keba_p30_charging_power", KEBA_ENTITIES
-        )
-        assert matches == ["sensor.keba_p30_charging_power"]
-
-    def test_find_pattern_matches_no_match(self, detector_keba):
-        """Returns empty list when pattern does not match."""
-        matches = detector_keba._find_pattern_matches(
-            "sensor.nonexistent_*", KEBA_ENTITIES
-        )
-        assert matches == []
-
-    def test_find_pattern_matches_exact_not_in_list(self, detector_keba):
-        """Exact pattern not in entity list returns empty."""
-        matches = detector_keba._find_pattern_matches(
-            "sensor.does_not_exist", KEBA_ENTITIES
-        )
-        assert matches == []
-
-
 class TestValidateEntity:
     """Test _validate_entity method."""
 
@@ -265,104 +231,6 @@ class TestValidateEntity:
         ) is True
 
 
-class TestDetectEvEntities:
-    """Test detect_ev_entities method."""
-
-    def test_detect_keba_entities(self, detector_keba):
-        """Finds KEBA-specific entities."""
-        detected = detector_keba.detect_ev_entities()
-        # Should detect ev_charging_power with KEBA entity
-        power_entities = [
-            eid for eid, desc, exists, pri in detected.get("ev_charging_power", [])
-        ]
-        assert "sensor.keba_p30_charging_power" in power_entities
-
-    def test_detect_easee_entities(self, detector_easee):
-        """Finds Easee entities."""
-        detected = detector_easee.detect_ev_entities()
-        power_entities = [
-            eid for eid, desc, exists, pri in detected.get("ev_charging_power", [])
-        ]
-        assert "sensor.easee_power" in power_entities
-
-    def test_detect_generic_fallback(self, detector_generic):
-        """Falls back to generic patterns when no integration-specific match."""
-        detected = detector_generic.detect_ev_entities()
-        # Generic pattern sensor.*charger*power* should match sensor.my_charger_power_total
-        power_entities = [
-            eid for eid, desc, exists, pri in detected.get("ev_charging_power", [])
-        ]
-        assert "sensor.my_charger_power_total" in power_entities
-
-    def test_detect_returns_all_sensor_types(self, detector_keba):
-        """Detected dict contains all expected sensor types."""
-        detected = detector_keba.detect_ev_entities()
-        expected_types = {
-            "ev_connected",
-            "ev_charging",
-            "ev_charging_power",
-            "ev_current",
-            "ev_session_energy",
-            "ev_total_energy",
-        }
-        assert expected_types.issubset(set(detected.keys()))
-
-    def test_detected_sorted_by_exists_and_priority(self, detector_keba):
-        """Results are sorted: valid entities first, then by priority descending."""
-        detected = detector_keba.detect_ev_entities()
-        for _sensor_type, entries in detected.items():
-            if len(entries) > 1:
-                # Verify sorted: (exists=True, high priority) before (exists=False, low priority)
-                for i in range(len(entries) - 1):
-                    e1 = entries[i]
-                    e2 = entries[i + 1]
-                    assert (e1[2], e1[3]) >= (e2[2], e2[3])
-
-
-class TestGetBestMatch:
-    """Test get_best_match method."""
-
-    def test_get_best_match_found(self, detector_keba):
-        """Returns highest priority valid entity."""
-        result = detector_keba.get_best_match("ev_charging_power")
-        assert result == "sensor.keba_p30_charging_power"
-
-    def test_get_best_match_not_found(self, detector_empty):
-        """Returns None when no matching entities."""
-        result = detector_empty.get_best_match("ev_charging_power")
-        assert result is None
-
-    def test_get_best_match_unknown_type(self, detector_keba):
-        """Returns None for unknown sensor type."""
-        result = detector_keba.get_best_match("nonexistent_type")
-        assert result is None
-
-
-class TestGetDetectedIntegrations:
-    """Test get_detected_ev_integrations method."""
-
-    def test_get_detected_integrations_keba(self, detector_keba):
-        """Detects KEBA as installed."""
-        integrations = detector_keba.get_detected_ev_integrations()
-        assert integrations["keba"] is True
-
-    def test_get_detected_integrations_no_easee(self, detector_keba):
-        """Does not detect Easee when only KEBA entities present."""
-        integrations = detector_keba.get_detected_ev_integrations()
-        assert integrations["easee"] is False
-
-    def test_get_detected_integrations_easee(self, detector_easee):
-        """Detects Easee when Easee entities present."""
-        integrations = detector_easee.get_detected_ev_integrations()
-        assert integrations["easee"] is True
-
-    def test_get_detected_integrations_none(self, detector_empty):
-        """All integrations False when no entities."""
-        integrations = detector_empty.get_detected_ev_integrations()
-        for _integration, detected in integrations.items():
-            assert detected is False
-
-
 class TestValidateEvConfiguration:
     """Test validate_ev_configuration method."""
 
@@ -406,46 +274,6 @@ class TestValidateEvConfiguration:
         }
         errors = detector_keba.validate_ev_configuration(config)
         assert "ev_connected_sensor" in errors
-
-
-class TestGetSuggestedEvDefaults:
-    """Test get_suggested_ev_defaults method."""
-
-    def test_get_suggested_ev_defaults(self, detector_keba):
-        """Returns detected defaults for all sensor mappings."""
-        defaults = detector_keba.get_suggested_ev_defaults()
-        assert "ev_connected_sensor" in defaults
-        assert "ev_charging_sensor" in defaults
-        assert "ev_charging_power_sensor" in defaults
-        assert defaults["ev_charging_power_sensor"] == "sensor.keba_p30_charging_power"
-
-    def test_get_suggested_ev_defaults_empty_fallback(self, detector_empty):
-        """Returns empty strings when no entities detected."""
-        defaults = detector_empty.get_suggested_ev_defaults()
-        for _key, value in defaults.items():
-            assert value == ""
-
-
-class TestMergedPatterns:
-    """Test _get_merged_patterns method."""
-
-    def test_merged_patterns_sorted_by_priority(self, detector_keba):
-        """Merged patterns are sorted by priority descending."""
-        merged = detector_keba._get_merged_patterns()
-        for _sensor_type, patterns in merged.items():
-            priorities = [p[2] for p in patterns]
-            assert priorities == sorted(priorities, reverse=True)
-
-    def test_merged_patterns_contain_generic(self, detector_keba):
-        """Merged patterns include generic fallback patterns."""
-        merged = detector_keba._get_merged_patterns()
-        descriptions = [desc for _, desc, _ in merged.get("ev_charging_power", [])]
-        assert any("Generic" in d for d in descriptions)
-
-
-# ============================================================
-# discover_inverter_from_registry — battery discharge control
-# ============================================================
 
 
 def _make_registry_entry(entity_id, platform, config_entry_id="ce-1", disabled=False):

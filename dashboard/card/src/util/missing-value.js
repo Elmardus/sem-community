@@ -26,6 +26,32 @@ export function isMissing(stateObj) {
 }
 
 /**
+ * (#1200) A state's number, or null when the sensor gave none.
+ *
+ * Every card reader goes through here, so an unavailable, unknown or missing
+ * sensor, and a state that is no number ("n/a"), all read as null — never 0,
+ * never NaN. `parseFloat(state) ?? fallback` let NaN through, because `??`
+ * only catches null and undefined. A sum that wants 0 says so: `?? 0`.
+ * @param {object|undefined} stateObj  hass.states[entity_id]
+ * @returns {number|null}
+ */
+export function readNumber(stateObj) {
+    if (isMissing(stateObj)) return null;
+    const v = parseFloat(stateObj.state);
+    return Number.isFinite(v) ? v : null;
+}
+
+/**
+ * (#1200) A number for display: fixed-point, or MISSING for no reading.
+ * @param {number|null|undefined} value
+ * @param {number} digits  decimals (default 0)
+ */
+export function fmtValue(value, digits = 0) {
+    if (value == null || !Number.isFinite(value)) return MISSING;
+    return value.toFixed(digits);
+}
+
+/**
  * Display string for a numeric state: fixed-point, or MISSING.
  * @param {object|undefined} stateObj  hass.states[entity_id]
  * @param {number} digits              decimals (default 0)
@@ -60,4 +86,29 @@ export function socDisplay(soc, stale = false) {
         fraction: Math.max(0, Math.min(1, soc / 100)),
         known: true,
     };
+}
+
+/**
+ * (#1197) Is SEM itself out, not just one of its sensors?
+ *
+ * A card skips its redraw while SEM is out (a reload or a failed cycle makes
+ * every SEM entity unavailable), so it does not flash zeros. It used to ask
+ * ONE entity. That entity can be out on its own: the battery status while
+ * the battery sensor is dark, the solar power while the inverter is dark.
+ * Then the card stopped drawing and kept old figures that looked live.
+ *
+ * @param {object} states  hass.states
+ * @param {string[]} ids   the entity ids the card reads
+ * @returns {boolean} true when at least one of them exists and every one
+ *   that exists is unavailable or unknown
+ */
+export function allOut(states, ids) {
+    let seen = false;
+    for (const id of ids || []) {
+        const st = id ? states?.[id] : undefined;
+        if (!st) continue;
+        seen = true;
+        if (st.state !== 'unavailable' && st.state !== 'unknown') return false;
+    }
+    return seen;
 }

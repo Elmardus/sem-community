@@ -1,4 +1,6 @@
-"""#917 — NRGkick becomes a brand row, from the integration's own keys.
+"""#917 — NRGkick, from the integration's own keys. (#1032) Found by the
+roster's roles now, not a brand row: the same entities, offered in the form
+the user confirms (``_found_by: roles``).
 
 @aleho named the control surface (number ``current_set``, switch
 ``charging_enabled``, number ``phase_count``); core's strings.json declares
@@ -18,10 +20,12 @@ from custom_components.solar_energy_management.hardware_detection import (
 
 
 def _entry(entity_id, platform, device_id, device_class=None):
+    obj = entity_id.split(".", 1)[1]
     return SimpleNamespace(
         entity_id=entity_id, platform=platform, device_id=device_id,
         original_device_class=device_class, disabled_by=None,
-        unique_id=entity_id.split(".", 1)[1],
+        unique_id=obj, translation_key=obj.removeprefix("nrgkick_"),
+        capabilities={}, entity_category=None, config_entry_id=None,
     )
 
 
@@ -62,7 +66,7 @@ def test_nrgkick_is_a_charger_with_the_controls_aleho_named():
     assert c["_platform"] == "nrgkick"
     assert c["ev_current_control_entity"] == "number.nrgkick_current_set"
     assert c["ev_start_stop_entity"] == "switch.nrgkick_charging_enabled"
-    assert c["ev_charging_sensor"] == "sensor.nrgkick_status"
+    assert c["_found_by"] == "roles"
 
 
 def test_the_power_is_the_total_not_a_phase_or_the_peak():

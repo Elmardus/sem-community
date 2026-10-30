@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Optional
 
 from homeassistant.helpers import entity_registry as er
 
+from ...utils.switch_sense import switch_service
 from .generic import GenericAdapter
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -47,23 +48,35 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _looks_like_wallbox(device: "CurrentControlDevice") -> bool:
-    """Heuristic: does this device look like a Wallbox charger?
+    """Is this charger driven by the Wallbox integration?
 
-    Matches on either the integration domain (``charger_service``
-    starts with ``wallbox.``) or the configured entity id containing
-    ``wallbox`` somewhere — Wallbox HA integration entities are
-    consistently namespaced ``*_wallbox_*``.
+    Asked of the integration — the service domain, or the registry platform
+    of a configured entity — never of the words in an entity id.
+
+    (#976, class 115) The id test was ``"wallbox" in entity_id``. Home
+    Assistant builds an id from the DEVICE name, and "Wallbox" is what owners
+    call any wall charger. @bgthb's Huawei on the OCPP integration is a
+    charge point named "wallbox": its ``switch.wallbox_charge_control`` made
+    it a Wallbox, the adapter took that switch as the pause/resume switch and
+    turned it on before every current write. On OCPP that turn_on is a
+    RemoteStartTransaction, so every write sent a start the charger refused
+    ("Rejected") while it was already charging.
     """
     service = (getattr(device, "charger_service", "") or "").lower()
     if service.startswith("wallbox.") or service.startswith("wallbox_"):
         return True
+    # The one registry lookup the builder's #976 wiring uses too (lazy:
+    # hardware_detection reaches back into this package).
+    from ...hardware_detection import entity_platform
+    hass = getattr(device, "hass", None)
     for attr in (
         "charger_service_entity_id",
         "charger_current_entity",
         "start_stop_entity",
     ):
-        value = (getattr(device, attr, "") or "").lower()
-        if "wallbox" in value:
+        eid = getattr(device, attr, None)
+        if eid and hass is not None \
+                and entity_platform(hass, str(eid)) == "wallbox":
             return True
     return False
 
@@ -189,7 +202,11 @@ class WallboxAdapter(GenericAdapter):
         return None
 
     async def _toggle_pause_switch(self, turn_on: bool) -> None:
-        """Turn the pause/resume switch on (resume) or off (pause).
+        """Let the charge run (``turn_on=True``: resume) or pause it.
+
+        Wallbox's own "Pause/resume" is on while it charges. A configured
+        switch named for the pause is on while paused, and gets the other
+        service (#1042).
 
         Silent no-op when no switch is discoverable. Errors are
         logged but don't abort the rest of the disable path — the
@@ -201,7 +218,7 @@ class WallboxAdapter(GenericAdapter):
         hass = getattr(self._device, "hass", None)
         if hass is None:
             return
-        service = "turn_on" if turn_on else "turn_off"
+        service = switch_service(hass, eid, run=turn_on)
         try:
             await self._device.send("switch", service, {"entity_id": eid})
         except Exception as exc:  # noqa: BLE001
