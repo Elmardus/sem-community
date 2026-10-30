@@ -13,10 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **Cards now show "—", not 0, for a sensor that is out** (#1200). EV power, battery health, costs and peak no longer look like real zeros.
+- 🐛 **Battery, grid and solar on/off sensors no longer say Off while their power sensor is out** (#1201). They show unknown after 3 minutes.
+- 🐛 **A power sensor showing text such as "none" or "nan" now reads as out, not 0 W** (#1202). SEM no longer acts on it.
+- 🐛 **A learned battery sign now stays with its battery when one is removed or replaced** (#1205). Before, the next battery could read discharge as charge.
+- 🐛 **The learned battery sign no longer flips when you go back a version and forward again** (#1208). Homes without an Energy Dashboard keep it too.
+- 🐛 **"Reset sign detection" now stays reset when a "Fix sign" flip was on** (#1209). A reload no longer reads old saved data back.
 - 🐛 **SEM no longer flips the sign of a grid meter with two sensors (import and export)** (#1215). Before, export could read as import.
 - 🐛 **The Simulation tab and cost estimates no longer count a battery sale as solar sent out** (#1216). Before, self-consumption and solar savings read too low.
 - 🐛 **An emptied charger service now stays empty after Save** (#1214). A charger moved to another integration no longer gets a "device is gone" Repair.
 - 🐛 **SEM now checks each battery's sign on a home that added a second battery** (#1210). Before, a wrong sign there was never flagged.
+- 🐛 **A battery setting saved in the Config tab or Configure dialog stays with its battery when batteries change** (#1204). Before, it could move to another.
+- 🐛 **A solar string, inverter, battery or grid sensor that drops out briefly no longer counts as 0 W** (#1203, #1186). SEM keeps its last reading.
 
 # [2.2.0] — DD.MM.YYYY
 

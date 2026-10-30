@@ -87,7 +87,7 @@ from .types import (
     SEMData, PowerReadings, PowerFlows, SystemStatus, LoadManagementData,
     SurplusControlData, ForecastSensorData, TariffSensorData,
     HeatPumpSensorData, HotWaterSensorData, PVAnalyticsData, EnergyAssistantSensorData,
-    SessionData, BatterySessionData,
+    SessionData, BatterySessionData, shown_w,
 )
 from .health_check import (
     chargers_outside_home, home_member_evidence, home_member_totals,
@@ -2206,9 +2206,15 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         if seen is None:
             seen = self._shown_home_input_seen = {}
         holding = False
+        # (#1186) …and while a dark unit of an input is held: home is built
+        # from that unit's 0 W, the input SEM shows from its last read.
+        units = getattr(power, "held_w", None)
+        units = units if isinstance(units, dict) else {}
         for name, flag in self._SHOWN_HOME_INPUTS:
             if not getattr(power, flag, False):
                 seen[name] = now
+                if name in units:
+                    holding = True      # the reader holds the dark unit
             elif name in seen and now - seen[name] <= SENSOR_DARK_READ_GRACE_S:
                 holding = True          # its entity still shows a value
         if not holding and self._battery_stop_not_reported(power, now):
@@ -2805,6 +2811,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     )
             else:
                 _info("Energy Dashboard not configured or incomplete")
+                # (#1208) the reader reads without one: say if that is sure
+                self._sensor_reader.set_dashboard_answered(answered)
 
         except Exception as e:
             _LOGGER.warning("Failed to read Energy Dashboard: %s", e)
@@ -3375,7 +3383,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
              # night with 3000 here and 0 above reads "grid charge, not surplus".
              "reclaim_raw_w": cr.get("reclaim_raw_w", 0)},
         )
-        st.process = LayerRecord(LayerStatus.OK, reason, {"soc": soc})
+        # (#1201) the status word reads the shown power: with a dark unit of
+        # two held, say what it adds, or the word and the watts below differ
+        _held = getattr(power, "held_w", None)
+        _held = _held.get("battery") if isinstance(_held, dict) else None
+        st.process = LayerRecord(
+            LayerStatus.OK, reason,
+            {"soc": soc} if _held is None else {"soc": soc, "held_w": round(_held)})
         # match: an explicit force command must be observed (force_charge →
         # charging, force_discharge → discharging). Normal/idle → None.
         _bd = getattr(self, "_last_battery_decisions", None) or {}
@@ -3891,7 +3905,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             # ambiguous low-power samples and could lock the wrong sign
             # until the next reload.
             self._sensor_reader.restore_sign_state(
-                self._storage.get_sign_state()
+                self._storage.get_sign_state(),
+                basis=self._storage.get_battery_sign_basis(),   # (#1208)
             )
 
             # (#638 night 2) Restore the measured W/A — in-memory only,
@@ -5581,6 +5596,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 self._storage.set_sign_state(
                     self._sensor_reader.export_sign_state()
                 )
+                # (#1208) …and beside it, in a key an older build keeps
+                basis = self._sensor_reader.export_battery_basis()
+                if basis is not None:
+                    self._storage.set_battery_sign_basis(basis)
                 # Persist the legionella timestamp (#508 I2).
                 _hw = self._surplus_controller._devices.get("hot_water") \
                     if hasattr(self, "_surplus_controller") else None
@@ -16602,14 +16621,26 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # while every read of that power is dark, the status is None, as
         # ``to_dict`` publishes the power itself. The entity holds its last
         # word for the dark-read grace, on the power's clock (sensor.py
-        # ``_HELD_TEXT_KEY``), then shows unavailable.
+        # ``_HELD_TEXT_KEY``), then shows unavailable. (#1201) The on/off
+        # flags are built the same way and held the same way
+        # (binary_sensor.py ``HELD_FLAG_KEYS``). Each is built from the
+        # power SEM shows (``shown_w``): a dark unit of two adds its last
+        # read for the grace, so the word agrees with the number beside it.
+        solar_dark = getattr(power, "solar_power_unavailable", False) is True
+        grid_dark = getattr(power, "grid_power_unavailable", False) is True
+        batt_dark = getattr(power, "battery_power_all_unavailable", False) is True
+        solar_w = shown_w(power, "solar_power")
+        import_w = shown_w(power, "grid_import_power")
+        export_w = shown_w(power, "grid_export_power")
+        charge_w = shown_w(power, "battery_charge_power")
+        discharge_w = shown_w(power, "battery_discharge_power")
 
         # Grid status
-        if getattr(power, "grid_power_unavailable", False) is True:
+        if grid_dark:
             status.grid_status = None
-        elif power.grid_import_power > 50:
+        elif import_w > 50:
             status.grid_status = "import"
-        elif power.grid_export_power > 50:
+        elif export_w > 50:
             status.grid_status = "export"
         else:
             status.grid_status = "idle"
@@ -16618,24 +16649,24 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # the grid (FORCE_DISCHARGE this cycle), surface a distinct
         # "selling" state so the Battery card can show it instead of a
         # generic "discharging".
-        if getattr(power, "battery_power_all_unavailable", False) is True:
+        if batt_dark:
             status.battery_status = None
-        elif getattr(self, "_battery_arbitrage_active", False) and power.battery_discharge_power > 50:
+        elif getattr(self, "_battery_arbitrage_active", False) and discharge_w > 50:
             status.battery_status = "selling"
-        elif power.battery_charge_power > 50:
+        elif charge_w > 50:
             status.battery_status = "charging"
-        elif power.battery_discharge_power > 50:
+        elif discharge_w > 50:
             status.battery_status = "discharging"
         else:
             status.battery_status = "idle"
 
         # Status flags
-        status.solar_active = power.solar_power > 50
+        status.solar_active = None if solar_dark else solar_w > 50
         status.ev_connected = power.ev_connected
         status.ev_charging = power.ev_charging
-        status.battery_charging = power.battery_charge_power > 50
-        status.battery_discharging = power.battery_discharge_power > 50
-        status.grid_export_active = power.grid_export_power > 50
+        status.battery_charging = None if batt_dark else charge_w > 50
+        status.battery_discharging = None if batt_dark else discharge_w > 50
+        status.grid_export_active = None if grid_dark else export_w > 50
 
         return status
 
