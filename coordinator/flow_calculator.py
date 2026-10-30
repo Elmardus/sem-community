@@ -347,10 +347,23 @@ class FlowCalculator:
         slack variable) and leftover demand reads zero on the missing
         rows. Pinned in ``tests/test_349_flow_priority_attribution.py``.
 
-        v1.6.9 multi-charger split + v1.7.0 per-string passthrough
-        (see below the allocator) are unchanged.
+        v1.6.9 multi-charger split (below the allocator) + v1.7.0
+        per-string passthrough (above it, #1203) are unchanged.
         """
         flows = PowerFlows()
+
+        # v1.7.0 / #312: carry per-string raw power onto the flows
+        # object so ``integrate_energy_flows`` can accumulate kWh per
+        # string without an API change. Strings are SOURCES so there's
+        # no destination attribution to compute — just pass-through.
+        # (#1203) Before the idle return below: with every input dark
+        # each reads 0 W, and the strings' held watts still count.
+        if power.solar_power_per_string:
+            flows.solar_per_string = dict(power.solar_power_per_string)
+            # (#1203) a dark string's last live watts, for its daily energy
+            held = getattr(power, "solar_power_per_string_held", None)
+            if isinstance(held, dict) and held:
+                flows.solar_per_string_held = dict(held)
 
         # Get source powers (priority order: solar > battery > grid)
         solar = power.solar_power
@@ -439,17 +452,8 @@ class FlowCalculator:
         # available, split the fleet-level EV flows by each charger's
         # share of the total EV draw. Math: ``charger_share = c_draw /
         # ev_total`` × fleet ``flows.*_to_ev``. Sum invariant holds by
-        # v1.7.0 / #312: carry per-string raw power onto the flows
-        # object so ``integrate_energy_flows`` can accumulate kWh per
-        # string without an API change. Strings are SOURCES so there's
-        # no destination attribution to compute — just pass-through.
-        if power.solar_power_per_string:
-            flows.solar_per_string = dict(power.solar_power_per_string)
-            # (#1203) a dark string's last live watts, for its daily energy
-            held = getattr(power, "solar_power_per_string_held", None)
-            if isinstance(held, dict) and held:
-                flows.solar_per_string_held = dict(held)
-
+        # construction.
+        #
         # Per-charger native attribution (Step 5 of arch/
         # multi-charger-primary, addresses #351 finding M3).
         #

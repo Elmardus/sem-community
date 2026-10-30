@@ -529,6 +529,72 @@ class TestADarkStringBooksItsLastRead:
         states["sensor.pv2"] = _state("unavailable", "W")
         assert r.read_power().solar_power_per_string_held == {}
 
+    def test_half_a_dark_v_i_pair_holds_its_last_product(self):
+        states = {"sensor.v1": _state(400, "V"), "sensor.i1": _state(3, "A"),
+                  "sensor.v2": _state(350, "V"), "sensor.i2": _state(2, "A"),
+                  "sensor.inv": _state(1900, "W")}
+        r, clock = _built(states, config={"solar_production_sensor": "sensor.inv"})
+        r.set_pv_strings({}, {"pv1": ("sensor.v1", "sensor.i1"),
+                              "pv2": ("sensor.v2", "sensor.i2")})
+        r.read_power()
+        states["sensor.i2"] = _state("unavailable", "A")
+        clock[0] += STEP_S
+        p = r.read_power()
+        assert p.solar_power_per_string["pv2"] == 0.0
+        assert p.solar_power_per_string_held == {"pv2": 700.0}
+
+    def test_the_string_returns_and_its_hold_ends(self):
+        r, clock, states = self._strings()
+        r.read_power()
+        _read(r, clock, states, **{"sensor.pv2": "unavailable"})
+        p = _read(r, clock, states, **{"sensor.pv2": 300})
+        assert p.solar_power_per_string == {"pv1": 1200.0, "pv2": 300.0}
+        assert p.solar_power_per_string_held == {}
+
+
+@pytest.mark.usefixtures("clock")
+class TestStringsThatAreTheSolarSourcesAddUp:
+    """(#1203) Two inverters on the dashboard ARE the strings (#378): the
+    string rows and the solar row hold the same dark unit for the same
+    grace, so they still add up — the reason #1203 waited for #1186."""
+
+    def test_the_string_rows_add_up_to_the_solar_row(self):
+        states = {"sensor.inv_a": _state(2000, "W"),
+                  "sensor.inv_b": _state(1500, "W")}
+        r, mono = _built(states, ed=EnergyDashboardConfig(
+            solar_power="sensor.inv_a",
+            solar_power_list=["sensor.inv_a", "sensor.inv_b"], has_solar=True))
+        r.set_pv_strings({"pv1_power": "sensor.inv_a",
+                          "pv2_power": "sensor.inv_b"})
+        fc = FlowCalculator()
+        calc, _ = _calc()
+        booked = [0.0]
+
+        def cycle(watts, step=STEP_S, **changes):
+            p = _read(r, mono, states, step=step, **changes)
+            self.clock.tick(timedelta(seconds=step))
+            calc._last_update = None
+            flows = fc.calculate_power_flows(p)
+            calc.calculate_energy(p, flows)
+            e = fc.integrate_energy_flows(flows, STEP_S)
+            booked[0] += _kwh(watts)
+            strings = sum(s.energy_kwh for s in e.per_string.values())
+            assert _row(calc, "solar") == pytest.approx(booked[0])
+            assert strings == pytest.approx(booked[0], abs=1e-3)
+            return p
+
+        cycle(3500.0)
+        for _ in range(3):                      # inverter B dark, held
+            p = cycle(3500.0, **{"sensor.inv_b": "unavailable"})
+            assert p.solar_power == pytest.approx(2000.0), "steering: 0 W"
+        cycle(2000.0, step=GRACE)               # past B's grace: 0 W again
+        cycle(3500.0, **{"sensor.inv_b": 1500})
+        for _ in range(3):                      # every unit dark, held
+            p = cycle(3500.0, **{"sensor.inv_a": "unavailable",
+                                 "sensor.inv_b": "unavailable"})
+            assert p.solar_power_unavailable is True
+        cycle(0.0, step=GRACE)                  # past the grace: 0 W
+
 
 # ── 6. Structural pins ─────────────────────────────────────────────────────
 
