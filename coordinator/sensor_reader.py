@@ -1457,9 +1457,9 @@ class SensorReader:
                 counters = (self._one_battery_own_counters(ed)
                             or (ed.battery_charge_energy, ed.battery_discharge_energy))
             else:
-                n = int(bid[1:]) if bid[1:].isdigit() else 0
-                counters = (unit_energy_counters(ed, units[n - 1])
-                            if 0 < n <= len(units) else None)
+                n = _bid_place(bid)              # (#1205) strict
+                counters = (unit_energy_counters(ed, units[n])
+                            if n is not None and n < len(units) else None)
             per_bid[bid] = {
                 "detected": self._battery_sign_detected.get(bid, False),
                 "inverted": self._battery_sign_inverted.get(bid, False),
@@ -1793,6 +1793,13 @@ class SensorReader:
                   if s is not None]
         detected = getattr(self, "_battery_sign_detected", None) or {}
         kept = getattr(self, "_battery_sign_kept", None) or set()
+        # "Fix battery sign" was set against what the saved signs read, and it
+        # is not bound to a sensor: a sign learned again under it would be
+        # turned over. While it is on, a saved sign whose sensor SEM no longer
+        # finds stays where it stands, as the #1193 check waits.
+        flip = bool((getattr(self, "_raw_config", None) or {}).get(
+            "battery_sign_user_flip", False))
+        waiting = {}
         combined = getattr(ed, "battery_power_list", None)
         units = list(combined) if isinstance(combined, (list, tuple)) else []
         if units and all(isinstance(u, str) and u for u in units):
@@ -1808,11 +1815,15 @@ class SensorReader:
                         free.remove(j)
                     new_place[old] = j
             for old in olds:                 # none saved: where it stands
-                if old not in record:
+                wait = (flip and old in record and new_place[old] is None
+                        and (detected.get(old) or old in kept))
+                if old not in record or wait:
                     j = place(old)
                     new_place[old] = j if j in free else None
                     if j in free:
                         free.remove(j)
+                        if wait:
+                            waiting[old] = record[old]
             moves = {old: (f"b{j + 1}" if j is not None else None)
                      for old, j in new_place.items()}
             if any(new != old for old, new in moves.items()):
@@ -1835,23 +1846,23 @@ class SensorReader:
                         s.update(moves[b] for b in held if moves[b])
             record = {b: s for b, s in record.items() if place(b) is None}
             record.update({f"b{k + 1}": u for k, u in enumerate(units)})
+            # a waiting sign keeps its sensor: with the flip off it is learned
+            # again on the next read
+            record.update(waiting)
         self._battery_lock_sensors = record
-        if not alone_from:
-            return
-        was = record.get(fleet)
-        if was is not None and was != alone_from and bool(
-                (getattr(self, "_raw_config", None) or {}).get(
-                    "battery_sign_user_flip", False)):
-            # "Fix battery sign" was set against what the saved sign read,
-            # and it is not bound to a sensor: a sign learned again under it
-            # would be turned over. It waits, as the #1193 check does.
-            if not getattr(self, "_fleet_sign_wait_said", False):
-                self._fleet_sign_wait_said = True
-                _LOGGER.info(
-                    "Battery sign: the saved sign was learned on %s, the "
-                    "battery is now read from %s. Fix battery sign is on, so "
-                    "SEM keeps it until that is turned off (#1205)",
-                    was, alone_from)
+        was = record.get(fleet) if alone_from else None
+        if (was is not None and was != alone_from and flip
+                and (detected.get(fleet) or fleet in kept)):
+            waiting[fleet] = was
+        if waiting and not getattr(self, "_sign_wait_said", False):
+            self._sign_wait_said = True
+            _LOGGER.info(
+                "Battery sign: the saved sign of %s was learned on a sensor "
+                "SEM no longer reads (%s). Fix battery sign is on, so SEM "
+                "keeps it until that is turned off (#1205)",
+                ", ".join(sorted(waiting)), ", ".join(
+                    waiting[b] for b in sorted(waiting)))
+        if not alone_from or fleet in waiting:
             return
         record[fleet] = alone_from
         if was is None or was == alone_from:

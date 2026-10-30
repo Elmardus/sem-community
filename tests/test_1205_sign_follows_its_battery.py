@@ -399,6 +399,56 @@ def test_the_one_battery_sign_waits_while_fix_battery_sign_is_on():
     assert off.cycle().battery_power == -1500.0
 
 
+def test_a_battery_sign_on_a_sensor_gone_waits_while_fix_battery_sign_is_on():
+    """Second review: the same for each battery. b1's sign was learned on
+    sensor x, which SEM no longer finds (renamed, or the battery replaced).
+    Learned again under the flip, battery a read +1500 W while discharging.
+    It stays where it stands until the flip is off, then is learned again."""
+    store = {"battery_detected": {"b1": True, "b2": True},
+             "battery_inverted": {"b1": False, "b2": True},
+             "battery_basis": "sensor", "battery_counters": "own",
+             "battery_learned_on": {"b1": "sensor.x_power",
+                                    "b2": "sensor.y_power"}}
+    flip = {"battery_sign_user_flip": True}
+    after = _Home(["a", "b"], store=store, config=flip)
+    p = after.cycle(9)
+    assert after.signs() == {"b1": False, "b2": True}
+    assert p.batteries["b1"].power_w == p.batteries["b2"].power_w == -1500.0
+    saved = after.reader.export_sign_state()
+    assert saved["battery_learned_on"] == {"b1": "sensor.x_power",
+                                           "b2": "sensor.y_power"}
+    off = _Home(["a", "b"], store=saved)
+    off.cycle()
+    assert off.signs() == {}, "with the flip off both are learned again"
+    p = off.cycle(9)
+    assert off.signs() == {"b1": True, "b2": False}
+    assert p.batteries["b1"].power_w == p.batteries["b2"].power_w == -1500.0
+
+
+def test_under_the_flip_a_gone_sensor_does_not_keep_another_battery_place():
+    """The wait keeps a sign at its own place only while no saved battery
+    claims it: battery b moved to b1 keeps b's sign there."""
+    store = {"battery_detected": {"b1": True, "b2": True},
+             "battery_inverted": {"b1": True, "b2": False},
+             "battery_basis": "sensor", "battery_counters": "own",
+             "battery_learned_on": {"b1": "sensor.x_power",
+                                    "b2": "sensor.b_power"}}
+    after = _Home(["b"] + ["c"], store=store,
+                  config={"battery_sign_user_flip": True})
+    after.cycle()
+    assert after.signs() == {"b1": False}
+    assert after.reader._battery_lock_sensors["b1"] == "sensor.b_power"
+
+
+def test_with_no_saved_sign_the_flip_does_not_hold_the_old_sensor():
+    """Second review: with no sign to keep, the record follows the sensor
+    read, so a sign learned on it is saved as learned on it."""
+    home = _Home(["a"], config={"battery_sign_user_flip": True})
+    home.reader._battery_lock_sensors = {FLEET: "sensor.x_power"}
+    home.cycle()
+    assert home.reader._battery_lock_sensors[FLEET] == "sensor.a_power"
+
+
 def test_the_audit_of_a_battery_that_moved_is_not_pruned_by_count():
     """Review: the #647 prune ran before the move and dropped audits by
     count, so battery c lost its audit when battery a was removed."""
