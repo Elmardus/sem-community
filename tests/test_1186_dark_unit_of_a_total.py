@@ -678,3 +678,87 @@ class TestTheReaderHasNoUnheldUnit:
         assert set(sr._UNIT_INPUT.values()) == {"solar", "grid", "battery"}
         assert set(sr._UNIT_INPUT) == set(sr._DEGRADABLE_POWER_INPUTS)
         assert set(SHOWN_FIELDS.values()) == {"solar", "grid", "battery"}
+
+
+# ── 7. Review edges (#1203) ────────────────────────────────────────────────
+
+class TestNoFalseLastRead:
+    def test_a_value_the_battery_gate_threw_out_is_never_held(self):
+        """#902 blanks an impossible side; when that side then goes dark
+        its last read is the one before, not 22.8 MW."""
+        r, clock, states, *_ = _shape(SHAPES[3])
+        r.read_power()
+        _read(r, clock, states, **{"sensor.p_from": 22_806_824})
+        p = _read(r, clock, states, **{"sensor.p_from": "unavailable"})
+        assert shown_w(p, "battery_power") == pytest.approx(-900.0)
+        assert _published(p)["battery_discharge_power"] == 900
+
+    def test_a_zero_the_solar_gate_threw_out_is_never_held(self):
+        """#988 refutes a 0 W total; inverter B's last read stays 1500 W."""
+        states = {"sensor.inv_a": _state(2000, "W"),
+                  "sensor.inv_b": _state(1500, "W"),
+                  "sensor.bat": _state(0, "W")}
+        r, clock = _built(states, ed=EnergyDashboardConfig(
+            solar_power="sensor.inv_a",
+            solar_power_list=["sensor.inv_a", "sensor.inv_b"],
+            battery_power="sensor.bat", has_solar=True, has_battery=True))
+        r.read_power()
+        refuted = _read(r, clock, states, **{"sensor.inv_a": 0,
+                                             "sensor.inv_b": 0,
+                                             "sensor.bat": 1267})
+        assert refuted.solar_power_unavailable is True
+        p = _read(r, clock, states, **{"sensor.inv_a": 2000,
+                                       "sensor.inv_b": "unavailable",
+                                       "sensor.bat": 0})
+        assert p.held_w == {"solar": 1500.0}
+
+    @pytest.mark.parametrize("word", ["nan", "inf"])
+    def test_a_state_that_is_no_finite_number_is_no_last_read(self, word):
+        r, clock, states, dark, *_ = _shape(SHAPES[0])
+        r.read_power()
+        _read(r, clock, states, **{dark: word})
+        p = _read(r, clock, states, **{dark: "unavailable"})
+        assert p.held_w == {"solar": 1500.0}, "the read before it"
+
+    def test_a_dark_unit_that_read_0_w_holds_nothing(self):
+        """An idle battery of two drops out: nothing to put back, so the
+        input is not held and the shown home does not freeze."""
+        states = {"sensor.b1": _state(1000, "W"), "sensor.b2": _state(0, "W")}
+        r, clock = _built(states, ed=SHAPES[1][1]["ed"])
+        r.read_power()
+        p = _read(r, clock, states, **{"sensor.b2": "unavailable"})
+        assert p.held_w == {}
+        assert shown_w(p, "battery_power") == pytest.approx(1000.0)
+
+
+@pytest.mark.usefixtures("clock")
+class TestAHeldBatteryKeepsItsChargeShare:
+    def test_the_dark_unit_keeps_its_share_of_the_charge(self):
+        """The charge booked holds battery 2; its share of the split comes
+        from the last live read, not from the live battery alone."""
+        from custom_components.solar_energy_management.coordinator.charger_types import (  # noqa: E501
+            BatteryPower,
+        )
+        from custom_components.solar_energy_management.coordinator.types import (
+            PowerFlows,
+        )
+        calc, _ = _calc()
+
+        def cycle(b2, held=None):
+            p = PowerReadings(battery_power=500.0 + (b2 or 0.0),
+                              battery_soc_unavailable=True)
+            p.batteries = {
+                "b1": BatteryPower("b1", power_w=500.0, power_read=True),
+                "b2": BatteryPower("b2", power_w=b2 or 0.0,
+                                   power_read=b2 is not None)}
+            p.calculate_derived()
+            if held:
+                p.held_w = held
+            calc._last_update = None
+            calc.calculate_energy(p, PowerFlows(solar_to_battery=p.battery_power))
+
+        cycle(1100.0)
+        cycle(None, {"battery": 1100.0})
+        pools = calc._battery_provenance._pools
+        assert pools["b2"].solar_kwh == pytest.approx(_kwh(1100.0, 2))
+        assert pools["b1"].solar_kwh == pytest.approx(_kwh(500.0, 2))

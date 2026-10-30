@@ -1340,12 +1340,15 @@ class SensorReader:
         and returned. With none, its last live read while that is no older
         than ``SENSOR_DARK_READ_GRACE_S`` (the age its own entity holds a
         value for; it counts from the read, so a dark cycle never renews
-        it), else None: past the grace, what it reads is not known."""
+        it), else None: past the grace, what it reads is not known.
+        (#1203 review) Only a finite number is stamped: "nan" or "inf" is no
+        last read to hold."""
         store = getattr(self, "_unit_last_live", None)
         if store is None:
             store = self._unit_last_live = {}
         if watts is not None:
-            store[key] = (float(watts), now)
+            if math.isfinite(float(watts)):
+                store[key] = (float(watts), now)
             return float(watts)
         last = store.get(key)
         if last is not None and 0.0 <= now - last[1] <= SENSOR_DARK_READ_GRACE_S:
@@ -1387,13 +1390,19 @@ class SensorReader:
         for name, units in terms.items():
             if len(units) < 2:
                 continue                  # one sensor: its flag holds it
+            if all_dark.get(name, False):
+                # (#1203 review) its flag holds it — and a read a gate threw
+                # out (#902, #988) is not a last read: it is never stamped
+                continue
             add, holding = 0.0, False
             for key, live, in_sum in units:
                 w = self._held_unit_w(key, live, now)
                 if live is None and w is not None:
                     add += w - in_sum     # its last read, not what the sum took
                     holding = True
-            if holding and not all_dark.get(name, False):
+            # (#1203 review) a held unit that adds nothing holds nothing: the
+            # shown home would freeze for it (#1047) with no figure to keep
+            if holding and abs(add) >= 1.0:
                 held_w[name] = sign.get(name, 1.0) * add
         readings.held_w = held_w
 

@@ -436,6 +436,8 @@ class EnergyCalculator:
         self._integral_held: frozenset = frozenset()
         self._integral_live: frozenset = frozenset()
         self._battery_live_flows: Optional[SimpleNamespace] = None
+        # (#1203 review) each battery's charge watts at that same live read
+        self._battery_live_charging: Dict[str, float] = {}
         # (#1191 review) the battery's part of the export, from the last
         # cycle the grid read live: a held export keeps it (#1177)
         self._grid_live_battery_export_w: float = 0.0
@@ -5101,17 +5103,30 @@ class EnergyCalculator:
 
         self.accumulate_battery_charge_split(solar_kwh, grid_kwh, today)
 
-        charging = {
-            bid: bp.power_w
-            for bid, bp in (getattr(power, "batteries", None) or {}).items()
-            if float(getattr(bp, "power_w", 0.0) or 0.0) > 0
-        }
+        charging = self._charging_units(power)
         for bid, (b_solar, b_grid) in allocate_fleet_charge(
             charging, solar_kwh, grid_kwh,
         ).items():
             self._battery_provenance.charge(
                 bid, b_solar, b_grid, self._import_rate,
             )
+
+    def _charging_units(self, power: PowerReadings) -> Dict[str, float]:
+        """(#1203 review) Each charging battery's watts, for the per-battery
+        split. While the battery is held (#1177, #1186) the charge booked is
+        the held figure, and a dark unit reads 0 W here: the live units
+        would take its charge. So the shares come from the last live read,
+        as the flow shares do (``_battery_flows``)."""
+        if "battery" in self._integral_held:
+            return dict(self._battery_live_charging)
+        charging = {
+            bid: bp.power_w
+            for bid, bp in (getattr(power, "batteries", None) or {}).items()
+            if float(getattr(bp, "power_w", 0.0) or 0.0) > 0
+        }
+        if "battery" in self._integral_live:
+            self._battery_live_charging = dict(charging)
+        return charging
 
     def _battery_discharge_savings(
         self, power: PowerReadings, discharge_increment: float,

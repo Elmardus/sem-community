@@ -2945,16 +2945,26 @@ sign check, and a pair unit with one dark side puts back its last net in place o
 top of it. An input with every read dark is left to its flag. `to_dict` and `_integral_watts` read it
 through `shown_w`; `_hold_shown_home` holds the house while a unit is held (#1047's rule); a partly held
 input counts as held for its flow shares. Each string keeps its last read for its daily energy
-(`solar_power_per_string_held`). Steering keeps the 0 W (#988, #1047). The #988 solar gate and the #902
-battery gate refute a TOTAL, but took away one read: with two inverters, or a two-sensor battery, the
-refuted value was published as a reading; now every read goes unless a battery unit is still read.
+(`solar_power_per_string_held`); `calculate_power_flows` passes the strings on BEFORE its all-idle
+return, because with every input dark each reads 0 W and the held strings were dropped there (the
+one-Modbus-link home, #1177's PROD shape). Steering keeps the 0 W (#988, #1047). The #988 solar gate
+and the #902 battery gate refute a TOTAL, but took away one read: with two inverters, or a two-sensor
+battery, the refuted value was published as a reading; now every read goes unless a battery unit is
+still read. Review (#1203): an input its flag holds stamps no unit, so a value a gate threw out is
+never a last read; only a finite read is stamped; a held unit that adds under 1 W holds nothing (the
+shown home froze for it); while the battery is held, the per-battery charge split takes the last live
+shares (`_charging_units`), as its flow shares do.
 **Guard:** `tests/test_1186_dark_unit_of_a_total.py` — every shape through the real reader (two
 inverters, two batteries, a pair inside a fleet, one battery with two sensors, declared, manual,
 config-path and discovered grid pairs, two grid meters): the grace edge, no renewal, never-read, a live
 0, not a number, the unit's return, every unit dark, an unproven guess holds nothing, the sign after a
 grid invert and a battery flip; `to_dict`; the rows; the shown home; the strings; both gates; and AST
 pins that every total is turned over by `_negate_total` and every grid side read is a unit (each with a
-probe). 53 of its 64 tests fail on the old code. **Left open:** past the grace a dark unit books 0 W.
+probe); strings that ARE the dashboard's solar sources add up to the solar row through the real reader,
+flow and energy calculators (one dark, past the grace, every unit dark); and the review edges (a value
+either gate threw out, "nan"/"inf", a 0 W unit, the charge share). **Left open:** past the grace a dark
+unit books 0 W; the strings read low for up to one more grace when a partly held input goes all dark,
+or when the #988 gate refutes a 0 W total the strings also read (#1261).
 
 ### 59. A limit smoothed like a preference — GUARDED
 **Symptom:** the guard says 10 A, the wire carries 14 → 12 → 12 → 10 over two minutes. **Root
