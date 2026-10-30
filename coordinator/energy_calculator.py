@@ -1525,7 +1525,7 @@ class EnergyCalculator:
             _LOGGER.debug("Could not detect install date from statistics: %s", e)
 
     @staticmethod
-    def _energy_state_kwh(state) -> float:
+    def _energy_state_kwh(state) -> Optional[float]:
         """Energy-counter state → kWh, honoring unit_of_measurement.
 
         #551 — hardware lifetime counters are NOT all kWh: Fronius
@@ -1538,7 +1538,10 @@ class EnergyCalculator:
         # #641 — this rule was the reference for the shared one; the body now
         # delegates so there is exactly one Wh/MWh table. The method stays as
         # the name the rest of the class (and its tests) call.
-        return energy_state_to_kwh(state, default=0.0)
+        # (#1202) None when the state gives no number: read as 0 kWh, "none"
+        # or "nan" looked like a counter reset and the next read booked the
+        # whole register.
+        return energy_state_to_kwh(state)
 
     def _read_counter_set(
         self, hass: HomeAssistant, entity_ids: List[str], now: float,
@@ -1603,7 +1606,9 @@ class EnergyCalculator:
                 return 0.0
             state = hass.states.get(entity_id)
             if state and state.state not in ("unknown", "unavailable", None):
-                return self._energy_state_kwh(state)  # #551 unit-aware
+                value = self._energy_state_kwh(state)  # #551 unit-aware
+                # (#1202) no number seeds nothing, as "unavailable" does
+                return 0.0 if value is None else value
             return 0.0
 
         # (#1043) Every category is the SUM of all its Energy Dashboard
@@ -2670,7 +2675,7 @@ class EnergyCalculator:
             if not state or state.state in ("unknown", "unavailable", None):
                 continue
             value = self._energy_state_kwh(state)  # #551 unit-aware
-            if value >= 0:
+            if value is not None and value >= 0:
                 readings[entity_id] = value
 
         if not readings:
@@ -2973,7 +2978,7 @@ class EnergyCalculator:
             if not state or state.state in ("unknown", "unavailable", None):
                 continue
             value = self._energy_state_kwh(state)  # #551 unit-aware
-            if value >= 0:
+            if value is not None and value >= 0:
                 value = self.ev_counter_judged_kwh(entity_id, value)  # (#1101)
                 # (#1049) A dip that comes back holds the last reading — on a
                 # fresh day too, where only the pending tracker remembers it.
@@ -3676,7 +3681,7 @@ class EnergyCalculator:
             if not state or state.state in ("unknown", "unavailable", None):
                 continue
             value = self._energy_state_kwh(state)  # #551 unit-aware
-            if value >= 0:
+            if value is not None and value >= 0:
                 readings[entity_id] = value
 
         if len(readings) != len(entities):
