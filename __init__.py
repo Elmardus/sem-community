@@ -815,6 +815,7 @@ def persist_global_option(hass, entry, coordinator, key: str, value) -> None:
 
 def persist_per_battery_option(
     hass, entry, coordinator, idx: int, list_key: str, value, count: int,
+    *, read_units: Any = None,
 ) -> None:
     """Persist ONE per-battery option without an integration reload (#523).
 
@@ -826,16 +827,29 @@ def persist_per_battery_option(
     battery 1, and the no-reload contract (copy options, mirror into
     ``coordinator.config``, arm the reload-skip snapshot) matches the
     charger path so a live mode flip doesn't bounce the integration.
+
+    (#1204) ``idx`` is a place in the battery order ``read_units``: for a
+    Mode select or reserve number the order it was built for
+    (``battery_control_units``); None for today's order (SEM's own write).
+    The batteries may have changed since the control was built (the reload
+    is due), so the value goes to that battery's slot today. A battery that
+    is gone takes no write.
     """
+    from .coordinator.battery_controls import put_battery_slot
     new_options = {**(entry.options or {})}
-    src = new_options.get(list_key)
-    if not isinstance(src, list):
-        src = (entry.data or {}).get(list_key)
-    lst = list(src) if isinstance(src, list) else []
+    saved = {**(entry.data or {}), **new_options}
+    if not isinstance(new_options.get(list_key), list):
+        saved[list_key] = (entry.data or {}).get(list_key)
+    if not 0 <= idx:
+        return
+    try:
+        lst = put_battery_slot(saved, list_key, idx, value, read_units)
+    except LookupError:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="battery_list_changed",
+        ) from None
     while len(lst) < count:
         lst.append(None)
-    if 0 <= idx < len(lst):
-        lst[idx] = value
     new_options[list_key] = lst
     if isinstance(getattr(coordinator, "config", None), dict):
         coordinator.config.update({**(entry.data or {}), **new_options})
@@ -2685,9 +2699,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
     # batteries. select.py and number.py build from it, and
     # _per_battery_config reads the store of the controls they build.
     from .coordinator.battery_controls import (
-        adopt_shared_battery_settings, discover_battery_control_slugs,
+        BATTERY_SLOT_UNITS_KEY, adopt_shared_battery_settings,
+        discover_battery_control_slugs,
     )
     coordinator.battery_control_slugs = discover_battery_control_slugs(coordinator)
+    # (#1204) …and the battery order their slots are in. A Mode select or
+    # reserve number writes its slot in this order, also after the batteries
+    # changed and before the reload rebuilds it.
+    _slot_units = {**(entry.data or {}), **(entry.options or {})}.get(
+        BATTERY_SLOT_UNITS_KEY)
+    coordinator.battery_control_units = (
+        tuple(_slot_units) if isinstance(_slot_units, list) else None)
     # (#1171) …and the first start after one shared control: each battery
     # starts on what that control drove, before anything is commanded.
     adopt_shared_battery_settings(
@@ -3373,6 +3395,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
 
     # Setup platforms (critical - must succeed)
     try:
+        # (#1204) from here the battery controls hold their places
+        coordinator._battery_controls_built = True
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
         _LOGGER.info("Platforms setup completed: %s", PLATFORMS)
         await _async_listen_energy_prefs(hass)
@@ -6238,6 +6262,26 @@ async def _async_register_phase_services(
                 "ev_chargers": _merge_ev_chargers_by_id(
                     existing_list, options["ev_chargers"]),
             }
+
+        # (#1204) The Config card sends one battery's edit of a per-battery
+        # list, by its place in the battery order the card read. It goes to
+        # that battery's slot today, and every other slot stays as saved: a
+        # whole list from the card's copy put the old order back after the
+        # batteries changed, and emptied the others after a failed read.
+        from .coordinator.battery_controls import battery_slot_edits
+        try:
+            options = battery_slot_edits(options, {
+                **(target_entry.data or {}), **(target_entry.options or {})})
+        except LookupError:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="battery_list_changed",
+            ) from None
+        except ValueError:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="set_option_invalid_payload",
+            ) from None
 
         # (#1077) The card picks a value preset the way the options flow
         # does: the preset fills the fields it owns, and a hand-changed one

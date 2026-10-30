@@ -67,7 +67,9 @@ from .tariff.value_layer import (
 from .coordinator.ev_taper_detector import resolve_charge_efficiency
 from .coordinator.units import energy_state_to_kwh, normalize_unit
 from .coordinator.install_modules import has_managed_charger
-from .coordinator.battery_controls import captured_battery_control_slugs
+from .coordinator.battery_controls import (
+    BATTERY_SLOT_UNITS_KEY, captured_battery_control_slugs, lists_in_current_order,
+)
 from .ha_energy_reader import (
     battery_units, read_energy_dashboard_config, EnergyDashboardConfig,
 )
@@ -1842,6 +1844,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self._unshown: dict[str, Any] = {}
         # (#1089) which battery's discharge-limit page is showing
         self._battery_limit_idx = 0
+        # (#1204) the battery order the draft's per-battery lists were read
+        # in; ``_battery_lists_read`` once they are in the draft
+        self._battery_lists_read = False
+        self._battery_read_units: Any = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -2836,9 +2842,32 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
         return captured_battery_control_slugs(coordinator) or ()
 
+    def _battery_draft_follows(self) -> bool:
+        """(#1204) The batteries changed while the dialog is open: each
+        battery's draft slots go to its place today, and the next pages and
+        the save follow today's order. A battery the pages never showed keeps
+        its own slots. True when the order changed."""
+        if not self._battery_lists_read:
+            return False
+        saved = {**self.config_entry.data, **self.config_entry.options}
+        today = saved.get(BATTERY_SLOT_UNITS_KEY)
+        if not isinstance(today, list) or today == self._battery_read_units:
+            return False
+        self._data.update(lists_in_current_order(
+            self._data, self._battery_read_units, saved))
+        self._battery_read_units = list(today)
+        return True
+
     def _battery_label_source(self, idx: int, slug: str) -> str:
         """(#1089) The sensor that tells the user which battery ``slug`` is:
-        its Energy-Dashboard power sensor, else SEM's own one."""
+        its Energy-Dashboard power sensor, else SEM's own one.
+
+        (#1204) The battery whose slot the page edits: its place in the order
+        the draft's lists were read in, while that order is known."""
+        read = self._battery_read_units
+        if (isinstance(read, list) and idx < len(read)
+                and isinstance(read[idx], str) and read[idx]):
+            return read[idx]
         coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
         reader = getattr(coordinator, "_sensor_reader", None)
         ed = getattr(reader, "_energy_dashboard_config", None)
@@ -2866,6 +2895,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         list_key = "battery_discharge_control_entities"
         # (#1166) the same page carries each pack's own end-of-charge level
         end_key = "battery_charge_end_soc_entities"
+        if not self._battery_lists_read:
+            # (#1204) The lists and the battery order they are in, read once
+            # together.
+            self._battery_lists_read = True
+            saved = self.config_entry.options or {}
+            self._battery_read_units = saved.get(BATTERY_SLOT_UNITS_KEY)
+            for key in (list_key, end_key):
+                if key not in self._data and isinstance(saved.get(key), list):
+                    self._data[key] = _draft_list(self, key)
         slugs = self._battery_slugs()
         idx = self._battery_limit_idx
         if user_input is not None:
@@ -2886,6 +2924,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 end_key, "battery_charge_end_soc_entity")
             idx += 1
             self._battery_limit_idx = idx
+        # (#1204) The answer above is for the page shown, in the order it
+        # was shown in. After a change the pages start again from the first
+        # battery, each showing what was answered for it: places moved, so
+        # going on by number would show one battery twice and skip another.
+        if self._battery_draft_follows():
+            idx = self._battery_limit_idx = 0
         if len(slugs) < 2:
             # Skipped (or SEM reloaded with fewer batteries mid-dialog): the
             # keys are owned, so the saved lists must reach the final save.
@@ -2898,7 +2942,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 self._data.setdefault("battery_charge_end_soc_entities",
                                       list(saved) if isinstance(saved, list) else saved)
             return await self.async_step_settings_ev()
-        if idx >= len(slugs):
+        pages = len(slugs)
+        read = self._battery_read_units
+        if isinstance(read, list) and read:
+            # (#1204) a page per battery the lists are kept for, also while
+            # the reload after a change is due
+            pages = min(pages, len(read))
+        if idx >= pages:
             return await self.async_step_settings_ev()
 
         limits = _draft_list(self, list_key)
@@ -4628,6 +4678,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # removed from ``entry.data`` too, or the start-up heal
                 # restores it from there on the next reload.
                 self._prune_removed_chargers_from_data()
+                # (#1204) the batteries may have changed since the last page
+                self._battery_draft_follows()
                 return self.async_create_entry(
                     data=self._without_flat_wiring_of_removed_first(
                         {**carried, **unshown, **self._data}))
