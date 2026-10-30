@@ -309,7 +309,15 @@ async def test_a_failed_setup_leaves_no_store_listening(
     sem_real_hass, sem_config_entry, hass_storage, where,
 ) -> None:
     """HA retries a failed setup with a new store and never unloads the
-    old one: it must not stay behind to write at HA stop."""
+    old one: it must not stay behind to write at HA stop.
+
+    Checked on the store itself, not a global ``hass.bus.async_listeners()``
+    count: the first setup attempt in a test can also be the first thing
+    that lazily sets up an unrelated HA component (``http``'s own
+    ``stop_server`` listener, found live) -- that is a one-time, permanent
+    registration, not a per-attempt leak, and it made this test fail
+    reproducibly for a reason that had nothing to do with SEM's storage.
+    """
     from unittest.mock import patch
 
     from homeassistant.config_entries import ConfigEntryState
@@ -317,7 +325,6 @@ async def test_a_failed_setup_leaves_no_store_listening(
     from custom_components.solar_energy_management.coordinator.storage import SEMStorage
 
     hass = sem_real_hass
-    before = hass.bus.async_listeners().get(EVENT_HOMEASSISTANT_STOP, 0)
     sem_config_entry.add_to_hass(hass)
     opened = []
     real_load = SEMStorage.async_load
@@ -340,9 +347,9 @@ async def test_a_failed_setup_leaves_no_store_listening(
 
     assert sem_config_entry.state is ConfigEntryState.SETUP_RETRY
     assert opened, "the store was never loaded: the test reached nothing"
-    assert hass.bus.async_listeners().get(EVENT_HOMEASSISTANT_STOP, 0) == before, (
-        "a failed setup left its store listening for HA stop")
     assert all(st._closed for st in opened)
+    assert all(st._shutdown_listener is None for st in opened), (
+        "a failed setup left its store listening for HA stop")
 
 
 def test_a_write_asked_for_while_the_close_writes_is_skipped() -> None:
