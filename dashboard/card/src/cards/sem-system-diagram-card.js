@@ -29,7 +29,7 @@ import {
 } from '../base/sem-shared.js';
 import { nightArcPos } from '../util/night-arc.js';
 import { formatTemperatureLabel } from '../util/temperature.js';
-import { MISSING, allOut, fmtValue, isMissing, socDisplay } from '../util/missing-value.js';
+import { MISSING, allOut, fmtValue, isMissing, readNumber, socDisplay } from '../util/missing-value.js';
 import { chargerIdsFrom, evNodeSoc, evNodeSocLabel, socFromState } from '../util/ev-node-soc.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
@@ -1730,7 +1730,8 @@ class SEMSystemDiagramCard extends SEMLitBase {
                 && info.device_type !== 'battery')
             .map(([id, info]) => {
                 const powerEntity = info.power_entity ? this._hass.states[info.power_entity] : null;
-                const power = powerEntity ? parseFloat(powerEntity.state) || 0 : (info.current_power || 0);
+                // (#1200) null while the load's own entity is out: "— W"
+                const power = powerEntity ? readNumber(powerEntity) : (info.current_power || 0);
                 return { id, ...info, power, name: this._localizedDeviceName(id, info) };
             })
             .sort((a, b) => b.power - a.power)

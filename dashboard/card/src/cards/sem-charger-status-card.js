@@ -12,7 +12,7 @@
 
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { semDefineCard } from '../base/sem-shared.js';
-import { allOut, fmtValue, readNumber } from '../util/missing-value.js';
+import { MISSING, allOut, fmtValue, readNumber } from '../util/missing-value.js';
 
 const DEFAULT_PREFIX = 'sensor.sem_';
 
@@ -123,7 +123,9 @@ class SEMChargerStatusCard extends SEMLitBase {
         const name = this._chargerName(id);
         const isCharging = power > 50;
         const statusColor = isCharging ? '#8DC892' : '#888';
-        const statusText = isCharging ? this._t('charging') : this._t('idle');
+        // (#1200) a power that is out says nothing about charging
+        const statusText = power == null ? MISSING
+            : isCharging ? this._t('charging') : this._t('idle');
         const glowOpacity = isCharging ? '0.15' : '0';
 
         return html`

@@ -52,6 +52,7 @@ class SEMCostsCard extends SEMLitBase {
     }
 
     _netColor(net) {
+        if (net == null) return 'var(--secondary-text-color, #888)';
         return net <= 0 ? '#8DC892' : '#f06292';
     }
 
@@ -77,7 +78,10 @@ class SEMCostsCard extends SEMLitBase {
         // because the savings are already the reason the net cost is low.
         // Mockup approved 21.08: label each block, subtotal each,
         // and say once that avoided cost is not cash.
-        const avoided = solar == null || batt == null ? null : solar + batt;
+        // A home with no battery has no battery savings sensor: that part is
+        // 0. A sensor that is there but out makes the total "—".
+        const battPart = this._hass?.states[`${this._prefix}${period}_battery_savings`] ? batt : 0;
+        const avoided = solar == null || battPart == null ? null : solar + battPart;
         return html`
             <div class="section">
                 <div class="section-title">${this._t(labelKey)}</div>
@@ -123,7 +127,7 @@ class SEMCostsCard extends SEMLitBase {
 
         const dailyNet = this._val('daily_net_cost');
         const heroSaving = dailyNet <= 0;
-        const heroColor = heroSaving ? '#8DC892' : '#f06292';
+        const heroColor = this._netColor(dailyNet);
         const heroText = dailyNet == null ? MISSING
             : (heroSaving ? '+' : '') + this._fmt(Math.abs(dailyNet), 2) + ' ' + curr;
         const heroLabel = heroSaving ? this._t('net_saving_today') : this._t('net_cost_today');
@@ -166,7 +170,7 @@ class SEMCostsCard extends SEMLitBase {
                             </div>
                             <div class="metric-row">
                                 <span class="metric-label">${this._t('roi_percentage')}</span>
-                                <span class="metric-val" style="color:${roiColor}">${roiPct ? this._fmt(roiPct, 1) + '%' : '—'}</span>
+                                <span class="metric-val" style="color:${roiColor}">${roiPct != null ? this._fmt(roiPct, 1) + '%' : '—'}</span>
                             </div>
                         </div>
                         <div class="section">

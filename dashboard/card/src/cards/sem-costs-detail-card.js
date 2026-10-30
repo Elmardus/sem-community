@@ -75,6 +75,11 @@ class SEMCostsDetailCard extends SEMLitBase {
         return readNumber(this._hass?.states[entityId]) ?? fallback;
     }
 
+    // (#1200) SEM makes the lifetime EV sensors only for a home with a charger.
+    _evModule() {
+        return !!this._hass?.states[`${this._prefix}lifetime_ev_energy`];
+    }
+
     _entityExists(entityId) {
         const e = this._hass?.states[entityId];
         return !!(e && e.state !== 'unavailable' && e.state !== 'unknown');
@@ -88,6 +93,7 @@ class SEMCostsDetailCard extends SEMLitBase {
     _sectionSubtitle(id, curr) {
         if (id === 'ev_econ') {
             const energy = this._val('lifetime_ev_energy');
+            if (!this._evModule()) return this._t('no_ev_data');
             if (energy == null) return MISSING;
             if (energy <= 0) return this._t('no_ev_data');
             const cost = this._val('lifetime_ev_cost');
@@ -191,8 +197,9 @@ class SEMCostsDetailCard extends SEMLitBase {
     _renderSectionBody(id, curr) {
         if (id === 'ev_econ') {
             const evEnergy = this._val('lifetime_ev_energy');
-            // (#1200) a sensor that is out is no reading, not "no EV data"
-            if (evEnergy != null && evEnergy <= 0) {
+            // (#1200) a sensor that is out is no reading, not "no EV data";
+            // a home with no charger has no such sensor at all.
+            if (!this._evModule() || (evEnergy != null && evEnergy <= 0)) {
                 return html`<div class="info-empty">${this._t('no_ev_data')}</div>`;
             }
             const evCost = this._val('lifetime_ev_cost');

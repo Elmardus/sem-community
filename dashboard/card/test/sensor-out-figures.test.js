@@ -255,6 +255,10 @@ test('no card reader keeps a number as its default', () => {
         const name = f.pathname.split('/src/')[1];
         assert.doesNotMatch(src, /^\s+_\w+\([\w, ]*\bfallback\s*=\s*-?\d/m,
             `${name}: a reader's default is a number again`);
+        // The readers by name, whatever their parameters are called.
+        for (const m of src.matchAll(/^\s+_(val|state|valNum|numVal|entityVal|getState)\(([^)]*)\)\s*\{/gm)) {
+            assert.doesNotMatch(m[2], /=\s*-?\d/, `${name}: _${m[1]}(${m[2]})`);
+        }
         assert.doesNotMatch(src, /parseFloat\([^()]*\)\s*\?\?/,
             `${name}: parseFloat(x) ?? y lets NaN through`);
     }
@@ -438,4 +442,96 @@ test('flow card: a node whose sensor is out reads "— W" after an update', () =
     assert.equal(nodes['val-grid'].textContent, '↓ 700 W');
     assert.equal(nodes['val-home'].textContent, '700 W');
     assert.equal(nodes['val-ev'].textContent, '0 W', 'a real 0 still prints 0');
+});
+
+// ── Found in review ────────────────────────────────────────────────────────
+
+test('costs card: a home with no battery keeps its avoided total', () => {
+    // SEM makes no battery savings sensor without a battery: that part is 0.
+    const el = made('sem-costs-card', {
+        'sensor.sem_daily_savings': st('1.5'),
+        'sensor.sem_daily_net_cost': st('-0.4'),
+    });
+    const out = words(text(el.render()));
+    assert.match(out, /cost_block_avoided_total 1\.50 EUR/, out);
+    // With a battery whose sensor is out, the total is not known.
+    const dark = made('sem-costs-card', {
+        'sensor.sem_daily_savings': st('1.5'),
+        'sensor.sem_daily_battery_savings': OUT,
+    });
+    assert.match(words(text(dark.render())), /cost_block_avoided_total — /);
+});
+
+test('costs detail: a home with no charger still says "no EV data"', () => {
+    const none = made('sem-costs-detail-card', {});
+    assert.equal(none._sectionSubtitle('ev_econ', 'EUR'), 'no_ev_data');
+    assert.match(words(text(none._renderSectionBody('ev_econ', 'EUR'))), /no_ev_data/);
+    const dark = made('sem-costs-detail-card', { 'sensor.sem_lifetime_ev_energy': OUT });
+    assert.equal(dark._sectionSubtitle('ev_econ', 'EUR'), '—');
+    const zero = made('sem-costs-detail-card', { 'sensor.sem_lifetime_ev_energy': st('0') });
+    assert.equal(zero._sectionSubtitle('ev_econ', 'EUR'), 'no_ev_data');
+});
+
+test('charger tile: a power that is out says neither Charging nor Idle', () => {
+    const el = made('sem-charger-status-card', { 'sensor.sem_charger_a_power': OUT });
+    el._chargers = ['a'];
+    const out = words(text(el._renderChargerTile('a')));
+    assert.doesNotMatch(out, /idle|charging/, out);
+    const live = made('sem-charger-status-card', { 'sensor.sem_charger_a_power': st('0') });
+    assert.match(words(text(live._renderChargerTile('a'))), /idle/);
+});
+
+test('grid card: a real 0 rate prints 0, an out one the dash', () => {
+    const el = made('sem-grid-card', {
+        'sensor.sem_tariff_current_export_rate': st('0'),
+        'sensor.sem_tariff_current_import_rate': OUT,
+    });
+    const out = words(text(el.render()));
+    assert.match(out, /export_rate 0\.0000 EUR\/kWh/, out);
+    assert.match(out, /import_rate — /, out);
+});
+
+test('flow card: a real 0 that goes out turns into "— W" on the next update', () => {
+    const states = {
+        'sensor.sem_solar_power': st('0'),
+        'sensor.sem_grid_import_power': st('300'),
+        'sensor.sem_grid_export_power': st('0'),
+        'sensor.sem_home_consumption_power': st('300'),
+    };
+    const el = made('sem-flow-card', states, { entity_prefix: 'sensor.sem_' });
+    const nodes = {};
+    el.renderRoot = {
+        getElementById: (id) => (id.startsWith('val-') ? (nodes[id] ??= { textContent: '', style: {}, setAttribute() {} }) : null),
+        querySelector: () => null, querySelectorAll: () => [],
+    };
+    el._currentValues = { 'val-grid': 300, 'val-home': 300 };
+    el._updateFlowsImperative();
+    assert.equal(nodes['val-solar'].textContent, '0 W');
+    el._hass = hassOf({ ...states, 'sensor.sem_solar_power': OUT });
+    el._updateFlowsImperative();
+    assert.equal(nodes['val-solar'].textContent, '— W', 'the flows did not move, the label must');
+});
+
+test('diagram and flow card: a load whose power entity is out reads "— W"', () => {
+    const info = { name: 'Boiler', power_entity: 'sensor.boiler_power', is_on: true };
+    const states = {
+        'sensor.sem_controllable_devices_count': st('1', { devices: { boiler: info } }),
+        'sensor.boiler_power': OUT,
+    };
+    const el = made('sem-system-diagram-card', states);
+    const loads = el._collectDevices();
+    assert.equal(loads.length, 1);
+    assert.equal(loads[0].power, null);
+    assert.match(words(text(el._renderDeviceChips())), /— W/);
+
+    const flow = made('sem-flow-card', states, { entity_prefix: 'sensor.sem_' });
+    const nodes = {};
+    flow.renderRoot = {
+        getElementById: (id) => (id.startsWith('dev-val-') ? (nodes[id] ??= { textContent: '', style: {}, setAttribute() {} }) : null),
+        querySelector: () => null, querySelectorAll: () => [],
+    };
+    flow._devicePositions = [{ x: 0, y: 0 }];
+    flow._currentValues = { 'dev-val-0': 1200 };
+    flow._updateDeviceValues([['boiler', info]]);
+    assert.equal(nodes['dev-val-0'].textContent, '— W', 'not a count down to 0 W');
 });

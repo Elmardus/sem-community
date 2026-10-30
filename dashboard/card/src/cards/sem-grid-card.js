@@ -151,7 +151,8 @@ class SEMGridCard extends SEMLitBase {
         const dailyExport = this._val('daily_grid_export_energy');
         const netToday = dailyImport == null || dailyExport == null
             ? null : dailyImport - dailyExport;
-        const netColor = netToday <= 0 ? '#8353d1' : '#488fc2';
+        const netColor = netToday == null ? 'var(--secondary-text-color, #888)'
+            : netToday <= 0 ? '#8353d1' : '#488fc2';
 
         // Peak management
         const peakPct = this._val('current_vs_peak_percentage');
@@ -410,13 +411,13 @@ class SEMGridCard extends SEMLitBase {
                         <div class="metric-row">
                             <span class="metric-label">${this._t('import_rate')}</span>
                             <span class="metric-val c-import">
-                                ${importRate ? `${this._fmt(importRate, 4)} ${curr}/kWh` : '—'}
+                                ${importRate != null ? `${this._fmt(importRate, 4)} ${curr}/kWh` : '—'}
                             </span>
                         </div>
                         <div class="metric-row">
                             <span class="metric-label">${this._t('export_rate')}</span>
                             <span class="metric-val c-export">
-                                ${exportRate ? `${this._fmt(exportRate, 4)} ${curr}/kWh` : '—'}
+                                ${exportRate != null ? `${this._fmt(exportRate, 4)} ${curr}/kWh` : '—'}
                             </span>
                         </div>
                         <div class="metric-row">
@@ -428,13 +429,13 @@ class SEMGridCard extends SEMLitBase {
                         <div class="metric-row">
                             <span class="metric-label">${this._t('today_min')}</span>
                             <span class="metric-val c-green">
-                                ${minPrice ? this._fmt(minPrice, 4) : '—'}
+                                ${minPrice != null ? this._fmt(minPrice, 4) : '—'}
                             </span>
                         </div>
                         <div class="metric-row">
                             <span class="metric-label">${this._t('today_max')}</span>
                             <span class="metric-val c-solar">
-                                ${maxPrice ? this._fmt(maxPrice, 4) : '—'}
+                                ${maxPrice != null ? this._fmt(maxPrice, 4) : '—'}
                             </span>
                         </div>
                     </div>

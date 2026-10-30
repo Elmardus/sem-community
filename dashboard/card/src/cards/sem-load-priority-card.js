@@ -1771,6 +1771,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
     // ── Helpers ──
     _getPeakColor() {
         if (this.peakLimitUnlimited) return '#4caf50';
+        if (this.currentPeak == null) return '#888';  // (#1200) no reading, no "safe"
         const pct = this.targetPeakLimit > 0 ? (this.currentPeak / this.targetPeakLimit) * 100 : 0;
         if (pct >= 100) return '#f44336';
         if (pct >= 90)  return '#ff9800';

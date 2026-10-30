@@ -13,7 +13,7 @@
 
 import { SEMLitBase, html, css, nothing } from '../base/sem-lit-base.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
-import { fmtValue, readNumber } from '../util/missing-value.js';
+import { MISSING, fmtValue, isMissing, readNumber } from '../util/missing-value.js';
 import {
     semTheme, semFormatPower, semCalcDuration, semGetCurrency, semDefineCard,
     SEM_COLORS, SEM_DEVICE_COLORS, SEM_FLOW_ACTIVE_THRESHOLD,
@@ -499,8 +499,11 @@ class SEMFlowCard extends SEMLitBase {
         const dailyBattery    = this._getStateStr('daily_battery_energy');
         const dailyHome       = this._getStateStr('daily_home_energy');
 
+        // (#1200) the out flags too: a real 0 that goes out keeps its 0 W
+        // flows, and only the flags say the label must change.
         const vals = { solar, battery, gridImport, gridExport, home, ev, soc, autarky,
-                       dailySolar, dailyEv, dailyGridImport, dailyGridExport, dailyBattery, dailyHome };
+                       dailySolar, dailyEv, dailyGridImport, dailyGridExport, dailyBattery, dailyHome,
+                       solarOut, gridOut, battOut, evOut };
         const key = JSON.stringify(vals);
         if (this._lastKey === key) return;
         this._lastKey = key;
@@ -776,7 +779,8 @@ class SEMFlowCard extends SEMLitBase {
         const H = L.home;
         devices.forEach(([id, info], idx) => {
             const powerEntity = info.power_entity ? this._hass.states[info.power_entity] : null;
-            const power = powerEntity ? parseFloat(powerEntity.state) || 0 : (info.current_power || 0);
+            // (#1200) null while the load's own entity is out: "— W"
+            const power = powerEntity ? readNumber(powerEntity) : (info.current_power || 0);
             const isOn  = power > 5;
             const color = info.color || SEM_DEVICE_COLORS[idx % SEM_DEVICE_COLORS.length];
             const pos   = this._devicePositions[idx];
@@ -785,7 +789,8 @@ class SEMFlowCard extends SEMLitBase {
             this._animateValue(`dev-val-${idx}`, power);
             if (info.daily_energy_entity) {
                 const de = this._hass.states[info.daily_energy_entity];
-                this._setText(`dev-daily-${idx}`, de ? `${this._t('today')} ${de.state} kWh` : '');
+                this._setText(`dev-daily-${idx}`,
+                    de ? `${this._t('today')} ${isMissing(de) ? MISSING : de.state} kWh` : '');
             }
 
             const conn = this.renderRoot.getElementById(`dev-conn-${idx}`);
