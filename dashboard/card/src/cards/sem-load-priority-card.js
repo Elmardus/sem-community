@@ -454,7 +454,7 @@ class SEMLoadPriorityCard extends SEMLitBase {
                     // no longer carries current_power (it made the count sensor
                     // write a row every cycle); older backends still fall back.
                     // (#1200) null while that entity is out: "— W", not 0 W.
-                    power: devicePowerKw(this._hass?.states?.[info.power_entity], info),
+                    power: devicePowerKw(this._hass.states[info.power_entity], info),
                     // (#577) self-calibrated rated power (W) — shown dimmed when
                     // the load is off so the row keeps a meaningful number
                     // instead of a bare "OFF".
