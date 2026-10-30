@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import calendar
-import dataclasses
+import copy
 import inspect
 import logging
 import math
@@ -885,7 +885,10 @@ class EnergyCalculator:
                 if w != float(getattr(power, f, 0.0) or 0.0)}
         if not held:
             return power, power_flows
-        readings = dataclasses.replace(power, held_w={}, **held)
+        readings = copy.copy(power)
+        readings.held_w = {}
+        for field, watts in held.items():
+            setattr(readings, field, watts)
         return readings, FlowCalculator.calculate_power_flows(readings)
 
     def _battery_flows(self, power_flows: "Optional[PowerFlows]"):
