@@ -185,10 +185,18 @@ def _persist(options, built, idx, value, key="battery_modes", count=2):
     entry = SimpleNamespace(entry_id="e", data={}, options=dict(options))
     hass.config_entries.async_update_entry.side_effect = (
         lambda e, options: setattr(e, "options", options))
-    coordinator = SimpleNamespace(config={}, battery_control_units=built)
+    coordinator = SimpleNamespace(config={})
     with patch("custom_components.solar_energy_management._refresh_runtime_config"):
-        persist_per_battery_option(hass, entry, coordinator, idx, key, value, count)
+        persist_per_battery_option(hass, entry, coordinator, idx, key, value, count,
+                                   read_units=built)
     return entry.options
+
+
+def test_sems_own_mode_write_is_in_todays_order():
+    """Review finding: ``_finish_manual_battery_modes`` counts batteries in
+    today's reader order, not in the order the selects were built for."""
+    options = {BATTERY_SLOT_UNITS_KEY: [C, A, B], "battery_modes": [None, "force_charge"]}
+    assert _persist(options, None, 1, "auto")["battery_modes"] == [None, "auto"]
 
 
 def test_a_select_built_before_the_change_writes_its_own_battery():
@@ -230,6 +238,13 @@ def test_a_change_at_setup_is_the_order_the_controls_are_built_in():
     coordinator = SimpleNamespace(config={}, battery_control_units=(A, B))
     assert align_battery_slots(hass, entry, coordinator, [C, A, B], running=False)
     assert coordinator.battery_control_units == (C, A, B)
+    # its twin: once the platforms are forwarded the controls hold their
+    # places, also before the entry is loaded
+    entry.options = {BATTERY_SLOT_UNITS_KEY: [A, B], "battery_modes": ["force_charge", "off"]}
+    coordinator = SimpleNamespace(config={}, battery_control_units=(A, B),
+                                  _battery_controls_built=True)
+    assert align_battery_slots(hass, entry, coordinator, [C, A, B], running=False)
+    assert coordinator.battery_control_units == (A, B)
 
 
 def test_a_first_record_while_running_keeps_the_order_the_slots_stood_in():
@@ -336,10 +351,16 @@ async def test_the_dialog_saves_each_battery_at_its_place_today(mock_hass, confi
     assert data[BATTERY_SLOT_UNITS_KEY] == [C, A, B]
 
 
+def _shown(result):
+    marker = next(m for m in result["data_schema"].schema if m.schema == FIELD)
+    return result["description_placeholders"]["sensor"], marker.description["suggested_value"]
+
+
 @pytest.mark.asyncio
 async def test_the_pages_follow_a_change_between_them(mock_hass, config_entry):
-    """C added in front after the first page: the answer for A goes with A,
-    and the next pages are today's (b2 is A now, with that answer)."""
+    """C added in front after A's page: A's answer goes with A, and the pages
+    start again from today's first battery, each with its own value — every
+    battery is shown, none twice in a row by number."""
     flow = _flow(mock_hass, config_entry, {
         BATTERY_SLOT_UNITS_KEY: [A, B],
         LIMITS: ["number.a_limit", "number.b_limit"]},
@@ -348,14 +369,12 @@ async def test_the_pages_follow_a_change_between_them(mock_hass, config_entry):
     config_entry.options = {
         BATTERY_SLOT_UNITS_KEY: [C, A, B],
         LIMITS: ["number.c_limit", "number.a_limit", "number.b_limit"]}
-    second = await _call(flow, config_entry, "settings_battery_limit",
-                         {FIELD: "number.a_new"})
-    assert second["description_placeholders"]["sensor"] == A
-    marker = next(m for m in second["data_schema"].schema if m.schema == FIELD)
-    assert marker.description["suggested_value"] == "number.a_new"
-    third = await _call(flow, config_entry, "settings_battery_limit",
-                        {FIELD: "number.a_new"})
-    assert third["description_placeholders"]["sensor"] == B
+    page = await _call(flow, config_entry, "settings_battery_limit", {FIELD: "number.a_new"})
+    assert _shown(page) == (C, "number.c_limit")
+    page = await _call(flow, config_entry, "settings_battery_limit", {FIELD: "number.c_limit"})
+    assert _shown(page) == (A, "number.a_new")
+    page = await _call(flow, config_entry, "settings_battery_limit", {FIELD: "number.a_new"})
+    assert _shown(page) == (B, "number.b_limit")
     await _call(flow, config_entry, "settings_battery_limit", {FIELD: "number.b_new"})
     data = await _save(flow, config_entry)
     assert data[LIMITS] == ["number.c_limit", "number.a_new", "number.b_new"]
@@ -369,14 +388,16 @@ async def test_the_pages_follow_a_change_between_them(mock_hass, config_entry):
 async def test_the_dialog_drops_a_battery_removed_while_it_was_open(
         mock_hass, config_entry, left, want):
     """The reload after the removal is still due (the slugs are two): the
-    pages stop at the one battery left, and its slot is its own."""
+    pages start again on the one battery left, and its slot is its own."""
     flow = _flow(mock_hass, config_entry, {
         BATTERY_SLOT_UNITS_KEY: [A, B], LIMITS: ["number.a_limit", "number.b_limit"]},
         _coordinator(("b1", "b2"), (A, B)))
     await _call(flow, config_entry, "settings_battery_limit")
     config_entry.options = {BATTERY_SLOT_UNITS_KEY: left,
                             LIMITS: ["number.a_limit" if left == [A] else "number.b_limit"]}
-    done = await _call(flow, config_entry, "settings_battery_limit", {FIELD: "number.a_new"})
+    page = await _call(flow, config_entry, "settings_battery_limit", {FIELD: "number.a_new"})
+    assert _shown(page) == (left[0], want[0])
+    done = await _call(flow, config_entry, "settings_battery_limit", {FIELD: want[0]})
     assert done["step_id"] == "settings_ev"
     data = await _save(flow, config_entry)
     assert data[LIMITS] == want
@@ -450,20 +471,19 @@ def _list_key_writes():
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node, fn in _innermost_functions(tree):
-            if True:
-                key = None
-                if (isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store)
-                        and isinstance(node.slice, ast.Constant)):
-                    key = node.slice.value
-                elif isinstance(node, ast.Dict):
-                    key = next((k.value for k in node.keys
-                                if isinstance(k, ast.Constant) and k.value in keys), None)
-                elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                      and node.func.attr == "setdefault" and node.args
-                      and isinstance(node.args[0], ast.Constant)):
-                    key = node.args[0].value
-                if key in keys:
-                    found.setdefault((rel, fn.name if fn else "<module>"), node.lineno)
+            key = None
+            if (isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store)
+                    and isinstance(node.slice, ast.Constant)):
+                key = node.slice.value
+            elif isinstance(node, ast.Dict):
+                key = next((k.value for k in node.keys
+                            if isinstance(k, ast.Constant) and k.value in keys), None)
+            elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                  and node.func.attr == "setdefault" and node.args
+                  and isinstance(node.args[0], ast.Constant)):
+                key = node.args[0].value
+            if key in keys:
+                found.setdefault((rel, fn.name if fn else "<module>"), node.lineno)
     return found
 
 
@@ -500,8 +520,22 @@ def _calls(rel, fn_name):
             for n in ast.walk(fn) if isinstance(n, ast.Call)}
 
 
+def _passes_read_units(rel, fn_name):
+    tree = ast.parse((ROOT / rel).read_text(encoding="utf-8"))
+    calls = [n for fn in ast.walk(tree)
+             if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) and fn.name == fn_name
+             for n in ast.walk(fn) if isinstance(n, ast.Call)
+             and getattr(n.func, "id", None) == "persist_per_battery_option"]
+    assert calls, (rel, fn_name)
+    return all(any(k.arg == "read_units" and "battery_control_units" in ast.unparse(k.value)
+                   for k in c.keywords) for c in calls)
+
+
 def test_each_writer_follows_the_order():
     assert "put_battery_slot" in _calls("__init__.py", "persist_per_battery_option")
+    # the controls write in the order they were built for
+    assert _passes_read_units("select.py", "async_select_option")
+    assert _passes_read_units("number.py", "async_set_native_value")
     assert "battery_slot_edits" in _calls("__init__.py", "async_set_option")
     assert "lists_in_current_order" in _calls("config_flow.py", "_battery_draft_follows")
     assert "_battery_draft_follows" in _calls("config_flow.py", "async_step_notifications")

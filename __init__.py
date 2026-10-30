@@ -815,6 +815,7 @@ def persist_global_option(hass, entry, coordinator, key: str, value) -> None:
 
 def persist_per_battery_option(
     hass, entry, coordinator, idx: int, list_key: str, value, count: int,
+    *, read_units: Any = None,
 ) -> None:
     """Persist ONE per-battery option without an integration reload (#523).
 
@@ -827,10 +828,12 @@ def persist_per_battery_option(
     ``coordinator.config``, arm the reload-skip snapshot) matches the
     charger path so a live mode flip doesn't bounce the integration.
 
-    (#1204) ``idx`` is a place in the battery order the controls were built
-    for (``battery_control_units``). The batteries may have changed since
-    (the reload is due), so the value goes to that battery's slot today. A
-    battery that is gone takes no write.
+    (#1204) ``idx`` is a place in the battery order ``read_units``: for a
+    Mode select or reserve number the order it was built for
+    (``battery_control_units``); None for today's order (SEM's own write).
+    The batteries may have changed since the control was built (the reload
+    is due), so the value goes to that battery's slot today. A battery that
+    is gone takes no write.
     """
     from .coordinator.battery_controls import put_battery_slot
     new_options = {**(entry.options or {})}
@@ -840,8 +843,7 @@ def persist_per_battery_option(
     if not 0 <= idx:
         return
     try:
-        lst = put_battery_slot(saved, list_key, idx, value,
-                               getattr(coordinator, "battery_control_units", None))
+        lst = put_battery_slot(saved, list_key, idx, value, read_units)
     except LookupError:
         raise ServiceValidationError(
             translation_domain=DOMAIN, translation_key="battery_list_changed",
@@ -3393,6 +3395,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SEMConfigEntry) -> bool:
 
     # Setup platforms (critical - must succeed)
     try:
+        # (#1204) from here the battery controls hold their places
+        coordinator._battery_controls_built = True
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
         _LOGGER.info("Platforms setup completed: %s", PLATFORMS)
         await _async_listen_energy_prefs(hass)

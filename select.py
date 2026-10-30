@@ -689,6 +689,7 @@ class SEMPerBatterySelect(CoordinatorEntity, SelectEntity):
             persist_per_battery_option(
                 self.hass, self._entry, self.coordinator,
                 self._idx, "battery_modes", option, self._count,
+                read_units=getattr(self.coordinator, "battery_control_units", None),
             )
             _LOGGER.info("Updated battery %d mode to %s", self._idx, option)
         self._value = option

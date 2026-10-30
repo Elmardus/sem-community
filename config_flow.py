@@ -2842,20 +2842,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
         return captured_battery_control_slugs(coordinator) or ()
 
-    def _battery_draft_follows(self) -> None:
+    def _battery_draft_follows(self) -> bool:
         """(#1204) The batteries changed while the dialog is open: each
         battery's draft slots go to its place today, and the next pages and
         the save follow today's order. A battery the pages never showed keeps
-        its own slots."""
+        its own slots. True when the order changed."""
         if not self._battery_lists_read:
-            return
+            return False
         saved = {**self.config_entry.data, **self.config_entry.options}
         today = saved.get(BATTERY_SLOT_UNITS_KEY)
         if not isinstance(today, list) or today == self._battery_read_units:
-            return
+            return False
         self._data.update(lists_in_current_order(
             self._data, self._battery_read_units, saved))
         self._battery_read_units = list(today)
+        return True
 
     def _battery_label_source(self, idx: int, slug: str) -> str:
         """(#1089) The sensor that tells the user which battery ``slug`` is:
@@ -2923,9 +2924,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 end_key, "battery_charge_end_soc_entity")
             idx += 1
             self._battery_limit_idx = idx
-        # (#1204) the answer above is for the page shown, in the order it
-        # was shown in; the next page is today's
-        self._battery_draft_follows()
+        # (#1204) The answer above is for the page shown, in the order it
+        # was shown in. After a change the pages start again from the first
+        # battery, each showing what was answered for it: places moved, so
+        # going on by number would show one battery twice and skip another.
+        if self._battery_draft_follows():
+            idx = self._battery_limit_idx = 0
         if len(slugs) < 2:
             # Skipped (or SEM reloaded with fewer batteries mid-dialog): the
             # keys are owned, so the saved lists must reach the final save.

@@ -429,7 +429,7 @@ def align_battery_slots(hass: Any, entry: Any, coordinator: Any, units: Any,
     if running and not moved:
         # the options listener must not reload for a record alone
         coordinator._skip_options_reload = dict(new_options)
-    if not running:
+    if not running and getattr(coordinator, "_battery_controls_built", False) is not True:
         # (#1204) the controls are built after this, from the new places
         coordinator.battery_control_units = tuple(changes[BATTERY_SLOT_UNITS_KEY])
     elif not moved and not isinstance(

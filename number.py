@@ -923,6 +923,7 @@ class SEMPerBatteryNumber(CoordinatorEntity, NumberEntity):
             persist_per_battery_option(
                 self.hass, self._entry, self.coordinator,
                 self._idx, "battery_reserve_socs", value, self._count,
+                read_units=getattr(self.coordinator, "battery_control_units", None),
             )
             _LOGGER.info("Updated battery %d reserve SOC to %s", self._idx, value)
         self._attr_native_value = value
