@@ -8369,13 +8369,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         (#1178) Not the discharge limit: batteries behind one inverter often
         share it (#691), and the pipeline gives a shared limit ONE writer
         per cycle (``battery_shared_limit``), so they no longer fight.
+        (#1182) Nor the sale power entity, for the same reason.
         """
         seen = getattr(self, "_battery_control_entity_owner", None)
         if seen is None:
             seen = {}
             self._battery_control_entity_owner = seen
         for key in (
-            "battery_force_discharge_control_entity",
             "battery_strategy_control_entity",
         ):
             ent = pbc.get(key)
@@ -9495,7 +9495,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             FleetContext,
         )
         from .decide_battery import (
-            decide_battery, effective_battery_count, forced_ops, stop_misses,
+            decide_battery, effective_battery_count, forced_ops,
+            sale_surface_count, stop_misses,
         )
 
         # Per-battery adapter cache (#375 — was a single
@@ -9581,14 +9582,21 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         _charge_active = (
             scheduler_decision is not None and scheduler_decision.should_charge
         )
-        # #691: the LIMIT_DISCHARGE home split (and the C6 sell split) must
-        # divide by the batteries that actually CONSUME the budget — a
-        # mode=off battery never gets the clamp, and batteries sharing one
-        # discharge-limit entity are a single actuation surface.
+        # #691: the LIMIT_DISCHARGE home split must divide by the batteries
+        # that actually CONSUME the budget — a mode=off battery never gets
+        # the clamp, and batteries sharing one discharge-limit entity are a
+        # single actuation surface.
         _n_cfg = len(getattr(power, "batteries", {}) or {})
-        _eff_battery_count = effective_battery_count(
-            [self._per_battery_config(i, _n_cfg) for i in range(_n_cfg)]
-        ) if _n_cfg else 1
+        _pbcs = [self._per_battery_config(i, _n_cfg) for i in range(_n_cfg)]
+        _eff_battery_count = effective_battery_count(_pbcs) if _n_cfg else 1
+        # (#1182) …and the C6 sell split by what a sale lands on: two
+        # batteries on one sale power entity sell as one, and two on their
+        # own sale entities sell twice even when they share one limit.
+        _bat_ids = list((getattr(power, "batteries", {}) or {}).keys())
+        _sale_count = sale_surface_count([
+            (pbc, self._battery_adapters.get(_bat_ids[i])
+             if i < len(_bat_ids) else None)
+            for i, pbc in enumerate(_pbcs)]) if _n_cfg else 1
 
         # Evaluate arbitrage ONLY when globally enabled. In v1.7.3 the global
         # toggle is forced off (#533) so this whole block is dormant — automatic
@@ -9668,7 +9676,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             from .energy_plan_actuation import arbitrage_sell_gate
             _sell_in, _sell_total_w = arbitrage_sell_gate(
                 getattr(self, "_energy_plan_shadow", None), dt_util.now())
-        _arb_sell = (_sell_in, _sell_total_w / max(1, _eff_battery_count))
+        _arb_sell = (_sell_in, _sell_total_w / _sale_count)
 
         # (#778) The forecast-led SPEND — same discipline, own switch, own
         # gate. Behind the SAME #758 kill switch: a kill switch some
@@ -9679,7 +9687,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             from .energy_plan_actuation import forecast_sell_gate
             _fsell_in, _fsell_total_w = forecast_sell_gate(
                 getattr(self, "_energy_plan_shadow", None), dt_util.now())
-        _fsell = (_fsell_in, _fsell_total_w / max(1, _eff_battery_count))
+        _fsell = (_fsell_in, _fsell_total_w / _sale_count)
         _sell_status = None
         if _spend_on:
             _arb_fired = (
@@ -10127,11 +10135,14 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
 
         if getattr(self, "_battery_reload_pending", False) is True:
             return          # (#1195) see above: an adapter may await
+        _sale_writers: dict = {}
         _writers = await actuate_batteries(
             _cycle_rows, _send, observer=self._observer_mode,
-            inputs_degraded=_degraded)
+            inputs_degraded=_degraded, sale_writers=_sale_writers)
         for battery_id, writer_id in _writers.items():
             self._last_battery_decisions[battery_id]["limit_written_by"] = writer_id
+        for battery_id, writer_id in _sale_writers.items():   # (#1182)
+            self._last_battery_decisions[battery_id]["sale_power_written_by"] = writer_id
 
         # Reset scheduler when night ends — preserved from legacy
         if (scheduler.enabled
