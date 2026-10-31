@@ -636,6 +636,19 @@ class BatteryControlAdapter(ABC):
         if isinstance(recipe, dict) and recipe.get("service"):
             self._adopted_recipe = dict(recipe)
 
+    def export_control_wired(self) -> bool:
+        """(#1183) Does this adapter have something to cut export with?
+
+        A brand that overrides ``command_limit_export`` has its own way
+        (Huawei: a service on the inverter; Deye: its work-mode select). The
+        generic adapter only once its number is set. Asked by the export
+        pick, so a generic battery beside the inverter's battery is not
+        offered a cut it cannot make.
+        """
+        fn = getattr(type(self), "command_limit_export", None)
+        owner = getattr(fn, "__qualname__", "").split(".")[0] if fn else ""
+        return bool(owner) and owner != "BatteryControlAdapter"
+
     def holds_export_cut(self) -> bool:
         """(#908) Is THIS adapter holding a cut SEM itself made?
 
