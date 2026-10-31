@@ -12497,7 +12497,10 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     _blocks = forecast_sell_blocks(
                         dt_util.now(), _night_start0,
                         float(_pe0.get("battery_spendable_kwh") or 0.0),
-                        max_discharge_w)
+                        max_discharge_w,
+                        # (#1184) a running sale keeps its block open
+                        selling=bool(getattr(
+                            self, "_forecast_sell_active", False)))
                     if _blocks:
                         fsell = {
                             "enabled": True,

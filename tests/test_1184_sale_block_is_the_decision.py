@@ -165,13 +165,25 @@ def test_a_field_the_controls_read_is_the_decision(case):
         "count as the same decision and keep the old stamp (#1184)")
 
 
-@pytest.mark.parametrize("case", DECISION_CASES, ids=_case_id)
+# Changes below the check's step: the same decision, yet each one changes
+# an act (a rate). Copied into a kept plan, it would act unseen.
+NOISE_CASES = [
+    ("plan_gate:power_w", ("blocks", 0, "power_w"), 2000.3),
+    ("arbitrage_sell_gate:kwh",
+     ("arbitrage", "discharge_blocks", 0, "kwh"), 2.764),
+    ("forecast_sell_gate:kwh", ("forecast_sell", "blocks", 0, "kwh"), 4.004),
+    ("forecast_sell_gate:start", ("forecast_sell", "blocks", 0, "start"),
+     (DAY + timedelta(hours=18, minutes=12, seconds=3)).isoformat()),
+]
+
+
+@pytest.mark.parametrize("case", NOISE_CASES, ids=lambda c: c[0])
 def test_a_kept_plan_acts_as_its_stamp_says(case):
     """Whatever a same-decision rebuild copies in must not change an act."""
-    _gate, _field, path, value = case
+    _name, path, value = case
     fresh = {**_with(path, value), "computed_at": _iso(13)}
-    if plan_decision_core(fresh) != plan_decision_core(BASE):
-        return      # a new decision restamps; the keep step never runs
+    assert _acts(fresh) != _acts(BASE), "the case proves nothing"
+    assert plan_decision_core(fresh) == plan_decision_core(BASE)
     kept = keep_decision_take_trajectory(BASE, fresh, _iso(13))
     assert _acts(kept) == _acts(BASE)
 
@@ -223,11 +235,19 @@ _GATES = ("plan_gate", "arbitrage_sell_gate", "forecast_sell_gate")
 
 
 def _keys_read(fn):
-    return {n.args[0].value for n in ast.walk(fn)
-            if isinstance(n, ast.Call)
-            and isinstance(n.func, ast.Attribute) and n.func.attr == "get"
-            and n.args and isinstance(n.args[0], ast.Constant)
-            and isinstance(n.args[0].value, str)}
+    """String keys read with ``.get("k")`` or ``x["k"]``."""
+    keys = set()
+    for n in ast.walk(fn):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "get" and n.args
+                and isinstance(n.args[0], ast.Constant)
+                and isinstance(n.args[0].value, str)):
+            keys.add(n.args[0].value)
+        elif (isinstance(n, ast.Subscript)
+                and isinstance(n.slice, ast.Constant)
+                and isinstance(n.slice.value, str)):
+            keys.add(n.slice.value)
+    return keys
 
 
 def _gate_fns():
@@ -256,13 +276,22 @@ def test_slots_are_read_for_their_span_only():
     fns = _gate_fns()
     for name in ("arbitrage_sell_gate", "forecast_sell_gate"):
         assert "slots" not in _keys_read(fns[name]), name
+    uses = [n for n in ast.walk(fns["plan_gate"])
+            if isinstance(n, ast.Name) and n.id == "slots"
+            and isinstance(n.ctx, ast.Load)]
     subs = [n for n in ast.walk(fns["plan_gate"])
             if isinstance(n, ast.Subscript)
             and isinstance(n.value, ast.Name) and n.value.id == "slots"]
     assert subs, "plan_gate no longer reads slots — drop this pin"
-    for s in subs:
-        idx = ast.literal_eval(s.slice)
+    for sub in subs:
+        idx = ast.literal_eval(sub.slice)
         assert idx in (0, -1), f"plan_gate reads slots[{idx}]"
+    # each read is ``slots[0]``/``slots[-1]`` or the ``if slots`` guard
+    # beside it — never a loop over the slots
+    assert not [n for n in ast.walk(fns["plan_gate"])
+                if isinstance(n, (ast.For, ast.comprehension))
+                and isinstance(n.iter, ast.Name) and n.iter.id == "slots"]
+    assert len(uses) <= 2 * len(subs), "plan_gate reads slots another way"
 
 
 # ── Through the tick: what the user sees after the rebuild ──
@@ -331,3 +360,63 @@ def test_an_unmoved_sale_keeps_the_stamp_and_its_blocks(_at_1300, intraday):
     assert plan["forecast_sell"] == BASE["forecast_sell"], (
         "a kept plan sells as its stamp says")
     assert _acts(plan) == _acts(BASE)
+
+
+# ── A rebuild while the sale runs keeps it running ──
+
+from custom_components.solar_energy_management.coordinator.forecast_sell import (  # noqa: E402
+    MIN_SPEND_KWH, forecast_sell_blocks,
+)
+
+NIGHT_START = DAY + timedelta(hours=19)
+AT_1700 = DAY + timedelta(hours=17)
+
+
+def _plan_with(blocks):
+    return {"computed_at": AT_1700.isoformat(),
+            "forecast_sell": {"enabled": True, "blocks": [
+                {**b, "start": b["start"].isoformat(),
+                 "end": b["end"].isoformat()} for b in blocks]}}
+
+
+def test_a_running_sale_keeps_its_block_open():
+    """20 kWh at 5 kW opened 15:00–19:00. A 17:00 rebuild reads 9.9 kWh
+    left (the pack fell a little faster than the sale): anchored, the
+    block would open again at 17:01:12 and the sale would stop."""
+    idle = forecast_sell_blocks(AT_1700, NIGHT_START, 9.9, 5000.0)
+    assert idle[0]["start"] > AT_1700        # what paused the sale
+    got = forecast_sell_blocks(AT_1700, NIGHT_START, 9.9, 5000.0,
+                               selling=True)
+    assert got[0]["start"] == AT_1700 and got[0]["end"] == NIGHT_START
+    assert got[0]["kwh"] == 9.9
+    is_open, rate = forecast_sell_gate(
+        _plan_with(got), AT_1700 + timedelta(seconds=30))
+    assert is_open and rate == pytest.approx(4950.0)
+
+
+def test_a_running_sale_with_more_left_keeps_its_anchor():
+    got = forecast_sell_blocks(AT_1700, NIGHT_START, 12.0, 5000.0,
+                               selling=True)
+    assert got == forecast_sell_blocks(AT_1700, NIGHT_START, 12.0, 5000.0)
+    assert got[0]["start"] < AT_1700
+
+
+def test_a_running_sale_still_ends():
+    assert forecast_sell_blocks(AT_1700, NIGHT_START, MIN_SPEND_KWH - 0.05,
+                                5000.0, selling=True) == []
+    assert forecast_sell_blocks(NIGHT_START, NIGHT_START, 5.0, 5000.0,
+                                selling=True) == []
+
+
+def test_the_plan_tells_the_builder_a_sale_runs():
+    """``_shadow_energy_plan`` passes ``selling`` from the live sale flag."""
+    tree = ast.parse((Path(__file__).resolve().parents[1] / "coordinator"
+                      / "coordinator.py").read_text())
+    build = next(n for n in ast.walk(tree)
+                 if isinstance(n, ast.FunctionDef)
+                 and n.name == "_shadow_energy_plan")
+    calls = [n for n in ast.walk(build) if isinstance(n, ast.Call)
+             and getattr(n.func, "id", "") == "forecast_sell_blocks"]
+    assert len(calls) == 1
+    kw = {k.arg: ast.unparse(k.value) for k in calls[0].keywords}
+    assert "_forecast_sell_active" in kw.get("selling", "")
