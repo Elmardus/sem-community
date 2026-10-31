@@ -8284,6 +8284,8 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # (#1180) one hold for the entry, shared by every battery: the packs
         # behind one inverter write the same charge-target number
         ctx["charge_target_hold"] = self._charge_target_hold()
+        # (#1181) …and one record of the forced charges SEM started
+        ctx["forced_charge_record"] = self._forced_charge_record()
         # (#1183) Which brand drives this battery is asked of its own
         # entities once the home has more than one: a brand integration
         # loaded for another battery is not this one's.
@@ -8354,6 +8356,28 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             self.hass, store=store,
             configured=(self.config.get("battery_target_soc_entity", ""),))
         return hold
+
+    def _forced_charge_record(self):
+        """(#1181) The switches and mode selects SEM turned on for a grid
+        charge, for the whole entry. Persisted for the same reason as the
+        charge target: an HA restart never unloads the entry, so the next
+        lifetime must know which charge is SEM's to stop. No record
+        without an entry id."""
+        record = getattr(self, "_forced_charge_record_obj", None)
+        if record is not None:
+            return record
+        from .battery_adapters.charge_record import ForcedChargeRecord
+        entry_id = str(getattr(
+            getattr(self, "config_entry", None), "entry_id", "") or "")
+        store = None
+        if entry_id:
+            try:
+                from homeassistant.helpers.storage import Store
+                store = Store(self.hass, 1, f"sem.forced_charge.{entry_id}")
+            except Exception:  # noqa: BLE001 — a store never costs a cycle
+                store = None
+        record = self._forced_charge_record_obj = ForcedChargeRecord(store)
+        return record
 
     def _warn_battery_entity_collision(self, battery_id: str, pbc: dict) -> None:
         """Warn (once per entity) when two batteries share a control entity.
@@ -10018,6 +10042,13 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                             battery_id, type(adapter).__name__,
                         )
 
+            # (#1181) a switch charge SEM started before a restart is SEM's
+            # to stop. Asked every cycle until the actuator can be read, then
+            # a no-op; reads only, so observer mode too. Never raises.
+            try:
+                await adapter.async_adopt_running_charge()
+            except Exception:  # noqa: BLE001 — a stand-in adapter in tests
+                pass
             _forced = ((False, False) if self._observer_mode
                        else forced_ops(adapter))
             view = BatteryView(

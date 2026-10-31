@@ -234,7 +234,8 @@ def _coord_stub(hass, config, ed=None):
     stub.battery_control_slugs = ("b1", "b2")
     stub._energy_dashboard_config = ed if ed is not None else _ed()
     for name in ("_battery_adapter_context", "_per_battery_config",
-                 "_battery_own_entities", "_charge_target_hold"):
+                 "_battery_own_entities", "_charge_target_hold",
+                 "_forced_charge_record"):
         setattr(stub, name, getattr(SEMCoordinator, name).__get__(stub))
     return stub
 
