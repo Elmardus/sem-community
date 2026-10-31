@@ -72,7 +72,8 @@ from ..const import (
 from ..utils.time_manager import TimeManager
 from ..ha_energy_reader import (
     read_energy_dashboard_config_outcome, EnergyDashboardConfig, battery_units,
-    battery_units_before_derive, energy_counters, yield_found_units_to_picks,
+    battery_units_before_derive, energy_counters, unit_energy_counters,
+    yield_found_units_to_picks,
 )
 from .install_modules import Module, Presence, module_reload_due, module_verdict, presence_of
 from .battery_controls import (  # (#1071, #1195)
@@ -8283,6 +8284,12 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         # (#1180) one hold for the entry, shared by every battery: the packs
         # behind one inverter write the same charge-target number
         ctx["charge_target_hold"] = self._charge_target_hold()
+        # (#1183) Which brand drives this battery is asked of its own
+        # entities once the home has more than one: a brand integration
+        # loaded for another battery is not this one's.
+        ctx["battery_fleet_size"] = int(count)
+        if count > 1:
+            ctx["battery_own_entity_ids"] = self._battery_own_entities(index)
         platform = (ctx.get("battery_charge_platform") or "auto").lower()
         if platform == "deye":
             if not entry_id:
@@ -8297,6 +8304,32 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     self.hass, entry_id, ctx["battery_id"],
                 )
         return ctx
+
+    def _battery_own_entities(self, index: int) -> tuple:
+        """(#1183) The entities that are the battery at ``index``'s alone.
+
+        Its Energy Dashboard sensor (``battery_units``, the order of its
+        ``b<N>`` id), the other sensor of a two-sensor pair, its own energy
+        counters (``unit_energy_counters``), and its slot of each
+        per-battery control list. Never a shared key: in a home of several
+        batteries the global keys may be another battery's.
+        """
+        own: list = []
+        ed = getattr(self, "_energy_dashboard_config", None)
+        units = battery_units(ed)
+        if 0 <= index < len(units):
+            unit = units[index]
+            own.append(unit)
+            for pair in getattr(ed, "battery_power_pairs", None) or ():
+                if isinstance(pair, (list, tuple)) and unit in pair:
+                    own.extend(pair)
+            own.extend(unit_energy_counters(ed, unit) or ())
+        for list_key, _single_key in PER_BATTERY_ENTITY_LISTS:
+            lst = self.config.get(list_key)
+            if isinstance(lst, list) and 0 <= index < len(lst) and lst[index]:
+                own.append(lst[index])
+        return tuple(dict.fromkeys(
+            eid for eid in own if isinstance(eid, str) and eid))
 
     def _charge_target_hold(self):
         """(#1180) The charge-target number as SEM found it, for the whole
@@ -9455,7 +9488,7 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             self._last_battery_decisions = {}
             return
         from .actuate_battery import actuate_battery
-        from .battery_adapters import adapter_for, _integration_loaded
+        from .battery_adapters import adapter_for, auto_brand
         from .battery_shared_limit import actuate_batteries
         from .charger_types import (
             BatteryIntent, BatteryRuntime, BatteryView,
@@ -9931,6 +9964,17 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                     battery_id, type(adapter).__name__,
                     getattr(adapter, "supports_forced_discharge", "n/a"),
                 )
+                if (_bat_count > 1
+                        and type(adapter).__name__ == "GenericBatteryAdapter"
+                        and auto_brand(self.hass, {}) is not None):
+                    # (#1183) say why a fleet battery is not the brand's
+                    _LOGGER.info(
+                        "Battery %s: none of its own entities (%s) belong to "
+                        "%s, so SEM drives it as a generic battery (#1183)",
+                        battery_id,
+                        ", ".join(_pbc.get("battery_own_entity_ids") or ())
+                        or "none found",
+                        auto_brand(self.hass, {}))
             elif type(adapter).__name__ == "GenericBatteryAdapter":
                 # Self-heal a startup race: the brand integration (e.g.
                 # huawei_solar) can finish loading AFTER SEM's first battery
@@ -9940,22 +9984,19 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
                 # (cheap: only while still Generic + a brand entry exists).
                 # #531: never self-heal a battery that has its OWN AC-coupled
                 # control surface (strategy select / bidirectional setpoint —
-                # e.g. a Sessy b2 in a Huawei fleet). adapter_for() now keeps
-                # those Generic, but skip the per-cycle rebuild entirely so a
-                # mixed-brand fleet doesn't churn an adapter that can't change.
-                _heal_cfg = self._per_battery_config(batt_idx, _bat_count)
-                _ac_coupled = bool(
-                    _heal_cfg.get("battery_strategy_control_entity")
-                    or _heal_cfg.get("battery_setpoint_bidirectional")
-                )
-                if not _ac_coupled and (
-                    _integration_loaded(self.hass, "huawei_solar")
-                    or _integration_loaded(self.hass, "goodwe")
-                ):
-                    # (#1180) built like the first one, so it gets the
-                    # entry's charge-target hold and runtime scope too
-                    _rebuilt = adapter_for(self.hass, self._battery_adapter_context(
-                        battery_id, batt_idx, _bat_count))
+                # e.g. a Sessy b2 in a Huawei fleet), and (#1183) never one
+                # whose own entities name no loaded brand in a home of more
+                # batteries: ``auto_brand`` asks what adapter_for() asks, so
+                # a mixed-brand fleet doesn't churn an adapter that can't
+                # change, and a sibling's brand is never this battery's.
+                # (#1180) built like the first one, so it gets the entry's
+                # charge-target hold and runtime scope too
+                _pbc = self._battery_adapter_context(
+                    battery_id, batt_idx, _bat_count)
+                if ((_pbc.get("battery_charge_platform") or "auto")
+                        .lower() == "auto"
+                        and auto_brand(self.hass, _pbc) is not None):
+                    _rebuilt = adapter_for(self.hass, _pbc)
                     if type(_rebuilt).__name__ != "GenericBatteryAdapter":
                         adapter = _rebuilt
                         if hasattr(adapter, "_orphan_guard"):
@@ -13663,6 +13704,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
         Not "has a release recipe": Huawei can always produce one (the
         integration owns the reset), so that test named an inverter SEM had
         never cut.
+
+        (#1183) Capability is ``export_control_wired``: overriding the verb
+        is not enough. The generic adapter overrides it with no number to
+        write, so a generic battery listed before the Huawei one took every
+        cut and refused it.
         """
         adapters = getattr(self, "_battery_adapters", None) or {}
         if not adapters:
@@ -13674,10 +13720,11 @@ class SEMCoordinator(DataUpdateCoordinator, EVControlMixin):
             except Exception:  # noqa: BLE001 — a brand that cannot answer is not the one
                 continue
         for adapter in adapters.values():
-            fn = getattr(type(adapter), "command_limit_export", None)
-            owner = getattr(fn, "__qualname__", "").split(".")[0] if fn else ""
-            if owner and owner != "BatteryControlAdapter":
-                return adapter
+            try:
+                if adapter.export_control_wired() is True:
+                    return adapter
+            except Exception:  # noqa: BLE001 — a brand that cannot answer is not the one
+                continue
         return self._primary_battery_adapter()
 
     def _resume_expired_pauses(self) -> None:

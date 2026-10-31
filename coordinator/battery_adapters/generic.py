@@ -460,6 +460,11 @@ class GenericBatteryAdapter(BatteryControlAdapter):
         self._last_export_limit_w = w
         self._last_export_intent = ExportIntent.LIMIT
 
+    def export_control_wired(self) -> bool:
+        """(#1183) Only a writable number can cut export here."""
+        ent = str(self._config.get("export_limit_entity", "") or "")
+        return ent.startswith("number.")
+
     def export_release_recipe(self):
         ent = str(self._config.get("export_limit_entity", "") or "")
         prior = getattr(self, "_export_prior", None)
