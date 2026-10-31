@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+- 🐛 **A rebuilt plan that moves when the battery sells to the grid now shows a new plan time** (#1184). A running sale keeps going.
 - 🐛 **Daily energy flows and solar savings no longer drop while a power sensor is out for a moment** (#1185). SEM uses its last reading.
 
 # [2.2.0] — 30.10.2026
