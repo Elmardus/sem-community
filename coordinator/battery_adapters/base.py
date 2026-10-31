@@ -82,9 +82,11 @@ async def async_release_batteries_on_unload(coordinator) -> dict:
     adapters = getattr(coordinator, "_battery_adapters", {}) or {}
     for bid, adapter in adapters.items():
         # (#1178) a cycle still running may have left another battery as
-        # this one's limit writer; the hand-back is every battery's own
+        # this one's limit writer; the hand-back is every battery's own.
+        # (#1182) The same for the sale power.
         try:
             adapter._limit_writer = None
+            adapter._setpoint_writer = None
         except Exception:  # noqa: BLE001 — a read-only stand-in in tests
             pass
         why = unload_release_reason(adapter, was_observer)
@@ -191,6 +193,30 @@ class BatteryControlAdapter(ABC):
     #: Reset by the pipeline each cycle: ``last_intent`` outlives a sale that
     #: has stopped going out.
     _sale_sent: bool = False
+    #: (#1182) The same for the sale power entity: set by the pipeline only
+    #: while the cycle's commands run, when another battery shares it — the
+    #: battery that writes it. ``None``: this adapter writes it.
+    _setpoint_writer: "Optional[str]" = None
+    #: (#1182) The value held back for that writer this cycle — sent after
+    #: all if the writer's command did not reach the entity.
+    _setpoint_withheld: "Optional[float]" = None
+    #: (#1182) This cycle's command, as the writer, left the sale power
+    #: entity holding its value (sent, or skipped as the same value). A
+    #: refused write is not that. Reset each cycle.
+    _setpoint_spoke: bool = False
+    #: (#1182) The zero held back was a stop on a device that takes no
+    #: write right after one: sent after all, it is still that stop.
+    _stop_withheld: bool = False
+
+    def sale_setpoint_entity(self) -> str:
+        """(#1182) The sale power entity this adapter's commands write, or
+        ``""``. A brand that sells another way overrides it."""
+        return str(self._force_discharge_entity or "")
+
+    def sale_surface(self) -> str:
+        """(#1182) What a sale from this battery lands on. Batteries with
+        the same answer sell as one, so the sale is split per answer."""
+        return self.sale_setpoint_entity()
 
     def _limit_not_mine(self, watts: float, force: bool = False) -> bool:
         """(#1178) True when this adapter must not write the shared
@@ -842,6 +868,11 @@ class BatteryControlAdapter(ABC):
         return value and NOT record intent when False (#589)."""
         if not self._force_discharge_entity:
             return True  # no-op needed — benign success
+        if self._setpoint_writer is not None:
+            # (#1182) another battery writes the shared entity this cycle;
+            # the pipeline gives this adapter its record after the cycle
+            self._setpoint_withheld = float(watts)
+            return True
         # (#749) ONE validation rule with the discharge-limit path: reject
         # non-power units (a current-native number would take watts as
         # amperes), reject unreadable states, and SCALE to the entity's
@@ -937,6 +968,7 @@ class BatteryControlAdapter(ABC):
         # (the common NORMAL cycle) must not spam the bus.
         if (self._last_force_discharge_w is not None
                 and abs(watts - self._last_force_discharge_w) < 100.0):
+            self._setpoint_spoke = True   # (#1182) the entity holds it
             return True  # de-dup skip — no write needed, treat as success
         try:
             # Domain-aware: real-hardware setpoints are ``number.*`` (Huawei
@@ -959,6 +991,7 @@ class BatteryControlAdapter(ABC):
                 blocking=True,
             )
             self._last_force_discharge_w = watts
+            self._setpoint_spoke = True   # (#1182) the write landed
             self._last_force_discharge_attempt_w = None
             if self._force_discharge_failures:
                 # Recovered — say so, and re-arm. A transient refusal that
